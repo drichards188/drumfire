@@ -1,0 +1,116 @@
+// The fire order card: what the battery commander writes on the order form. Target reference, line,
+// range, elevation from the range table, charge, fuze, rounds, the corrections made so far, and the
+// brass keys (corrections, Fire, Cease). Values are typed in; the keys act on the sim's `correct` command
+// in yards (converted to metres here).
+import { el, setText, setCls, card, label, Btn, Seg } from '../widgets.js';
+import { tut } from '../highlight.js';
+import { ref, dm, elev, yd, FUZE, fromYd, commas } from './common.js';
+
+export const STEPS_YD = [10, 25, 50, 100, 200];
+
+function field(title, cls = '') {
+  const f = el('div', 'fld ' + cls);
+  const v = el('div', 'fval', '--');
+  const s = el('div', 'fsub', '');
+  f.append(el('i', 'ftitle', title), v, s);
+  return { el: f, v, s };
+}
+function stepper(title, onDec, onInc) {
+  const f = el('div', 'fld stp');
+  const row = el('div', 'srow');
+  const mk = (t, fn) => { const b = new Btn({ main: t, cls: 'mini', onClick: fn }); return b; };
+  const dec = mk('◀', onDec), inc = mk('▶', onInc);
+  const v = el('div', 'fval', '--');
+  row.append(dec.el, v, inc.el);
+  const s = el('div', 'fsub', '');
+  f.append(el('i', 'ftitle', title), row, s);
+  return { el: f, v, s, dec, inc };
+}
+
+export class OrderCard {
+  constructor({ send, act, cfg }) {
+    this.send = send; this.act = act; this.cfg = cfg;
+    this.step = 2;                                  // index into STEPS_YD (50 yards)
+    const c = card('FIRE ORDER', 'battery commander', 'order');
+    this.el = c.el;
+    const b = c.body;
+    this.target = el('div', 'tgt');
+    this.tRef = el('div', 'tref', '--');
+    this.tName = el('div', 'tname', 'No target laid');
+    const stamp = el('div', 'tstamp', 'F.O.');
+    this.target.append(el('i', 'ftitle', 'TARGET'), this.tRef, this.tName, stamp);
+    this.line = field('LINE'); this.range = field('RANGE', 'wide'); this.el_ = field('ELEVATION');
+    const r2 = el('div', 'frow3');
+    r2.append(this.line.el, this.range.el, this.el_.el);
+    this.charge = stepper('CHARGE', () => this.act('charge', -1), () => this.act('charge', 1));
+    this.tof = field('TIME OF FLIGHT');
+    this.rounds = stepper('ROUNDS / PIECE', () => this.act('rounds', -1), () => this.act('rounds', 1));
+    const r3 = el('div', 'frow3');
+    r3.append(this.charge.el, this.tof.el, this.rounds.el);
+    this.fuze = new Seg({
+      cls: 'fuze', items: cfg.fuzes.map((f) => ({ v: f, main: FUZE[f].main, sub: FUZE[f].sub })),
+      onChange: (v) => this.act('fuze', v),
+    });
+    const fz = el('div', 'frowf');
+    fz.append(el('i', 'ftitle', 'FUZE'), this.fuze.el);
+    this.corr = el('div', 'corr');
+    this.corrVal = el('b', null, 'none');
+    this.corr.append(el('i', null, 'CORRECTIONS MADE'), this.corrVal);
+    // brass keys: add and drop (range) up and down, left and right (line)
+    const kp = el('div', 'keypad');
+    const k = (name, sub, fn, cls) => { const x = new Btn({ main: name, sub, cls: 'key ' + cls, onClick: fn }); return x; };
+    this.bAdd = k('ADD', '↑', () => this.act('corr', 'add'), 'ka');
+    this.bDrop = k('DROP', '↓', () => this.act('corr', 'drop'), 'kd');
+    this.bLeft = k('LEFT', '←', () => this.act('corr', 'left'), 'kl');
+    this.bRight = k('RIGHT', '→', () => this.act('corr', 'right'), 'kr');
+    this.bStep = new Btn({ main: '50 yd', sub: 'X step', cls: 'key kstep', onClick: () => this.act('step') });
+    for (const [b, n] of [[this.bAdd, 'add'], [this.bDrop, 'drop'], [this.bLeft, 'left'], [this.bRight, 'right'], [this.bStep, 'step']]) tut(b.el, `${n} keypad`);
+    kp.append(this.bAdd.el, this.bLeft.el, this.bStep.el, this.bRight.el, this.bDrop.el);
+    this.bFire = new Btn({ main: 'FIRE', sub: 'Space', cls: 'fire', hold: true, onDown: () => this.act('fire'), onUp: () => {} });
+    this.bCease = new Btn({ main: 'CEASE', sub: 'Backspace', cls: 'cease', onClick: () => this.act('cease') });
+    tut(this.bFire.el, 'fire'); tut(this.bCease.el, 'cease');
+    const fc = el('div', 'firecol');
+    fc.append(this.bFire.el, this.bCease.el);
+    const bottom = el('div', 'orderbot');
+    bottom.append(kp, fc);
+    tut(this.target, 'target'); tut(this.line.el, 'line'); tut(this.range.el, 'range'); tut(this.el_.el, 'elevation'); tut(this.charge.el, 'charge');
+    tut(this.tof.el, 'tof'); tut(this.rounds.el, 'rounds'); tut(fz, 'fuze'); tut(this.corr, 'corrections'); tut(c.el, 'order');
+    b.append(this.target, r2, r3, fz, this.corr, bottom);
+  }
+
+  update(x) {
+    const { unit, sim, nCharges, missionName, ready, alive, stepYd } = x;
+    const o = unit.order || {};
+    const t = o.target;
+    setText(this.tRef, t ? ref(t.x, t.z) : '-- . -- . -');
+    setText(this.tName, missionName || (t ? 'Map point' : 'Click the board, or take a mission (Tab, Enter)'));
+    setCls(this.target, 'none', !t);
+    setText(this.line.v, t ? dm(o.line) : '---°--′');
+    setText(this.line.s, o.adj && Math.abs(o.adj.right) > 0.5 ? `${o.adj.right > 0 ? 'right' : 'left'} ${commas(Math.abs(o.adj.right) / 0.9144)}` : 'on the line');
+    setText(this.range.v, t ? yd(o.range) : '----');
+    setText(this.range.s, 'yards');
+    setText(this.el_.v, t ? elev(o.el) : '--°--′');
+    setText(this.el_.s, t ? 'from the range table' : '');
+    setText(this.charge.v, String((o.charge || 0) + 1));
+    setText(this.charge.s, `of ${nCharges}`);
+    this.charge.dec.enable((o.charge || 0) > 0);
+    this.charge.inc.enable((o.charge || 0) < nCharges - 1);
+    setText(this.tof.v, t ? `${Math.round(o.tof)} sec` : '--');
+    setText(this.tof.s, t ? `apex ${commas(x.apexYd || 0)} yds` : '');
+    setText(this.rounds.v, String(o.rounds || 1));
+    setText(this.rounds.s, this.cfg.rounds.length > 1 && (o.rounds || 1) > 1 ? 'fire for effect' : 'ranging round');
+    this.rounds.dec.enable((o.rounds || 1) > this.cfg.rounds[0]);
+    this.rounds.inc.enable((o.rounds || 1) < this.cfg.rounds[this.cfg.rounds.length - 1]);
+    this.fuze.set(o.fuze || 'instant');
+    const a = o.adj || { add: 0, right: 0 };
+    const addY = Math.round(a.add / 0.9144), rY = Math.round(a.right / 0.9144);
+    const parts = [];
+    if (addY) parts.push(`${addY > 0 ? 'ADD' : 'DROP'} ${Math.abs(addY)}`);
+    if (rY) parts.push(`${rY > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(rY)}`);
+    setText(this.corrVal, parts.length ? parts.join('  ·  ') : 'none');
+    this.bStep.text(`${stepYd} yd`);
+    this.bFire.set(ready > 0 && !!t);
+    this.bFire.text('FIRE', ready > 0 ? `${ready} of ${alive} ready` : 'Space');
+    setCls(this.bFire.el, 'armed', ready > 0 && !!t);
+  }
+}

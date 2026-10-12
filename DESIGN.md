@@ -1,0 +1,545 @@
+# Drumfire: heavy artillery at Ypres, 1917 (design contract)
+
+A three.js (WebGL2) game built from the MaxGFX framework (`../threejs-maxgfx`) and the Echelon air
+defense game (`../threejs-iads`); both are READ ONLY from here, never write there. The player commands
+a Heavy Artillery Group in the Ypres salient in autumn 1917: a 15-inch howitzer, a section of 9.2-inch
+howitzers, a battery of 6-inch 26 cwt howitzers, a section of 60-pounders and a railway gun. Fire
+missions come in from forward observers, aircraft and the sound rangers: hostile batteries, concrete
+pillboxes, wire, ammunition dumps, a kite balloon, a railhead. The player lays the guns from the
+artillery board, fires, reads the observers' fall-of-shot reports, corrects, and fires for effect,
+while German counter-battery fire walks onto the gun positions and German infantry counter-attack
+across no man's land under red SOS rockets.
+
+**The goal is maximum cool factor: big guns, big explosions.** Enormous muzzle blasts that shove dust
+rings across the ground and shake the camera, crews heaving 1,400 lb shells onto loading trays, shells
+you can follow up through the clouds and down onto the target, earth geysers, shockwaves, craters that
+stay, smoke columns, ammunition dumps cooking off in chains, night barrages that light the horizon.
+When a choice is between subtle and spectacular, pick spectacular (but keep it physically plausible:
+dirt and smoke move like dirt and smoke, light falls off, sound travels at 343 m/s).
+
+**Screen:** the left half is a third-person 3D view of the selected unit (orbit with the mouse, zoom
+with the wheel; F follows the unit's newest shell to its burst); the right half is the unit's fire
+control console: the artillery board (a trench map with the grid), the fire order, the range table,
+the observers' messages and the guns' state. Units not selected fight on their own (AI crews) in
+whatever mode the player left them.
+
+This file is the contract between the agents building the game in parallel. If you need to change a
+shared interface, keep it backward compatible and note it in the "Changelog" at the end.
+
+## Simulation fidelity
+
+An arcade game with period flavour, not a gunnery simulator: generic game mechanics with gameplay
+values. Shells fly a simple drag-and-gravity integration with game drag constants; range tables are
+computed from that same integrator; errors are a per-gun calibration error, a daily wind and a random
+dispersion; damage comes from a game table by calibre and target hardness. Period detail goes into
+the look, the words and the procedure (yards, degrees and minutes, map squares, clock code), never
+into weapons-effects modelling.
+
+## Conventions
+
+- Plain ES modules, no TypeScript, no framework, only `three` and `lil-gui` at runtime. Match the
+  maxgfx/iads code style: 2-space indent, single quotes, semicolons, compact code, comments that
+  explain why rather than what. No em dashes in prose or comments (use commas, colons, parentheses).
+- Units: metres, seconds, radians internally. People see yards (`YARD = 0.9144`), degrees and minutes
+  of arc, and map references; convert only at the display edge.
+- World frame (`src/sector.js`): y up, origin at the centre of the Group's gun line, north is -Z,
+  east is +X; the Germans are to the east. A bearing b at range r is `x = r sin b, z = -r cos b`
+  (`fromBearing`, `bearingOf`, `headingFor`). `UNITS`, `LINES`, `SECTORS`, `SITES`, `PLACES`, `GROUND`,
+  `ZONE`, `RAIL_SPUR`, `gridRef`/`fromGridRef`, `piecePlacements`, `flatPads` live there. Read it, never
+  hard-code positions elsewhere. Changes to sector.js go through the lead (note them in the Changelog).
+- Model space: front -Z (the muzzle points -Z at zero traverse and elevation), right +X, ground contact
+  at y = 0, real-world size in metres. Headings are `rotation.y` (0 = facing north; `headingFor(b)`).
+  Traverse is `rotation.y` of the traverse pivot relative to the platform (+ = left); elevation is
+  `rotation.x` of the elevation pivot (+ = muzzle up); recoil is `position.z` of the recoil pivot
+  (+ = back toward the breech).
+- Every system is a class with `update(dt, ...)`. Cross-system effects go through callbacks wired in
+  `main.js` (the maxgfx pattern), never by importing another system's state.
+- The sim (`src/sim/`) is Node-safe (no DOM, no three) and deterministic per seed: randomness from
+  `sim.rng`, never `Math.random`.
+- Dev server: `http://localhost:5201` (already running; do not start another on 5201. If it is down,
+  start it with `npx vite --port 5201 --host` in the background from the project root).
+- Screenshots and console errors: `node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait ms]
+  [--until "expr"] [--eval "expr"]`. Each call launches its own headless Chromium (SwiftShader WebGL2,
+  slow but correct), so agents never share a browser. Do NOT use the Playwright MCP browser tools.
+  Put screenshots in `shots/` (gitignored) under a subfolder named after your role. Look at them
+  with the Read tool, and actually judge them: compare against the reference photos in `refs/`.
+- Reference sheets and photos for the guns, the German side, the battlefield and the procedure are
+  being written to `refs/<group>/README.md` and `refs/<group>/photos/` (gitignored, local only).
+- Never commit to git. Never edit files another agent owns; ask for changes in your final report.
+
+## Where the framework comes from
+
+Copied already (lead): `noise.js`, `shaderlib.js` (identical in both projects), iads `atmosphere.js`,
+`clouds.js`, `weather.js`, `post.js`, `fx.js`, `camera.js`, `terrain.js`, `terrainHeight.js` (now
+reading `flatPads` from `sector.js`), `terrainField.js`, `vegetation.js`, `grass.js`, `hud.js`,
+`sight.js`, `style.css`, `sim/flight.js`, `models/kit.js`, `models/rig.js` (without the MZKT truck),
+`models/v/crew.js`, `models/v/swap.js`; maxgfx `flares.js` (parachute flares as analytic lights
+through `globalUniforms.uFlarePos/uFlareCol/uFlareCount`, still reading `ocean.heightAt`), and both
+`ballistics.js` versions side by side as `ballistics.maxgfx.js` and `ballistics.iads.js` (reference
+for the sim; the sim agent writes its own and deletes them). `public/audio/` has the iads recordings
+(`CREDITS.md`). `tools/shot.mjs` points at port 5201.
+
+Worth taking from maxgfx (read only): `gunner.js` camera trauma shake (`shake(k)`, the noise at
+~606-620) and `main.js` `blastNear` (~267-275); `audio.js` `sixteenInch` bank (~396), `thunder()`,
+`whistle()`, `explosion`; `models/runners.js` (instanced articulated crowd with gaits: infantry);
+`models/guns.js` `createMountMaterial` (painted steel shader) and `buildSailor`/`CREW_POSES`;
+`ordnance.js` (falling-ordnance whistle and near-miss events); `ocean.js` `FoamMap` (a camera-centred
+world-space render target with decay and stamping, the pattern for a scorch/crater map).
+
+## File ownership (phase 1, agents in parallel)
+
+| Agent | Owns (create/edit only these) |
+|---|---|
+| Framework | `index.html`, `src/style.css`, `src/main.js`, `src/shaderlib.js`, `src/noise.js`, `src/atmosphere.js`, `src/clouds.js`, `src/weather.js`, `src/camera.js`, `src/hud.js`, `src/sight.js`, `src/flares.js` |
+| Terrain | `src/terrain.js`, `src/terrainHeight.js`, `src/terrainField.js`, `src/trenchlines.js`, `src/vegetation.js`, `src/grass.js`, `src/craters.js`, `world.html`, `src/dev/worldview.js` |
+| Dressing | `src/world/*` (trench walls and sandbags, wire, ruins of Ypres and the villages, gun pits and battery positions, roads, duckboards, the rail spur track, camouflage nets) |
+| Heavy models | `src/models/kit.js`, `src/models/rig.js`, `src/models/guns.js`, `src/models/v/bl15.js`, `src/models/v/bl92.js`, `src/models/v/rail.js`, `src/models/v/crew.js`, `src/models/v/swap.js`, `models.html`, `src/dev/modelviewer.js` |
+| Field models | `src/models/v/bl6.js`, `src/models/v/bl60.js`, `src/models/targets.js`, `src/models/t/*`, `src/models/shells.js` (reads kit.js, rig.js and crew.js, never edits them) |
+| Infantry | `src/models/infantry.js`, `src/models/inf/*` (reads kit.js, never edits it) |
+| Simulation | `src/sim/*`, `src/ballistics*.js`, `tools/simtest.mjs` |
+| FX | `src/fx.js`, `src/fx/*`, `src/post.js`, `fx.html`, `src/dev/fxtest.js` |
+| UI | `src/ui/*`, `ui.html` |
+| Audio | `src/audio.js`, `public/audio/*`, `audio.html`, `src/dev/audiotest.js`, `tools/audiotest.mjs` |
+
+The world agents' viewer `world.html` belongs to the terrain agent; the dressing agent adds its
+builders to the scene through `src/world/index.js` (`buildWorld(scene, terrain) -> { update(dt, camera) }`),
+which `worldview.js` and `main.js` import if it exists.
+
+Phase 2 (after the above): `src/render/*` (gun rigs posed from the sim, the loading choreography,
+shells, targets, infantry), the full wiring in `src/main.js`, the title-screen attract battle,
+`README.md`, `CLAUDE.md`, balance passes.
+
+## Module contracts
+
+### Terrain and world (`src/terrain*.js`, `src/world/*`, `src/craters.js`, world agent)
+
+```js
+import { Terrain, heightAt, normalAt, los } from './terrain.js';
+heightAt(x, z)          // pure, Node-safe, static ground (the sim uses it); includes trenches' cut, pads, old craters
+const terrain = new Terrain(scene, { quality });
+terrain.heightAt(x, z)  // rendered ground: heightAt plus the runtime craters
+terrain.normalAt(x, z, out); terrain.los(ax, ay, az, bx, by, bz);
+terrain.groundAt(x, z)  // 'mud' | 'water' | 'grass' | 'road' | 'concrete' | 'rubble' (for burst fx and sound)
+terrain.update(camera)  // recentres camera-following geometry
+terrain.setQuality(name)
+import { Craters } from './craters.js';
+const craters = new Craters(terrain, { quality });   // or owned by Terrain as terrain.craters
+craters.add(x, z, radius, depth, { scorch = 1, water = false })  // a new crater, visible at once
+```
+
+The Ypres salient as the period photographs show it: flat, low Flanders ground on the British side
+(fields, hedges, poplar rows, farms, the ruins of Ypres), turning through the devastated zone (`ZONE`)
+into a lunar wilderness of overlapping shell holes, many flooded with grey-brown water, liquid mud,
+shattered tree stumps (Polygon Wood, Sanctuary Wood), ruined villages as heaps of brick (`PLACES`),
+duckboard tracks and plank roads, and the trench lines (`LINES`): zig-zag fire trenches with
+traverses, sandbag parapets, communication trenches back, belts of barbed wire in front of the German
+line, and German concrete pillboxes. The German side rises gently to the ridges (`GROUND`). Behind
+the German lines the country recovers (less cratered) toward the railhead. Old craters are part of the
+pure `heightAt` (deterministic cellular pattern) so sim and render agree; runtime craters from this
+battle are visual only (plus `terrain.heightAt`). Craters by calibre (game values): 18-pdr 1.5 m
+radius, 60-pdr 2 m, 6-inch 3 m, 9.2-inch 5 m, 12-inch 6.5 m, 15-inch 8 m; depth about 0.4 times the
+radius; craters on wet ground fill with water over time. Readable to ~25 km through haze.
+
+### Camera (`src/camera.js`, framework)
+
+`ChaseCamera(camera, dom, { ground })` as in iads (orbit, zoom 6 to 250 m here, `setTarget`,
+`padlock`, `follow(obj, onEnd)`, `cine(on)`, `free(on)`), plus:
+`chase.shake(trauma)` (maxgfx gunner trauma model: adds trauma 0..1, squared to amplitude, decays,
+noise-driven yaw/pitch/roll and a little position; main converts a blast into trauma from calibre and
+distance), and `chase.followShell(shell, { onBurst })` (rides behind and above the shell, looks along
+its velocity, lets the player orbit, on burst holds a wide shot of the burst for ~4 s, then returns).
+`shell` is a sim shell object (fields below); it can be read every frame, its `alive` drops at burst.
+
+### Models (`src/models/`, heavy models and field models agents)
+
+```js
+import { buildGun, GUN_KINDS } from './models/guns.js';   // GUN_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail']
+const rig = buildGun(kind);
+rig.root          // THREE.Group in model space (front -Z, ground y = 0, metres)
+rig.pivots        // { traverse, elevation, recoil, breech, ... } (traverse may be absent; extras below)
+rig.anchors       // { eye, muzzle, breech, tray, shellStack, crew: [{ role, x, y, z, heading, pose }] }
+                  // muzzle: its -Z is the bore direction; breech: where the shell goes in;
+                  // tray: where a shell rests before ramming; shellStack: the ready ammunition
+rig.recoilLength  // metres the barrel runs back
+rig.loadEl        // elevation the piece must come down to for loading (radians; heavies load low)
+rig.setBreech(k)  // 0 closed, 1 open
+rig.setShell(where, visible)  // where: 'tray' | 'crane' | 'trolley': show the shell being loaded there
+rig.boxes         // [{ min, max }] hit boxes, model space
+rig.update?(dt)   // optional per-frame animation the model owns (e.g. wheel spin)
+```
+
+Extra pivots by kind: `bl15` `crane` (the shell crane jib: rotation.y) and `hoist` (position.y of the
+hook); `rail` `trolley` (the shell trolley along the loading platform: position.z), `bogies` (none
+animated is fine). Pieces sit on their platforms: `bl15` the steel bed/earth box, `bl92` the earth
+box with its ballast, `bl6` wheels with the box trail, `bl60` wheels and trail, `rail` the railway
+mounting on bogies (on standard-gauge track, the track itself is the world's `RAIL_SPUR`).
+
+```js
+import { buildCrewman, CREW_POSES, CREW_OUTFITS } from './models/v/crew.js';
+// WW1 outfits: 'gunner' (shirt sleeves, braces, Brodie helmet or cap), 'gunner-tunic', 'officer'
+// (Sam Browne, cap or helmet), 'german' (field grey, Stahlhelm), 'stretcher'. Poses for the loading
+// choreography: 'stand', 'carry', 'haul' (on a rope), 'ram' (rammer staff), 'lay' (at the dial sight),
+// 'lanyard', 'crouch', 'ears' (covering ears), 'point', 'phone', 'dead'.
+import { buildShell, SHELL_KINDS } from './models/shells.js';
+buildShell(kind)  // { parts: [{ geometry, material }], length, radius } one merged geometry per material, for instancing
+                  // kinds: 'bl15' | 'bl92' | 'bl6' | 'bl60' | 'rail' | 'fh15' | 'm21' | 'fk77' (German 15 cm, 21 cm, 7.7 cm)
+import { buildTarget } from './models/targets.js';
+buildTarget(kind) // kind from sector SITES: 'battery' | 'mebu' | 'dump' | 'balloon' | 'hq' | 'crossroads' | 'railyard'
+                  // -> { root, parts: [Object3D], setDamage(i, k), anchors: { ... } }
+                  // parts are the destroyable bits (each gun of a battery, each stack of a dump, each wagon)
+import { Infantry } from './models/infantry.js';
+const inf = new Infantry(scene, { max: 1500 });   // instanced soldiers (port of maxgfx runners.js)
+inf.update(dt, groups, heightAt)  // groups: sim.infantry (below); men fall when `alive` drops
+```
+
+All procedural, detailed enough for a close third-person view of the gun and its crew (the guns are
+the stars: get the silhouettes, proportions, and the big distinctive parts right from `refs/`).
+Materials from `MeshStandardMaterial` (camo, wear and mud via canvas textures and `surfaceFinish`).
+British guns are painted in a dull grey-green or khaki; many 1917 guns carried a disruptive camouflage
+of earth colours. Nets and brushwood screens are the world agent's (gun pit dressing).
+
+### Simulation (`src/sim/`, simulation agent)
+
+```js
+import { Sim } from './sim/sim.js';
+const sim = new Sim({ heightAt, seed: 1 });
+sim.events = {                         // all optional; called with optional chaining
+  fire(unit, piece, shell),            // a gun fired: muzzle blast, recoil, sound, camera trauma
+  load(unit, piece, step),             // a loading step began (see GUNS[kind].load): sound, choreography
+  shellBurst(shell, pos, info),        // any burst, own or enemy. info = { calibre (inches), fuze,
+                                       //   crater (radius m, 0 for airbursts), ground, hit (target id|null),
+                                       //   near: { unitId, piece } | null, own: bool }
+  incoming(shell),                     // an enemy shell will land within ~400 m of one of our pieces (~4 s before)
+  targetHit(target, part, dmg), targetDestroyed(target, by),   // by = unitId or null
+  secondary(pos, size),                // ammunition cooking off (dump, battery pit, our own shell stack): 0.5 to 4
+  pieceHit(unit, piece), pieceDestroyed(unit, piece), casualty(unit, piece),
+  report(mission, report),             // an observer's fall-of-shot report arrived
+  mission(mission, change),            // 'new' | 'assigned' | 'ranging' | 'ffe' | 'done' | 'failed'
+  sos(sector),                         // red rockets over a sector of the front
+  flare(pos, kind),                    // 'very' (white), 'sos' (red), 'star' (star shell over no man's land)
+  radio(text, kind),                   // 'info' | 'warn' | 'alert' | 'kill' | 'phone' | 'wireless'
+  phase(n, title, sub), state(state),  // director
+};
+sim.newGame({ difficulty: 'Normal', attract: false, seed });
+sim.update(dt);                        // dt already scaled by the time compression
+sim.command(unitId, name, args);       // see Commands
+sim.units; sim.targets; sim.shells; sim.missions; sim.infantry; sim.state; sim.phase; sim.score;
+sim.time;                              // seconds since the start
+sim.clock;                             // hour of day (5.25 = 05:15), drives the sun (main)
+sim.wind;                              // { bearing, speed } the day's meteor telegram (it shifts the fall of shot)
+sim.front;                             // { A: 1, B: 1, C: 1, D: 1 } holding strength per SECTORS id, 0 = lost
+sim.rangeTable(kind, charge);          // [{ range, el, tof, apex }] from the game integrator, every 100 yards
+sim.solve(unitId, x, z, charge?);      // { line, range, el, tof, charge } nominal laying for a point (no errors)
+sim.unitById(id); sim.targetById(id); sim.missionById(id);
+sim.alpha;                             // 0..1, how far the real time is into the next fixed step (render interpolation)
+```
+
+**Unit** (`sim.units[i]`, plain data read by the UI and the render layer):
+```js
+{ id, kind, name, callsign, battery, pos: { x, y, z }, zero, alive,
+  mode: 'auto' | 'manual' | 'hold',     // auto: the AI crew takes missions; manual: player; hold: cease fire
+  pieces: [Piece], missionId, ammo: { he, shrapnel }, signature,  // 0..1, how much the enemy has located it
+  order: { x, z, line, range, charge, el, tof, fuze: 'instant' | 'delay' | 'shrapnel', rounds,
+           adj: { add, right }, target: { x, z } | null },  // the current fire order (adj in metres)
+  stats: { rounds, hits, kills } }
+```
+**Piece** (one gun): `{ i, kind, pos: { x, y, z }, bearing (platform), az, el, cmd: { az, el },
+state: 'idle' | 'loading' | 'laying' | 'ready' | 'recoil' | 'dead', job: { step, t, dur } | null,
+recoil (0..1 of the stroke), breech (0..1 open), loaded, crew, crewMax, hp, maxHp, wear, firedAt }`.
+`az` follows the model convention (rotation.y of the traverse pivot, + = left of the platform bearing).
+The loading cycle is a sequence of steps from `GUNS[kind].load` (for the heavies: `'depress'` to
+`rig.loadEl`, `'open'` breech, `'shell'` carried or craned onto the tray, `'ram'`, `'cartridge'` (bags),
+`'close'`, `'prime'`, `'lay'` back to the ordered elevation and line, then `'ready'`), each with a game
+duration; the render layer animates crew and rig from `piece.job` and the sim drives `piece.az/el`.
+
+**Shell** (`sim.shells`, own and enemy, in flight): `{ id, own, unitId, piece, kind, calibre, pos: { x,
+y, z }, prev: { x, y, z }, vel: { x, y, z }, fuze, t, tof, aim: { x, z }, alive }`. Integrated by the sim
+(gravity plus the kind's game drag); the render interpolates from `prev` to `pos`.
+
+**Target** (`sim.targets`): `{ id, kind, name, pos: { x, y, z }, bearing, r, alive, known, active, hp,
+maxHp, parts: [{ x, z, hp, alive }], damage }`, spawned from `SITES` plus mobile ones (traffic at the
+crossroads at night, trains at the railhead). `known` targets are drawn on the board.
+
+**Infantry** (`sim.infantry`): `[{ id, side: 'german' | 'british', sector, state: 'forming' | 'advancing'
+| 'assault' | 'broken' | 'in', pos: { x, z }, bearing, n0, men: [{ dx, dz, alive, t }] }]`.
+
+**Mission** (`sim.missions`): `{ id, kind: 'cb' | 'destroy' | 'wire' | 'sos' | 'harass' | 'barrage',
+title, targetId, x, z, gridRef, observer: 'foo' | 'air' | 'balloon' | 'sound' | 'map', priority,
+t0, deadline, unitId, state: 'open' | 'ranging' | 'ffe' | 'done' | 'failed', reports: [Report] }`.
+**Report**: `{ t, missionId, unitId, shellId, over (m, + = beyond the target along the line of fire),
+right (m, + = right of the line of fire), clock ('B3' style, for aircraft), text (the message as the
+observer would send it, in yards), ok }`. FOOs telephone add/drop and left/right in yards; aircraft
+send the RFC clock code (Y 10, Z 25, A 50, B 100, C 200, D 300, E 400, F 500 yards; 12 o'clock is
+true north from the target); sound rangers give a map reference with an error; map shoots get no
+reports. Reports arrive a few seconds after the burst.
+
+**Commands** (`sim.command(unitId, name, args)`, also what the console sends):
+| name | args | effect |
+|---|---|---|
+| `mission` | `{ id }` | take the mission: lay on its point, ranging fire |
+| `lay` | `{ x, z }` | lay on a map point (artillery board click) |
+| `correct` | `{ add, right }` | metres: add > 0 adds range, right > 0 shifts right of the line of fire |
+| `charge` | `{ charge }` | charge index |
+| `fuze` | `{ fuze }` | 'instant' (106), 'delay', 'shrapnel' (60-pdr only) |
+| `rounds` | `{ n }` | rounds per piece to fire on the next `fire` (1 ranging, 2 to 8 for effect) |
+| `fire` | `{}` | fire the ready pieces (manual), or start the series |
+| `cease` | `{}` | stop firing |
+| `mode` | `{ mode }` | 'auto', 'manual', 'hold' |
+| `sos` | `{ sector }` | every unit lays on that sector's SOS line and fires (unit id ignored) |
+
+Tables (`src/sim/tables.js`): `GUNS[kind]` (name, calibre, shell mass, charges with muzzle velocities,
+elevation limits, traverse limits, lay rates, loading steps and durations, crew, hp, dispersion,
+calibration error, ammo), `SHELLS[kind]` (game drag, crater radius, blast and lethal radii, damage by
+hardness), `TARGETS[kind]`, `DIFFICULTY` ('Easy' | 'Normal' | 'Hard'). Gameplay values: maximum
+ranges about 60-pdr 11 km, 6-inch 9.5 km, 9.2-inch 11.5 km, 15-inch 9.5 km, railway gun 16 km;
+times of flight 15 to 45 s; loading cycles 60-pdr ~10 s, 6-inch ~12 s, 9.2-inch ~25 s, 15-inch
+~50 s, railway gun ~60 s. The first round of a fresh lay lands 50 to 400 m off; good corrections
+get within ~30 m in two or three rounds.
+
+Director (`src/sim/director.js`): phases with a game clock: dawn registration (a quiet start, a few
+missions that teach the loop), the bombardment (pillboxes, batteries, dumps, the balloon, German
+counter-battery fire on our positions), the counter-attack (SOS in two sectors while the CB fire
+continues), night harassing fire (crossroads traffic, the railhead for the railway gun, star shells)
+and, if time allows, Zero hour (a creeping barrage the British infantry follow). Loss: two front
+sectors lost, or every piece destroyed. AI crews are tuned to be imperfect so the player matters:
+`tools/simtest.mjs` runs headless battles (all-auto vs a scripted player) and prints a table.
+Attract mode (title screen): a demonstration bombardment, nothing scored, nothing of ours destroyed.
+
+### FX (`src/fx.js`, `src/fx/*`, `src/post.js`, FX agent)
+
+iads `FX` stays the base (smoke/glow/debris/shard pools, fixed light pool, `explosion`, `dust`, `fire`,
+`burnSite`, `fx.ground`), extended with the artillery set:
+```js
+fx.gunBlast(p, dir, calibre, { night })   // muzzle fireball and flame tongue, the blast cone of smoke and
+                                          // dust, a ground dust ring racing out, leaves/grit, smoke ring,
+                                          // a lingering cordite cloud that drifts with the wind, light flash
+fx.shellBurst(p, { calibre, fuze, ground, crater })  // the earth geyser (a column of black earth and
+                                          // mud thrown 20 to 120 m up by calibre that falls back), clods and
+                                          // debris on ballistic arcs, the flash and fireball (brief, it is HE
+                                          // in earth), shockwave dust ring, white/black smoke that rises and
+                                          // drifts, water spout on 'water', brick dust on 'rubble'
+fx.shrapnel(p, calibre)                   // the white woolly airburst ball with its downward cone
+fx.cookOff(p, size)                       // ammunition dump: fireball, rolling mushroom, flying burning
+                                          // rounds (glow trails), follow-up pops over several seconds
+fx.burnSite(p, size, life)                // ground fire with smoke column (iads)
+fx.update(dt, camera, light)              // as iads
+post.shockwave(worldPos, { radius, speed, strength })  // screen-space refraction ring (camera near blasts)
+```
+Brief analytic lights: night battles need far more than the 4 pooled PointLights. `shaderlib.js`
+`MAX_FLARE_LIGHTS` becomes 16 (framework agent; every shader that loops over `uFlarePos` must use the
+constant), and `flares.js` owns them: `flares.flash(pos, color, intensity, life)` adds a brief light
+(muzzle flash, burst, cook-off) next to the parachute flares and star shells, and each frame the
+brightest 16 as seen from the camera fill the uniforms. FX never touches the uniforms: it calls the
+optional hook `fx.onFlash?.(pos, color, intensity, life)` which main wires to `flares.flash`.
+`post.dazzle(k)` (FX agent) is a brief exposure kick for a blast near the camera (auto exposure is a
+log average and barely moves for a flash).
+
+Plus anything else that sells it (heat shimmer over the muzzle, sparks, falling dirt rain). Budgets
+scale with `setBudget(q.fx)`; nothing may allocate per frame. Never add or remove three.js lights at
+runtime (fixed pool).
+
+### UI (`src/ui/`, UI agent)
+
+`Panel(root, { audio, onSelect, onCommand })`, `panel.update(view)`, as in iads: it reads only what is
+passed in and talks back through `onSelect(unitId)` and `onCommand(unitId, name, args)`. `view` is
+`{ sim, selectedId }` where `sim` is the Sim (or the mock) with the fields above (`units`, `missions`,
+`targets`, `shells`, `reports`, `clock`, `wind`, `front`, `rangeTable`, `solve`, `state`, `score`).
+`ui.html` runs the panel against `src/ui/mock.js` (a mock world with the same shape) so it can be built
+without the 3D view. The console is a period fire control board, not a modern display: a linen-backed
+trench map (the artillery board) drawn on a canvas with the lettered and numbered squares, British
+trenches blue and German red, woods and villages, the known targets, the arc of fire and the line to
+the target, the fall of shot plotted with numbers, the SOS lines; the fire order card (target ref,
+line in degrees and minutes, range in yards, charge, elevation from the range table, fuze, rounds);
+the range table; the message pad (telephone and wireless messages as written slips); the guns' state
+(loading step, crew, wear, ammunition); the missions list. Keys: Tab next mission, Enter take it,
+Space fire, arrows correct (up/down add/drop, left/right line), Q/E charge, R rounds, Z fuze, A mode
+(auto/manual), S SOS. Main owns 1 to 5, C, F, M, H, F3, `[` and `]`.
+
+### Audio (`src/audio.js`, audio agent)
+
+`AudioEngine` as in iads (banks rendered at `start()` after a user gesture, recordings layered when
+decoded, world sounds routed with travel delay at 343 m/s, distance low-pass and air absorption,
+Doppler on moving loops), with the artillery set:
+```js
+audio.gun(pos, calibre)               // muzzle blast: near a 15-inch it is a physical slam with sub-bass and
+                                      // a long rolling echo; far guns a deep thud; the 60-pdr a sharp crack
+audio.burst(pos, calibre, { fuze, ground })   // explosion near (crack, roar, debris patter) and far (rumble)
+audio.shell(shell)                    // a flight voice bound to a sim shell: tearing-canvas rush and whistle
+                                      // with Doppler, the "freight train" of the 15-inch; stops at burst
+audio.incoming(shell)                 // the rising scream of an enemy shell coming down near the listener
+audio.cookOff(pos, size)
+audio.load(step, pos, kind)           // trolley rattle, crane chain, rammer thump, breech screw and clang, "Ready!"
+audio.flare(pos, kind)                // Very pistol pop, hiss
+audio.ui(name)                        // 'phone' buzzer, 'wireless' morse, 'click', 'paper', 'bell', 'whistle'
+audio.setAmbience({ drumfire, rain, wind })   // distant drumfire bed: continuous rumble with flickers
+audio.update(dt, camera)
+```
+
+### Main (`src/main.js`, framework agent in phase 1, wiring in phase 2)
+
+As iads: `init()` builds atmosphere, terrain, clouds, fx, flares, weather, the `Sim`, views, post,
+the chase camera, audio and the panel; the frame loop steps the sim with `dt` scaled by
+`params.timeScale` and everything visual with `rawDt`. `params` is the single source of truth for
+settings (lil-gui behind the gear button); `QUALITY` presets (Low/Medium/High/Ultra) set pixel ratio,
+shadow map, AO, samples and the fx budget. `window.__drumfire` exposes every system, `frame(dt, draw)`
+and `fastForward(seconds, { unit, scale })`. URL params `?quality=`, `?play=1`, `?unit=N`. Title
+screen with the attract-mode battle behind it; "Take command" starts `sim.newGame`.
+
+## Simulation details (sim agent)
+
+Files: `src/sim/sim.js` (Sim, commands, shell stepping), `tables.js` (GUNS, SHELLS, FUZE, TARGETS, FFE, DIFFICULTY,
+CLOCK_KEYS, PHASES), `shells.js` (integrator, `rangeTable`, `solveElevation`, `autoCharge`), `guns.js` (units, pieces,
+orders, loading cycle, shot), `targets.js`, `observers.js`, `enemy.js`, `infantry.js`, `crews.js` (AI), `director.js`.
+
+Conventions as implemented:
+- `unit.order`: `x,z` the corrected aim point, `target` the uncorrected point, `line` (rad bearing), `range` (m), `el` (rad,
+  laid with the site correction from the integrator, not the flat table), `tof`, `charge` (index, -1 none), `fuze`, `rounds`,
+  `adj {add,right}` (m), plus `ok`/`reason` ('out of range', 'inside minimum range', 'out of arc'), `chargeAuto`, `h`
+  (burst height above ground for the balloon), `sheaf`, `shift`. `unit.charges` (count), `unit.arc` (half angle, rad).
+- `rangeTable(kind, charge)` rows `{ range (m), el (rad), tof, apex }` every 100 yards on the rising branch; `[]` for a charge
+  the gun does not have. `solve(unitId, x, z, charge?)` -> `{ line, range, el, tof, charge, ok }`.
+- `sim.wind = { bearing (rad, blowing FROM), speed (m/s), wx, wz }`. `sim.state`: 'attract' | 'playing' | 'victory' | 'defeat'.
+  `sim.night` (bool), `sim.clock` hour of day (a time lapse: dawn 04:45 at t=0, 06:12 at 330 s, 14:30 at 900 s, 19:30 at 1300 s,
+  05:06 next morning at 1850 s, 06:42 at 2300 s), `sim.reports`, `sim.assaults`, `sim.barrage`, `sim.stats`.
+- Pieces: `job = { step, t, dur, i, n }` while loading (steps from `GUNS[kind].load`, an array of `{ step, dur }`; heavies start
+  with 'depress' to `GUNS.loadEl`); `job` is null when `state` is 'ready' (the 'ready' load event is emitted). A re-lay of a
+  loaded piece is `state: 'laying'` with `job.step 'lay'`. `piece.loaded` turns true when the round is rammed. `recoil` 0..1 (kick in
+  0.18 s, run out over `GUNS.runout`), `breech` 0..1. `piece.rounds` is the rounds left in the series.
+- Commands: besides the table above, any of mission/lay/correct/charge/fuze/rounds/fire from the player switches an 'auto' unit to
+  'manual' (the AI would otherwise undo it). `fire` returns false when the order is not laid-able. `sos` ignores the unit id; a
+  unit that cannot reach the line (range or arc) is left alone. Ranging: with `rounds 1` on a mission in state 'ranging' only the
+  lead piece fires; `rounds > 1` fires every piece (and moves the mission to 'ffe').
+- Reports: `mission.reports[]` (also `sim.reports`): `{ t, missionId, unitId, shellId, n, observer, observed, over, right, clock, text,
+  ok, corr: { add, right } }`. `over`/`right` are the OBSERVER's estimate (m; air reports are quantised to the circle and hour),
+  `corr` is what to apply with `correct`. Reports are only sent while the mission is 'ranging'. Not observed: `observed false`, `over null`.
+  Only `report` events carry them (no duplicate `radio`). The clock code: circle letters Y Z A B C D E F = 10 25 50 100 200 300 400
+  500 yards, hour with 12 at true north from the target ('B3' = 100 yards east); `ok` for A or better; FOO `ok` within 45 m.
+- Targets: `parts: [{ x, z, hp, alive, y?, type? }]` placed from `src/models/t/layout.js` `partLayout`; extra `present` (false while
+  the mobile target has nothing there: no convoy, no train) and `active`. Crossroads parts are 4 vehicles (`type` 'wagon'|'wagon'|'gun'|
+  'lorry') whose x,z move along the road while a convoy is present; the railyard is the 9 layout parts, present while a train is in
+  (260 s). The balloon is destroyed when part 0 (the Drachen) dies; part 1 is the winch lorry. Destroyed batteries are replaced by a
+  fresh one after 420 s (a new 'cb' mission); in attract mode every target comes back after 70 s.
+- Infantry groups: `bearing` in rad; men offsets in the group frame the infantry renderer uses (dx right, dz toward the rear, group
+  rotated by `bearing`). German states 'forming' (about 25 s, rockets after 5 s) -> 'advancing' -> 'assault' (20 s) -> 'in' (breach) or
+  'broken' (an about-turn rotates the formation 180 degrees so no man jumps). British groups ('forming' -> 'advancing' -> 'in')
+  walk behind the barrage. `n` is the live count, `n0` the start strength.
+- Missions carry extra fields: `units` (all assigned unit ids), `obsName`, `rounds`, `lift` (barrage), `alt`, `sector`, `tEnd`.
+  `sos` mission point = the SOS line a third of the way from the British front across no man's land; barrage missions (one per lane)
+  move their `x,z` at each lift. `mission.state` 'ranging' is skipped for map and sound shoots, SOS and the barrage (straight to 'ffe').
+- Extra events (all optional): `enemyFire(batteryId, part, shell)` (a German gun fired: flash at night), `targetGone(target)` (convoy
+  or train left), `lift(k, barrage)` (the barrage lifted). `incoming(shell)` fires ~4 s before an enemy shell lands within 400 m of a
+  piece. German shells are in `sim.shells` with `own: false`, `unitId: null`, `kind` 'fh15' | 'm21' | 'fk77'.
+- Shell ids ('s1', 'e1', ...) are unique for the whole game; a shell that leaves `sim.shells` has burst at `shell.pos` (the bisected
+  ground point). Shells may carry `fuze` 'shrapnel' (60-pdr): airburst at the aimed range, `info.crater` 0.
+- Gameplay hooks the console can explain: `unit.signature` (flash and sound ranging) builds with every round (more at night, with the
+  kite balloon up, on Hard) and fades at 0.006/s (0.014/s on hold); German batteries walk onto the loudest unit once it passes 0.2.
+  `unit.underFire` is the sim time of the last near burst. Wear (0..1) lowers muzzle velocity and widens dispersion.
+
+## Balance (simulation agent)
+
+Tune with `node tools/simtest.mjs 1 2 3 --all --difficulty all --table` (players: `auto` all AI, `player` a scripted competent player on
+the 15-inch, 9.2-inch and 6-inch battery, `full` the same on all five). `MIS=1` lists missions, `OCC=1` piece occupancy, `ZDBG=1`
+Zero-hour groups, `DBG=<t> DBGU=<unit>` a unit's state. A game is about 40 minutes of game time (victory comes with the infantry on
+the objective at about 40.5 min; defeat earlier when two sectors fall or every gun is lost). Seeds 1 to 72, the finished tree:
+
+| Difficulty | all auto | scripted 15in+9.2in+6in | scripted all five |
+|---|---|---|---|
+| Easy | 39 of 72 | 66 | 69 |
+| Normal | 14 of 72 | 48 | 61 |
+| Hard | 0 of 72 | 4 | 15 |
+
+(lead) Normal re-run on seeds 1 to 72 after the loading elevations were aligned with the models (`GUNS[kind].loadEl`); Easy and Hard are from before that change.
+
+On Normal the auto crews hold the SOS 46 % of the time (scripted all five 77 %), 50 % of the infantry reach the objective on
+average with auto crews against 68 % with the scripted player (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Tuning knobs:
+`DIFFICULTY` (err, cb, dmg, assault, time, ammo, sig, zero), the dispersion and calibration in `GUNS`, `SHELLS` radii, the CB
+cadence in `enemy.js` (one round per gun per 85 s / (cb * activity)), the breach penalty in `director.js` (0.5 of a sector per group in),
+the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or more; single games flip near the loss line.
+
+## Tutorial (phase 3)
+
+A playable tutorial, reached from the title screen ("Tutorials" next to "Take command"): a list of
+lessons with completion ticks (localStorage `drumfire.tutorials`), each a list of steps run on a
+scripted range. The pattern is iads `src/tutorial.js` (read only): an instruction card over the 3D view
+(title, text, the objective line, Next/Skip/Exit, step counter), the console controls the step is
+about pulsing (`data-tut` names through `src/ui/highlight.js` `tut(el, name)` / `setHighlight(list)`),
+and a step completes when its `done(T)` reads true from the sim state; steps without `done` explain
+and advance with Next. Esc leaves the lesson (back to the title screen and the attract battle).
+
+**Ownership.** Sim scripting agent: `src/sim/*` (the scripted mode and `sim.script`, below; normal
+games must be unchanged, re-run `tools/simtest.mjs` to prove it). Tutorial agent: `src/tutorial.js`
+(new), `index.html`, `src/style.css`, `src/hud.js`, `src/main.js` (the wiring), and light edits in
+`src/ui/*` to tag controls with `tut(el, name)` (no behaviour changes in the console).
+
+**Scripted range** (`sim.newGame({ scripted: true, difficulty, seed })`): the director runs no phases
+and spawns nothing, there is no German fire unless the script asks for it, our pieces and crews take
+no damage, every unit starts on `mode: 'hold'` (the lesson sets the modes it wants), the clock is held
+at 10:00 (`sim.script.clock`). `sim.scripted` is true. Everything else (loading cycles, shells,
+observers, reports, damage to targets, infantry) is the normal game.
+
+```js
+sim.script.clock(hour | null)              // hold the clock at an hour (null: run it as in a battle)
+sim.script.mission(siteId, {               // a mission on a sector.js SITES target (made known) -> mission
+  kind, observer: 'foo' | 'air' | 'sound' | 'map', unitId, title, deadline,
+  firstError: { over, right },             // metres: the first round of the unit's fresh lay on it lands
+})                                         // exactly there (later rounds: normal dispersion, no calibration error)
+sim.script.wire(sectorId, opts)            // a wire-cutting mission -> mission
+sim.script.hostile(batteryId, { at, interval = 14, start = 450, walk = 90 })
+                                           // a German battery opens counter-battery fire on unit `at`: rounds
+                                           // land `start` m off and walk in `walk` m per round; it stops when
+                                           // the battery dies or the unit holds fire long enough (the normal
+                                           // signature rule); returns the 'cb' mission (sound ranging)
+sim.script.assault(sectorId, size = 1)     // an SOS: infantry form and cross, red rockets (normal rules)
+sim.script.convoy(); sim.script.train()    // the mobile targets (crossroads traffic, a train at the railhead)
+sim.script.quiet()                         // stop all German fire now
+sim.script.invulnerable(on = true)         // our pieces take no damage (default in scripted mode)
+sim.script.clear()                         // remove missions, shells in flight and infantry
+```
+
+**Daylight (a hard rule).** Every lesson runs in full daylight so the player can see the guns, the
+crews and the bursts: the scripted range holds the clock at 10:00, `sim.script.clock` clamps any hour
+it is given to 09:00 to 15:00, and no lesson asks for night. While a lesson runs, main drives the sun
+from the sim clock (it ignores a `?hour=` or slider hour, `params.lockHour`), keeps the weather at
+'Clear' or 'Overcast' (never Mist, Rain or Drizzle), and restores the player's settings on leaving.
+The sim's `night` stays false on the range (no night signature or observer rules).
+
+**Lessons** (`TUTORIALS` in `src/tutorial.js`; ids are also `?tutorial=<id>`):
+1. `basics`: the screen, units 1 to 5, the camera (drag, wheel, C), the console (board, fire order,
+   range table, missions, messages, the guns card), time compression, watching a gun load and fire,
+   F to ride its shell.
+2. `ranging`: the 6-inch battery: take a mission (Tab, Enter), lay, a ranging round, the FOO's
+   telephone report in yards, corrections (arrows, the step, the pencilled "apply"), the bracket, fire
+   for effect (rounds), the target destroyed.
+3. `clockcode`: the 9.2-inch with an aircraft observer: the RFC clock code (letter = distance, number =
+   hour, 12 = north) on the dial, decoding it into a correction.
+4. `heavy`: the 15-inch on a pillbox: the delay fuze, the crane cycle, the long flight (F); then Hilda,
+   the railway gun, on the railhead.
+5. `counter`: counter-battery: German shells walk onto your guns, HOLD to go quiet, the sound rangers'
+   reference, the 60-pounders on the hostile battery.
+6. `sos`: red rockets: S (or the sector keys), every gun on the SOS line, shrapnel from the 60-pounders,
+   breaking the attack.
+
+Every step has an optional `demo(T)` that performs its goal with the same commands the console sends
+(and the same keys main handles), so `window.__drumfire.tutorial.autoplay()` can run a whole lesson
+unattended; it is how the lessons are tested (every lesson must complete under autoplay).
+
+## Changelog
+
+- (lead) Initial contract, `src/sector.js`, framework files copied.
+- (audio) `audio.js` API as in the Audio section, plus: `audio.start()`, `setVolume(v)`, `toggleMute()`, `deafen(k)` (0..1 pressure dullness, normally raised by the engine itself when a gun or burst is close), `audio.onShock = ({ d, k, pos }) => {}` (fires when the shock of a close blast reaches the listener, after the travel delay: shake the camera there), `classOf(calibre)` export. Gun/burst classes by calibre: light < 4 in, field < 5.5 (60-pdr), med < 7.5 (6 in), heavy < 12 (9.2 in), huge (15 in, railway). `load(step, pos, kind)` steps: trolley, crane, ram, breech (screw + clang), screw, clang, cartridge, case, ready, fire, whistle; `kind` is a calibre in inches or 'bl15'/'bl92'/'bl6'/'bl60'. `flare(pos, 'very'|'star'|'rocket')`. Shell objects only need `{ pos, vel, alive, calibre, own }`; `alive === false` stops the voice. Tests: `node tools/audiotest.mjs`, `/audio.html` (`window.__audioReport.ok`).
+- (infantry) `inf.update(dt, groups, heightAt, camera)`: the camera (optional) enables the distance enlargement and frustum culling; `inf.blast(x, z, radius)`, `inf.reset()`, `inf.setShadows(on)`, `inf.stats`. Group frame: a man at (dx, dz) stands at `x = pos.x + dx cos b - dz sin b, z = pos.z + dx sin b + dz cos b` (dx to the right, dz toward the rear, so dz < 0 is ahead); men face their direction of travel. `men[i].t` is unused. Bodies stay where they fell until the group leaves `sim.infantry`, then sink and fade over 3 s. Viewer: `/src/models/inf/preview.html` (`?side=british&blast=1&cam=az,el,dist&far=1&n=200&force=dead|down|throw`).
+- (framework) `flares.js`: `new Flares(scene, { ground })`, `launch(pos, 'very'|'sos'|'star')`, `flash(pos, color, intensity, life, { radius, reach })` (intensity = the fx module's peak power, scaled by 0.02 inside), `clear()`, `lightAt(p)`. `shaderlib.js`: `MAX_FLARE_LIGHTS = 16`, new `uFlareRng[i]` (softening radius, reach) and GLSL `flareAtt(i, d2)`; fx.js loops should use `MAX_FLARE_LIGHTS` and `flareAtt`. `camera.js`: `shake`, `followShell`, `watch`, `releaseShot`, `mode`, `update(dt, alpha)`. `main.js`: `window.__drumfire` (`hooks.<event>`, `onFrame`, `aim`, `sandboxBlast`), `?sandbox=1` keys B N K L J, `?hour=` `?weather=` `?unit=N` (unit id), optional `src/render/index.js` `createRender({ scene, sim, terrain, fx, rigs })` -> `{ update(dt, rawDt, sim, fx), reset(sim) }`.
+- (fx) FX hooks main wires: `fx.onShock(pos, radius, speed, strength)` -> `post.shockwave(pos, { radius, speed, strength })`; `fx.onHeat(pos, radius, life)` -> `post.heat(pos, { radius, life })`; `fx.onFlash(pos, color, intensity, life, { radius, reach })` -> `flares.flash` (all args pooled: copy them). New: `post.dazzle(k)`, `post.heat`, grade '1917', `fx.reset()`, `seedFx(n)`, `fx.leaf`, `fx.clods`; sandbox `fx.html` (`&sheet=t1,t2,..` contact sheet).
+- (ui) `new Panel(root, { audio, onSelect, onCommand })`, `panel.update({ sim, selectedId }, dt?)` (also accepts iads-style `(dt, view)`), optional hooks main may call: `panel.radio(text, kind)` from `sim.events.radio` (phone, wireless, warn, alert and kill make slips on the message pad; info is ignored because the task slips already say it), `panel.sos(sectorId)` from `sim.events.sos`, `panel.reset()` on a new game, `panel.dispose()`. The panel watches `sim.shells` itself: a shell that vanishes has burst at its last position (fall of shot, numbered per unit; enemy bursts within 450 m of a piece are drawn as red splashes) and reads reports from `sim.missions[].reports`, so no event wiring is needed. UI conventions the sim should match: `unit.order.line` and `el` are radians, `range` metres (shown in yards), `order.x/z` the corrected aim point and `order.target` the uncorrected point, `order.adj` metres; `rangeTable(kind, charge)` returns `range` in metres (every 100 yards), `el` radians, `tof` and `apex` seconds and metres, an empty array for a charge the gun does not have (the UI counts charges by probing, or reads optional `unit.charges`); `sim.wind.bearing` is where the wind blows FROM (radians); optional `unit.arc` (half-angle of the arc of fire, radians). Corrections are in yards on the keys and converted to metres for `correct`. Keys owned by the console: Tab/Shift+Tab mission cursor, Enter take it, Space fire, arrows correct (Shift = 10 yards, else the step), X step (10/25/50/100/200 yd), Q/E charge, R rounds, Z fuze, A auto/manual, S S.O.S. (alarmed sector, else the weakest), Backspace/Delete cease, `.` apply the pencilled correction of the newest report. Harness: `/ui.html?unit=N&scn=ranging|sos|dead`.
+- (heavy models) `guns.js`: `buildGun(kind)` (sync), `GUN_KINDS`, `loadGuns()` (promise; bl6/bl60 load lazily from the field agent's files, a plain stand-in is returned until they have). Gun rigs come from `rig.js` `newGunRig(kind, scheme)` (+ `anchor`, `crewSpot`, `addShellProp`, `finishGun`): pivots `traverse`, `elevation`, `recoil`, `breech`, `tray` (bl15, bl92, rail; folds to keep the loading tilt above `loadEl`), bl15 `crane` (rotation.y, 0 over the tray, PI over `anchors.shellStack`) and `hoist` (position.y = hook height in the crane frame, `rig.hoistRange {up, down}`), rail `trolley` (position.z, 0 at the rear, about -3.1 at the breech) and `bogies`. Extras: `rig.setRecoil(k 0..1)`, `setElevation(r)`, `setTraverse(r)`, `rig.shell {len, rad}`, `rig.breechOpen {axis, angle}` (setBreech(1) swings the carrier 1.65 rad), `anchors.crew [{ role, x, y, z, heading, pose }]` (heading is rotation.y, 0 faces the muzzle). **The render layer must call `rig.update?.(dt)` every frame** (bl15 stretches its hoist chain, all three keep the tray at its loading tilt). Rail gun is the BL 12-inch Mk III howitzer ("Hilda"), whose 12-inch shell matches `shells.js` `rail`; recoil metres bl15 0.8, bl92 1.0, rail 0.76; `loadEl` bl15 0.3, bl92 -0.05, rail 0.06. `kit.js`: schemes 'drab' | 'wkhaki' | 'earth' | 'railcamo', materials `iron timber shell chain rope soil`, helpers `zLathe xLathe rivets rivetRow rivetFrame rivetPoly chain handwheel gearArc shellGeometry ibeamX/Y/Z mergeAll woodTextures`. `crew.js`: `buildCrewman({ outfit: 'gunner' | 'gunner-tunic' | 'officer' | 'german' | 'stretcher', ...overrides })`, options `headgear` brodie|stahlhelm|peaked, `vest` braces|ww1|german|sambrown, `shirt`, `legs` puttees|boots, `armband`; `crewForRole(role, i)`; poses added: `haul ram lay lanyard ears point phone dead`. Viewer `/models.html?kind=bl15|bl92|bl6|bl60|rail|crew`, `&all=guns|crew|outfits`, `&shell=bl15`, `&target=battery`, `&pose=elevation:0.6,recoil:1,breech:1,traverse:0.2,crane:0,hoist:2,trolley:-2`, `&load=tray|crane|trolley`, `&crew=1`, `&anim=1`, `&ortho=right|left|front|rear|top`, `&cam=az,el,dist`.
+- (lead) `sector.js`: unit 5 is the BL 12-inch railway howitzer Mk III "Hilda" (the heavy models agent's choice, at Ypres in November 1917). `RAIL_MAIN` (new, the north-south main line) and `RAIL_SPUR` (now the curved firing spur that leaves the main line at z = -1200 and runs east under the gun, so the car lies on the zero line, 90 degrees); the rail pad is turned to the piece bearing like the others; the 15-inch pad is 24 m square.
+- (dressing) `src/world/index.js`: `buildWorld(scene, terrain) -> { update(dt, camera), groups, idle(), stats(), invalidate(x, z, r) }` (invalidate drops tiles near a point so they rebuild on the new ground); `src/world/battery.js` exports `positionAnchors(unitId, pieceIndex) -> { shellStack, shelter, cartridges, net, commandPost }` each `{ x, z, yaw }`. Viewer: `src/world/preview.html`. Lays RAIL_MAIN and RAIL_SPUR, leaves 8 m of the spur clear under the railway gun.
+- (terrain) `src/trenchlines.js` (pure): `trenchPolylines()` -> [{ side: 'british'|'german', kind: 'fire'|'support'|'reserve'|'comm', pts }] (crenellated bays ~9 m, jogs 2.4 m, comm trenches zig-zag), `wireBelts()` -> [{ side, pts, width }] (stretches with gaps), `tracks()` -> [{ kind: 'road'|'plank'|'duckboard', pts }], `lineBase(key)`, `trenchDistance(x, z)`, `trenchSample(x, z, out)` -> { d, kind, side, lat }, `trackSample(x, z, out)`, `TRENCH` profiles (depth ~1.9 m, floor half-width 1 m, parapet +0.95 m on the enemy side, parados +0.6 m), `TRACK_WIDTH`.
+- (terrain) `terrainHeight.js` also exports `waterTable`, `wetAt`, `craterDensity`, `oldCraters`, `groundKindAt`, `STREAMS`, `groundSmooth`. `terrain.groundAt(x, z)`, `terrain.craters` (`add(x, z, radius, depth, { scorch, water })`, `delta`, `at`, `fill`), `terrain.heightAt` is a bound function (safe to pass as `fx.ground`). Viewer: `/world.html?at=...&cam=az,el,dist&hour=&weather=&craters=N&world=0&still=1`.
+- (field models) `shells.js`: `buildShell(kind, seg = 24)` and `buildCartridge(kind, { charges })` -> `{ parts, length, radius }`, built along Z nose -Z and centred; `SHELL_KINDS`. `targets.js`: `buildTarget(kind, opts)` -> `{ root, parts, setDamage(i, k), anchors: { burn[], top[], center }, ...extras }` (battery adds `rigs`, balloon `cable`/`bridle` and takes `{ alt }`), `buildGermanGun('fh15' | 'm21' | 'fk77')` (gun rigs, German 'tri' camouflage), `buildTraffic('wagon' | 'cart' | 'gun' | 'lorry')` and `buildTrain(n)` (Groups for mobile traffic), `partLayout(kind, { alt })` (Node-safe, in `src/models/t/layout.js`: part offsets `{ x, z, y }` in the site frame, local -Z is the site's facing; the sim should build `parts` from it). The target root is not turned: the render layer sets `root.rotation.y = headingFor(site.bearing)`. Parts are Groups whose home pose is taken at build; `setDamage` blackens, tilts, sinks, throws bits and fades a scorch blotch in. bl6/bl60/German guns follow the guns.js rig contract plus `setRecoil/setElevation/setTraverse`; `traverse` swings the whole carriage about the point under the axle; `setShell('cartridge', v)` shows the bag on the tray. Viewer: `src/models/t/preview.html?kind=bl6|bl60|german:fh15&pose=...&crew=1` or `?target=battery&dmg=0.5` or `?shell=all`.
+- (fx) pass 2: gun blast rebuilt (dense cloud, ground fan), geyser skirt/cauliflower head/base surge, soft ground fade in the smoke shader, distance enlargement; new hook fx.onGust(pos, dirX, dirZ, radius, strength) for grass flattening; smoke attribute iE.
+- (sim) src/sim/* written; extra fields and events listed in "Simulation details". `src/ballistics.*.js` reference copies deleted.
+  Traverse limits are game-wide (15in +-48 deg, 9.2in +-58, 6in +-68, 60pdr +-65, rail +-48 of the zero line) so every unit can reach
+  most of the front; models should pose `piece.az` as given. Muzzle velocities and drag are game values (15in 336 m/s, max range 9.7 km).
+- (render) `src/render/index.js` `createRender({ scene, sim, terrain, fx, rigs, camera? }) -> render`. It reuses main's gun rigs (`rigs`, key `${unitId}:${pieceIndex}`; builds any that are missing), so main's own recoil loop and `rig.rec = 1` are now redundant (the render layer runs after them and wins) and can go. Calls main makes: `render.update(dt, rawDt, sim, fx, camera)` every frame after `sim.update` (the camera drives crew level of detail, shell enlargement and infantry culling; without it everything is drawn in full); `render.select(unitId)` when the selected unit changes (full-detail crews out to 450 m, others within 140 m, a cheaper crew to 420 m, none beyond); `render.reset(sim)` after `sim.newGame`; `sim.events.enemyFire = (srcId, part, shell) => { const m = render.onEnemyFire(srcId, part, shell); if (m) { fx.gunBlast(_p.set(m.x, m.y, m.z), _d.set(m.dx, m.dy, m.dz), m.calibre, { night }); audio.gun(_p, m.calibre); } }` (`m` is a shared record `{ x, y, z, dx, dy, dz, calibre }`, copy it; it also kicks that German gun back); `render.hooks.shellBurst(shell, pos, info)` (or `render.onBurst(pos, info)`) throws infantry near a burst; `render.onFire(unit, piece)` returns the same kind of record for one of our guns with the rig posed exactly as the sim has it at the shot (use it instead of reading `rig.anchors.muzzle` in main's fire handler); `render.newestShell(unitId)` returns the sim shell for the F key; `render.eye(unitId, out)` a point above the unit's first gun. What it draws: guns posed from `piece.az/el`; recoil from `piece.firedAt` (out in 0.14 s, a pause, the run out over `GUNS[kind].runout`), a platform shudder, a wreck pose for a dead piece, the breech from the open/close steps; the loading crews (`crews.js`: pure functions of `piece.job`, the time since `firedAt` and `piece.fireAt`, so time compression and fastForward are exact): the 15-inch crane lifts the shell from the ground and swings it onto the tray, the railway gun's trolley runs the round forward, the 9.2-inch pair carries it from the stack, the 6-inch and 60-pdr carriers bring it by arm; rammer staff, cordite bags, lanyard with a rope, arm up for the order, everybody turning away and covering their ears from 1.6 s before a shot until 3 s after; shells in flight (`shells.js`, instanced per kind, interpolated with `sim.alpha`, enlarged with distance to about 7 px, cap 24x); targets (`targets.js`: `setDamage` per sim part, battery guns recoil, the balloon falls burning over 14 s, mobile targets only while `present`); infantry. The sim fields it reads beyond the contract: `piece.firedAt`, `piece.fireAt`, `piece.rounds`, `piece.cmd`, `piece.crew/crewMax`, `target.present/maxHp`, `shell.t0`. Preview: `/src/render/preview.html?unit=1&step=ram&t=0.5&cam=az,el,dist` (steps: depress open shell ram cartridge close prime lay ready fire idle; `fire` t is seconds since the shot; `&run=1` runs the sim live; `window.__render.set(step, t)`).
+- (sim scripting) `src/sim/script.js`: `sim.newGame({ scripted: true })` and `sim.script` as in "Tutorial (phase 3)"; deviations: `clock(null)` holds the current hour (never runs on), `mission` deadline defaults to 3600 s, `hostile` also takes `grace = 4` (rounds fired before the signature rule can end it, stops when the unit's signature is under 0.2), `firstError` is the lay's map error: every round of that unit on the mission lands that far over/right of its aim point (the first exactly, later ones with only dispersion), `sim.invulnerable`, scripted observers (quick, never lost, steadier estimates), `director.assault/convoy/train` now return their object or mission.

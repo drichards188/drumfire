@@ -1,0 +1,1116 @@
+import * as THREE from 'three';
+import GUI from 'lil-gui';
+import Stats from 'three/examples/jsm/libs/stats.module.js';
+
+import { globalUniforms, patchSceneFog } from './shaderlib.js';
+import { Atmosphere } from './atmosphere.js';
+import { Terrain, heightAt, los } from './terrain.js';
+import { groundKindAt } from './terrainHeight.js';
+import { Clouds } from './clouds.js';
+import { Weather, WEATHER } from './weather.js';
+import { PostFX, GRADES } from './post.js';
+import { FX } from './fx.js';
+import { Flares } from './flares.js';
+import { HUD } from './hud.js';
+import { Tutorials } from './tutorial.js';
+import { ChaseCamera } from './camera.js';
+import { UNITS, piecePlacements, headingFor, DEG, YARD } from './sector.js';
+
+// The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
+// are written by other agents: they are loaded here only if their files exist and work, so the page
+// always boots (import.meta.glob also bundles whichever exist).
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js']);
+const optional = async (path) => {
+  try {
+    return (await OPTIONAL[path]?.()) ?? null;
+  } catch (e) {
+    console.warn(`optional module ${path} failed: ${e.message}`);
+    return null;
+  }
+};
+
+const QUALITY = {
+  Low: { pixelRatio: 0.75, shadowMap: 2048, shadowExtent: 120, ao: false, raySamples: 16, dofSamples: 16, fx: 0.5, maxSmoke: 3500 },
+  Medium: { pixelRatio: 1, shadowMap: 2048, shadowExtent: 150, ao: true, raySamples: 32, dofSamples: 32, fx: 0.75, maxSmoke: 5500 },
+  High: { pixelRatio: 1.5, shadowMap: 4096, shadowExtent: 180, ao: true, raySamples: 48, dofSamples: 48, fx: 1, maxSmoke: 7000 },
+  Ultra: { pixelRatio: 2, shadowMap: 4096, shadowExtent: 220, ao: true, raySamples: 64, dofSamples: 64, fx: 1.25, maxSmoke: 9000 },
+};
+const TIME_SCALES = [0.25, 0.5, 1, 2, 4, 8];
+
+const hud = new HUD();
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const step = async (p, msg) => {
+  hud.setLoading(p, msg);
+  await tick();
+};
+const query = new URLSearchParams(location.search);
+const SANDBOX = !!query.get('sandbox');
+
+// ---------------------------------------------------------------- game values for the look and feel
+// Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
+// the calibre in inches that drives blast size, shake and sound (the sim's shells carry their own).
+const KIND = {
+  bl15: { eye: 4.2, dist: 46, calibre: 15 },
+  bl92: { eye: 3.2, dist: 60, calibre: 9.2 },
+  bl6: { eye: 2.2, dist: 100, calibre: 6 },
+  bl60: { eye: 2, dist: 52, calibre: 5 },
+  rail: { eye: 4.5, dist: 44, calibre: 12 },
+};
+// Camera trauma from a blast of `calibre` inches at `d` metres: a 15-inch beside the camera
+// is full trauma, a 60-pounder a nudge, and everything falls away with the square of the distance.
+const blastTrauma = (calibre, d, k = 1) => {
+  const r0 = 25 + 6 * calibre;
+  return Math.min(1, ((calibre / 15) ** 1.2 * 1.15 * k) / (1 + (d / r0) ** 2));
+};
+// the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
+const flashOf = (calibre) => 4.9e4 * calibre * calibre;
+
+// Time of day from the game clock (hours; 5.25 = 05:15). A game day, not an almanac: the sim's clock
+// starts at 04:45 for stand-to, so the sun rises early (~05:05) and the battle opens in the first light
+// instead of the dark; it sets at ~19:00, 26 degrees at noon. Returns elevation (degrees) and bearing.
+const SUN = { rise: 5.1, set: 19.0, noon: 26, midnight: 38 };
+function sunAt(hour) {
+  const h = ((hour % 24) + 24) % 24;
+  const day = SUN.set - SUN.rise;
+  if (h >= SUN.rise && h <= SUN.set) {
+    const u = (h - SUN.rise) / day;
+    return { elevation: SUN.noon * Math.sin(Math.PI * u), bearing: 105 + 150 * u };
+  }
+  const v = (((h - SUN.set + 24) % 24) / (24 - day));
+  return { elevation: -SUN.midnight * Math.sin(Math.PI * v), bearing: (255 + 210 * v) % 360 };
+}
+
+async function init() {
+  const view = document.getElementById('view');
+  const canvas = document.getElementById('c');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+  const size = () => ({ w: Math.max(2, view.clientWidth), h: Math.max(2, view.clientHeight) });
+  let { w: vw, h: vh } = size();
+  renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY.High.pixelRatio));
+  renderer.setSize(vw, vh, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.info.autoReset = false;
+
+  const scene = new THREE.Scene();
+  // far enough for the ridges and the haze; the near plane suits a camera 6 m from a gun
+  const camera = new THREE.PerspectiveCamera(50, vw / vh, 0.3, 80000);
+  camera.position.set(-1800, 30, -340);
+
+  const startQuality = QUALITY[query.get('quality')] ? query.get('quality') : 'Medium';
+
+  await step(0.05, 'Painting the sky');
+  const atmosphere = new Atmosphere(renderer, scene);
+  // a night with no moon over the line: gun flashes and flares do the lighting
+  atmosphere.setMoon({ dElev: -60, dAz: 100 });
+  // the faint blue ambient that keeps the ground readable after dark (a fixed light, never added later)
+  const nightHemi = new THREE.HemisphereLight(0x5b6c92, 0x201c14, 0);
+  scene.add(nightHemi);
+
+  await step(0.12, 'Surveying the salient');
+  const terrain = new Terrain(scene, { quality: startQuality });
+  const clouds = new Clouds(scene);
+
+  await step(0.35, 'Laying out the guns');
+  const fx = new FX(scene, { maxSmoke: QUALITY[startQuality].maxSmoke });
+  fx.ground = terrain.heightAt;
+  const flares = new Flares(scene, { ground: terrain.heightAt });
+  fx.onFlash = (pos, color, intensity, life, opts) => flares.flash(pos, color, intensity, life, opts);
+  const weather = new Weather(scene, null);
+
+  const mods = {
+    sim: await optional('./sim/sim.js'),
+    panel: await optional('./ui/panel.js'),
+    audio: await optional('./audio.js'),
+    guns: await optional('./models/guns.js'),
+    world: await optional('./world/index.js'),
+    craters: await optional('./craters.js'),
+    render: await optional('./render/index.js'),
+  };
+  await mods.guns?.loadGuns?.();
+
+  // ---------------------------------------------------------------- the world and the gun line
+  await step(0.45, 'Digging the trenches');
+  let world = null;
+  try {
+    world = mods.world?.buildWorld?.(scene, terrain) ?? null;
+  } catch (e) {
+    console.warn('buildWorld failed:', e.message);
+  }
+  let craters = terrain.craters ?? null;
+  try {
+    if (!craters && mods.craters?.Craters) craters = new mods.craters.Craters(terrain, { quality: startQuality });
+  } catch (e) {
+    console.warn('Craters failed:', e.message);
+  }
+
+  // one rig per piece, on the terrain, facing the unit's zero line; the render layer (phase 2)
+  // replaces these with rigs posed from the sim. Until then main recoils them on a fire event.
+  const rigs = new Map(); // `${unitId}:${piece}` -> rig
+  const unitRoot = {}; // unit id -> Object3D at the centre of the unit (the camera's target)
+  for (const u of UNITS) {
+    const places = piecePlacements(u);
+    const cx = places.reduce((s, p) => s + p.x, 0) / places.length, cz = places.reduce((s, p) => s + p.z, 0) / places.length;
+    const g = new THREE.Object3D();
+    g.position.set(cx, terrain.heightAt(cx, cz) + KIND[u.kind].eye, cz);
+    g.rotation.y = headingFor(u.zero);
+    scene.add(g);
+    unitRoot[u.id] = g;
+    if (!mods.guns?.buildGun) continue;
+    for (const p of places) {
+      try {
+        const rig = mods.guns.buildGun(p.kind);
+        rig.root.position.set(p.x, terrain.heightAt(p.x, p.z), p.z);
+        rig.root.rotation.y = headingFor(p.bearing);
+        rig.setElevation?.(0.5);
+        scene.add(rig.root);
+        rig.rec = 0;
+        rigs.set(`${u.id}:${p.i}`, rig);
+      } catch (e) {
+        console.warn(`buildGun(${p.kind}) failed: ${e.message}`);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- the battle
+  // The sim runs a demonstration bombardment (attract mode: nothing scored, nothing destroyed)
+  // behind the title screen; Take command starts the real one. Without a sim the gun line stands
+  // on its own (sandbox keys below).
+  let sim = null;
+  try {
+    if (mods.sim?.Sim) {
+      // the pure ground classifier, so the sim stays deterministic (runtime craters only change the look)
+      sim = new mods.sim.Sim({ heightAt, los, groundAt: groundKindAt, seed: (Math.random() * 1e9) | 0 });
+      sim.newGame({ attract: true });
+    }
+  } catch (e) {
+    console.warn('Sim failed to start:', e.message);
+    sim = null;
+  }
+  let renderLayer = null;
+  try {
+    renderLayer = mods.render?.createRender?.({ scene, sim, terrain, fx, rigs, camera }) ?? null;
+  } catch (e) {
+    console.warn('render layer failed:', e.message);
+  }
+
+  patchSceneFog(scene);
+
+  await step(0.72, 'Preparing the lens');
+  const post = new PostFX(renderer, scene, camera);
+  // the blast's refraction ring and the heat shimmer over a muzzle (fx sends pooled vectors: post copies)
+  fx.onShock = (pos, radius, speed, strength) => post.shockwave?.(pos, { radius, speed, strength });
+  fx.onHeat = (pos, radius, life) => post.heat?.(pos, { radius, life });
+  const chase = new ChaseCamera(camera, canvas, { ground: terrain.heightAt });
+  let audio = null;
+  try {
+    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine() : null;
+  } catch (e) {
+    console.warn('AudioEngine failed:', e.message);
+  }
+  // sound starts on the first user gesture (browsers refuse earlier), whichever it is
+  const wake = () => {
+    removeEventListener('pointerdown', wake);
+    removeEventListener('keydown', wake);
+    try {
+      if (audio && !audio.ctx) audio.start();
+    } catch (e) {
+      console.warn('audio.start failed:', e.message);
+    }
+  };
+  addEventListener('pointerdown', wake);
+  addEventListener('keydown', wake);
+  // a close blast's pressure wave reached the listener (after the 343 m/s delay): shake and dazzle land with the sound
+  if (audio) {
+    audio.onShock = ({ k }) => {
+      chase.shake(Math.min(1, k * 1.1));
+      post.dazzle?.(Math.min(1, k * 0.7));
+    };
+  }
+  const panelEl = document.getElementById('panel');
+  let panel = null;
+  try {
+    if (mods.panel?.Panel) {
+      panelEl.replaceChildren();
+      panel = new mods.panel.Panel(panelEl, {
+        audio,
+        onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
+        onCommand: (id, name, args) => sim?.command(id, name, args),
+      });
+    }
+  } catch (e) {
+    console.warn('Panel failed:', e.message);
+    panelEl.replaceChildren(Object.assign(document.createElement('div'), { className: 'placeholder', textContent: 'FIRE CONTROL OFFLINE' }));
+  }
+
+  // ---------------------------------------------------------------- settings
+  const params = {
+    quality: startQuality,
+    dynamicRes: !navigator.webdriver,
+    timeScale: 1,
+    difficulty: 'Normal',
+    fov: 50,
+    hour: Number(query.get('hour') ?? 8.5),
+    lockHour: query.get('hour') != null, // a fixed time of day (URL or the slider), not the sim's clock
+    weather: WEATHER[query.get('weather')] ? query.get('weather') : 'Overcast',
+    exposure: 1.0,
+    sunGain: 1.5,
+    envIntensity: 0.4,
+    nightGlow: 0.55,
+    autoExposure: true,
+    exposureKey: 0.17,
+    toneMapping: 'ACES Filmic',
+    grade: GRADES.Flanders ? 'Flanders' : 'Natural',
+    ao: true,
+    aoIntensity: 1.0,
+    bloom: true,
+    bloomStrength: 0.3,
+    bloomRadius: 0.55,
+    bloomThreshold: 3.0,
+    godRays: 0.35,
+    lensFlare: 0.4,
+    chromatic: 0.003,
+    vignette: 0.38,
+    grain: 0.03,
+    sharpen: 0.35,
+    shake: true,
+    fogDensity: 0.00009,
+    fogFalloff: 0.0007,
+    turbidity: 3.6,
+    rayleigh: 1.5,
+    grass: true,
+    trees: true,
+  };
+  let resScale = 1;
+  let state = 'title'; // title | playing | ended
+  let freeCam = false;
+  let selected = Math.max(0, Math.min(UNITS.length - 1, Number(query.get('unit') ?? 1) - 1)); // ?unit=N is the unit id (1 to 5)
+  let following = false; // the camera is on a shell (F)
+  let cineClock = 0; // title screen: seconds since the last cut
+
+  const basePixelRatio = () => Math.min(devicePixelRatio, QUALITY[params.quality].pixelRatio);
+  const applyPixelRatio = () => {
+    renderer.setPixelRatio(basePixelRatio() * (params.dynamicRes ? resScale : 1));
+    renderer.setSize(vw, vh, false);
+    post.setSize(vw, vh);
+  };
+  const applyQuality = (name) => {
+    const q = QUALITY[name];
+    resScale = 1;
+    applyPixelRatio();
+    atmosphere.setShadowQuality(q.shadowMap, q.shadowExtent);
+    params.ao = q.ao;
+    post.gtao.enabled = q.ao;
+    post.lens.material.defines.RAY_SAMPLES = q.raySamples;
+    post.lens.material.needsUpdate = true;
+    post.dof.material.defines.SAMPLES = q.dofSamples;
+    post.dof.material.needsUpdate = true;
+    fx.setBudget(q.fx);
+    terrain.setQuality(name);
+    gui.controllersRecursive().forEach((c) => c.updateDisplay());
+  };
+  const toneMaps = {
+    'ACES Filmic': THREE.ACESFilmicToneMapping,
+    AgX: THREE.AgXToneMapping,
+    'Khronos Neutral': THREE.NeutralToneMapping,
+    Reinhard: THREE.ReinhardToneMapping,
+  };
+
+  const gui = new GUI({ title: 'Settings', container: document.getElementById('gui-host') });
+  gui.add(params, 'quality', Object.keys(QUALITY)).name('Quality preset').onChange(applyQuality);
+  gui.add(params, 'dynamicRes').name('Dynamic resolution').onChange(() => {
+    resScale = 1;
+    applyPixelRatio();
+  });
+  const fPlay = gui.addFolder('Game');
+  fPlay.add(params, 'difficulty', ['Easy', 'Normal', 'Hard']).name('Difficulty (next game)').listen();
+  fPlay.add(params, 'timeScale', TIME_SCALES).name('Time compression ([ ])').listen().onChange((v) => hud.setTimeScale(v));
+  fPlay.add(params, 'fov', 30, 80, 1).name('Field of view');
+  fPlay.add(params, 'shake').name('Camera shake').onChange((v) => (chase.shakeOn = v));
+  const fWorld = gui.addFolder('Time & weather');
+  fWorld.add(params, 'hour', 0, 24, 0.05).name('Hour (fixes the clock)').listen().onChange(() => (params.lockHour = true));
+  fWorld.add(params, 'lockHour').name('Fixed time of day').listen();
+  fWorld.add(params, 'weather', Object.keys(WEATHER)).name('Weather').onChange((v) => weather.set(v)).listen();
+  fWorld.close();
+  const fLand = gui.addFolder('Landscape');
+  fLand.add(params, 'grass').name('Grass').onChange((v) => terrain.grass && (terrain.grass.mesh.visible = v));
+  fLand.add(params, 'trees').name('Trees').onChange((v) => terrain.trees && (terrain.trees.group.visible = v));
+  fLand.close();
+  const fCam = gui.addFolder('Look');
+  fCam.add(params, 'grade', Object.keys(GRADES)).name('Color grade').onChange((v) => post.setGrade(v));
+  fCam.close();
+  const fPost = gui.addFolder('Post processing');
+  fPost.add(params, 'autoExposure').name('Auto exposure');
+  fPost.add(params, 'exposureKey', 0.05, 0.6, 0.01).name('Exposure key');
+  fPost.add(params, 'exposure', 0.1, 3, 0.01).name('Exposure bias');
+  fPost.add(params, 'envIntensity', 0, 2, 0.01).name('Sky light (IBL)');
+  fPost.add(params, 'nightGlow', 0, 2, 0.01).name('Night ambient');
+  fPost.add(params, 'sunGain', 0.3, 3, 0.01).name('Sun intensity');
+  fPost.add(params, 'toneMapping', Object.keys(toneMaps)).name('Tone mapping');
+  fPost.add(params, 'ao').name('GTAO').onChange((v) => (post.gtao.enabled = v)).listen();
+  fPost.add(params, 'aoIntensity', 0, 2, 0.01).name('AO intensity');
+  fPost.add(params, 'bloom').name('Bloom');
+  fPost.add(params, 'bloomStrength', 0, 2, 0.01).name('Bloom strength');
+  fPost.add(params, 'bloomRadius', 0, 1, 0.01).name('Bloom radius');
+  fPost.add(params, 'bloomThreshold', 0, 10, 0.01).name('Bloom threshold');
+  fPost.add(params, 'godRays', 0, 3, 0.01).name('God rays');
+  fPost.add(params, 'lensFlare', 0, 3, 0.01).name('Lens flare');
+  fPost.add(params, 'chromatic', 0, 0.05, 0.001).name('Chromatic aberration');
+  fPost.add(params, 'vignette', 0, 1, 0.01).name('Vignette');
+  fPost.add(params, 'grain', 0, 0.15, 0.001).name('Film grain');
+  fPost.add(params, 'sharpen', 0, 1.5, 0.01).name('Sharpen');
+  fPost.close();
+  const fAtmo = gui.addFolder('Atmosphere');
+  fAtmo.add(params, 'fogDensity', 0, 0.0006, 0.000005).name('Haze density');
+  fAtmo.add(params, 'fogFalloff', 0, 0.01, 0.0001).name('Haze height falloff');
+  fAtmo.add(params, 'turbidity', 0, 20, 0.1).name('Turbidity').onChange(() => (atmosphere.lastEnvKey = ''));
+  fAtmo.add(params, 'rayleigh', 0, 4, 0.01).name('Rayleigh').onChange(() => (atmosphere.lastEnvKey = ''));
+  fAtmo.close();
+  post.setGrade(params.grade);
+
+  const guiHost = document.getElementById('gui-host');
+  guiHost.classList.add('hidden');
+  document.getElementById('gear').addEventListener('click', () => guiHost.classList.toggle('hidden'));
+
+  const stats = new Stats();
+  stats.dom.classList.add('stats');
+  view.appendChild(stats.dom);
+
+  // ---------------------------------------------------------------- units and camera
+  const selectUnit = (i) => {
+    if (i < 0 || i >= UNITS.length) return;
+    selected = i;
+    const u = UNITS[i];
+    freeCam = false;
+    following = false;
+    chase.free(false);
+    chase.releaseShot();
+    chase.setTarget(unitRoot[u.id]);
+    chase.goalDist = KIND[u.kind].dist;
+    // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
+    chase.goalYaw += 0.75;
+    chase.goalPitch = 0.17;
+    hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}`);
+    renderLayer?.select?.(u.id);
+    drumfire.events.select?.(u.id, i);
+  };
+  // F: ride the selected unit's newest shell in flight to its burst; back to the unit when it ends
+  const backToUnit = () => {
+    following = false;
+    if (state === 'title') chase.cine(true);
+  };
+  const followShell = (shell) => {
+    freeCam = false;
+    following = true;
+    chase.cine(false);
+    chase.followShell(shell, { onBurst: backToUnit });
+    hud.hint('Riding the shell (F: back to the gun)', 2200);
+  };
+  const newestShell = (unitId) => {
+    let best = null;
+    const list = sim?.shells ?? fakeShells;
+    for (const s of list) if (s.alive && s.own !== false && (s.unitId === unitId || s.unitId == null) && (!best || (s.id ?? 0) > (best.id ?? 0))) best = s;
+    return best;
+  };
+  const setTimeScale = (k) => {
+    params.timeScale = k;
+    hud.setTimeScale(k);
+  };
+  const stepTime = (d) => setTimeScale(TIME_SCALES[Math.min(TIME_SCALES.length - 1, Math.max(0, TIME_SCALES.indexOf(params.timeScale) + d))]);
+  const tsEl = document.getElementById('timescale');
+  tsEl.addEventListener('pointerdown', (e) => e.stopPropagation()); // no camera drag from the buttons
+  document.getElementById('ts-up').addEventListener('click', () => stepTime(1));
+  document.getElementById('ts-down').addEventListener('click', () => stepTime(-1));
+  document.getElementById('ts-val').addEventListener('click', () => setTimeScale(1));
+
+  const playBtn = document.getElementById('play');
+  const diffBtns = [...document.querySelectorAll('#difficulty button')];
+  diffBtns.forEach((b) =>
+    b.addEventListener('click', () => {
+      params.difficulty = b.dataset.d;
+      diffBtns.forEach((o) => o.classList.toggle('on', o === b));
+    })
+  );
+
+  // a new battle (the real one, a lesson's range or the demonstration): the sim, then everything that remembers the last
+  const newBattle = (opts) => {
+    if (!sim) return;
+    flares.clear();
+    fx.clearLitter?.();
+    sim.newGame(opts);
+    renderLayer?.reset?.(sim);
+    panel?.reset?.();
+    patchSceneFog(scene);
+  };
+  // a unit key or tab: a lesson keeps the player on the units it is about
+  const unitKey = (i) => {
+    if (tutorial?.active && !tutorial.run.def.units.includes(UNITS[i]?.id)) {
+      hud.hint('This lesson does not use that unit. Exit it to switch freely.', 1800);
+      return;
+    }
+    selectUnit(i);
+  };
+
+  const start = () => {
+    state = 'playing';
+    hud.hideEnd();
+    hud.showTitle(false);
+    chase.autoOrbit = 0;
+    chase.cine(false);
+    following = false;
+    newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0 });
+    selectUnit(selected);
+    hud.toast('Drumfire', 'Heavy artillery, Ypres salient, 1917', 3200);
+    hud.setScore(0);
+    try {
+      audio?.start?.();
+    } catch (e) {
+      console.warn('audio.start failed:', e.message);
+    }
+    hud.radio('Group HQ: all batteries, stand to. Observers report at first light.', 'info');
+    drumfire.events.start?.(params.difficulty);
+  };
+  playBtn.addEventListener('click', start);
+
+  // ---------------------------------------------------------------- tutorials (src/tutorial.js)
+  // A lesson runs the sim in scripted mode and ALWAYS in daylight: the sun follows the sim clock (held at 10:00),
+  // ignoring ?hour= and the slider, and the weather is Clear or Overcast; the player's settings come back on leaving.
+  const DAY_WEATHER = ['Clear', 'Overcast'];
+  let saved = null;
+  const setWeather = (w, now = false) => {
+    params.weather = w;
+    weather.set(w, now);
+  };
+  const tutorial = sim
+    ? new Tutorials({
+        sim,
+        hud,
+        host: {
+          enter(def) {
+            state = 'tutorial';
+            hud.showTitle(false);
+            hud.hideEnd();
+            chase.autoOrbit = 0;
+            chase.cine(false);
+            following = false;
+            saved ??= { weather: params.weather };
+            if (!DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
+            newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0 });
+            setTimeScale(1);
+            hud.setScore(0);
+            try {
+              audio?.start?.();
+            } catch (e) {
+              console.warn('audio.start failed:', e.message);
+            }
+            selectUnit(UNITS.findIndex((u) => u.id === def.unit));
+            applySun(clockHour(), true);
+          },
+          leave() {
+            following = false;
+            chase.releaseShot();
+            setTimeScale(1);
+            if (saved) setWeather(saved.weather, true);
+            saved = null;
+            newBattle({ attract: true, seed: (Math.random() * 1e9) | 0 });
+            state = 'title';
+            hud.showTitle(true);
+            cineClock = 0;
+            chase.cine(true);
+            selectUnit(selected);
+            applySun(clockHour(), true);
+          },
+          select: (id) => selectUnit(UNITS.findIndex((u) => u.id === id)),
+          selectedId: () => UNITS[selected].id,
+          cam: () => ({ yaw: chase.goalYaw, dist: chase.goalDist }),
+          nudgeCam: () => {
+            chase.goalYaw += 0.8;
+            chase.goalDist *= 0.9;
+          },
+          scale: () => params.timeScale,
+          setScale: (k) => setTimeScale(k),
+          follow: () => {
+            const sh = newestShell(UNITS[selected].id);
+            if (sh) followShell(sh);
+            return !!sh;
+          },
+          following: () => following,
+          hint: (text) => hud.hint(text, 3500),
+          frame: (dt, draw) => frame(dt, draw),
+        },
+      })
+    : null;
+  document.getElementById('tutorials').addEventListener('click', () => tutorial?.openMenu());
+
+  // ---------------------------------------------------------------- sandbox
+  // ?sandbox=1: no title, straight to the gun line. B fires a fake 15-inch blast at the selected
+  // unit and a fake shell that bursts 300 m ahead; N a burst 300 m ahead at once; K a star shell, L
+  // a Very light, J an SOS rocket over the selected unit's front. Meant for every agent's testing.
+  const fakeShells = [];
+  const fakeMesh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0x20180c, fog: false }));
+  fakeMesh.visible = false;
+  scene.add(fakeMesh);
+  const _m = new THREE.Vector3(), _d = new THREE.Vector3(), _b = new THREE.Vector3();
+  const unitFacing = (u, out) => out.set(Math.sin(u.zero), 0, -Math.cos(u.zero));
+  const sandboxBlast = (cal = 15) => {
+    const u = UNITS[selected];
+    const rig = rigs.get(`${u.id}:0`);
+    const dir = unitFacing(u, _d);
+    if (rig) rig.root.updateMatrixWorld(true);
+    const muzzle = rig?.anchors?.muzzle ? rig.anchors.muzzle.getWorldPosition(_m) : _m.copy(unitRoot[u.id].position).addScaledVector(dir, 6);
+    const aim = _b.copy(dir).multiplyScalar(0.8).setY(0.6).normalize();
+    handlers.fire({ id: u.id, kind: u.kind }, { i: 0, kind: u.kind, pos: muzzle }, { calibre: cal, vel: { x: aim.x * 300, y: aim.y * 300, z: aim.z * 300 } });
+    // a shell on an arc to a point 300 m ahead, 2.6 s of flight
+    const from = muzzle.clone();
+    const to = muzzle.clone().addScaledVector(dir, 300);
+    to.y = terrain.heightAt(to.x, to.z);
+    const shell = { id: Date.now(), own: true, unitId: u.id, calibre: cal, pos: from.clone(), prev: from.clone(), vel: new THREE.Vector3(), alive: true, t: 0, tof: 2.6, from, to };
+    fakeShells.push(shell);
+    audio?.shell?.(shell);
+    return shell;
+  };
+  const sandboxBurst = (cal = 9.2, ahead = 300) => {
+    const u = UNITS[selected];
+    const dir = unitFacing(u, _d);
+    const p = new THREE.Vector3().copy(unitRoot[u.id].position).addScaledVector(dir, ahead);
+    p.y = terrain.heightAt(p.x, p.z);
+    handlers.shellBurst({ calibre: cal, own: true }, p, { calibre: cal, fuze: 'instant', crater: cal * 0.5, ground: terrain.groundAt?.(p.x, p.z) ?? 'mud', hit: null, near: null, own: true });
+  };
+  const stepFakeShells = (dt) => {
+    for (let i = fakeShells.length - 1; i >= 0; i--) {
+      const s = fakeShells[i];
+      if (!s.alive) {
+        if ((s.dead = (s.dead ?? 0) + dt) > 8) fakeShells.splice(i, 1);
+        continue;
+      }
+      s.t += dt;
+      s.prev.copy(s.pos);
+      const k = Math.min(1, s.t / s.tof);
+      s.pos.lerpVectors(s.from, s.to, k);
+      s.pos.y += 4 * 60 * k * (1 - k); // an arc 60 m high
+      s.vel.copy(s.pos).sub(s.prev).divideScalar(Math.max(dt, 1e-3));
+      if (k >= 1) {
+        s.alive = false;
+        sandboxBurst(s.calibre, 300);
+      }
+    }
+    const live = fakeShells.find((s) => s.alive);
+    fakeMesh.visible = !!live;
+    if (live) fakeMesh.position.copy(live.pos);
+  };
+
+  // ---------------------------------------------------------------- sim events
+  // One table: sim.events.<name> runs the handler below, then drumfire.hooks.<name> (the render
+  // layer and tests hang their own work there). Every system is feature-detected: a missing method is
+  // skipped, never an error. `near` helpers turn a world point into distance from the camera.
+  const nearD = (p) => camera.position.distanceTo(p);
+  const asVec = (p, out) => out.set(p.x, p.y ?? 0, p.z);
+  const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _dir = new THREE.Vector3();
+  const seenShells = new WeakSet();
+  const handlers = {
+    // a gun fired: muzzle blast, light, recoil, sound, shake
+    fire(unit, piece, shell) {
+      const cal = shell?.calibre ?? KIND[piece?.kind ?? unit?.kind]?.calibre ?? 6;
+      const rig = rigs.get(`${unit.id}:${piece?.i ?? 0}`);
+      const night = atmosphere.night;
+      const v = shell?.vel;
+      if (v && (v.x || v.y || v.z)) _dir.set(v.x, v.y, v.z).normalize();
+      else unitFacing(UNITS.find((u) => u.id === unit.id) ?? UNITS[0], _dir).setY(0.4).normalize();
+      const m = renderLayer?.onFire?.(unit, piece);
+      if (m) {
+        _p.set(m.x, m.y, m.z);
+        _dir.set(m.dx, m.dy, m.dz);
+      } else if (rig?.anchors?.muzzle) {
+        rig.root.updateMatrixWorld(true);
+        rig.anchors.muzzle.getWorldPosition(_p);
+      } else asVec(piece?.pos ?? unit.pos, _p).addScaledVector(_dir, 4);
+      fx.gunBlast?.(_p, _dir, cal, { night });
+      audio?.gun?.(_p, cal);
+      if (rig && !renderLayer) rig.rec = 1;
+      // with sound running the shake and dazzle arrive with the pressure wave (audio.onShock)
+      if (!audio?.ctx) {
+        chase.shake(blastTrauma(cal, nearD(_p)));
+        post.dazzle?.(blastTrauma(cal, nearD(_p), 0.6) * 0.8);
+      }
+      if (!fx.gunBlast) fx.onFlash?.(_p, 0xffc070, flashOf(cal), 0.25);
+    },
+    load(unit, piece, stepName) {
+      const p = asVec(piece?.pos ?? unit.pos, _p);
+      audio?.load?.(stepName, p, piece?.kind ?? unit.kind);
+    },
+    // any burst, own or enemy
+    shellBurst(shell, pos, info = {}) {
+      tutorial?.onBurst(shell, info);
+      const cal = info.calibre ?? shell?.calibre ?? 6;
+      asVec(pos, _q);
+      if (info.fuze === 'shrapnel' && fx.shrapnel) fx.shrapnel(_q, cal);
+      else fx.shellBurst?.(_q, { calibre: cal, fuze: info.fuze, ground: info.ground, crater: info.crater });
+      if (info.crater > 0 && info.ground !== 'water') {
+        try {
+          craters?.add?.(_q.x, _q.z, info.crater, info.crater * 0.4, { scorch: Math.min(1.5, 0.6 + cal / 15), water: info.ground === 'water' });
+        } catch (e) {
+          console.warn('craters.add failed:', e.message);
+        }
+      }
+      audio?.burst?.(_q, cal, { fuze: info.fuze, ground: info.ground });
+      renderLayer?.onBurst?.(_q, info);
+      const d = nearD(_q);
+      // re-seat the dressing on the new crater, only where it is built in detail (near the camera)
+      if (info.crater > 0 && d < 1400) world?.invalidate?.(_q.x, _q.z, info.crater + 6);
+      if (!audio?.ctx) chase.shake(blastTrauma(cal, d, 0.9));
+      if (d < 120 * (cal / 9) + 40) {
+        post.shockwave?.(_q, { radius: 40 + cal * 12, speed: 343, strength: Math.min(1, 0.4 + cal / 20) });
+        if (!audio?.ctx) post.dazzle?.(Math.min(1, (1 - d / (120 * (cal / 9) + 40)) * 0.9));
+      }
+    },
+    enemyFire(src, part, shell) {
+      const m = renderLayer?.onEnemyFire?.(src, part, shell);
+      if (!m) return;
+      _p.set(m.x, m.y, m.z);
+      fx.gunBlast?.(_p, _dir.set(m.dx, m.dy, m.dz), m.calibre, { night: atmosphere.night });
+      audio?.gun?.(_p, m.calibre);
+    },
+    lift(k, barrage) {
+      if (sim?.attract) return;
+      hud.hint(`The barrage lifts (${k}${barrage?.kMax ? ` of ${barrage.kMax}` : ''})`, 2200);
+      audio?.ui?.('whistle');
+    },
+    incoming(shell) {
+      audio?.incoming?.(shell);
+    },
+    secondary(pos, sz) {
+      asVec(pos, _q);
+      fx.cookOff?.(_q, sz);
+      audio?.cookOff?.(_q, sz);
+      if (!audio?.ctx) chase.shake(blastTrauma(8 + 4 * sz, nearD(_q), 0.8));
+    },
+    flare(pos, kind) {
+      flares.launch(asVec(pos, _q), kind);
+      audio?.flare?.(_q, kind);
+    },
+    sos(sector) {
+      if (sim?.attract) return;
+      hud.hint('SOS: red rockets over the front', 2500);
+      panel?.sos?.(sector?.id ?? sector);
+    },
+    pieceHit(unit, piece) {
+      asVec(piece?.pos ?? unit.pos, _q);
+      fx.explosion?.(_q, 1.2, { debris: true });
+    },
+    pieceDestroyed(unit, piece) {
+      asVec(piece?.pos ?? unit.pos, _q);
+      fx.cookOff?.(_q, 1.5);
+      audio?.cookOff?.(_q, 1.5);
+      chase.shake(blastTrauma(10, nearD(_q)));
+    },
+    targetDestroyed(target, by) {
+      if (sim?.attract) return;
+      hud.kill(`${target.name}: destroyed`, target.points ?? 10, by != null && by !== UNITS[selected].id);
+      setScore();
+    },
+    report(mission, report) {
+      if (sim?.attract) return;
+      hud.radio(report.text, 'wireless');
+      audio?.ui?.('wireless');
+    },
+    mission(mission, change) {
+      if (sim?.attract) return;
+      if (change === 'new') {
+        hud.hint(`New fire mission: ${mission.title}`, 3000);
+        audio?.ui?.('phone');
+      }
+    },
+    radio(text, kind) {
+      if (sim?.attract) return;
+      hud.radio(text, kind);
+      panel?.radio?.(text, kind);
+      if (kind === 'phone' || kind === 'wireless') audio?.ui?.(kind);
+    },
+    phase(n, title, sub) {
+      if (sim?.attract) return;
+      hud.toast(title, sub, 5000);
+      audio?.ui?.('bell');
+    },
+    state(s) {
+      if ((s === 'victory' || s === 'defeat') && !sim.attract && state === 'playing') endGame(s);
+    },
+  };
+  const drumfire = { events: {}, hooks: {}, onFrame: [] };
+  window.__drumfire = drumfire;
+  if (sim) {
+    sim.events = sim.events || {};
+    for (const [name, fn] of Object.entries(handlers)) {
+      sim.events[name] = (...args) => {
+        try {
+          fn(...args);
+        } catch (e) {
+          console.warn(`event ${name}: ${e.message}`);
+        }
+        drumfire.hooks[name]?.(...args);
+      };
+    }
+    // the title screen's cutaways: a gun fires in the demonstration battle, the camera rides its shell
+    const baseFire = sim.events.fire;
+    sim.events.fire = (unit, piece, shell) => {
+      baseFire(unit, piece, shell);
+      if (sim.attract && state === 'title' && !following && cineClock > 9 && shell) {
+        const i = UNITS.findIndex((x) => x.id === unit.id);
+        if (i >= 0) {
+          if (i !== selected) selectUnit(i);
+          cineClock = 0;
+          followShell(shell);
+        }
+      }
+    };
+  }
+  const setScore = () => {
+    const sc = sim?.score;
+    hud.setScore(typeof sc === 'number' ? sc : sc?.points ?? 0);
+  };
+  const endGame = (s) => {
+    state = 'ended';
+    const sc = sim.score;
+    const win = s === 'victory';
+    hud.showEnd(
+      {
+        title: win ? 'Objectives taken' : 'The line is lost',
+        sub: win ? 'The Group has done its work.' : 'The sector is overrun.',
+        victory: win,
+        stats: [
+          ['Score', (typeof sc === 'number' ? sc : sc?.points ?? 0).toLocaleString('en-US')],
+          ...Object.entries(sc && typeof sc === 'object' ? sc : {}).filter(([k, v]) => k !== 'points' && typeof v === 'number').slice(0, 5).map(([k, v]) => [k, Math.round(v)]),
+          ['Pieces serving', `${sim.units.reduce((n, u) => n + u.pieces.filter((p) => p.state !== 'dead').length, 0)}`],
+        ],
+      },
+      { onRestart: () => start() }
+    );
+  };
+
+  // ---------------------------------------------------------------- keys and resize
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && tutorial?.escape()) return;
+    if (e.repeat || e.target.closest?.('input, textarea, select')) return;
+    if (/^Digit[1-5]$/.test(e.code) && !e.ctrlKey && !e.metaKey) unitKey(Number(e.code.slice(5)) - 1);
+    else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
+      if (following) {
+        chase.releaseShot();
+        backToUnit();
+        return;
+      }
+      const sh = newestShell(UNITS[selected].id);
+      if (sh) followShell(sh);
+      else hud.hint('No shell in flight from this unit', 1800);
+    } else if (e.code === 'KeyC' && !e.ctrlKey) {
+      following = false;
+      chase.releaseShot();
+      freeCam = !freeCam;
+      if (freeCam) {
+        chase.free(true);
+        chase.goalDist = 400;
+        chase.goalPitch = 0.4;
+        hud.hint('Free camera: drag to orbit, wheel to zoom, WASD to move, C to return', 3500);
+      } else selectUnit(selected);
+    } else if (e.code === 'BracketRight') stepTime(1);
+    else if (e.code === 'BracketLeft') stepTime(-1);
+    else if (e.code === 'KeyH') document.body.classList.toggle('ui-hidden');
+    else if (e.code === 'KeyM') hud.hint(audio?.toggleMute?.() ? 'Sound off' : 'Sound on', 1500);
+    else if (e.code === 'F3') {
+      e.preventDefault();
+      document.body.classList.toggle('debug');
+    } else if (SANDBOX && e.code === 'KeyB') sandboxBlast(KIND[UNITS[selected].kind].calibre);
+    else if (SANDBOX && e.code === 'KeyN') sandboxBurst(15, 300);
+    else if (SANDBOX && /^Key[KLJ]$/.test(e.code)) {
+      const u = UNITS[selected];
+      const p = unitRoot[u.id].position;
+      flares.launch(_q.set(p.x + Math.sin(u.zero) * 400, p.y - 3, p.z - Math.cos(u.zero) * 400), { KeyK: 'star', KeyL: 'very', KeyJ: 'sos' }[e.code]);
+    }
+  });
+
+  new ResizeObserver(() => {
+    ({ w: vw, h: vh } = size());
+    camera.aspect = vw / vh;
+    camera.updateProjectionMatrix();
+    renderer.setSize(vw, vh, false);
+    post.setSize(vw, vh);
+  }).observe(view);
+
+  // ---------------------------------------------------------------- first frame
+  await step(0.85, 'Compiling shaders');
+  applyQuality(startQuality);
+  weather.set(params.weather, true);
+  // a lesson is always daylight: the sim's held clock (09:00 to 15:00), never ?hour= or the slider
+  const clockHour = () => (tutorial?.active ? Math.min(15, Math.max(9, sim.scripted ? sim.clock : 10)) : params.lockHour || !sim || sim.clock == null ? params.hour : sim.clock);
+  const applySun = (h, force = false) => {
+    const s = sunAt(h);
+    sun.elevation = s.elevation;
+    sun.bearing = s.bearing;
+    if (force || Math.abs(s.elevation - atmosphere.elevation) > 0.4 || Math.abs(s.bearing - 180 + atmosphere.azimuth) > 1.5 || atmosphere.lastEnvKey === '') atmosphere.set(s.elevation, 180 - s.bearing);
+  };
+  const sun = { elevation: 20, bearing: 180 };
+  applySun(clockHour(), true);
+  selectUnit(selected);
+  chase.cine(!SANDBOX);
+  chase.goalDist = 60;
+  chase.goalPitch = 0.28;
+  chase.update(1);
+  terrain.update(camera, true);
+  await renderer.compileAsync(scene, camera);
+  atmosphere.update(chase.focus, 0, camera);
+  renderer.shadowMap.needsUpdate = true;
+  post.render(0.016);
+  hud.setLoading(1, '');
+  hud.ready();
+  playBtn.disabled = false;
+  hud.setTimeScale(1);
+
+  const timer = new THREE.Timer();
+  const sunColorN = new THREE.Color();
+  const ambient = new THREE.Color();
+  let t = 0;
+  let sunTimer = 0;
+  let hudTimer = 0;
+  let resTimer = 0;
+  let ambTimer = 0;
+  let frameAvg = 16;
+  const markers = [];
+  const bracketPt = new THREE.Vector3();
+
+  const frame = (forcedDt, draw = true) => {
+    timer.update();
+    const rawDt = forcedDt ?? THREE.MathUtils.clamp(timer.getDelta(), 0, 0.1);
+    frameAvg += (rawDt * 1000 - frameAvg) * 0.05;
+    const dt = rawDt * params.timeScale; // game time (time compression applies to the world, not the camera)
+    t += dt;
+    globalUniforms.uTime.value = t;
+
+    // time of day: the sim's clock, or the fixed hour
+    const hour = clockHour();
+    sunTimer -= rawDt;
+    const u = atmosphere.uniforms;
+    atmosphere.setStorm(weather.state.storm);
+    u.cloudCoverage.value = weather.state.cover * 0.45;
+    u.cloudDensity.value = 0.45 + weather.state.storm * 0.4;
+    u.turbidity.value = params.turbidity;
+    u.rayleigh.value = params.rayleigh;
+    const stormKey = weather.state.storm.toFixed(2);
+    if (sunTimer <= 0 && (!atmosphere.lastEnvKey.endsWith(stormKey) || Math.abs(sunAt(hour).elevation - atmosphere.elevation) > 0.4 || Math.abs(sunAt(hour).bearing - 180 + atmosphere.azimuth) > 1.5)) {
+      applySun(hour, true);
+      sunTimer = 0.25;
+    }
+    scene.environmentIntensity = params.envIntensity * atmosphere.baseEnvIntensity * (1 - weather.state.storm * 0.35) + weather.flash * 2.5;
+
+    if (dt > 0) sim?.update(dt);
+    if (tutorial?.active && !DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
+    tutorial?.update(rawDt);
+    if (SANDBOX || !sim) stepFakeShells(dt);
+    if (!renderLayer) for (const rig of rigs.values()) {
+      rig.update?.(dt);
+      if (rig.rec > 0) {
+        rig.rec = Math.max(0, rig.rec - rawDt / 1.7);
+        // out in a tenth of a second, back at an easy run-out
+        const k = 1 - rig.rec, r = k < 0.07 ? k / 0.07 : 1 - ((k - 0.07) / 0.93) ** 0.8;
+        if (rig.setRecoil) rig.setRecoil(Math.max(0, r));
+        else if (rig.pivots?.recoil) rig.pivots.recoil.position.z = (rig.recoilLength ?? 1) * Math.max(0, r);
+      }
+    }
+    if (sim) renderLayer?.update?.(dt, rawDt, sim, fx, camera);
+    world?.update?.(dt, camera);
+    craters?.update?.(dt, camera);
+    if (sim) {
+      for (const sh of sim.shells) {
+        if (!seenShells.has(sh)) {
+          seenShells.add(sh);
+          audio?.shell?.(sh);
+        }
+      }
+    }
+    for (const f of drumfire.onFrame) f(dt, rawDt, t);
+
+    camera.fov += (params.fov - camera.fov) * (1 - Math.exp(-rawDt * 10));
+    camera.updateProjectionMatrix();
+    if (state === 'title') {
+      cineClock += rawDt;
+      if (!following && cineClock > 26) {
+        cineClock = 0;
+        selectUnit((selected + 1) % UNITS.length);
+        chase.cine(true);
+      }
+    }
+    chase.update(rawDt, sim?.alpha ?? 1);
+    if (drumfire.aim) camera.lookAt(drumfire.aim.x, drumfire.aim.y, drumfire.aim.z); // a test can look anywhere
+    camera.updateMatrixWorld();
+    // camouflage nets between the camera and the gun it orbits are cut away (world/mats.js)
+    const cut = mods.world?.CUTAWAY;
+    if (cut) {
+      cut.a.value.copy(camera.position);
+      cut.b.value.copy(chase.focus);
+      cut.r.value = chase.mode === 'unit' && !freeCam ? 10 : 0;
+    }
+
+    terrain.update(camera);
+
+    atmosphere.update(chase.focus, t, camera);
+    const light = atmosphere.sun;
+    light.intensity = (atmosphere.sunBase ?? light.intensity) * params.sunGain;
+    sunColorN.copy(light.color).multiplyScalar(light.intensity / 6.5);
+    globalUniforms.uSunDirW.value.copy(atmosphere.lightDir);
+    globalUniforms.uSunColorN.value.copy(sunColorN);
+    ambient.copy(scene.fog.color).multiplyScalar(0.9 + 0.3 * (1 - weather.state.storm));
+    nightHemi.intensity = params.nightGlow * atmosphere.night * (1 - 0.3 * weather.state.storm);
+
+    const lightEnv = { sunDir: atmosphere.lightDir, sunColor: sunColorN, sunIntensity: 6.5, ambient };
+    clouds.update(dt, camera, {
+      ...lightEnv,
+      sunIntensity: 6.5 * (1 - 0.65 * atmosphere.night),
+      cover: THREE.MathUtils.clamp(0.55 + weather.state.cover * 0.6, 0, 1),
+      deck: weather.state.deck ?? 0,
+    });
+    fx.wind.set(-4 * weather.state.wind, 0, 1.6 * weather.state.wind);
+    fx.update(dt, camera, { ...lightEnv, night: atmosphere.night });
+    flares.wind.copy(fx.wind);
+    flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * renderer.getPixelRatio()));
+    weather.update(dt, t, camera, atmosphere);
+
+    scene.fog.density = params.fogDensity * weather.state.fog;
+    globalUniforms.fogSunColor.value.copy(atmosphere.fogSunBase || globalUniforms.fogSunColor.value).multiplyScalar(1 - 0.9 * weather.state.storm);
+    globalUniforms.fogHeightFalloff.value = params.fogFalloff;
+    globalUniforms.fogBaseHeight.value = 0;
+
+    const nightK = atmosphere.night;
+    renderer.toneMapping = toneMaps[params.toneMapping];
+    renderer.toneMappingExposure = params.exposure;
+    const ex = post.exposure.params;
+    ex.auto = params.autoExposure;
+    ex.key = params.exposureKey * (1 - 0.35 * nightK);
+    ex.max = 2 + 5 * (1 - THREE.MathUtils.smoothstep(sun.elevation, -6, 3));
+    post.gtao.blendIntensity = params.aoIntensity;
+    post.bloom.enabled = params.bloom;
+    post.bloom.strength = params.bloomStrength * (1 - 0.3 * nightK);
+    post.bloom.radius = params.bloomRadius;
+    post.bloom.threshold = params.bloomThreshold;
+    const lu = post.lens.uniforms;
+    lu.uFlare.value = params.lensFlare * (1 - weather.state.storm);
+    lu.uCA.value = params.chromatic;
+    const gu = post.grade.uniforms;
+    gu.uVignette.value = params.vignette;
+    gu.uGrain.value = params.grain * (1 - 0.5 * nightK);
+    gu.uNight.value = nightK;
+    gu.uSharpen.value = params.sharpen;
+    post.dof.enabled = false;
+    post.update(t, rawDt, atmosphere.sunDir, sunColorN, sun.elevation);
+    lu.uRays.value *= params.godRays * (1 - weather.state.storm);
+
+    renderer.info.reset();
+    renderer.shadowMap.needsUpdate = true;
+    if (draw) post.render(rawDt);
+    stats.update();
+
+    // HUD, console, audio
+    hud.setClock(hour);
+    if (panel && sim) {
+      const view2 = { sim, selectedId: UNITS[selected].id, dt: rawDt, time: sim.time };
+      if (panel.update.length >= 2) panel.update(rawDt, view2);
+      else panel.update(view2);
+    }
+    if (audio) {
+      ambTimer -= rawDt;
+      if (ambTimer <= 0) {
+        ambTimer = 0.5;
+        const busy = sim ? Math.min(1, 0.25 + sim.shells.length * 0.04) : 0.3;
+        audio.setAmbience?.({ drumfire: state === 'playing' || state === 'title' ? busy : state === 'tutorial' ? busy * 0.5 : 0, rain: weather.state.rain, wind: weather.state.wind });
+      }
+      audio.update?.(rawDt, camera);
+    }
+
+    resTimer -= rawDt;
+    if (params.dynamicRes && resTimer <= 0) {
+      resTimer = 1.5;
+      let next = resScale;
+      if (frameAvg > 20) next = Math.max(0.5, resScale - 0.1);
+      else if (frameAvg < 13.5) next = Math.min(1, resScale + 0.05);
+      if (next !== resScale) {
+        resScale = next;
+        applyPixelRatio();
+      }
+    }
+
+    // compass: the other batteries, the known targets, the selected unit's mission point
+    markers.length = 0;
+    UNITS.forEach((un, i) => {
+      if (i !== selected) markers.push({ pos: unitRoot[un.id].position, kind: 'unit', label: un.id });
+    });
+    let mission = null;
+    if (sim) {
+      const su = sim.units?.find((x) => x.id === UNITS[selected].id);
+      mission = su?.missionId != null ? sim.missionById?.(su.missionId) : null;
+      let n = 0;
+      for (const tg of sim.targets ?? []) {
+        if (tg.alive && tg.known && n++ < 8) markers.push({ pos: tg.pos, kind: 'enemy', label: (tg.kind ?? '').slice(0, 3).toUpperCase() });
+      }
+    }
+    hud.updateCompass(camera, markers);
+    if (mission) {
+      bracketPt.set(mission.x, terrain.heightAt(mission.x, mission.z) + 4, mission.z);
+      hud.bracket(camera, bracketPt, `${mission.title ?? mission.kind}`);
+    } else hud.bracket(camera, null);
+
+    hudTimer -= rawDt;
+    if (hudTimer <= 0 && document.body.classList.contains('debug')) {
+      hudTimer = 0.25;
+      const i = renderer.info;
+      const c = fx.counts ?? {};
+      hud.debug(
+        `fps        ${(1000 / frameAvg).toFixed(0)} (${frameAvg.toFixed(1)} ms)\n` +
+          `state      ${state}  time x${params.timeScale}${freeCam ? '  free camera' : ''}  camera ${chase.mode}\n` +
+          `draw calls ${i.render.calls}\n` +
+          `triangles  ${(i.render.triangles / 1e6).toFixed(2)}M\n` +
+          `resolution ${Math.round(vw * renderer.getPixelRatio())}x${Math.round(vh * renderer.getPixelRatio())} (${Math.round(resScale * 100)}%)\n` +
+          `particles  ${c.smoke ?? 0} smoke, ${c.glow ?? 0} glow, ${c.debris ?? 0} debris  lights ${globalUniforms.uFlareCount.value} (${flares.items.length} flares, ${flares.flashes.length} flashes)\n` +
+          `battle     ${sim ? `${sim.state} phase ${sim.phase} shells ${sim.shells.length}` : 'no sim'}\n` +
+          `camera     ${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)}  dist ${chase.dist.toFixed(0)}  trauma ${chase.trauma.toFixed(2)}\n` +
+          `clock      ${String(Math.floor(hour)).padStart(2, '0')}:${String(Math.floor((hour % 1) * 60)).padStart(2, '0')}  sun ${sun.elevation.toFixed(1)} deg bearing ${sun.bearing.toFixed(0)}  weather ${params.weather}`
+      );
+    }
+  };
+  renderer.setAnimationLoop(() => frame());
+
+  if (SANDBOX) {
+    state = 'playing';
+    hud.showTitle(false);
+    chase.cine(false);
+    selectUnit(selected);
+    hud.setScore(0);
+  } else if (query.get('tutorial') && tutorial) {
+    tutorial.start(query.get('tutorial'));
+  } else if (query.get('play')) {
+    selectUnit(selected);
+    start();
+  }
+
+  Object.assign(drumfire, {
+    renderer, scene, camera, terrain, atmosphere, post, fx, flares, hud, chase, params, frame, clouds, weather, world, craters,
+    sim, tutorial, audio, panel, rigs, unitRoot, units: UNITS, handlers, renderLayer, sun, fakeShells,
+    select: selectUnit, start, setTimeScale, followShell, newestShell, sandboxBlast, sandboxBurst,
+    fastForward(seconds, { unit = null, scale = 8, settle = 6 } = {}) {
+      renderer.setAnimationLoop(null);
+      if (unit != null) selectUnit(unit);
+      const keep = params.timeScale;
+      params.timeScale = scale;
+      for (let i = Math.ceil(seconds / (0.05 * scale)); i > 0; i--) frame(0.05, false);
+      params.timeScale = keep;
+      for (let i = 0; i < settle; i++) frame(1 / 30, true);
+      return {
+        time: Math.round(sim?.time ?? t), state: sim?.state ?? state, clock: sim?.clock ?? params.hour,
+        shells: sim?.shells?.length ?? fakeShells.length, score: sim?.score ?? 0,
+      };
+    },
+  });
+  Object.defineProperty(drumfire, 'state', { get: () => state, configurable: true });
+}
+
+init().catch((e) => {
+  console.error(e);
+  document.getElementById('status').textContent = `Failed to start: ${e.message}`;
+});
