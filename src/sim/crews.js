@@ -181,7 +181,7 @@ export class Crews {
 
   await(u, ai, m) {
     const sim = this.sim;
-    const mine = m.reports.filter((r) => r.unitId === u.id);
+    const mine = m.reports.filter((r) => r.unitId === u.id && !r.wild);
     if (mine.length > ai.seen && !u.firing) {
       const r = mine[mine.length - 1];
       ai.seen = mine.length;

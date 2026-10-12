@@ -496,7 +496,7 @@ async function init() {
             chase.cine(false);
             following = false;
             saved ??= { weather: params.weather };
-            if (!DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
+            setWeather('Clear', true); // sun and shadow for the lesson; the gear menu may still pick Overcast
             newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0 });
             setTimeScale(1);
             hud.setScore(0);
@@ -642,7 +642,7 @@ async function init() {
     },
     // any burst, own or enemy
     shellBurst(shell, pos, info = {}) {
-      tutorial?.onBurst(shell, info);
+      tutorial?.onBurst(shell, pos, info);
       const cal = info.calibre ?? shell?.calibre ?? 6;
       asVec(pos, _q);
       if (info.fuze === 'shrapnel' && fx.shrapnel) fx.shrapnel(_q, cal);
@@ -863,6 +863,7 @@ async function init() {
   hud.setLoading(1, '');
   hud.ready();
   playBtn.disabled = false;
+  document.getElementById('tutorials').disabled = !tutorial;
   hud.setTimeScale(1);
 
   const timer = new THREE.Timer();

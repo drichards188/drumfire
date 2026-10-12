@@ -31,19 +31,26 @@ const target = (T, key = 'main') => {
 // destroyed, or the mission closed as done (a battery is silenced before its last gun burns)
 const targetDown = (T, key = 'main') => {
   const t = target(T, key);
-  return (!!t && !t.alive) || T.m(key)?.state === 'done';
+  return (!!t && !t.alive) || !!T.life.closed[key];
 };
 const taken = (T, key = 'main') => !!T.m(key) && T.u.missionId === T.m(key).id;
 // the dead-reckoned "has the gun a round to go": loaded or loading something worth firing
 const idle = (T) => !inFlight(T) && !queued(T.u);
 
-// the correction (metres) that would carry the unit's aim onto the German battery B1
+// the adjustment (metres, as order.adj) that would carry the unit's rounds onto the German battery B1: read
+// from where its last bursts fell, the way the player reads the numbered marks on the board
 const counterNeed = (T) => {
   const b = T.sim.targetById('B1'), u = T.u, t = u.order.target;
-  if (!b || !t) return null;
+  const f = T.life.fall.filter((q) => q.unitId === u.id).slice(-6);
+  if (!b || !t || !f.length) return null;
   const dx = t.x - u.pos.x, dz = t.z - u.pos.z, r = Math.hypot(dx, dz) || 1, fx = dx / r, fz = dz / r;
-  const ex = b.pos.x - t.x, ez = b.pos.z - t.z;
-  return { add: ex * fx + ez * fz, right: -ex * fz + ez * fx };
+  let add = 0, right = 0;
+  for (const q of f) {
+    const ex = b.pos.x - q.x, ez = b.pos.z - q.z;
+    add += q.adj.add + ex * fx + ez * fz;
+    right += q.adj.right - ex * fz + ez * fx;
+  }
+  return { add: add / f.length, right: right / f.length };
 };
 
 // the steps that several lessons share
@@ -77,7 +84,15 @@ const reportStep = (o = {}) => ({
 // correct as the report says, fire again, until the observer calls it on target
 const bracketDemo = (T) => {
   const u = T.u, R = T.rep;
-  if (!idle(T) || u.stats.rounds - (T.lr0[T.uid] ?? 0) > R.n) return; // a round is flying or its report is due
+  if (!idle(T) || targetDown(T)) return;
+  if (u.stats.rounds - (T.lr0[T.uid] ?? 0) > R.n) {
+    // a report is due; if none comes the observer lost the round (the aim has strayed far from the target): come back half way
+    if (T.sim.time - u.lastShot < 40) return;
+    T.once(`lost${u.stats.rounds}`, () => T.act('correct', { add: -u.order.adj.add / 2, right: -u.order.adj.right / 2 }));
+    T.lr0[T.uid] = u.stats.rounds - R.n;
+    R.last = null; // that report's correction is no longer wanted
+    return;
+  }
   if (R.last && !R.last.ok && !T.corrected()) T.act('correct', { add: R.last.corr.add, right: R.last.corr.right });
   else if (readyN(u) > 0 || u.pieces.some((p) => p.state !== 'dead')) T.act('fire');
 };
@@ -87,7 +102,7 @@ const effectStep = (o = {}) => ({
   text: o.text,
   goal: 'Press R until ROUNDS is 4 or more, then Space',
   hi: ['rounds', 'fire'],
-  done: (T) => T.u.order.rounds >= 3 && shots(T) >= 1,
+  done: (T) => (T.u.order.rounds >= 3 && shots(T) >= 1) || targetDown(T),
   demo: (T) => {
     T.once('rounds', () => T.act('rounds', { n: o.n ?? 6 }));
     if (T.u.order.rounds >= 3) T.once('fire', () => T.act('fire'));
@@ -241,7 +256,7 @@ export const TUTORIALS = [
     units: [3],
     blurb: 'The 6-inch battery on a hostile battery: take the task, a ranging round, the observer\'s telephone report, corrections, fire for effect.',
     outro: 'Range first, then fire for effect: the first round of a fresh lay is never right. Next, the aeroplane observer and the clock code.',
-    keep: (T) => T.ensure('main', 'B1', { observer: 'foo', title: 'Hostile battery 1', firstError: { over: -260, right: 90 } }),
+    keep: (T) => T.ensure('main', 'B1', { observer: 'foo', title: 'Hostile battery 1', firstError: { over: -150, right: 60 } }),
     steps: [
       {
         id: 'brief',
@@ -281,7 +296,7 @@ export const TUTORIALS = [
         goal: 'Get an "on target" report',
         hi: ['fire', 'pad', 'keypad'],
         limit: 500,
-        done: (T) => !!T.m()?.reports.some((r) => r.ok),
+        done: (T) => !!T.m()?.reports.some((r) => r.ok) || targetDown(T),
         demo: bracketDemo,
       },
       effectStep({
@@ -302,7 +317,7 @@ export const TUTORIALS = [
     units: [2],
     blurb: 'The 9.2-inch section with an R.F.C. observer: the wireless message, the clock code on the dial, and decoding it into a correction.',
     outro: 'Letter for distance, number for the hour, twelve at true north: that is all the code. The observer in the air sees what the trench cannot.',
-    keep: (T) => T.ensure('main', 'B2', { observer: 'air', title: 'Hostile battery 2', firstError: { over: -300, right: 0 } }),
+    keep: (T) => T.ensure('main', 'B2', { observer: 'air', title: 'Hostile battery 2', firstError: { over: -150, right: 0 } }),
     steps: [
       {
         id: 'brief',
@@ -347,7 +362,7 @@ export const TUTORIALS = [
         goal: 'Get a message of A or better',
         hi: ['fire', 'pad', 'clock'],
         limit: 600,
-        done: (T) => !!T.m()?.reports.some((r) => r.ok),
+        done: (T) => !!T.m()?.reports.some((r) => r.ok) || targetDown(T),
         demo: bracketDemo,
       },
       effectStep({
@@ -508,7 +523,7 @@ export const TUTORIALS = [
       {
         id: 'incoming',
         title: 'Counter-battery fire',
-        text: 'A German battery has been listening. Hear that? The first rounds fall about 500 yards from you and then walk in, 100 yards a time. You cannot stop them landing, and a gun cannot be hit twice by what has already passed. Your guns cannot be hurt on this range, but they could be in a real fight.',
+        text: 'A German battery has been listening. Hear that? The first rounds fall about 500 yards from you and then walk in, 100 yards a time. Your guns cannot be hurt on this range, but in a real fight they could be.',
         goal: 'Survive two German bursts',
         enter: (T) => {
           T.life.eb = 0;
@@ -577,23 +592,28 @@ export const TUTORIALS = [
         done: (T) => {
           const need = counterNeed(T);
           const a = T.u.order.adj;
-          return !need || (Math.abs(a.add - need.add) < 80 && Math.abs(a.right - need.right) < 80);
+          return !!need && (Math.abs(a.add - need.add) < 80 && Math.abs(a.right - need.right) < 80);
         },
         demo: (T) => {
           const need = counterNeed(T), a = T.u.order.adj;
-          if (need && idle(T)) T.once('c', () => T.act('correct', { add: need.add - a.add, right: need.right - a.right }));
+          if (need && idle(T)) T.once(`c${T.life.fall.length}`, () => T.act('correct', { add: need.add - a.add, right: need.right - a.right }));
         },
       },
       {
         id: 'silenced',
-        title: 'Silence the battery',
-        text: 'Keep firing until the German battery is wrecked. The sound rangers will tell you if it is shifting.',
-        goal: 'Destroy the German battery',
+        title: 'Cripple the battery',
+        text: 'Keep firing, and keep correcting onto the red symbol after every series, until the German battery has lost half its strength. Sixty-pounders are light, so it takes a while: press ] to hurry.',
+        goal: 'Cripple the German battery',
         hi: ['guns', 'board'],
         limit: 900,
-        done: (T) => !T.sim.targetById('B1')?.alive,
+        done: (T) => {
+          const b = T.sim.targetById('B1');
+          return !b || !b.alive || b.parts.reduce((n, p) => n + Math.max(0, p.hp), 0) <= b.parts.length * 12; // half its strength gone
+        },
         demo: (T) => {
           if (!idle(T)) return;
+          const need = counterNeed(T), a = T.u.order.adj;
+          if (need) T.act('correct', { add: need.add - a.add, right: need.right - a.right });
           T.act('rounds', { n: 8 });
           T.act('fire');
         },
@@ -800,7 +820,7 @@ export class Tutorials {
     this.hud.showTutorialMenu(false);
     this.host.enter(def);
     this.ms = {}; // lesson missions by key
-    this.life = { eb: 0, lastEB: 0 }; // facts that outlive a step
+    this.life = { eb: 0, lastEB: 0, fall: [], closed: {} }; // facts that outlive a step
     this.lr0 = {}; // rounds each unit had fired when the lesson began
     this.log = [];
     this.rep = { n: 0, last: null, base: { add: 0, right: 0 } };
@@ -822,6 +842,7 @@ export class Tutorials {
 
   stopRun() {
     setHighlight([]);
+    this.script?.quiet?.();
     this.script?.clear?.();
     this.run = null;
     this.auto = null;
@@ -877,6 +898,7 @@ export class Tutorials {
     this.done[run.def.id] = true;
     this.save();
     this.refreshMenu();
+    this.script?.quiet?.();
     this.script?.clear?.();
     setHighlight([]);
     this.host.setScale(1);
@@ -1048,6 +1070,8 @@ export class Tutorials {
   // make the mission if it is missing or has lapsed (the keep pattern: a step can never stall)
   ensure(key, site, o) {
     const cur = this.m(key);
+    if (this.life.closed[key]) return cur;
+    if (cur?.state === 'done') this.life.closed[key] = true;
     if (cur && cur.state !== 'failed') return cur;
     if (!this.script?.mission) {
       if (!this.warned) this.hint('The scripted range is not available in this build.');
@@ -1083,10 +1107,14 @@ export class Tutorials {
   }
 
   // ---------------------------------------------------------------- events from main
-  onBurst(shell, info) {
-    if (this.run && info && info.own === false) {
+  onBurst(shell, pos, info) {
+    if (!this.run || !info) return;
+    if (info.own === false) {
       this.life.eb++;
       this.life.lastEB = this.sim.time;
+    } else if (shell.unitId != null) {
+      const o = this.sim.unitById(shell.unitId)?.order.adj;
+      this.life.fall.push({ unitId: shell.unitId, x: pos.x, z: pos.z, adj: { add: o?.add ?? 0, right: o?.right ?? 0 } });
     }
   }
 }
