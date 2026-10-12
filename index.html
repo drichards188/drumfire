@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drumfire: heavy artillery, Ypres 1917</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 fill=%22%231e1a14%22/%3E%3Cpath d=%22M5 21h14l6-5h3v-3h-3l-2-3h-4l-2 3h-3zm2 2a3 3 0 1 0 6 0%22 fill=%22%23c9a24a%22/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="title">
+    <div id="view">
+      <canvas id="c"></canvas>
+
+      <div id="hud">
+        <div id="unit"><b id="unit-name"></b><span id="unit-call"></span></div>
+        <div id="compass"><div id="compass-strip"></div><div class="compass-center"></div><div id="heading">000</div></div>
+        <div id="score-box"><span>Score</span><b id="score">0</b></div>
+        <div id="clock" title="Time of day"><span>Time</span><b id="clock-val">05:15</b></div>
+        <div id="timescale" data-tut="timescale"><button id="ts-down" type="button" title="Slower ([)">&minus;</button><span id="ts-arrows">&#9654;</span><b id="ts-val" title="Back to real time">x1</b><button id="ts-up" type="button" title="Faster (])">+</button></div>
+        <div id="radio"></div>
+        <div id="toast"><div id="toast-main"></div><div id="toast-sub"></div></div>
+        <div id="kills"></div>
+        <div id="bracket"><span></span><i></i></div>
+        <div id="hint"></div>
+        <pre id="debug"></pre>
+      </div>
+
+      <div id="end">
+        <div class="card">
+          <h2 id="end-title">Objectives taken</h2>
+          <p id="end-sub"></p>
+          <div id="end-stats"></div>
+          <button id="end-restart">Fight again</button>
+        </div>
+      </div>
+
+      <div id="title-screen">
+        <div class="brand">
+          <h1>DRUMFIRE</h1>
+          <p class="sub">Heavy artillery, Ypres salient, 1917</p>
+          <p class="blurb">A Heavy Artillery Group in the mud before Passchendaele: a 15-inch howitzer, 9.2s, 6-inch howitzers, 60-pounders and a railway gun. Lay the guns from the board, read the observers, walk the shells onto pillboxes, batteries and dumps, and hold the line when the counter-attack comes.</p>
+        </div>
+        <div class="loader">
+          <div id="load-bar"><div id="load-bar-fill"></div></div>
+          <p id="status">Surveying the salient</p>
+        </div>
+        <div id="options">
+          <div id="difficulty">
+            <button data-d="Easy">Easy</button>
+            <button data-d="Normal" class="on">Normal</button>
+            <button data-d="Hard">Hard</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="play" disabled>Take command</button>
+          <button id="tutorials" disabled>Tutorials</button>
+        </div>
+        <ul class="keys">
+          <li><kbd>1</kbd>-<kbd>5</kbd> select gun</li>
+          <li><kbd>Drag</kbd> orbit</li>
+          <li><kbd>Wheel</kbd> zoom</li>
+          <li><kbd>F</kbd> follow the shell to its burst</li>
+          <li><kbd>C</kbd> free camera</li>
+          <li><kbd>M</kbd> mute</li>
+          <li><kbd>[</kbd> <kbd>]</kbd> time compression</li>
+          <li><kbd>H</kbd> hide overlay</li>
+          <li><kbd>F3</kbd> stats</li>
+        </ul>
+      </div>
+
+      <div id="tut-menu">
+        <h2>Tutorials</h2>
+        <p class="tm-sub">Six short lessons on a quiet range, in daylight. Nothing is scored and nothing is lost.</p>
+        <div id="tut-list"></div>
+        <button id="tut-back">Back</button>
+      </div>
+
+      <div id="tut-card">
+        <div class="tc-head"><span class="tc-name"></span><span class="tc-step"></span></div>
+        <div class="tc-bar" aria-hidden="true"><i></i></div>
+        <h3 class="tc-title"></h3>
+        <p class="tc-text"></p>
+        <div class="tc-goal"><i class="tc-box"></i><span></span></div>
+        <div class="tc-keys">
+          <button class="tc-btn" id="tc-exit">Exit</button>
+          <span class="tc-spacer"></span>
+          <button class="tc-btn" id="tc-skip">Skip step</button>
+          <button class="tc-btn main" id="tc-next">Next</button>
+        </div>
+      </div>
+
+      <button id="gear" title="Settings">&#9881;</button>
+      <div id="gui-host"></div>
+    </div>
+
+    <div id="panel"><div class="placeholder">FIRE CONTROL OFFLINE</div></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

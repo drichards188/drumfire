@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Drumfire: fx sandbox</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 12px/1.4 monospace; color: #ddd; }
+    vite-error-overlay { display: none !important; } /* other agents break their own modules now and then */
+    canvas { display: block; width: 100vw; height: 100vh; }
+    #info { position: fixed; left: 8px; top: 6px; white-space: pre; text-shadow: 0 0 3px #000; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="info"></div>
+  <script type="module" src="/src/dev/fxtest.js"></script>
+</body>
+</html>
