@@ -515,7 +515,7 @@ export class FX {
   }
 
   // ---------------------------------------------------------------- artillery
-  /** A gun firing: p the muzzle, dir its unit direction, calibre in inches (2.95 to 15). */
+  /** A gun firing: p the muzzle, dir its unit direction, calibre in inches (2.95 to 18). */
   gunBlast(p, dir, calibre = 9.2, opts = {}) { this.curGy = this.ground(p.x, p.z); art.gunBlast(this, p, dir, calibre, opts); this.curGy = null; }
 
   /** A shell bursting on the ground: { calibre, fuze: 'impact'|'delay'|'instant', ground: 'mud'|'water'|'rubble'|'concrete', crater }. */

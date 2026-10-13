@@ -53,7 +53,7 @@ function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
  * the cordite cloud that hangs and drifts.
  */
 export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
-  const sc = clamp(calibre / 15, 0.16, 1.15), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sc = clamp(calibre / 15, 0.16, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z);
   const nb = night ? 1.8 : 1; // the glow pass is turned down by night: put the light back
@@ -178,7 +178,7 @@ const FUZES = {
  * crater: a hole was dug (the lip then sheds more earth).
  */
 export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mud', crater = true } = {}) {
-  const sc = clamp(calibre / 15, 0.14, 1.15), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sc = clamp(calibre / 15, 0.14, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z), y0 = Math.abs(p.y - gy) < 4 ? gy : p.y;
   const G = GROUNDS[ground] || GROUNDS.mud, FZ = FUZES[fuze] || FUZES.impact;

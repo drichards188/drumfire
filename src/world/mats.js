@@ -383,6 +383,19 @@ const cutaway = (shader) => {
   );
 };
 
+// the rolled front edge of a net is hessian: it goes with the selected unit's nets when they are drawn back
+// (only the per-piece discs, not the camera line, so screens and shelters elsewhere stay put)
+const cutawayRoll = (shader) => {
+  shader.uniforms.uCutP = CUTAWAY.p;
+  shader.fragmentShader = 'uniform vec3 uCutP[4];\n' + shader.fragmentShader.replace(
+    '#include <alphatest_fragment>',
+    `#include <alphatest_fragment>
+    #ifdef USE_FOG
+    for (int i = 0; i < 4; i++) if (uCutP[i].z > 0.0 && length(vFogWorldPos.xz - uCutP[i].xy) < uCutP[i].z) discard;
+    #endif`
+  );
+};
+
 let MATS = null;
 export function worldMats() {
   if (MATS) return MATS;
@@ -415,7 +428,8 @@ export function worldMats() {
   m.wire.userData.noShadow = true;
   m.scrim.userData.noShadow = true;
   m.water.userData.noShadow = true;
-  for (const [k, v] of Object.entries(m)) patchMaterial(v, k === 'scrim' ? 'scrim-cutaway' : 'fog', k === 'scrim' ? cutaway : undefined);
+  const patches = { scrim: ['scrim-cutaway', cutaway], hessian: ['hessian-cutaway', cutawayRoll] };
+  for (const [k, v] of Object.entries(m)) patchMaterial(v, patches[k]?.[0] ?? 'fog', patches[k]?.[1]);
   MATS = m;
   return m;
 }

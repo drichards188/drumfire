@@ -4,7 +4,7 @@ import { pitSolids } from '../world/battery.js';
 // Where a crewman's body may stand: a plan-view occupancy grid of the gun's steel (and the pit's walls,
 // stack and crates) in the rig's root frame at zero traverse, seen through the height band of a man
 // standing on a floor (feet + 0.16 m to feet + 1.75 m). Two flavours: `home` is the union of every pose
-// the gun takes (elevations, breech open or shut, the recoil, the crane's swing, the trolley's run), for
+// the gun takes (elevations, breech open or shut, the recoil, the crane's swing, the trolley's run; the railway car's roll-back is not swept: its men ride it), for
 // the places men stand at the shot; `work` leaves the recoil out (the gun sits run out while it is loaded).
 // From it: `snap` (nearest standing place with clearance), `route` (a path round the steel, string pulled)
 // and `free`. Built once per gun kind (the rig part is cached); the pit is overlaid per position.
@@ -95,7 +95,7 @@ function buildRig(rig, kind, floors, g, bounds) {
     }
   };
   const rest = { t: rig.pivots.trolley ? rig.pivots.trolley.position.z : 0 };
-  const reset = () => { rig.setTraverse(0); rig.setRecoil(0); rig.setBreech(0); rig.setTray?.(1); rig.setElevation(g.restEl); rig.update?.(0.016); if (rig.pivots.crane) rig.pivots.crane.rotation.y = Math.PI; if (rig.pivots.hoist) rig.pivots.hoist.position.y = rig.hoistRange?.up ?? 3.6; if (rig.pivots.trolley) rig.pivots.trolley.position.z = rest.t; };
+  const reset = () => { rig.setCar?.(0); rig.setTraverse(0); rig.setRecoil(0); rig.setBreech(0); rig.setTray?.(1); rig.setElevation(g.restEl); rig.update?.(0.016); if (rig.pivots.crane) rig.pivots.crane.rotation.y = Math.PI; if (rig.pivots.hoist) rig.pivots.hoist.position.y = rig.hoistRange?.up ?? 3.6; if (rig.pivots.trolley) rig.pivots.trolley.position.z = rest.t; };
   reset();
   draw(items.filter((i) => !i.group), 'fixed');
   const sweep = (list, poses, flavours) => {
@@ -150,7 +150,9 @@ export class CrewField {
     for (const s of rig.anchors.crew) { x0 = Math.min(x0, s.x - 2); x1 = Math.max(x1, s.x + 2); z0 = Math.min(z0, s.z - 2); z1 = Math.max(z1, s.z + 2); }
     const pit = pitSolids(kind, place.x, place.z);
     for (const b of pit) if (b.name !== 'wall') { x0 = Math.min(x0, b.x0 - 1); x1 = Math.max(x1, b.x1 + 1); z0 = Math.min(z0, b.z0 - 1); z1 = Math.max(z1, b.z1 + 1); }
-    x0 = Math.max(x0 - 1.5, -16); x1 = Math.min(x1 + 1.5, 16); z0 = Math.max(z0 - 1.5, -8); z1 = Math.min(z1 + 1.5, 24);
+    // the 18-inch car is 21 m long and stands behind the pit's usual 24 m limit (its men and the hoist's stack are at z 8 to 12)
+    const zLo = kind === 'rail' ? -16 : -8, zHi = kind === 'rail' ? 32 : 24;
+    x0 = Math.max(x0 - 1.5, -16); x1 = Math.min(x1 + 1.5, 16); z0 = Math.max(z0 - 1.5, zLo); z1 = Math.min(z1 + 1.5, zHi);
     const cb = cache.get(kind + '|' + floors.join(','));
     this.b = cb ? cb.b : { x0: Math.floor(x0 * 10) / 10, z0: Math.floor(z0 * 10) / 10, w: Math.ceil((x1 - x0) / CELL), h: Math.ceil((z1 - z0) / CELL) };
     const key = kind + '|' + floors.join(',');
@@ -159,6 +161,8 @@ export class CrewField {
     const { w, h } = this.b, n = w * h;
     // the pit goes into the fixed layer; distances per layer, flavour and level
     this.ca = 1; this.sa = 0;
+    const tv = rig.pivots.traverse; // the mounting turns about this point (the 18-inch's is 0.8 m forward of the car's middle)
+    this.px = tv ? tv.position.x : 0; this.pz = tv ? tv.position.z : 0;
     this.dist = { rot: { home: [], work: [] }, fix: { home: [], work: [] } };
     this.fixOcc = { home: [], work: [] };
     for (const f of ['home', 'work']) floors.forEach((fy, l) => {
@@ -200,7 +204,8 @@ export class CrewField {
           for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
             if (!src[j * w + i]) continue;
             const x = this.b.x0 + (i + 0.5) * CELL, z = this.b.z0 + (j + 0.5) * CELL;
-            const nx = ly === 'rot' ? x * c - z * sn : x * c + z * sn, nz = ly === 'rot' ? x * sn + z * c : -x * sn + z * c;
+            const ex = x - this.px, ez = z - this.pz;
+            const nx = (ly === 'rot' ? ex * c - ez * sn : ex * c + ez * sn) + this.px, nz = (ly === 'rot' ? ex * sn + ez * c : -ex * sn + ez * c) + this.pz;
             const ii = Math.floor((nx - this.b.x0) / CELL), jj = Math.floor((nz - this.b.z0) / CELL);
             if (ii >= 0 && jj >= 0 && ii < w && jj < h) o[jj * w + ii] = 1;
           }
@@ -241,9 +246,9 @@ export class CrewField {
 
   // clearance at a point of the man's frame: the gun's own frame (world false) or the root's (world true)
   dAt(fl, l, x, z, world = false) {
-    const c = this.ca, s = this.sa;
+    const c = this.ca, s = this.sa, px = this.px, pz = this.pz;
     let rx, rz, fx, fz;
-    if (world) { fx = x; fz = z; rx = x * c - z * s; rz = x * s + z * c; } else { rx = x; rz = z; fx = x * c + z * s; fz = -x * s + z * c; }
+    if (world) { const dx = x - px, dz = z - pz; fx = x; fz = z; rx = dx * c - dz * s + px; rz = dx * s + dz * c + pz; } else { const dx = x - px, dz = z - pz; rx = x; rz = z; fx = dx * c + dz * s + px; fz = -dx * s + dz * c + pz; }
     return Math.min(this.cellD(this.dist.rot[fl][l], rx, rz), this.cellD(this.dist.fix[fl][l], fx, fz));
   }
 

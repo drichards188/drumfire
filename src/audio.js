@@ -1385,7 +1385,7 @@ export class AudioEngine {
   }
 
   /**
-   * A gun firing at `pos`; `calibre` in inches (2.95 to 15). Class by calibre: light (field gun, sharp
+   * A gun firing at `pos`; `calibre` in inches (2.95 to 18). Class by calibre: light (field gun, sharp
    * crack), the 60-pdr, the 6-inch, the 9.2 and the 15-inch with the railway guns (the slam).
    */
   gun(pos, calibre = 6) {

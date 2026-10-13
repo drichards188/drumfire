@@ -228,7 +228,7 @@ function makeCtx(kind) {
   const views = new GunViews(scene, sim, null, rigs, null, true);
   const crew = views.views[0].crew;
   const map = new Map();
-  for (const [k, o] of Object.entries(rig.pivots)) map.set(o, k);
+  for (const [k, o] of Object.entries(rig.pivots)) if (k !== 'car' && k !== 'bogies') map.set(o, k); // the car and its wheels are the 'root' steel
   if (crew) {
     map.set(crew.shellA, 'cshell'); map.set(crew.shellB, 'cshellB'); map.set(crew.bag, 'cbag'); map.set(crew.staff, 'staff'); map.set(crew.rope, null);
     for (const m of crew.men) map.set(m.root, null);
@@ -252,7 +252,7 @@ function slides(rig, mesh, x, y, z) {
 }
 
 // the cradle's solid sleeve and glands close round the barrel's jacket and rods as they slide: by design
-const BARREL_R = { bl15: 0.76, bl92: 0.52, rail: 0.55, bl6: 0.17, bl60: 0.17 };
+const BARREL_R = { bl15: 0.76, bl92: 0.52, rail: 0.62, bl6: 0.17, bl60: 0.17 };
 function cradleOver(ctx, x, y, z) {
   const rig = ctx.rig, l = rig.pivots.elevation.worldToLocal(new THREE.Vector3(x, y, z));
   if (Math.hypot(l.x, l.y) < BARREL_R[ctx.kind] + 0.03) return true;

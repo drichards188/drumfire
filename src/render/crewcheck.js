@@ -10,7 +10,7 @@ import { UNITS, piecePlacements } from '../sector.js';
 import { GUNS } from '../sim/tables.js';
 import { buildGun, loadGuns } from '../models/guns.js';
 import { GunCrew } from './crews.js';
-import { loadPose } from './guns.js';
+import { loadPose, carPose } from './guns.js';
 import { h2 } from '../world/mesher.js';
 import { pitSolids } from '../world/battery.js';
 import { CrewField } from './crewfield.js';
@@ -340,6 +340,7 @@ function runGun(kind, scn, speed) {
     let r = 0;
     if (tf >= 0 && tf < g.runout + 1.2) r = tf < 0.14 ? Math.sin((tf / 0.14) * Math.PI / 2) : tf < 0.45 ? 1 : 1 - Math.min(1, Math.max(0, (tf - 0.45) / g.runout));
     rig.setRecoil(r);
+    rig.setCar?.(carPose(g, p, tf) * (rig.carRoll ?? 0)); // the railway car's roll-back and winch-in (its men ride it, crews.js)
     const lp = loadPose(p, 0);
     rig.setBreech(lp.breech);
     rig.setTray?.(lp.tray);

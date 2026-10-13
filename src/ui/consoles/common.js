@@ -40,7 +40,7 @@ export const FUZE = {
   delay: { main: 'DELAY', sub: 'penetrate' },
   shrapnel: { main: 'SHRAPNEL', sub: 'time fuze' },
 };
-export const KIND_SHORT = { bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '12-in Rly' };
+export const KIND_SHORT = { bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly' };
 
 // Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns
 // the unit has (more than one: the guns selector on the order card).
@@ -49,7 +49,7 @@ export const KINDS = {
   bl92: { pieces: 2, title: '9.2-INCH HOWITZERS', note: 'Section of two, 290 lb shells', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3 },
   bl6: { pieces: 4, title: '6-INCH 26 CWT HOWITZERS', note: 'Battery of four: ripple fire for effect', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'delay'], charges: 3 },
   bl60: { pieces: 2, title: '60-POUNDERS', note: 'Long flat trajectory: shrapnel bursts over wire and infantry', rounds: [1, 2, 4, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2 },
-  rail: { pieces: 1, title: 'RAILWAY GUN', note: 'Deep targets: railhead, headquarters, distant batteries', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
+  rail: { pieces: 1, title: '18-INCH RAILWAY GUN', note: 'Deep targets to 20 km, 2,500 lb shells, a cycle of 90 s; the car rolls back on the rails', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
 };
 
 // loading steps in the order the crew performs them (labels are the drill words)

@@ -31,9 +31,9 @@ Keys 1 to 5 select a unit.
 | 2 | 9.2-inch howitzer | Mother | 91st Siege Battery | 2 |
 | 3 | 6-inch 26 cwt howitzers | Ginger | 118th Siege Battery | 4 |
 | 4 | 60-pounders | Long Tom | 1/1st Lowland Heavy Battery | 2 |
-| 5 | 12-inch railway howitzer | Hilda | No. 13 Railway Siege Battery | 1 |
+| 5 | 18-inch railway howitzer | Wolfe | No. 13 Railway Siege Battery | 1 |
 
-The heavies are slow and powerful (the 15-inch loads in about 50 s, the railway gun in about 60 s, the 60-pounder in about 10 s), and each kind has its own loading crew and machinery: the 15-inch shell crane, the railway gun's loading trolley, the pair carrying a 9.2-inch round from the stack. The 60-pounders can also fire shrapnel (airbursts over wire and open ground). The railway gun reaches the deep targets (railhead, headquarters, far batteries).
+The heavies are slow and powerful (the 15-inch loads in about 50 s, the 18-inch railway gun in about 90 s, the 60-pounder in about 10 s), and each kind has its own loading crew and machinery: the 15-inch shell crane, the railway gun's shell hoist and tray, the pair carrying a 9.2-inch round from the stack. The 60-pounders can also fire shrapnel (airbursts over wire and open ground). The 18-inch railway gun (2,500 lb shells, about 20 km) reaches the deep targets (railhead, headquarters, far batteries) and fires the biggest burst in the game. It is a what-if gun: the real British 18-inch railway howitzer was ordered in 1918 and proofed in 1920 or 1921 and never fired in the war (the 18-inch naval guns of the monitors General Wolfe and Lord Clive did fire on the Belgian coast in 1918), so in 1917 the Group has it in its place of the 12-inch railway howitzers that really served at Ypres.
 
 ## Controls
 

@@ -26,7 +26,9 @@ const ROLES = {
   bl60: { officer: 'cmd', layer: 'lay', sight: 'wheel', loader: 'breech', rammer: 'ram', shell: 'carry', cartridge: 'bag', lanyard: 'lan', ears: 'idle' },
   bl92: { sergeant: 'cmd', layer: 'lay', elevator: 'wheel', lanyard: 'lan', loader1: 'pair0', loader2: 'pair1', rammer1: 'ram', rammer2: 'ram', ammo1: 'idle', ammo2: 'bag' },
   bl15: { sergeant: 'cmd', layer: 'lay', traverser: 'wheel', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', rammer3: 'ram', rammer4: 'ram', crane1: 'winch', crane2: 'signal', ammo1: 'sling', ammo2: 'bag' },
-  rail: { sergeant: 'cmd', layer: 'lay', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', trolley1: 'trolley', crane: 'winch', ammo1: 'sling' },
+  // (the 2.8 m high loading stage is only reached by ladder, so the cordite is carried by the first loader (on the left, away from the block's swing), who stands on it)
+  // the 18-inch railway gun: the 15-inch's drill (a shell hoist, a rammer team on the loading stage) on the car
+  rail: { sergeant: 'cmd', layer: 'lay', traverser: 'wheel', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', rammer3: 'ram', rammer4: 'ram', crane1: 'winch', crane2: 'signal', ammo1: 'sling', ammo2: 'idle' },
 };
 // roles that stay in the world frame (the rest turn with the gun's traverse)
 const WORLD_ROLES = new Set(['crane1', 'crane2', 'ammo1', 'ammo2', 'crane', 'shell', 'cartridge']);
@@ -35,7 +37,7 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _y = new THREE.Vector3(0, 1, 0);
 const _pt = { x: 0, z: 0, h: 0, d: 0 };
 const R_STAND = 0.3, R_WALK = 0.3;
-const _pp = { x: 0, z: 0 };
+const _pp = { x: 0, z: 0 }, _pp2 = { x: 0, z: 0 }, _pp3 = { x: 0, z: 0 };
 
 function propOf(built) {
   const g = new THREE.Group();
@@ -73,8 +75,9 @@ class Man {
   home(out) {
     const s = this.spot, c = this.crew;
     if (this.world) { out.x = this.sx; out.z = this.sz; out.h = s.heading; } else {
-      out.x = this.sx * c.ca + this.sz * c.sa;
-      out.z = -this.sx * c.sa + this.sz * c.ca;
+      const dx = this.sx - c.pvx, dz = this.sz - c.pvz;
+      out.x = dx * c.ca + dz * c.sa + c.pvx;
+      out.z = -dx * c.sa + dz * c.ca + c.pvz;
       out.h = s.heading + c.az;
     }
     out.y = s.y;
@@ -87,6 +90,7 @@ class Man {
       h += wrapPi(c.az + Math.PI - h) * 0.75 * c.ears;
       if (c.ears > 0.5) pose = 'ears';
     }
+    if (this.spot.car) z += c.carZ; // standing on the railway car: it rolls back along the track with the gun
     this.x = x; this.y = y; this.z = z; this.h = h;
     this.root.position.set(x, y, z);
     this.root.rotation.y = h;
@@ -106,7 +110,8 @@ class Man {
     const c = this.crew, d = clamp01(k) * poly.len;
     polyAt(poly, d, _pt, headingOf, smooth, wrapPi);
     const rot = !this.world, moving = k > 0 && k < 1 && poly.len > 0.05;
-    const x = rot ? _pt.x * c.ca + _pt.z * c.sa : _pt.x, z = rot ? -_pt.x * c.sa + _pt.z * c.ca : _pt.z, h = rot ? _pt.h + c.az : _pt.h;
+    const ux = _pt.x - c.pvx, uz = _pt.z - c.pvz;
+    const x = rot ? ux * c.ca + uz * c.sa + c.pvx : _pt.x, z = rot ? -ux * c.sa + uz * c.ca + c.pvz : _pt.z, h = rot ? _pt.h + c.az : _pt.h;
     this.put(x, y, z, h, moving ? gait : (gait === 'carryWalk' ? 'carry' : 'stand'), moving ? d / (gait === 'carryWalk' ? CSTRIDE : STRIDE) : c.idleT + this.seed);
   }
 
@@ -137,8 +142,12 @@ export class GunCrew {
     this.level = 2;
     this.blend = 1;
     this.idleT = 0;
+    this.carZ = 0; // how far the railway car has rolled back along the track (rig.pivots.car), metres
     this.ears = 0;
     this.az = 0; this.ca = 1; this.sa = 0;
+    // the traverse pivot's place (the 18-inch's mounting turns about a point 0.8 m forward of the car's middle)
+    const tv = rig.pivots.traverse;
+    this.pvx = tv ? tv.position.x : 0; this.pvz = tv ? tv.position.z : 0;
     this.T = new THREE.Vector3(); this.B = new THREE.Vector3(); this.Mz = new THREE.Vector3(); this.S = new THREE.Vector3();
     this.u = new THREE.Vector3(0, 0, -1);
     this.bd = { x: 0, z: -1 }; this.rt = { x: 1, z: 0 };
@@ -151,7 +160,7 @@ export class GunCrew {
     const bag = buildCartridge(kind === 'rail' ? 'rail' : kind);
     this.bag = propOf(bag);
     this.bagLen = bag.length;
-    const staffLen = { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 3.0 }[kind] ?? 2;
+    const staffLen = { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 4.2 }[kind] ?? 2;
     this.staffLen = staffLen;
     const wood = new THREE.MeshStandardMaterial({ color: 0x7a6040, roughness: 0.8 });
     const iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.5 });
@@ -217,7 +226,7 @@ export class GunCrew {
         const cr = F.pit.filter((b) => b.name === 'crate');
         if (cr.length) { tx = cr.reduce((a, b) => a + (b.x0 + b.x1) / 2, 0) / cr.length; tz = cr.reduce((a, b) => a + (b.z0 + b.z1) / 2, 0) / cr.length - 0.9; }
       }
-      F.snapHome(m.li, tx, tz, m.spot.pose === 'crouch' ? 0.4 : R_STAND, out, m.world);
+      F.snapHome(m.li, tx, tz, m.spot.pose === 'crouch' ? 0.4 : this.kind === 'rail' ? R_STAND + 0.06 : R_STAND, out, m.world);
       m.sx = out.x; m.sz = out.z;
       if (!m.world) F.blk.push([out.x, out.z, 0.32]); // the next man keeps his distance
     }
@@ -236,8 +245,8 @@ export class GunCrew {
       const k = m.bk ??= [0, 0, 0.32];
       // the man's place in root space, then in the asker's frame
       let x = m.sx, z = m.sz;
-      if (!m.world) { x = m.sx * ca + m.sz * sa; z = -m.sx * sa + m.sz * ca; }
-      if (!except.world) { k[0] = x * ca - z * sa; k[1] = x * sa + z * ca; } else { k[0] = x; k[1] = z; }
+      if (!m.world) { const dx = m.sx - this.pvx, dz = m.sz - this.pvz; x = dx * ca + dz * sa + this.pvx; z = -dx * sa + dz * ca + this.pvz; }
+      if (!except.world) { const dx = x - this.pvx, dz = z - this.pvz; k[0] = dx * ca - dz * sa + this.pvx; k[1] = dx * sa + dz * ca + this.pvz; } else { k[0] = x; k[1] = z; }
       b.push(k);
     }
     return b;
@@ -245,7 +254,7 @@ export class GunCrew {
 
   // to and from the field frame (the gun's traverse frame for the men that turn with it)
   toF(m, x, z, out) {
-    if (m.world) { out.x = x; out.z = z; } else { out.x = x * this.ca - z * this.sa; out.z = x * this.sa + z * this.ca; }
+    if (m.world) { out.x = x; out.z = z; } else { const dx = x - this.pvx, dz = z - this.pvz; out.x = dx * this.ca - dz * this.sa + this.pvx; out.z = dx * this.sa + dz * this.ca + this.pvz; }
     return out;
   }
 
@@ -290,6 +299,7 @@ export class GunCrew {
     toR(rig.anchors.muzzle, this.Mz);
     toR(rig.anchors.shellStack, this.S);
     this.u.copy(this.Mz).sub(this.B).normalize();
+    this.carZ = rig.pivots.car ? rig.pivots.car.position.z : 0;
     this.az = p.az;
     this.field.setAz(p.az);
     this.ca = Math.cos(p.az); this.sa = Math.sin(p.az);
@@ -487,7 +497,8 @@ export class GunCrew {
     const q = this.tmp[2], carry = shell ? this.shellA : this.bag, F = this.field, fq = this.tmp[4], fh = this.tmp[5];
     // his working place: beside the tray (shell) or behind the breech (bag), moved clear of the steel
     const tgt = shell ? this.trayAt(this.aT, _a) : _a.copy(this.B).addScaledVector(this.u, -0.15);
-    const back = shell ? this.half + 0.35 : 0.75, side = shell ? 0.62 : 0.5;
+    // (the 18-inch's block is hinged on the right and swings out there: the cordite comes in from the left)
+    const back = shell ? this.half + 0.35 : 0.75, side = shell ? 0.62 : this.kind === 'rail' ? -0.6 : 0.5;
     this.toF(m, tgt.x - this.bd.x * back + this.rt.x * side, tgt.z - this.bd.z * back + this.rt.z * side, fq);
     this.blockers(m);
     const fl = m.spot.y < this.workY - 0.1 && F.hasComb ? 'comb' : 'work';
@@ -505,7 +516,7 @@ export class GunCrew {
     const rc = shell ? Math.min(0.75, Math.hypot(0.42, this.half) + this.srad * 0.5) : R_WALK;
     const goP = this.plan(m, 'go', this.lw, fh.x, fh.z, fq.x, fq.z, rc, false, false, fl), backP = this.plan(m, 'back', this.lw, fq.x, fq.z, fh.x, fh.z, R_WALK, false, true, fl);
     // the root-space place at the end of the walk
-    if (m.world) { q.x = fq.x; q.z = fq.z; } else { q.x = fq.x * this.ca + fq.z * this.sa; q.z = -fq.x * this.sa + fq.z * this.ca; }
+    if (m.world) { q.x = fq.x; q.z = fq.z; } else this.rootXZ(m, fq, q);
     const home = this.tmp[1];
     m.home(home);
     let phase = 'hold', kk = 0, have = true;
@@ -602,13 +613,13 @@ export class GunCrew {
       hd = headingOf(_pp.x - ca.x, _pp.z - ca.z);
     }
     const fx = C.x + Math.cos(hd) * 0.42 * side, fz = C.z - Math.sin(hd) * 0.42 * side, rot = !m.world;
-    const rx = rot ? fx * this.ca + fz * this.sa : fx, rz = rot ? -fx * this.sa + fz * this.ca : fz, rh = rot ? hd + this.az : hd;
+    const rr = this.rootXZ(m, { x: fx, z: fz }, _pp2), rx = rr.x, rz = rr.z, rh = rot ? hd + this.az : hd;
     const pose = phase === 'lift' ? 'crouch' : phase === 'go' ? 'carryWalk' : phase === 'place' ? 'carry' : phase === 'back' ? 'walk' : 'stand';
     const gait = phase === 'go' ? CSTRIDE : STRIDE;
     m.put(rx, y, rz, rh, pose, moving ? dist / gait : phase === 'wait' ? this.idleT + m.seed : 0);
     // the shell hangs between the two (drawn once, by the left man) at their midpoint
     if (side < 0) {
-      const mx = rot ? C.x * this.ca + C.z * this.sa : C.x, mz = rot ? -C.x * this.sa + C.z * this.ca : C.z, mh = rot ? hd + this.az : hd;
+      const rm = this.rootXZ(m, C, _pp3), mx = rm.x, mz = rm.z, mh = rot ? hd + this.az : hd;
       let cx, cy, cz, yaw = mh, pitch = 0, vis = true;
       if (phase === 'wait' || phase === 'back' || phase === 'lift') {
         if (phase === 'back' || (phase === 'wait' && c.loaded) || s === 'prime' || s === 'lay' || s === 'close' || s === 'cartridge') vis = false;
@@ -651,7 +662,7 @@ export class GunCrew {
   }
 
   rootXZ(m, f, out) {
-    if (m.world) { out.x = f.x; out.z = f.z; } else { out.x = f.x * this.ca + f.z * this.sa; out.z = -f.x * this.sa + f.z * this.ca; }
+    if (m.world) { out.x = f.x; out.z = f.z; } else { const dx = f.x - this.pvx, dz = f.z - this.pvz; out.x = dx * this.ca + dz * this.sa + this.pvx; out.z = -dx * this.sa + dz * this.ca + this.pvz; }
     return out;
   }
 
@@ -661,6 +672,7 @@ export class GunCrew {
 
   // loaders at the tray of the crane / trolley guns: hands steady the shell as it comes down
   guideMan(m, c, h) {
+    if (this.kind === 'rail' && m.beh === 'guide0' && (c.s === 'cartridge' || (c.s === 'close' && c.k < 0.35))) return this.carryMan(m, c, h, 'bag');
     m.put(h.x, h.y, h.z, h.h, 'stand', this.idleT + m.seed);
     const side = m.beh === 'guide0' ? -1 : 1;
     if (c.s === 'shell' && c.k > 0.6 && c.k < 1.0) {

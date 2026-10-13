@@ -411,7 +411,7 @@ export const TUTORIALS = [
     name: 'The heavies',
     unit: 1,
     units: [1, 5],
-    blurb: 'Granny, the 15-inch, on a concrete pillbox with the delay fuze and the long flight; then Hilda, the railway gun, on the railhead.',
+    blurb: 'Granny, the 15-inch, on a concrete pillbox with the delay fuze and the long flight; then Wolfe, the 18-inch railway gun, on the railhead.',
     outro: 'Delay fuzes for concrete, the biggest guns for the deepest targets. Counter-battery work is next.',
     keep: (T) => {
       T.ensure('main', 'M1', { observer: 'foo', title: 'Pillbox "Iberian"', firstError: { over: -70, right: 30 } });
@@ -483,9 +483,9 @@ export const TUTORIALS = [
         },
       },
       {
-        id: 'hilda',
-        title: 'Hilda',
-        text: 'Number 5 is Hilda, a 12-inch howitzer on a railway truck, firing from a curved spur. She reaches deeper than any other gun in the Group. Press 5 to go to her.',
+        id: 'wolfe',
+        title: 'Wolfe',
+        text: 'Number 5 is Wolfe, an 18-inch howitzer on a railway car, firing from a curved spur: a shell of 2,500 pounds. (A what-if gun: the real one was not proved until after the war.) She reaches deeper than any other gun in the Group. Press 5 to go to her.',
         goal: 'Press 5',
         hi: ['tabs'],
         enter: (T) => {
@@ -500,13 +500,13 @@ export const TUTORIALS = [
         id: 'take-rail',
         key: 'rail',
         title: 'The railhead',
-        text: 'A train has stopped at the railhead behind the German lines, 16,000 yards away. Too far for anything but Hilda, and no observer can see it, so it is a map shoot: no reports, just a good map reference. Tab, Enter.',
+        text: 'A train has stopped at the railhead behind the German lines, 16,000 yards away. Too far for anything but Wolfe, and no observer can see it, so it is a map shoot: no reports, just a good map reference. Tab, Enter.',
       }),
       {
         id: 'fire-rail',
         title: 'Deep fire',
-        text: 'Hilda is slower still, about a minute to load. Press Space; she fires when ready. Press F to ride her shell the whole way.',
-        goal: 'Fire Hilda',
+        text: 'Wolfe is slower still, about a minute and a half to load. Press Space; she fires when ready. Press F to ride her shell the whole way.',
+        goal: 'Fire Wolfe',
         hi: ['fire'],
         limit: 600,
         done: (T) => shots(T) >= 1 && !inFlight(T),

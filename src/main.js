@@ -54,7 +54,7 @@ const KIND = {
   bl92: { eye: 3.2, dist: 60, calibre: 9.2 },
   bl6: { eye: 2.2, dist: 100, calibre: 6 },
   bl60: { eye: 2, dist: 52, calibre: 5 },
-  rail: { eye: 4.5, dist: 44, calibre: 12 },
+  rail: { eye: 4.5, dist: 50, calibre: 18 },
 };
 // Camera trauma from a blast of `calibre` inches at `d` metres: a 15-inch beside the camera
 // is full trauma, a 60-pounder a nudge, and everything falls away with the square of the distance.
@@ -63,7 +63,7 @@ const blastTrauma = (calibre, d, k = 1) => {
   return Math.min(1, ((calibre / 15) ** 1.2 * 1.15 * k) / (1 + (d / r0) ** 2));
 };
 // how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
-const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 18 };
+const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 
