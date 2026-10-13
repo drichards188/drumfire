@@ -3,6 +3,7 @@ import { buildCrewman, CREW_POSES, CREW_GAITS } from '../models/v/crew.js';
 import { buildShell, buildCartridge } from '../models/shells.js';
 import { GUNS, STEP } from '../sim/tables.js';
 import { ramp, smooth, lerp, wrapPi, headingOf, clamp01 } from './anim.js';
+import { CrewField, newPoly, polyAt, finishPoly } from './crewfield.js';
 
 // The loading choreography of one gun: the crew (crew.js figures at the rig's crew spots), the shell,
 // the bag and the rammer staff as props, and the rig's mechanisms (the 15-inch crane, the railway
@@ -25,34 +26,18 @@ const ROLES = {
   bl60: { officer: 'cmd', layer: 'lay', sight: 'wheel', loader: 'breech', rammer: 'ram', shell: 'carry', cartridge: 'bag', lanyard: 'lan', ears: 'idle' },
   bl92: { sergeant: 'cmd', layer: 'lay', elevator: 'wheel', lanyard: 'lan', loader1: 'pair0', loader2: 'pair1', rammer1: 'ram', rammer2: 'ram', ammo1: 'idle', ammo2: 'bag' },
   bl15: { sergeant: 'cmd', layer: 'lay', traverser: 'wheel', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', rammer3: 'ram', rammer4: 'ram', crane1: 'winch', crane2: 'signal', ammo1: 'sling', ammo2: 'bag' },
-  rail: { sergeant: 'cmd', layer: 'lay', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', trolley1: 'trolley', crane: 'winch', ammo1: 'sling' },
+  // (the 2.8 m high loading stage is only reached by ladder, so the cordite is carried by the first loader (on the left, away from the block's swing), who stands on it)
+  // the 18-inch railway gun: the 15-inch's drill (a shell hoist, a rammer team on the loading stage) on the car
+  rail: { sergeant: 'cmd', layer: 'lay', traverser: 'wheel', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', rammer3: 'ram', rammer4: 'ram', crane1: 'winch', crane2: 'signal', ammo1: 'sling', ammo2: 'idle' },
 };
 // roles that stay in the world frame (the rest turn with the gun's traverse)
 const WORLD_ROLES = new Set(['crane1', 'crane2', 'ammo1', 'ammo2', 'crane', 'shell', 'cartridge']);
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _inv = new THREE.Matrix4();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _y = new THREE.Vector3(0, 1, 0);
-const _tr = { x: 0, z: 0, h: 0, d: 0 };
-
-// a point on a two-leg path P0 -> P1 -> P2 at fraction k, with the heading smoothed round the corner
-function trace(out, p0, p1, p2, k) {
-  const l1 = Math.hypot(p1.x - p0.x, p1.z - p0.z), l2 = Math.hypot(p2.x - p1.x, p2.z - p1.z);
-  const L = l1 + l2, s = clamp01(k) * L;
-  const h1 = l1 > 1e-3 ? headingOf(p1.x - p0.x, p1.z - p0.z) : headingOf(p2.x - p1.x, p2.z - p1.z);
-  const h2 = l2 > 1e-3 ? headingOf(p2.x - p1.x, p2.z - p1.z) : h1;
-  if (s < l1) {
-    const f = l1 > 0 ? s / l1 : 0;
-    out.x = p0.x + (p1.x - p0.x) * f;
-    out.z = p0.z + (p1.z - p0.z) * f;
-  } else {
-    const f = l2 > 0 ? (s - l1) / l2 : 0;
-    out.x = p1.x + (p2.x - p1.x) * f;
-    out.z = p1.z + (p2.z - p1.z) * f;
-  }
-  out.h = h1 + wrapPi(h2 - h1) * smooth(s, l1 - 0.6, l1 + 0.6);
-  out.d = s;
-  return out;
-}
+const _pt = { x: 0, z: 0, h: 0, d: 0 };
+const R_STAND = 0.3, R_WALK = 0.3;
+const _pp = { x: 0, z: 0 }, _pp2 = { x: 0, z: 0 }, _pp3 = { x: 0, z: 0 };
 
 function propOf(built) {
   const g = new THREE.Group();
@@ -73,13 +58,15 @@ class Man {
     this.role = spot.role;
     this.idx = idx;
     this.beh = ROLES[crew.kind]?.[spot.role] ?? 'idle';
-    this.world = WORLD_ROLES.has(spot.role) && crew.kind !== 'bl6' && crew.kind !== 'bl60';
+    this.world = (WORLD_ROLES.has(spot.role) && crew.kind !== 'bl6' && crew.kind !== 'bl60') || /sergeant|officer|ears/.test(spot.role);
     const o = crewOutfit(spot.role, idx);
     this.fig = buildCrewman(o);
     this.root = this.fig.root;
     this.root.visible = false;
     crew.rig.root.add(this.root);
+    this.sx = spot.x; this.sz = spot.z; // the standing place (crews.js moves it clear of the steel)
     this.x = spot.x; this.z = spot.z; this.y = spot.y; this.h = spot.heading;
+    this.li = 0; this.plans = {};
     this.seed = idx * 1.37;
     this.noEars = false;
   }
@@ -87,9 +74,10 @@ class Man {
   // the spot in root space for the current traverse
   home(out) {
     const s = this.spot, c = this.crew;
-    if (this.world) { out.x = s.x; out.z = s.z; out.h = s.heading; } else {
-      out.x = s.x * c.ca + s.z * c.sa;
-      out.z = -s.x * c.sa + s.z * c.ca;
+    if (this.world) { out.x = this.sx; out.z = this.sz; out.h = s.heading; } else {
+      const dx = this.sx - c.pvx, dz = this.sz - c.pvz;
+      out.x = dx * c.ca + dz * c.sa + c.pvx;
+      out.z = -dx * c.sa + dz * c.ca + c.pvz;
       out.h = s.heading + c.az;
     }
     out.y = s.y;
@@ -102,6 +90,7 @@ class Man {
       h += wrapPi(c.az + Math.PI - h) * 0.75 * c.ears;
       if (c.ears > 0.5) pose = 'ears';
     }
+    if (this.spot.car) z += c.carZ; // standing on the railway car: it rolls back along the track with the gun
     this.x = x; this.y = y; this.z = z; this.h = h;
     this.root.position.set(x, y, z);
     this.root.rotation.y = h;
@@ -114,6 +103,16 @@ class Man {
     const moving = kk > 0 && kk < 1 && d > 0.05;
     const h = d > 0.05 ? headingOf(b.x - a.x, b.z - a.z) : this.h;
     this.put(lerp(a.x, b.x, kk), y, lerp(a.z, b.z, kk), h, moving ? gait : (gait === 'carryWalk' ? 'carry' : 'stand'), moving ? (d * kk) / (gait === 'carryWalk' ? CSTRIDE : STRIDE) : this.crew.idleT + this.seed);
+  }
+
+  // walk along a route planned in the field frame (the gun's traverse frame, or the root for world roles)
+  follow(poly, k, y, gait = 'walk') {
+    const c = this.crew, d = clamp01(k) * poly.len;
+    polyAt(poly, d, _pt, headingOf, smooth, wrapPi);
+    const rot = !this.world, moving = k > 0 && k < 1 && poly.len > 0.05;
+    const ux = _pt.x - c.pvx, uz = _pt.z - c.pvz;
+    const x = rot ? ux * c.ca + uz * c.sa + c.pvx : _pt.x, z = rot ? -ux * c.sa + uz * c.ca + c.pvz : _pt.z, h = rot ? _pt.h + c.az : _pt.h;
+    this.put(x, y, z, h, moving ? gait : (gait === 'carryWalk' ? 'carry' : 'stand'), moving ? d / (gait === 'carryWalk' ? CSTRIDE : STRIDE) : c.idleT + this.seed);
   }
 
   // put the grip point of a hand on a root-space point (after put)
@@ -143,8 +142,12 @@ export class GunCrew {
     this.level = 2;
     this.blend = 1;
     this.idleT = 0;
+    this.carZ = 0; // how far the railway car has rolled back along the track (rig.pivots.car), metres
     this.ears = 0;
     this.az = 0; this.ca = 1; this.sa = 0;
+    // the traverse pivot's place (the 18-inch's mounting turns about a point 0.8 m forward of the car's middle)
+    const tv = rig.pivots.traverse;
+    this.pvx = tv ? tv.position.x : 0; this.pvz = tv ? tv.position.z : 0;
     this.T = new THREE.Vector3(); this.B = new THREE.Vector3(); this.Mz = new THREE.Vector3(); this.S = new THREE.Vector3();
     this.u = new THREE.Vector3(0, 0, -1);
     this.bd = { x: 0, z: -1 }; this.rt = { x: 1, z: 0 };
@@ -157,7 +160,7 @@ export class GunCrew {
     const bag = buildCartridge(kind === 'rail' ? 'rail' : kind);
     this.bag = propOf(bag);
     this.bagLen = bag.length;
-    const staffLen = { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 3.0 }[kind] ?? 2;
+    const staffLen = { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 4.2 }[kind] ?? 2;
     this.staffLen = staffLen;
     const wood = new THREE.MeshStandardMaterial({ color: 0x7a6040, roughness: 0.8 });
     const iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.5 });
@@ -185,6 +188,8 @@ export class GunCrew {
     // the height of the loading platform behind the breech (the stack is on the ground)
     this.workY = (this.byRole.get('rammer1') ?? this.byRole.get('rammer') ?? this.byRole.get('loader'))?.spot.y ?? 0;
     this.setup();
+    this.field = null;
+    this.makeField();
   }
 
   setup() {
@@ -201,6 +206,79 @@ export class GunCrew {
     this.restHoist = rig.hoistRange?.up ?? 3.6;
     this.restTrolley = this.trolley ? this.trolley.position.z : 0;
     this.trolleyRear = this.restTrolley;
+  }
+
+  // the clearance field: standing places moved clear of the steel, the other men's places as blockers
+  makeField() {
+    const rig = this.rig, floors = [...new Set(this.men.map((m) => Math.round(m.spot.y * 20) / 20).concat([0, Math.round(this.workY * 20) / 20]))].sort((a, b) => a - b);
+    const keep = [rig.root.position.clone(), rig.root.rotation.clone(), rig.root.quaternion.clone()];
+    rig.root.position.set(0, 0, 0); rig.root.rotation.set(0, 0, 0); rig.root.updateMatrixWorld(true);
+    const at = rig.root.userData.crewAt ?? { x: keep[0].x, z: keep[0].z };
+    const F = this.field = new CrewField(rig, this.kind, GUNS[this.kind], floors, at, this.workY);
+    rig.root.position.copy(keep[0]); rig.root.rotation.copy(keep[1]); rig.root.updateMatrixWorld(true);
+    const out = { x: 0, z: 0 };
+    F.blk.length = 0;
+    for (const m of this.men) {
+      m.li = F.level(m.spot.y);
+      let tx = m.spot.x, tz = m.spot.z;
+      if (m.beh === 'bag' && m.world) {
+        // the cordite man waits by the cartridge crates of the pit
+        const cr = F.pit.filter((b) => b.name === 'crate');
+        if (cr.length) { tx = cr.reduce((a, b) => a + (b.x0 + b.x1) / 2, 0) / cr.length; tz = cr.reduce((a, b) => a + (b.z0 + b.z1) / 2, 0) / cr.length - 0.9; }
+      }
+      F.snapHome(m.li, tx, tz, m.spot.pose === 'crouch' ? 0.4 : this.kind === 'rail' ? R_STAND + 0.06 : R_STAND, out, m.world);
+      m.sx = out.x; m.sz = out.z;
+      if (!m.world) F.blk.push([out.x, out.z, 0.32]); // the next man keeps his distance
+    }
+    F.blk.length = 0;
+    this.lw = F.level(this.workY); this.l0 = F.level(0);
+    this.pairLead = this.men.find((q) => /^pair/.test(q.beh)) ?? null;
+    this.snapTmp = out;
+  }
+
+  // standing men are obstacles for the walkers (not the one asking)
+  blockers(except) {
+    const b = this.field.blk, ca = this.ca, sa = this.sa;
+    b.length = 0;
+    for (const m of this.men) {
+      if (m === except || /^pair/.test(m.beh)) continue;
+      const k = m.bk ??= [0, 0, 0.32];
+      // the man's place in root space, then in the asker's frame
+      let x = m.sx, z = m.sz;
+      if (!m.world) { const dx = m.sx - this.pvx, dz = m.sz - this.pvz; x = dx * ca + dz * sa + this.pvx; z = -dx * sa + dz * ca + this.pvz; }
+      if (!except.world) { const dx = x - this.pvx, dz = z - this.pvz; k[0] = dx * ca - dz * sa + this.pvx; k[1] = dx * sa + dz * ca + this.pvz; } else { k[0] = x; k[1] = z; }
+      b.push(k);
+    }
+    return b;
+  }
+
+  // to and from the field frame (the gun's traverse frame for the men that turn with it)
+  toF(m, x, z, out) {
+    if (m.world) { out.x = x; out.z = z; } else { const dx = x - this.pvx, dz = z - this.pvz; out.x = dx * this.ca - dz * this.sa + this.pvx; out.z = dx * this.sa + dz * this.ca + this.pvz; }
+    return out;
+  }
+
+  // a cached route for man m (tag names the leg), endpoints in the field frame
+  plan(m, tag, l, ax, az, bx, bz, r, ignoreBlock = false, down = false, fl = 'work', relax = 0.28, ext = null) {
+    const P = m.plans[tag] ??= { poly: newPoly(), k: [1e9, 1e9, 1e9, 1e9, 0, 1e9] };
+    const k = P.k;
+    if (Math.abs(k[0] - ax) > 0.02 || Math.abs(k[1] - az) > 0.02 || Math.abs(k[2] - bx) > 0.02 || Math.abs(k[3] - bz) > 0.02 || k[4] !== r || Math.abs(k[5] - this.az) > 0.01) {
+      k[0] = ax; k[1] = az; k[2] = bx; k[3] = bz; k[4] = r; k[5] = this.az;
+      if (ignoreBlock) this.field.blk.length = 0; else this.blockers(m);
+      // ext = { x, z, head }: the walk is routed to (bx, bz) and then runs straight to (x, z) (head: it starts at (x, z) instead)
+      const poly = P.poly;
+      if (ext && ext.head) {
+        this.field.route(fl, l, ext.x, ext.z, bx, bz, r, poly, m.world, relax);
+        poly.x.copyWithin(1, 0, poly.n); poly.z.copyWithin(1, 0, poly.n);
+        poly.x[0] = ax; poly.z[0] = az; poly.n++;
+        finishPoly(poly);
+      } else {
+        this.field.route(fl, l, ax, az, bx, bz, r, poly, m.world, relax);
+        if (ext) { poly.x[poly.n] = ext.x; poly.z[poly.n] = ext.z; poly.n++; finishPoly(poly); }
+      }
+      P.poly.step = this.field.findStep(P.poly, this.l0, l, down);
+    }
+    return P.poly;
   }
 
   setLevel(level) {
@@ -221,7 +299,9 @@ export class GunCrew {
     toR(rig.anchors.muzzle, this.Mz);
     toR(rig.anchors.shellStack, this.S);
     this.u.copy(this.Mz).sub(this.B).normalize();
+    this.carZ = rig.pivots.car ? rig.pivots.car.position.z : 0;
     this.az = p.az;
+    this.field.setAz(p.az);
     this.ca = Math.cos(p.az); this.sa = Math.sin(p.az);
     this.bd.x = -this.sa; this.bd.z = -this.ca;
     this.rt.x = this.ca; this.rt.z = -this.sa;
@@ -375,6 +455,23 @@ export class GunCrew {
     let adv = 0;
     if (c.s === 'ram') adv = this.ramK * (this.half * 0.55 - this.aT) * 0.9 * (1 - smooth(c.k, 0.8, 1));
     else if (c.s === 'cartridge' && on) adv = 0.25 * smooth(c.k, 0.55, 0.72) * (1 - smooth(c.k, 0.78, 0.95));
+    // with a pair carrying the shell to the rear of the tray the rammers give them room
+    let back = 0;
+    if (this.pairLead && this.pairBk) {
+      if (c.s === 'shell') back = 1.2 * smooth(c.k, 0, 0.15);
+      else if (c.s === 'ram') back = 1.2 * (1 - smooth(c.k, 0.55, 0.8));
+      else if (c.s === 'open' || c.s === 'depress') back = 0;
+      else if (c.s === 'cartridge') back = 0;
+    }
+    if (back > 0) { h.x -= this.bd.x * back; h.z -= this.bd.z * back; }
+    if (adv > 0) {
+      // the body stops at the steel; the staff goes on without him
+      this.blockers(m);
+      if (this.pairLead && this.pairBk && (c.s === 'ram' && c.k < 0.7)) this.field.blk.push(this.pairBk[0], this.pairBk[1]);
+      let reach = 0;
+      while (reach < adv && this.field.free("work", m.li, m.sx, m.sz + back - reach - 0.05, 0.5, m.world)) reach += 0.05;
+      adv = Math.min(adv, reach);
+    }
     m.put(h.x + this.bd.x * adv, h.y, h.z + this.bd.z * adv, h.h, on ? 'ram' : 'stand', on ? c.k * 2 : this.idleT + m.seed);
     if (on) {
       // both hands on the shaft, at the part of it nearest the man
@@ -397,13 +494,31 @@ export class GunCrew {
   // one man with the shell or the bag in his arms
   carryMan(m, c, h, what) {
     const s = c.s, k = c.k, shell = what === 'shell';
-    const home = this.tmp[1], q = this.tmp[2], carry = shell ? this.shellA : this.bag;
-    m.home(home);
-    // his working place: beside the tray (shell) or behind the breech (bag)
+    const q = this.tmp[2], carry = shell ? this.shellA : this.bag, F = this.field, fq = this.tmp[4], fh = this.tmp[5];
+    // his working place: beside the tray (shell) or behind the breech (bag), moved clear of the steel
     const tgt = shell ? this.trayAt(this.aT, _a) : _a.copy(this.B).addScaledVector(this.u, -0.15);
-    const back = shell ? this.half + 0.35 : 0.75, side = shell ? 0.62 : 0.5;
-    q.x = tgt.x - this.bd.x * back + this.rt.x * side;
-    q.z = tgt.z - this.bd.z * back + this.rt.z * side;
+    // (the 18-inch's block is hinged on the right and swings out there: the cordite comes in from the left)
+    const back = shell ? this.half + 0.35 : 0.75, side = shell ? 0.62 : this.kind === 'rail' ? -0.6 : 0.5;
+    this.toF(m, tgt.x - this.bd.x * back + this.rt.x * side, tgt.z - this.bd.z * back + this.rt.z * side, fq);
+    this.blockers(m);
+    const fl = m.spot.y < this.workY - 0.1 && F.hasComb ? 'comb' : 'work';
+    F.snap(fl, this.lw, fq.x, fq.z, R_STAND, fq, m.world);
+    fh.x = m.sx; fh.z = m.sz;
+    // a man far from his work place goes as near as a short walk gets him
+    if (Math.hypot(fq.x - fh.x, fq.z - fh.z) > 2.5) {
+      const key = m.cq ??= [1e9, 1e9, 1e9, 1e9, 1e9];
+      if (Math.abs(key[0] - fq.x) > 0.02 || Math.abs(key[1] - fq.z) > 0.02 || Math.abs(key[2] - fh.x) > 0.02 || Math.abs(key[3] - fh.z) > 0.02 || Math.abs(key[4] - this.az) > 0.01) {
+        key[0] = fq.x; key[1] = fq.z; key[2] = fh.x; key[3] = fh.z; key[4] = this.az;
+        F.closest(fl, this.lw, fh.x, fh.z, fq.x, fq.z, R_STAND, Math.min(6.5, Math.hypot(fq.x - fh.x, fq.z - fh.z) * 1.6), (m.cqOut ??= { x: 0, z: 0 }), m.world);
+      }
+      fq.x = m.cqOut.x; fq.z = m.cqOut.z;
+    }
+    const rc = shell ? Math.min(0.75, Math.hypot(0.42, this.half) + this.srad * 0.5) : R_WALK;
+    const goP = this.plan(m, 'go', this.lw, fh.x, fh.z, fq.x, fq.z, rc, false, false, fl), backP = this.plan(m, 'back', this.lw, fq.x, fq.z, fh.x, fh.z, R_WALK, false, true, fl);
+    // the root-space place at the end of the walk
+    if (m.world) { q.x = fq.x; q.z = fq.z; } else this.rootXZ(m, fq, q);
+    const home = this.tmp[1];
+    m.home(home);
     let phase = 'hold', kk = 0, have = true;
     if (shell) {
       if (s === 'shell') { phase = k < 0.78 ? 'go' : 'place'; kk = phase === 'go' ? k / 0.78 : (k - 0.78) / 0.22; have = !(phase === 'place' && kk > 0.6); }
@@ -415,11 +530,13 @@ export class GunCrew {
       have = k < 0.72;
     } else if (s === 'close' && k < 0.35) { phase = 'pick'; have = false; }
     const wy = this.workY, hy = home.y;
-    const y = phase === 'go' ? lerp(hy, wy, smooth(kk, 0.6, 0.95)) : phase === 'place' ? wy : phase === 'back' ? lerp(wy, hy, smooth(kk, 0.05, 0.4)) : hy;
+    const y = phase === 'go' ? lerp(hy, wy, goP.step >= 0 ? smooth(kk * goP.len, goP.step - 0.3, goP.step + 0.1) : smooth(kk, 0.6, 0.95))
+      : phase === 'place' ? wy
+      : phase === 'back' ? lerp(wy, hy, backP.step >= 0 ? smooth(kk * backP.len, backP.step - 0.1, backP.step + 0.3) : smooth(kk, 0.05, 0.4)) : hy;
     switch (phase) {
-      case 'go': m.walk(home, q, kk, y, have ? 'carryWalk' : 'walk'); break;
+      case 'go': m.follow(goP, kk, y, have ? 'carryWalk' : 'walk'); break;
       case 'place': m.put(q.x, y, q.z, headingOf(tgt.x - q.x, tgt.z - q.z), have ? 'carry' : 'stand', 0); break;
-      case 'back': m.walk(q, home, kk, y, 'walk'); break;
+      case 'back': m.follow(backP, kk, y, 'walk'); break;
       case 'pick': m.put(home.x, hy, home.z, home.h, 'crouch', 0); break;
       default: m.put(home.x, hy, home.z, home.h, have ? 'carry' : 'stand', this.idleT + m.seed);
     }
@@ -435,10 +552,13 @@ export class GunCrew {
         yaw += wrapPi(this.az - yaw) * e;
         pitch = Math.asin(this.u.y) * e;
       } else {
-        const e2 = smooth(kk, 0, 0.6);
-        cx = lerp(cx, this.B.x, e2); cy = lerp(cy, this.B.y, e2); cz = lerp(cz, this.B.z, e2);
-        yaw += wrapPi(this.az - yaw) * e2;
-        pitch = Math.asin(this.u.y) * e2;
+        // up to a point on the bore axis behind the breech (clear of the tray plate), then along the axis in
+        const hb = this.bagLen / 2 + 0.3, s1 = smooth(kk, 0, 0.4), s2 = smooth(kk, 0.4, 0.7);
+        const hx = this.B.x - this.u.x * hb, hy = this.B.y - this.u.y * hb + 0.05, hz = this.B.z - this.u.z * hb;
+        cx = lerp(cx, hx, s1); cy = lerp(cy, hy, s1); cz = lerp(cz, hz, s1);
+        cx = lerp(cx, this.B.x, s2); cy = lerp(cy, this.B.y + 0.05, s2); cz = lerp(cz, this.B.z, s2);
+        yaw += wrapPi(this.az - yaw) * s1;
+        pitch = Math.asin(this.u.y) * s1;
         if (kk > 0.7) { carry.visible = false; return; }
       }
     }
@@ -449,53 +569,68 @@ export class GunCrew {
     for (const [side2, sg] of [['L', -1], ['R', 1]]) m.hand(side2, cx + nx * len * 0.3 * sg, cy - this.srad * 0.9, cz + nz * len * 0.3 * sg, 0.9);
   }
 
+  // the two carriers of the 9.2-inch: the pair walks one route (planned for both, 0.84 m apart) from the stack
+  // to the rear end of the tray, the shell hanging between them
   pairMan(m, c, h) {
-    this.act2 = true;
-    const side = m.beh === 'pair0' ? -1 : 1;
-    const s = c.s, k = c.k;
-    const stack = this.tmp[1], mid = this.tmp[2], q = this.tmp[3];
-    // idle: at the stack beside the waiting shell; working place: beside the tray
-    stack.x = this.S.x + 0.1; stack.z = this.S.z + 1.1;
-    const tgt = this.trayAt(this.aT, _a);
-    mid.x = tgt.x - this.bd.x * (this.half + 1.3); mid.z = tgt.z - this.bd.z * (this.half + 1.3);
-    q.x = tgt.x - this.bd.x * (this.half * 0.0 + 0.1); q.z = tgt.z - this.bd.z * 0.1;
+    const side = m.beh === 'pair0' ? -1 : 1, F = this.field, lead = this.pairLead ??= this.men.find((q) => /^pair/.test(q.beh));
+    const s = c.s, k = c.k, tgt = this.trayAt(this.aT, _a), ca = this.tmp[3], cb = this.tmp[4], tf = this.tmp[5], C = this.tmp[2];
+    // the pair's centre at the stack, and behind the tray's rear end, moved clear of the steel
+    this.toF(lead, this.S.x + 0.1, this.S.z + 1.1, ca);
+    this.blockers(lead);
+    const fl = F.hasComb ? 'comb' : 'work', la = F.hasComb ? this.lw : this.l0;
+    this.toF(lead, this.S.x, this.S.z, _pp);
+    this.snapPair(fl, la, ca, headingOf(_pp.x - ca.x, _pp.z - ca.z));
+    this.toF(lead, tgt.x - this.bd.x * (this.half + 0.6), tgt.z - this.bd.z * (this.half + 0.6), cb);
+    this.toF(lead, tgt.x, tgt.z, tf);
+    this.snapPair(fl, this.lw, cb, headingOf(tf.x - cb.x, tf.z - cb.z));
+    { // where the two stand at the tray, for the rammers to keep clear of
+      const hb = headingOf(tf.x - cb.x, tf.z - cb.z), bk = this.pairBk ??= [[0, 0, 0.3], [0, 0, 0.3]];
+      bk[0][0] = cb.x - Math.cos(hb) * 0.42; bk[0][1] = cb.z + Math.sin(hb) * 0.42; bk[1][0] = cb.x + Math.cos(hb) * 0.42; bk[1][1] = cb.z - Math.sin(hb) * 0.42;
+    }
+    // the last metre runs straight up the tray's axis, so the pair arrives side on to the tray
+    const wp = this.tmp[1];
+    wp.x = cb.x - (tf.x - cb.x) / (Math.hypot(tf.x - cb.x, tf.z - cb.z) || 1) * 1.1; wp.z = cb.z - (tf.z - cb.z) / (Math.hypot(tf.x - cb.x, tf.z - cb.z) || 1) * 1.1;
+    const goP = this.plan(lead, 'go', this.lw, ca.x, ca.z, wp.x, wp.z, 0.8, false, false, fl, 0.5, { x: cb.x, z: cb.z }), backP = this.plan(lead, 'back', this.lw, cb.x, cb.z, ca.x, ca.z, 0.8, false, true, fl, 0.5, { x: wp.x, z: wp.z, head: true });
+    backP.x[0] = cb.x; backP.z[0] = cb.z;
     let kk = 0, phase = 'wait';
     if (s === 'shell') { phase = k < 0.14 ? 'lift' : k < 0.84 ? 'go' : 'place'; kk = phase === 'go' ? (k - 0.14) / 0.7 : phase === 'place' ? (k - 0.84) / 0.16 : k / 0.14; }
     else if (s === 'ram') { phase = 'back'; kk = ramp(k, 0, 0.7); }
-    else if (s === 'depress' || s === 'open') phase = 'wait';
-    // flank offset perpendicular to the path heading
-    const tr = trace(_tr, stack, mid, q, phase === 'go' ? kk : phase === 'place' ? 1 : 0);
-    const hd = phase === 'go' || phase === 'place' ? tr.h : headingOf(this.S.x - stack.x, this.S.z - stack.z);
-    const rx = Math.cos(hd), rz = -Math.sin(hd);
-    const off = 0.4 * side;
+    // floor under them: up onto the platform where the route crosses its edge, down again on the way back
     const wy = h.y;
-    const y = phase === 'go' ? lerp(0, wy, smooth(kk, 0.6, 0.95)) : phase === 'place' ? wy : phase === 'back' ? lerp(wy, 0, smooth(kk, 0.05, 0.4)) : 0;
-    const px = tr.x + rx * off, pz = tr.z + rz * off;
-    switch (phase) {
-      case 'lift': m.put(stack.x + rx * off, y, stack.z + rz * off, hd, 'crouch', 0); break;
-      case 'go': m.put(px, y, pz, hd, 'carryWalk', tr.d / CSTRIDE); break;
-      case 'place': m.put(px, y, pz, hd, 'carry', 0); break;
-      case 'back': {
-        const bx = lerp(px, stack.x + rx * off, kk), bz = lerp(pz, stack.z + rz * off, kk);
-        m.walk({ x: px, z: pz }, { x: stack.x + rx * off, z: stack.z + rz * off }, kk, y, 'walk');
-        void bx; void bz;
-        break;
-      }
-      default: m.put(stack.x + rx * off, y, stack.z + rz * off, hd, 'stand', this.idleT + m.seed);
+    let y = 0;
+    if (phase === 'go') y = goP.step >= 0 ? wy * smooth(kk * goP.len, goP.step - 0.3, goP.step + 0.1) : wy * smooth(kk, 0.6, 0.95);
+    else if (phase === 'place') y = wy;
+    else if (phase === 'back') y = backP.step >= 0 ? wy * (1 - smooth(kk * backP.len, backP.step - 0.1, backP.step + 0.3)) : wy * (1 - smooth(kk, 0.05, 0.4));
+    // the centre (field frame) and its heading, then the man 0.42 m to his side of it
+    let hd, moving = false, dist = 0;
+    if (phase === 'go' || phase === 'back') {
+      const P = phase === 'go' ? goP : backP;
+      polyAt(P, kk * P.len, _pt, headingOf, smooth, wrapPi);
+      C.x = _pt.x; C.z = _pt.z; hd = _pt.h; moving = kk > 0 && kk < 1 && P.len > 0.05; dist = _pt.d;
+    } else if (phase === 'place') { C.x = cb.x; C.z = cb.z; hd = headingOf(tf.x - cb.x, tf.z - cb.z); } else {
+      C.x = ca.x; C.z = ca.z;
+      this.toF(lead, this.S.x, this.S.z, _pp);
+      hd = headingOf(_pp.x - ca.x, _pp.z - ca.z);
     }
+    const fx = C.x + Math.cos(hd) * 0.42 * side, fz = C.z - Math.sin(hd) * 0.42 * side, rot = !m.world;
+    const rr = this.rootXZ(m, { x: fx, z: fz }, _pp2), rx = rr.x, rz = rr.z, rh = rot ? hd + this.az : hd;
+    const pose = phase === 'lift' ? 'crouch' : phase === 'go' ? 'carryWalk' : phase === 'place' ? 'carry' : phase === 'back' ? 'walk' : 'stand';
+    const gait = phase === 'go' ? CSTRIDE : STRIDE;
+    m.put(rx, y, rz, rh, pose, moving ? dist / gait : phase === 'wait' ? this.idleT + m.seed : 0);
+    // the shell hangs between the two (drawn once, by the left man) at their midpoint
     if (side < 0) {
-      // the shell travels between the two (drawn once, by the left man)
-      let cx, cy, cz, yaw = hd, pitch = 0, vis = true;
+      const rm = this.rootXZ(m, C, _pp3), mx = rm.x, mz = rm.z, mh = rot ? hd + this.az : hd;
+      let cx, cy, cz, yaw = mh, pitch = 0, vis = true;
       if (phase === 'wait' || phase === 'back' || phase === 'lift') {
         if (phase === 'back' || (phase === 'wait' && c.loaded) || s === 'prime' || s === 'lay' || s === 'close' || s === 'cartridge') vis = false;
         cx = this.S.x; cy = 0.2 + this.srad; cz = this.S.z + 0.2; yaw = 0; // lying on the ground
-        if (phase === 'lift') { const e = smooth(kk, 0.3, 1); cy = lerp(cy, y + 0.85, e); cx = lerp(cx, tr.x, e); cz = lerp(cz, tr.z, e); yaw = hd; }
+        if (phase === 'lift') { const e = smooth(kk, 0.3, 1); cy = lerp(cy, y + 0.85, e); cx = lerp(cx, mx, e); cz = lerp(cz, mz, e); yaw = wrapPi(mh) * e; }
       } else {
-        cx = tr.x; cy = y + 0.9; cz = tr.z;
+        cx = mx; cy = y + 0.9; cz = mz;
         if (phase === 'place') {
           const e = smooth(kk, 0.1, 1);
           cx = lerp(cx, tgt.x, e); cy = lerp(cy, tgt.y, e); cz = lerp(cz, tgt.z, e);
-          yaw = hd + wrapPi(this.az - hd) * e;
+          yaw += wrapPi(this.az - yaw) * e;
           pitch = Math.asin(this.u.y) * e;
           if (kk >= 1) vis = false;
         }
@@ -505,15 +640,39 @@ export class GunCrew {
       this.pairShell = { x: cx, y: cy, z: cz, yaw };
     }
     const ps = this.pairShell;
-    if (ps && (phase === 'go' || phase === 'place' || phase === 'lift') && ps.set !== false) {
+    if (ps && (phase === 'go' || phase === 'place' || phase === 'lift')) {
       const nx = -Math.sin(ps.yaw), nz = -Math.cos(ps.yaw), sx = Math.cos(ps.yaw), sz = -Math.sin(ps.yaw);
       m.hand('L', ps.x + sx * side * this.srad * 1.1 - nx * 0.2, ps.y - 0.05, ps.z + sz * side * this.srad * 1.1 - nz * 0.2, 0.9);
       m.hand('R', ps.x + sx * side * this.srad * 1.1 + nx * 0.2, ps.y - 0.05, ps.z + sz * side * this.srad * 1.1 + nz * 0.2, 0.9);
     }
   }
 
+  // move a pair's centre until both men, 0.42 m either side of it, stand clear
+  snapPair(fl, l, c, hd) {
+    const F = this.field, ox = Math.cos(hd) * 0.42, oz = -Math.sin(hd) * 0.42;
+    const ok = (x, z) => F.free(fl, l, x + ox, z + oz, R_STAND) && F.free(fl, l, x - ox, z - oz, R_STAND);
+    if (ok(c.x, c.z)) return;
+    for (let r = 0.05; r < 3; r += 0.05) {
+      const n = Math.max(8, Math.ceil(r * 40));
+      for (let a = 0; a < n; a++) {
+        const x = c.x + Math.cos((a / n) * 6.2832) * r, z = c.z + Math.sin((a / n) * 6.2832) * r;
+        if (ok(x, z)) { c.x = x; c.z = z; return; }
+      }
+    }
+  }
+
+  rootXZ(m, f, out) {
+    if (m.world) { out.x = f.x; out.z = f.z; } else { const dx = f.x - this.pvx, dz = f.z - this.pvz; out.x = dx * this.ca + dz * this.sa + this.pvx; out.z = -dx * this.sa + dz * this.ca + this.pvz; }
+    return out;
+  }
+
+  mate(m) {
+    return this.men.find((q) => q !== m && /^pair/.test(q.beh));
+  }
+
   // loaders at the tray of the crane / trolley guns: hands steady the shell as it comes down
   guideMan(m, c, h) {
+    if (this.kind === 'rail' && m.beh === 'guide0' && (c.s === 'cartridge' || (c.s === 'close' && c.k < 0.35))) return this.carryMan(m, c, h, 'bag');
     m.put(h.x, h.y, h.z, h.h, 'stand', this.idleT + m.seed);
     const side = m.beh === 'guide0' ? -1 : 1;
     if (c.s === 'shell' && c.k > 0.6 && c.k < 1.0) {

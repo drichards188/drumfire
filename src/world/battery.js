@@ -17,8 +17,10 @@ const KINDS = {
   bl92: { half: 7, z0: -2, z1: 8.5, wall: 1.7, net: { x: 8, z0: -2, z1: 9, hBack: 5.8, hFront: 4.8, poles: 3 }, stack: { x: -4.2, z: 6, r: 0.125, len: 0.95, cols: 5, tiers: 3 }, shelter: { x: 10.5, z: 4.5 }, cases: [4, 6.5] },
   bl6: { half: 5, z0: -1.5, z1: 6.5, wall: 1.4, net: { x: 5.6, z0: -1.4, z1: 7, hBack: 3.9, hFront: 3.2, poles: 2 }, stack: { x: -3.1, z: 4.4, r: 0.08, len: 0.55, cols: 6, tiers: 3 }, shelter: { x: 7.4, z: 3.5 }, cases: [3, 5] },
   bl60: { half: 4.6, z0: -1, z1: 6, wall: 1.3, net: { x: 5.2, z0: -1, z1: 6.5, hBack: 3.8, hFront: 3.1, poles: 2 }, stack: { x: -2.9, z: 4, r: 0.07, len: 0.65, cols: 5, tiers: 3 }, shelter: { x: 7, z: 3.5 }, cases: [2.8, 4.8] },
-  // the railway gun stands on the spur: the local x axis runs along the track
-  rail: { half: 0, z0: 0, z1: 0, wall: 0, net: { x: 8, z0: 3, z1: 16, hBack: 6, hFront: 5.2, poles: 3 }, stack: { x: -6, z: 12, r: 0.19, len: 1.5, cols: 5, tiers: 3 }, shelter: { x: 12, z: 14 }, cases: [5, 11] },
+  // the railway gun stands on the spur: local -Z (the line of fire) runs along the track. The 18-inch car is about 22 m
+  // long (z -11.1 to +11.1 over the buffers) and rolls back along the track to z = +17.1 when the gun fires, so nothing
+  // stands within 3 m of the track from z = -12 to +18; the net (shifted `dx` to the right) covers the crates and the shelter beside the track, clear of the hoist's jib (6.2 m high) and the track; the rig's own two ready shells lie at the foot of the hoist (x 4.75, z 9.7 to 10.9); the world's reserve stack is behind them.
+  rail: { half: 0, z0: 0, z1: 0, wall: 0, net: { x: 7, z0: 3, z1: 19, hBack: 6, hFront: 5.2, poles: 3, dx: 14 }, stack: { x: 4.75, z: 14.6, r: 0.23, len: 2.1, cols: 3, tiers: 2 }, shelter: { x: 13, z: 20 }, cases: [8.5, 12.5] },
 };
 
 // Position anchors the render layer may use: where the ready-use shell stack and the crew shelter are, world
@@ -30,14 +32,50 @@ export function positionAnchors(unitId, pieceIndex = 0) {
   if (!pl) return null;
   const K = KINDS[pl.kind], yaw = headingFor(pl.bearing), L = frame(pl.x, pl.z, yaw);
   const at = (lx, lz) => { const p = L(lx, lz); return { x: p[0], z: p[1], yaw }; };
-  const cp = unitFrame(u)(0, 34);
+  const cp = unitFrame(u)(u.kind === 'rail' ? 22 : 0, 34);
   return {
     shellStack: at(K.stack.x, K.stack.z),
     shelter: at(K.shelter.x, K.shelter.z),
     cartridges: at(K.cases[0], K.cases[1]),
-    net: at(0, (K.net.z0 + K.net.z1) / 2),
+    net: at(K.net.dx ?? 0, (K.net.z0 + K.net.z1) / 2),
     commandPost: { x: cp[0], z: cp[1], yaw },
   };
+}
+
+// The solid props of one gun position in the piece's local frame (-Z the line of fire, +X right), as boxes
+// { name, x0, z0, x1, z1, h } (metres, ground to h): the sandbag walls, the ready-use stack, the cartridge
+// crates and the spent cases standing behind the gun (placed from the piece's world position like the build).
+// The render layer's crew choreography keeps the men out of them (render/crewfield.js).
+export function pitSolids(kind, wx = 0, wz = 0) {
+  const K = KINDS[kind], out = [];
+  if (!K) return out;
+  const add = (name, x0, z0, x1, z1, h) => out.push({ name, x0, z0, x1, z1, h });
+  const wall = (name, ax, az, bx, bz, hh, gaps = []) => {
+    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2)), along = Math.abs(bz - az) > Math.abs(bx - ax);
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      if (gaps.some((g) => t1 > g[0] && t0 < g[1])) continue;
+      const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+      add(name, Math.min(x0, x1) - (along ? 0.5 : 0), Math.min(z0, z1) - (along ? 0 : 0.5), Math.max(x0, x1) + (along ? 0.5 : 0), Math.max(z0, z1) + (along ? 0 : 0.5), hh);
+    }
+  };
+  if (K.half) {
+    wall('wall', -K.half, K.z0, -K.half, K.z1, K.wall);
+    wall('wall', K.half, K.z0, K.half, K.z1, K.wall);
+    wall('wall', -K.half, K.z1, K.half, K.z1, K.wall * 0.9, [[0.4, 0.6]]);
+  }
+  const st = K.stack, w = st.cols * st.r * 2.05 + 0.3;
+  add('stack', st.x - (st.len + 0.4) / 2, st.z - w / 2, st.x + (st.len + 0.4) / 2, st.z + w / 2, 0.1 + st.r * 2 + st.tiers * st.r * 1.78);
+  for (let k = 0; k < 5; k++) {
+    const cx = K.cases[0] + (k % 3) * 0.55, cz = K.cases[1] + ((k / 3) | 0) * 0.45;
+    add('crate', cx - 0.3, cz - 0.25, cx + 0.3, cz + 0.25, 0.35);
+  }
+  const big = kind === 'bl15' || kind === 'bl92';
+  for (let k = 0; k < (kind === 'rail' ? 0 : 6); k++) {
+    const x = -1.5 + h2(k, wz, 5) * 3.2, z = 4.4 + h2(k, wx, 6) * 2.4, r = big ? 0.11 : 0.06;
+    add('case', x - r, z - r, x + r, z + r, r * 6);
+  }
+  return out;
 }
 
 const unitFrame = (u) => frame(u.pos.x, u.pos.z, headingFor(u.zero));
@@ -54,7 +92,7 @@ function init() {
     const pls = piecePlacements(u);
     pls.forEach((p) => add(p.x, p.z, { t: 'piece', u, p }));
     const L = unitFrame(u);
-    const c = L(0, 40);
+    const c = L(u.kind === 'rail' ? 22 : 0, 40);
     add(c[0], c[1], { t: 'camp', u, pls });
   }
 }
@@ -148,7 +186,7 @@ function piece(m, u, p, lod, h) {
       void b;
     }
   }
-  net(m, h, L, K.net, tone);
+  net(m, h, K.net.dx ? (lx, lz) => L(lx + K.net.dx, lz) : L, K.net, tone);
   if (lod > 0) return;
   // ready-use shell stack with a tarpaulin half over it, and cartridge boxes
   const st = K.stack, sp = L(st.x, st.z);
@@ -159,13 +197,14 @@ function piece(m, u, p, lod, h) {
     const q = L(K.cases[0] + (k % 3) * 0.55, K.cases[1] + ((k / 3) | 0) * 0.45);
     crate(m, h, q[0], q[1], yaw + (h2(k, p.x, 2) - 0.5) * 0.4, 0.5, 0.3, 0.3);
   }
-  for (let k = 0; k < 6; k++) { // spent brass cases standing about
+  for (let k = 0; k < (p.kind === 'rail' ? 0 : 6); k++) { // spent brass cases standing about (not on the railway gun's track)
     const q = L(-1.5 + h2(k, p.z, 5) * 3.2, 4.4 + h2(k, p.x, 6) * 2.4), y = h(q[0], q[1]), r = big ? 0.11 : 0.06;
     m.tube('paint', [q[0], y, q[1]], [q[0], y + r * 6, q[1]], r, r * 0.9, 8, rgbk(0.72, 0.55, 0.24));
   }
   shelter(m, h, L, K.shelter.x, K.shelter.z, tone);
   // duckboard walk from the pit back to the camp spine
-  walk(m, h, [L(0, K.z1 || 4), L(0, 14)], 1.6);
+  if (p.kind !== 'rail') walk(m, h, [L(0, K.z1 || 4), L(0, 14)], 1.6);
+  else walk(m, h, [L(11, 18), L(7.6, 12.2)], 1.4); // the shelter to the foot of the hoist
 }
 
 // plank walk (duckboards) through points ([x, z] pairs), width w
@@ -181,7 +220,8 @@ export function walk(m, h, pts, w = 1.2) {
 }
 
 function camp(m, u, pls, lod, h) {
-  const L = unitFrame(u), yaw = headingFor(u.zero);
+  // the railway gun's camp lies beside its spur, not on it (the spur runs straight back under the camp frame's axis)
+  const L0 = unitFrame(u), yaw = headingFor(u.zero), L = u.kind === 'rail' ? (lx, lz) => L0(lx + 22, lz) : L0;
   const span = pls.reduce((a, q) => Math.max(a, Math.abs(q.x - u.pos.x) + Math.abs(q.z - u.pos.z)), 0) + 10;
   const half = Math.max(12, span * 0.5);
   // command post: a mound over a dugout with a plank door, sandbag revetted porch and the signal desk's wires

@@ -119,7 +119,7 @@ function playerFor(ids) {
           }
           break;
         case 'await': {
-          const mine = m.reports.filter((r) => r.unitId === id);
+          const mine = m.reports.filter((r) => r.unitId === id && !r.wild);
           if (mine.length > s.seen && !u.firing) {
             const r = mine[mine.length - 1];
             s.seen = mine.length;

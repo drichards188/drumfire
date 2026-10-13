@@ -7,12 +7,12 @@ import { UNITS, SITES, SECTORS, LINES, YARD, DEG, bearingOf, gridRef, piecePlace
 
 const mulberry = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 
-const MAXR = { bl15: [6200, 8000, 9500], bl92: [7000, 9300, 11500], bl6: [5000, 7400, 9500], bl60: [8200, 11000], rail: [11000, 14000, 16000] };
-const CYCLE = { bl15: 50, bl92: 25, bl6: 12, bl60: 10, rail: 60 };
+const MAXR = { bl15: [6200, 8000, 9500], bl92: [7000, 9300, 11500], bl6: [5000, 7400, 9500], bl60: [8200, 11000], rail: [9000, 14500, 20300] };
+const CYCLE = { bl15: 50, bl92: 25, bl6: 12, bl60: 10, rail: 90 };
 const STEP = [['depress', 0.1], ['open', 0.07], ['shell', 0.22], ['ram', 0.1], ['cartridge', 0.18], ['close', 0.08], ['prime', 0.06], ['lay', 0.19]];
 const CREW = { bl15: 12, bl92: 9, bl6: 7, bl60: 6, rail: 14 };
-const HP = { bl15: 400, bl92: 300, bl6: 200, bl60: 160, rail: 500 };
-const CAL = { bl15: 15, bl92: 9.2, bl6: 6, bl60: 5, rail: 14 };
+const HP = { bl15: 400, bl92: 300, bl6: 200, bl60: 160, rail: 600 };
+const CAL = { bl15: 15, bl92: 9.2, bl6: 6, bl60: 5, rail: 18 };
 
 const tableCache = {};
 function tableFor(kind, charge) {
@@ -65,7 +65,7 @@ export class MockWorld {
 
   makeUnit(d) {
     const pl = piecePlacements(d);
-    const c0 = { he: { bl15: 60, bl92: 120, bl6: 240, bl60: 260, rail: 40 }[d.kind], shrapnel: d.kind === 'bl60' ? 120 : 0 };
+    const c0 = { he: { bl15: 60, bl92: 120, bl6: 240, bl60: 260, rail: 36 }[d.kind], shrapnel: d.kind === 'bl60' ? 120 : 0 };
     const u = {
       id: d.id, kind: d.kind, name: d.name, callsign: d.callsign, battery: d.battery, pos: { x: d.pos.x, y: 0, z: d.pos.z }, zero: d.zero, alive: true,
       mode: 'manual', missionId: null, ammo: c0, signature: 0.1 + 0.1 * d.id, stats: { rounds: 0, hits: 0, kills: 0 }, arc: 30 * DEG,
@@ -169,13 +169,13 @@ export class MockWorld {
       if (p.state === 'dead') continue;
       const wantLoad = !!o.target && u.mode !== 'hold';
       if (p.state === 'recoil') { p.recoil = Math.max(0, p.recoil - dt * 0.8); if (p.recoil <= 0) { p.state = 'idle'; p.loaded = false; } continue; }
-      if (p.state === 'idle' && wantLoad) { p.state = 'loading'; p.stage = 0; p.job = { step: STEP[0][0], t: 0, dur: STEP[0][1] * total }; }
+      if (p.state === 'idle' && wantLoad) { p.state = 'loading'; p.stage = 0; p.job = { step: STEP[0][0], t: 0, dur: STEP[0][1] * total, i: 0, n: STEP.length }; }
       if (p.state === 'loading') {
         p.job.t += dt;
         if (p.job.t >= p.job.dur) {
           p.stage++;
           if (p.stage >= STEP.length) { p.state = 'ready'; p.job = null; p.loaded = true; }
-          else p.job = { step: STEP[p.stage][0], t: 0, dur: STEP[p.stage][1] * total };
+          else p.job = { step: STEP[p.stage][0], t: 0, dur: STEP[p.stage][1] * total, i: p.stage, n: STEP.length };
         }
         if (p.job && p.job.step === 'lay') { const f = p.job.t / p.job.dur; p.az += (p.cmd.az - p.az) * Math.min(1, f * 0.4 + dt); p.el += (p.cmd.el - p.el) * Math.min(1, f * 0.4 + dt); }
       }

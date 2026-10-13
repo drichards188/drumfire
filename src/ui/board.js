@@ -105,7 +105,7 @@ export class Board {
     if (!unit || !this.W) return;
     const cfg = KINDS[unit.kind] || {};
     const reach = Math.max(rangeSpan(sim, unit.kind, 0).max, ...[1, 2, 3].map((c) => rangeSpan(sim, unit.kind, c).max)) || 11000;
-    const x0 = Math.min(unit.pos.x - 700, 2600), x1 = Math.min(unit.pos.x + reach * 1.02, cfg.deep ? 17000 : 14000);
+    const x0 = Math.min(unit.pos.x - 700, 2600), x1 = Math.min(unit.pos.x + reach * 1.02, cfg.deep ? 18500 : 14000);
     const zc = Math.max(-1500, Math.min(1500, unit.pos.z * 0.35));
     const mpp = Math.max(MPP_MIN, Math.min(MPP_MAX, Math.max((x1 - x0) / this.W, 8000 / this.H) * 1.04));
     this.view = { cx: (x0 + x1) / 2, cz: zc, mpp };

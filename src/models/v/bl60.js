@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { V, box, rbox, xTube, zTube, rod, sideProfile } from '../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, addWheel, addHandwheel, trailBeam, addDialSight, breechSetter, trayShells, crew, L90, R90 } from '../t/fieldkit.js';
+import { floorFade } from '../rig.js';
+import { buildShell } from '../shells.js';
 
 /**
  * BL 60-pounder Mk I on its Mk I field carriage (the "Long Tom" section of the 1/1st Lowland Heavy
@@ -30,12 +32,11 @@ export function buildBL60({ girdles = false } = {}) {
   // top-carriage cheeks
   const cheek = [[-0.62, 0.78], [-0.34, 1.2], [-0.12, 1.62], [0.42, 1.62], [0.66, 1.2], [1.0, 0.64], [1.0, 0.5], [-0.62, 0.55]];
   for (const s of [-1, 1]) P.add('camo', sideProfile(cheek, 0.035).applyMatrix4(new THREE.Matrix4().makeTranslation(s * 0.37, 0, 0)));
-  P.add('camo', box(0.78, 0.12, 1.5, 0, 0.6, 0.2));
+  P.add('camo', box(0.78, 0.12, 1.5, 0, 0.42, 0.2)); // bed plate, low enough for the breech tail at full elevation
   P.add('camo', box(0.72, 0.1, 0.5, 0, 1.05, -0.75, -0.25));
-  P.add('steel', xTube(-0.38, 0.38, 0.032, 0.032, 8, 1.52, 0.55));
-  for (const s of [-1, 1]) P.add('steel', xTube(s * 0.34, s * 0.5, 0.085, 0.085, 12, TR.y, TR.z));
+    for (const s of [-1, 1]) P.add('steel', xTube(s * 0.34, s * 0.5, 0.085, 0.085, 12, TR.y, TR.z));
   // long box trail with a flat deck between the cheeks (the gun rest) and the spade
-  trailBeam(P, 'camo', [{ z: 0.7, y: 0.66, w: 0.74, h: 0.36 }, { z: 1.8, y: 0.5, w: 0.64, h: 0.32 }, { z: 3.0, y: 0.36, w: 0.56, h: 0.26 }, { z: 4.0, y: 0.24, w: 0.48, h: 0.22 }]);
+  trailBeam(P, 'camo', [{ z: 0.7, y: 0.4, w: 0.74, h: 0.3 }, { z: 1.8, y: 0.4, w: 0.64, h: 0.28 }, { z: 3.0, y: 0.36, w: 0.56, h: 0.26 }, { z: 4.0, y: 0.24, w: 0.48, h: 0.22 }]);
   P.add('camo', box(0.5, 0.46, 0.05, 0, 0.14, 4.14, -0.22));
   P.add('steel', new THREE.TorusGeometry(0.08, 0.018, 6, 14).rotateX(Math.PI / 2).translate(0, 0.3, 4.3));
   P.add('steel', zTube(4.0, 4.25, 0.05, 0.05, 8, 0, 0.28));
@@ -98,11 +99,15 @@ export function buildBL60({ girdles = false } = {}) {
   rig.anchors.eye = node(trav, 'eye', 0, 1.9, 0.9);
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, BL.muzzle);
   rig.anchors.breech = node(el, 'breech', 0, 0, BL.breech + 0.02);
-  rig.anchors.tray = node(el, 'tray', 0, -0.16, BL.breech);
+  // the round lies on the bore axis, its base behind the breech and its nose short of it, ready to be rammed
+  const sh60 = buildShell('bl60');
+  rig.anchors.tray = node(el, 'tray', 0, 0, BL.breech + sh60.length / 2 + 0.06);
   rig.anchors.shellStack = node(root, 'shellStack', 1.9, 0.1, 2.6);
-  trayShells(rig, rig.anchors.tray, 'bl60');
+  trayShells(rig, node(el, 'trayShell', 0, -(sh60.radius + 0.02), BL.breech + 0.06), 'bl60');
   rig.recoilLength = 1.2;
   rig.loadEl = 0.06;
+  floorFade(rig, TR.y, BL.breech + 0.1, 0.2, 0.65, 0.1);
+  rig.slideMats = ['dark', 'steel', 'char']; // the barrel's own metal, which slides through the cradle sleeve (clip check)
 
   crew(rig, 'layer', -1.2, 0.35, L90, 'lay');
   crew(rig, 'sight', -1.15, 1.0, L90, 'lay');

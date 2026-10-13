@@ -34,15 +34,27 @@ export class Observers {
     const sim = this.sim;
     const u = sim.unitById(shell.unitId);
     if (!u) return;
+    // rounds are matched to a ranging mission whose point is within 400 m of the aim; a round that
+    // matches none but comes from a unit laid on its own mission (the uncorrected aim is the mission
+    // point, so a wild correction took it off) is still answered: in a battle with "not observed" (the
+    // crews' ranging is unchanged), on the range with a full report so a lesson cannot stall
+    const observed = (m) => m && m.state === 'ranging' && m.observer !== 'map' && m.observer !== 'sound' && m.kind !== 'sos' && m.kind !== 'barrage';
     let best = null, bd = 400;
     for (const m of sim.missions) {
-      if (m.state !== 'ranging') continue;
-      if (m.observer === 'map' || m.observer === 'sound') continue;
-      if (m.kind === 'sos' || m.kind === 'barrage') continue;
+      if (!observed(m)) continue;
       const d = Math.hypot(shell.aim.x - m.x, shell.aim.z - m.z);
       if (d < bd) {
         bd = d;
         best = m;
+      }
+    }
+    let wild = false;
+    if (!best) {
+      const own = u.missionId != null ? sim.missionById(u.missionId) : null;
+      const tg = u.order?.target;
+      if (observed(own) && tg && Math.hypot(tg.x - own.x, tg.z - own.z) < 60) {
+        best = own;
+        wild = true;
       }
     }
     if (!best) return;
@@ -51,9 +63,11 @@ export class Observers {
     const fx = dx / r, fz = dz / r, rx = -fz, rz = fx;
     const bx = pos.x - ref.x, bz = pos.z - ref.z;
     const over = bx * fx + bz * fz, right = bx * rx + bz * rz;
-    let delay = m.observer === 'air' ? 6 + sim.rng() * 5 : m.observer === 'balloon' ? 5 + sim.rng() * 3 : 3 + sim.rng() * 4;
+    // the "not observed" answer to a wild round in a battle draws nothing from sim.rng, so a seeded game
+    // plays out exactly as it did before that answer existed
+    let delay = wild && !sim.scripted ? 6 : m.observer === 'air' ? 6 + sim.rng() * 5 : m.observer === 'balloon' ? 5 + sim.rng() * 3 : 3 + sim.rng() * 4;
     if (sim.scripted) delay = 2 + (delay - 3) * 0.4; // the range's observers are quick, so a lesson does not stall
-    this.queue.push({ t: sim.time + delay, m, u, shell, over, right, ref, fx, fz, rx, rz });
+    this.queue.push({ t: sim.time + delay, m, u, shell, over, right, ref, fx, fz, rx, rz, wild });
   }
 
   update() {
@@ -75,7 +89,12 @@ export class Observers {
       observed: true, corr: { add: 0, right: 0 }, n: (m.rounds = (m.rounds ?? 0) + 1), observer: m.observer,
     };
     const d = Math.hypot(q.over, q.right);
-    if (m.observer === 'air') {
+    if (q.wild && !sim.scripted) {
+      // for the player only: the crews (and the simtest player) ignore it, as they did the silence before
+      rep.observed = false;
+      rep.wild = true;
+      rep.text = `${m.obsName}: round not observed, well off the target.`;
+    } else if (m.observer === 'air') {
       let ci = CIRCLES.findIndex((c) => d <= c[1] * YARD);
       if (ci < 0 && sim.scripted) ci = CIRCLES.length - 1; // never a lost round on the range
       if (ci < 0) {

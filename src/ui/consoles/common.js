@@ -40,15 +40,16 @@ export const FUZE = {
   delay: { main: 'DELAY', sub: 'penetrate' },
   shrapnel: { main: 'SHRAPNEL', sub: 'time fuze' },
 };
-export const KIND_SHORT = { bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '12-in Rly' };
+export const KIND_SHORT = { bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly' };
 
-// Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece.
+// Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns
+// the unit has (more than one: the guns selector on the order card).
 export const KINDS = {
-  bl15: { title: '15-INCH HOWITZER', note: 'One piece, a very slow cycle: lay carefully, 1,400 lb shells', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, loadSteps: true },
-  bl92: { title: '9.2-INCH HOWITZERS', note: 'Section of two, 290 lb shells', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3 },
-  bl6: { title: '6-INCH 26 CWT HOWITZERS', note: 'Battery of four: ripple fire for effect', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'delay'], charges: 3 },
-  bl60: { title: '60-POUNDERS', note: 'Long flat trajectory: shrapnel bursts over wire and infantry', rounds: [1, 2, 4, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2 },
-  rail: { title: 'RAILWAY GUN', note: 'Deep targets: railhead, headquarters, distant batteries', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
+  bl15: { pieces: 1, title: '15-INCH HOWITZER', note: 'One piece, a very slow cycle: lay carefully, 1,400 lb shells', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, loadSteps: true },
+  bl92: { pieces: 2, title: '9.2-INCH HOWITZERS', note: 'Section of two, 290 lb shells', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3 },
+  bl6: { pieces: 4, title: '6-INCH 26 CWT HOWITZERS', note: 'Battery of four: ripple fire for effect', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'delay'], charges: 3 },
+  bl60: { pieces: 2, title: '60-POUNDERS', note: 'Long flat trajectory: shrapnel bursts over wire and infantry', rounds: [1, 2, 4, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2 },
+  rail: { pieces: 1, title: '18-INCH RAILWAY GUN', note: 'Deep targets to 20 km, 2,500 lb shells, a cycle of 90 s; the car rolls back on the rails', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
 };
 
 // loading steps in the order the crew performs them (labels are the drill words)
@@ -97,4 +98,18 @@ export function chargeCount(sim, u, cfg) {
   n = n || cfg.charges;
   probed[u.kind] = n;
   return n;
+}
+
+// The guns selector's choices for a unit of n pieces: values are what the `fire` command takes as `guns`
+// ('1' and '2' are sent as numbers). A pair has 1 GUN and SECTION (both); four guns add the half-battery section.
+export function gunChoices(n) {
+  if (n < 2) return [];
+  const one = { v: '1', main: '1 GUN', sub: 'No. 1', tip: 'The directing gun alone: ranging (G)' };
+  if (n === 2) return [one, { v: 'all', main: 'SECTION', sub: 'both guns', tip: 'Both guns (G)' }];
+  return [one, { v: '2', main: 'SECTION', sub: '2 guns', tip: 'Two guns (G)' }, { v: 'all', main: 'BATTERY', sub: `all ${n}`, tip: 'Every gun: fire for effect (G)' }];
+}
+// What the selector sits on by itself: the directing gun while ranging (or with no task), every gun once the
+// mission is for effect, the observer says on target, or a series of more than one round is ordered.
+export function gunsDefault(m, o) {
+  return m && (m.state === 'ffe' || m.onTarget) || (o && o.rounds > 1) ? 'all' : '1';
 }

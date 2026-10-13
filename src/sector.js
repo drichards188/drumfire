@@ -31,7 +31,7 @@ export const UNITS = [
     pieces: [{ kind: 'bl15', dx: 0, dz: 0 }],
   },
   {
-    id: 2, kind: 'bl92', name: '9.2-inch howitzer', callsign: 'Mother',
+    id: 2, kind: 'bl92', name: '9.2-inch howitzers', callsign: 'Mother',
     battery: '91st Siege Battery', pos: { x: -600, z: 900 }, zero: 88 * DEG,
     pieces: [{ kind: 'bl92', dx: 0, dz: 0 }, { kind: 'bl92', dx: 0, dz: 45 }],
   },
@@ -49,22 +49,24 @@ export const UNITS = [
     pieces: [{ kind: 'bl60', dx: 0, dz: -18 }, { kind: 'bl60', dx: 3, dz: 18 }],
   },
   {
-    id: 5, kind: 'rail', name: '12-inch railway howitzer', callsign: 'Hilda',
+    id: 5, kind: 'rail', name: '18-inch railway howitzer', callsign: 'Wolfe',
     battery: 'No. 13 Railway Siege Battery', pos: { x: -3200, z: 300 }, zero: 90 * DEG,
     pieces: [{ kind: 'rail', dx: 0, dz: 0 }],
   },
 ];
 
 // Standard gauge. The main line runs north-south behind the gun line; the railway gun stands on a
-// curved firing spur that leaves it and swings east, so the car lies on the zero line (the 12-inch
-// Mk III traverses only a little on its car: the curve of the spur is the coarse laying).
+// curved firing spur that leaves it and swings east, so the car lies on the zero line (the 18-inch
+// traverses only 2 degrees on its car: the curve of the spur is the coarse laying). The car is about 20 m long and
+// rolls back about 6 m along the track on firing, so the spur is straight for 170 m, 80 m behind the car and
+// 130 m ahead of it, and the pad under it is 60 m long along the line of fire.
 export const RAIL_MAIN = [
   { x: -3420, z: -6000 }, { x: -3425, z: -3000 }, { x: -3420, z: -1200 }, { x: -3440, z: 600 },
   { x: -3480, z: 2400 }, { x: -3600, z: 4400 }, { x: -3750, z: 7000 },
 ];
 export const RAIL_SPUR = [
   { x: -3420, z: -1200 }, { x: -3412, z: -600 }, { x: -3400, z: -250 }, { x: -3384, z: 20 },
-  { x: -3360, z: 160 }, { x: -3328, z: 245 }, { x: -3288, z: 288 }, { x: -3240, z: 300 },
+  { x: -3360, z: 160 }, { x: -3328, z: 245 }, { x: -3296, z: 282 }, { x: -3262, z: 298 }, { x: -3232, z: 300 },
   { x: -3200, z: 300 }, { x: -3130, z: 300 }, { x: -3070, z: 300 },
 ];
 
@@ -236,8 +238,8 @@ export function piecePlacements(unit) {
 export function flatPads() {
   const pads = [];
   for (const u of UNITS) for (const p of piecePlacements(u)) {
-    // the 15-inch platform with its crane and shell stack is ~15 m across; the railway car is 12 m long
-    const big = u.kind === 'rail' ? [6, 26] : u.kind === 'bl15' ? [12, 12] : [8, 8];
+    // the 15-inch platform with its crane and shell stack is ~15 m across; the 18-inch car is about 20 m long and rolls back 6 m
+    const big = u.kind === 'rail' ? [7, 30] : u.kind === 'bl15' ? [12, 12] : [8, 8];
     pads.push({ x: p.x, z: p.z, rx: big[0], rz: big[1], heading: headingFor(p.bearing), blend: 18 });
   }
   for (const s of SITES) if (s.kind !== 'balloon') {

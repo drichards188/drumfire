@@ -15,6 +15,17 @@ export const wrapPi = (a) => {
 };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+// The pieces a `fire` command with `guns` sets going: 1, 2 or 'all' (the pieces most ready first, then
+// loaded ones, then the rest, in gun order, so "1" is No. 1 unless it is down or busy), or a list of piece
+// indices. Dead and blocked pieces never fire. Pure: the console uses it for its FIRE label.
+export function pickGuns(u, guns) {
+  const live = u.pieces.filter((p) => p.state !== 'dead' && !p.blocked);
+  if (Array.isArray(guns)) return live.filter((p) => guns.includes(p.i));
+  const n = guns === 'all' ? live.length : clamp(guns | 0, 1, live.length);
+  const rank = (p) => (p.state === 'ready' ? 0 : p.loaded ? 1 : 2);
+  return live.map((p, k) => ({ p, k })).sort((a, b) => rank(a.p) - rank(b.p) || a.k - b.k).slice(0, n).map((x) => x.p).sort((a, b) => a.i - b.i);
+}
+
 export function createUnits(sim) {
   const diff = sim.difficulty;
   return UNITS.map((def) => {
@@ -181,15 +192,16 @@ export class Guns {
     if (was !== o.rounds > 1) this.recompute(u);
   }
 
-  // start the series: every ready piece (or loading piece) will fire `order.rounds` rounds
-  fire(u) {
+  // start the series: every live piece (or the `guns` chosen with pickGuns) fires `order.rounds` rounds
+  fire(u, guns) {
     const sim = this.sim, o = u.order;
     if (!o.target || !o.ok || !u.alive) return false;
     const live = u.pieces.filter((p) => p.state !== 'dead' && !p.blocked);
     const m = u.missionId != null ? sim.missionById(u.missionId) : null;
-    // ranging: one gun (the lead) fires a single round; the whole battery is for effect
-    const ranging = o.rounds === 1 && m && m.state === 'ranging' && live.length > 1;
-    const sel = ranging ? [live.find((p) => p.loaded) ?? live[0]] : live;
+    // without `guns`: ranging means one gun (the lead) fires a single round; the whole battery is for effect
+    const ranging = guns == null && o.rounds === 1 && m && m.state === 'ranging' && live.length > 1;
+    const sel = guns != null ? pickGuns(u, guns) : ranging ? [live.find((p) => p.loaded) ?? live[0]] : live;
+    if (guns != null && !sel.length) return false;
     let i = 0;
     for (const p of sel) {
       p.rounds = o.rounds;

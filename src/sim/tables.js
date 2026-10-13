@@ -60,14 +60,21 @@ export const GUNS = {
     fuzes: ['instant', 'delay', 'shrapnel'],
   },
   rail: {
-    name: 'Railway gun', short: 'Rail', calibre: 12, mass: 340, shell: 'rail',
-    charges: [{ name: 'Charge 1', v: 285 }, { name: 'Charge 2', v: 370 }, { name: 'Charge 3', v: 474 }],
+    // The what-if British 18-inch railway howitzer on the "Boche-Buster" car (ordered 1918, proofed 1920 to 1921, never
+    // fired in the war). Muzzle velocity 570 m/s on the top charge as the handbook gives; the game drag (cd) is
+    // set so that charge reaches about 20 km at 40 degrees, the handbook's 20.4 km. Real traverse is 2 degrees on
+    // the car and the rest by moving the car on its curved spur; the game folds both into one +-48 degree slew
+    // at a slow 1.2 degrees a second (the spur curve and the shunting), so every site in the sector is reachable.
+    // The cycle is about 90 s of game time (the real gun fired one round in four to six minutes). Crew 14 is the
+    // men drawn at the car (the real crew was about 50).
+    name: '18-inch railway howitzer', short: 'Rail', calibre: 18, mass: 1134, shell: 'rail',
+    charges: [{ name: 'Charge 1', v: 340 }, { name: 'Charge 2', v: 450 }, { name: 'Charge 3', v: 570 }],
     elMin: D(10), elMax: D(40), restEl: D(30), loadEl: D(3.5), traverse: D(48),
-    azRate: D(1.5), elRate: D(4),
-    load: seq(['depress', 6], ['open', 5], ['shell', 16], ['ram', 8], ['cartridge', 10], ['close', 4], ['prime', 3], ['lay', 8]),
-    crew: 14, hp: 150, recoil: 1.2, runout: 6, sheaf: 35,
+    azRate: D(1.2), elRate: D(3.5),
+    load: seq(['depress', 7], ['open', 6], ['shell', 24], ['ram', 13], ['cartridge', 18], ['close', 5], ['prime', 4], ['lay', 11]),
+    crew: 14, hp: 170, recoil: 1.2, runout: 9, sheaf: 35,
     disp: { r: 0.0028, l: 0.0010 }, calib: { v: 0.0012, line: 0.0006 }, wearPerRound: 0.0007,
-    ammo: { he: 50, shrapnel: 0 }, sig: 0.06, cd: 0.2,
+    ammo: { he: 36, shrapnel: 0 }, sig: 0.1, cd: 0.32,
     fuzes: ['instant', 'delay'],
   },
 };
@@ -77,7 +84,7 @@ export const GUNS = {
 // wire cutting radius. German shells carry the same fields (they only damage pieces and crews).
 export const SHELLS = {
   bl15: { calibre: 15, crater: 8, soft: { R: 60, D: 75 }, hard: { R: 30, D: 100 }, lethal: 52, wire: 40, pieceR: 60 },
-  rail: { calibre: 12, crater: 6.5, soft: { R: 52, D: 62 }, hard: { R: 24, D: 80 }, lethal: 44, wire: 34, pieceR: 50 },
+  rail: { calibre: 18, crater: 10, soft: { R: 68, D: 85 }, hard: { R: 34, D: 120 }, lethal: 58, wire: 44, pieceR: 66 },
   bl92: { calibre: 9.2, crater: 5, soft: { R: 44, D: 50 }, hard: { R: 18, D: 55 }, lethal: 36, wire: 28, pieceR: 40 },
   bl6: { calibre: 6, crater: 3, soft: { R: 30, D: 28 }, hard: { R: 8, D: 14 }, lethal: 25, wire: 20, pieceR: 25 },
   bl60: { calibre: 5, crater: 2, soft: { R: 22, D: 20 }, hard: { R: 5, D: 6 }, lethal: 18, wire: 15, pieceR: 18 },

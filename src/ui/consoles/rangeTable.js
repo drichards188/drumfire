@@ -1,4 +1,4 @@
-// The range table card for the current charge: five rows around the ordered range, the nearest
+// The range table card for the current charge: three rows around the ordered range, the nearest
 // highlighted, from sim.rangeTable (the same integrator the shells fly). Ranges are yards here.
 import { el, setText, setCls, card } from '../widgets.js';
 import { toYd, elev, commas } from './common.js';
@@ -15,7 +15,7 @@ export class RangeTable {
     for (const h of ['YARDS', 'ELEVATION', 'TIME OF FLIGHT']) head.append(el('b', null, h));
     t.append(head);
     this.rows = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const r = el('div', 'rtr');
       const cells = [el('span'), el('span'), el('span')];
       r.append(...cells);
@@ -32,7 +32,7 @@ export class RangeTable {
     if (!tab.length) return;
     let n = 0, best = 1e9;
     for (let i = 0; i < tab.length; i++) { const d = Math.abs(tab[i].range - (o.range || 0)); if (d < best) { best = d; n = i; } }
-    let first = Math.max(0, Math.min(tab.length - 5, n - 2));
+    let first = Math.max(0, Math.min(tab.length - 3, n - 1));
     this.rows.forEach((row, i) => {
       const e = tab[first + i];
       if (!e) { setText(row.cells[0], ''); setText(row.cells[1], ''); setText(row.cells[2], ''); return; }

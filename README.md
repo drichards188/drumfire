@@ -17,6 +17,8 @@ npm run preview  # serve the built bundle
 
 A browser with WebGL2 is required. Open the page, pick Easy, Normal or Hard and press "Take command". Sound starts on the first click or key press.
 
+**Tutorials.** "Tutorials" on the title screen (next to "Take command") opens six short guided lessons on a quiet scripted range, always in daylight (the sun is held at 10:00 and the weather is Clear or Overcast; your own settings come back when you leave). Each lesson shows an instruction card over the 3D view, pulses the console controls it is about, and completes a step when you have done what it asks (Skip step and Esc are always there). Lessons: **The basics** (the screen, five units, camera, console, time compression, watch the 15-inch load, fire and ride its shell with F), **Ranging with the F.O.O.** (6-inch battery: take a mission, ranging round, telephone report, corrections, bracketing, fire for effect), **The aeroplane and the clock code** (9.2-inch: wireless messages and the RFC clock code), **The heavies** (15-inch with the delay fuze on a pillbox, then the railway gun on the railhead), **Counter-battery** (German fire walks onto you; HOLD; the 60-pounders on the sound rangers' reference) and **S.O.S.** (red rockets, every gun on the line, shrapnel, break the attack). Completed lessons are ticked (stored in the browser). `?tutorial=<basics|ranging|clockcode|heavy|counter|sos>` starts one directly.
+
 URL parameters: `?quality=Low|Medium|High|Ultra` (default Medium), `?play=1` (skip the title screen), `?unit=N` (start on unit 1 to 5), `?hour=H` (fix the time of day, for example `5.25`), `?weather=Clear|Overcast|Drizzle|Rain|Mist`, `?sandbox=1` (no battle; B fires a test blast, N a burst, K a star shell, L a Very light, J an SOS rocket). The gear button opens a settings panel (quality, colour grade, bloom, fog, exposure and so on). `F3` shows frame and particle statistics.
 
 ## The Group
@@ -29,9 +31,9 @@ Keys 1 to 5 select a unit.
 | 2 | 9.2-inch howitzer | Mother | 91st Siege Battery | 2 |
 | 3 | 6-inch 26 cwt howitzers | Ginger | 118th Siege Battery | 4 |
 | 4 | 60-pounders | Long Tom | 1/1st Lowland Heavy Battery | 2 |
-| 5 | 12-inch railway howitzer | Hilda | No. 13 Railway Siege Battery | 1 |
+| 5 | 18-inch railway howitzer | Wolfe | No. 13 Railway Siege Battery | 1 |
 
-The heavies are slow and powerful (the 15-inch loads in about 50 s, the railway gun in about 60 s, the 60-pounder in about 10 s), and each kind has its own loading crew and machinery: the 15-inch shell crane, the railway gun's loading trolley, the pair carrying a 9.2-inch round from the stack. The 60-pounders can also fire shrapnel (airbursts over wire and open ground). The railway gun reaches the deep targets (railhead, headquarters, far batteries).
+The heavies are slow and powerful (the 15-inch loads in about 50 s, the 18-inch railway gun in about 90 s, the 60-pounder in about 10 s), and each kind has its own loading crew and machinery: the 15-inch shell crane, the railway gun's shell hoist and tray, the pair carrying a 9.2-inch round from the stack. The 60-pounders can also fire shrapnel (airbursts over wire and open ground). The 18-inch railway gun (2,500 lb shells, about 20 km) reaches the deep targets (railhead, headquarters, far batteries) and fires the biggest burst in the game. It is a what-if gun: the real British 18-inch railway howitzer was ordered in 1918 and proofed in 1920 or 1921 and never fired in the war (the 18-inch naval guns of the monitors General Wolfe and Lord Clive did fire on the Belgian coast in 1918), so in 1917 the Group has it in its place of the 12-inch railway howitzers that really served at Ypres.
 
 ## Controls
 
@@ -54,7 +56,8 @@ Console keys (for the selected unit; clicking the buttons does the same):
 |---|---|
 | Tab, Shift+Tab | move the mission cursor |
 | Enter | take the mission under the cursor |
-| Space | fire |
+| Space | fire the guns chosen by the GUNS selector |
+| G | GUNS selector: 1 GUN (the directing gun, for ranging), SECTION, BATTERY (hidden for one-piece units). It sits on 1 GUN while ranging and goes to all guns for effect; G or a click overrides it |
 | Arrow keys | correct the aim: up adds range, down drops, left and right shift the line (Shift = 10 yards, otherwise the current step) |
 | X | cycle the correction step (10, 25, 50, 100, 200 yards) |
 | Q, E | charge down, up |

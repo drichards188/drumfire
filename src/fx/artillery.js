@@ -53,7 +53,7 @@ function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
  * the cordite cloud that hangs and drifts.
  */
 export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
-  const sc = clamp(calibre / 15, 0.16, 1.15), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sc = clamp(calibre / 15, 0.16, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z);
   const nb = night ? 1.8 : 1; // the glow pass is turned down by night: put the light back
@@ -86,6 +86,7 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
 
   // --- the cloud: a dense mass of many overlapping puffs thrown forward and out. Darker, denser
   // cores (the fireball lights them orange for a few frames), paler and more open at the edge.
+  const lifeK = 0.4 + 0.6 * sc, coreA = 0.65 + 0.35 * sc;
   const nCore = cnt(240 * kc, q, 16);
   for (let i = 0; i < nCore; i++) {
     const w = Math.pow(rand(), 0.7); // 0 at the heart, 1 at the rim
@@ -97,18 +98,20 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
     const pr = dusty ? 0.3 : c, pg = dusty ? 0.26 : c * 0.95, pb = dusty ? 0.2 : c * 0.88;
     fx.addSmoke(SMOKE.CORDITE, p.x + dir.x * along + V.x * 3.5 * k8 * w, p.y + dir.y * along + V.y * 3 * k8 * w, p.z + dir.z * along + V.z * 3.5 * k8 * w,
       dir.x * v + V.x * rr(3, 13) * ks, dir.y * v + V.y * rr(2, 9) * ks + 2, dir.z * v + V.z * rr(3, 13) * ks,
-      rr(7, 14), rr(2.5, 5) * k8 * z, rr(8, 18) * k8 * z * (0.7 + 0.5 * w), pr, pg, pb, rr(0.72, 0.92) - 0.15 * w,
+      rr(7, 14) * lifeK, rr(2.5, 5) * k8 * z, rr(8, 18) * k8 * z * (0.7 + 0.5 * w), pr, pg, pb, (rr(0.72, 0.92) - 0.15 * w) * coreA,
       { drag: rr(1.2, 2.2), buoy: rr(0.6, 1.5), glow: w < 0.5 ? 0.75 : 0, len: 0.22, gy: gy - 2 });
   }
   // the cloud that stays: big soft puffs that roll, thin and drift on the wind for ten to twenty seconds
-  const nHang = cnt(26 * kc, q, 5);
+  // (a small calibre leaves a thinner, shorter hang: a battery firing together should drift, not bank up)
+  const hangK = 0.25 + 0.75 * sc * sc, hangLife = 4 + 15 * sc;
+  const nHang = cnt(26 * kc * (0.45 + 0.55 * sc), q, 4);
   for (let i = 0; i < nHang; i++) {
     rdir(V);
     fx.addSmoke(SMOKE.HANG, p.x + dir.x * rr(3, 16) * k8 + V.x * 5 * k8, p.y + Math.abs(V.y) * 3 * k8 + dir.y * rr(3, 16) * k8, p.z + dir.z * rr(3, 16) * k8 + V.z * 5 * k8,
-      dir.x * rr(2, 9) + V.x * 2, dir.y * rr(1, 5) + 1.5, dir.z * rr(2, 9) + V.z * 2, rr(20, 36), 8 * k8 * z, rr(24, 46) * k8 * z, 0.34, 0.32, 0.29, 0.34, { drag: 0.5, buoy: 0.15 });
+      dir.x * rr(2, 9) + V.x * 2, dir.y * rr(1, 5) + 1.5, dir.z * rr(2, 9) + V.z * 2, rr(0.75, 1.15) * hangLife, 8 * k8 * z, rr(24, 46) * k8 * z, 0.34, 0.32, 0.29, 0.34 * hangK, { drag: 0.9, buoy: 0.15 });
   }
   // a smoke ring leaves the muzzle along the bore
-  vortex(fx, V.copy(dir).multiplyScalar(6 * k8).add(p), dir, 2 * k8, 1 * k8, cnt(26, q, 10), 28 * ks, 5 * ks, 7, 1 * k8, 3.4 * k8 * z, [0.42, 0.4, 0.37], 0.55, { drag: 0.55, buoy: 0.12, kind: SMOKE.CORDITE });
+  vortex(fx, V.copy(dir).multiplyScalar(6 * k8).add(p), dir, 2 * k8, 1 * k8, cnt(26, q, 10), 28 * ks, 5 * ks, 3 + 4 * sc, 1 * k8, 3.4 * k8 * z, [0.42, 0.4, 0.37], 0.55, { drag: 0.55, buoy: 0.12, kind: SMOKE.CORDITE });
 
   // --- the ground: a fan of dust kicked off the ground in a wedge ahead of the muzzle, and a ring all round
   const nFan = cnt(110 * kc, q, 14);
@@ -175,7 +178,7 @@ const FUZES = {
  * crater: a hole was dug (the lip then sheds more earth).
  */
 export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mud', crater = true } = {}) {
-  const sc = clamp(calibre / 15, 0.14, 1.15), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sc = clamp(calibre / 15, 0.14, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z), y0 = Math.abs(p.y - gy) < 4 ? gy : p.y;
   const G = GROUNDS[ground] || GROUNDS.mud, FZ = FUZES[fuze] || FUZES.impact;

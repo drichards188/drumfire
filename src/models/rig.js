@@ -54,7 +54,12 @@ export function newGunRig(kind, scheme = 'earth') {
   rig.setBreech = (k) => {
     const b = rig.pivots.breech;
     if (b) b.rotation[rig.breechOpen.axis] = k * rig.breechOpen.angle;
+    // a viewer that only knows the breech gets a sensible tray: out beside the gun until the block is open
+    // (the render layer follows with setTray from the loading step)
+    rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25)));
   };
+  rig.setTray = null; // trayMount() installs it on the guns that have a tray
+  rig.recoilFade = null; // (el) -> 0..1 share of the recoil stroke available at that elevation
   rig.setShell = (where, visible) => { const g = rig.props[where]; if (g) g.visible = !!visible; };
   return rig;
 }
@@ -97,4 +102,38 @@ export function finishGun(rig) {
   delete rig.P;
   delete rig.mats;
   return rig;
+}
+
+// The loading tray rides a cross slide on the carriage (the tray on its loading arm: ref bl92in "loading
+// arm lowered and tray removed"): raised, it lies behind the breech along the bore at the loading
+// elevation, bridging to the breech ring; stowed it has slid `slide` m to the left, clear of the recoiling
+// breech and the swinging block (which hinges on the right). `pivots.tray` carries the tray's meshes in a
+// frame whose origin is the tray's front hinge point (hy, hz in the elevation frame) at rig.loadEl.
+// anchors.tray stays on the elevation frame (tilted back to the loading slope as the gun is raised, as
+// before) so the crew's idea of where the shell lies does not move with the slide. update() keeps it.
+export function trayMount(rig, trav, elev, hy, hz, ay, az, slide) {
+  const p = pivotAt(rig, trav, 'tray', 0, 0, 0);
+  const e = rig.loadEl, c = Math.cos(e), s = Math.sin(e);
+  p.position.set(elev.position.x, elev.position.y + hy * c - hz * s, elev.position.z + hy * s + hz * c);
+  p.rotation.x = e;
+  const x0 = p.position.x;
+  rig.setTray = (k) => { p.position.x = x0 - Math.min(1, Math.max(0, k)) * slide; };
+  const tilt = node(elev, 'trayTilt', 0, hy, hz);
+  const a = node(tilt, 'tray', 0, ay, az);
+  rig.anchors.tray = a;
+  rig.trayTilt = () => { tilt.rotation.x = -Math.max(0, elev.rotation.x - rig.loadEl); };
+  rig.trayTilt();
+  rig.setTray(1);
+  return p;
+}
+
+// Recoil that shortens as the gun is raised, so the breech tail (`tailZ` behind the trunnion axis along the
+// bore, radius `tailR`) stays `m` above the floor `ty` below the trunnions: the stroke the cradle allows at
+// that elevation as a share of rig.recoilLength, never below `min`.
+export function floorFade(rig, ty, tailZ, tailR, m = 0.06, min = 0.3) {
+  rig.recoilFade = (el) => {
+    if (el <= 0.02) return 1;
+    const room = (ty - m - tailR * Math.cos(el)) / Math.sin(el) - tailZ;
+    return Math.min(1, Math.max(min, room / rig.recoilLength));
+  };
 }

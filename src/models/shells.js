@@ -19,7 +19,7 @@ const SPEC = {
   bl92: { d: 0.234, L: 0.95, og: 1.4, rho: 2.0, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
   bl6: { d: 0.152, L: 0.58, og: 1.5, rho: 2.0, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
   bl60: { d: 0.127, L: 0.62, og: 1.8, rho: 2.5, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
-  rail: { d: 0.305, L: 1.25, og: 1.4, rho: 2.0, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
+  rail: { d: 0.457, L: 2.01, og: 1.7, rho: 2.4, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' }, // 18-inch HE Mk 2D, 2,500 lb, 6 ft 7 in
   fh15: { d: 0.149, L: 0.56, og: 1.4, rho: 2.0, band: 0.1, paint: 0x585d58, stripe: 0xc8a82a, nose: 'steel' },
   m21: { d: 0.211, L: 0.72, og: 1.3, rho: 2.0, band: 0.1, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' },
   fk77: { d: 0.077, L: 0.34, og: 1.6, rho: 2.5, band: 0.12, paint: 0x23262a, stripe: 0xb03a22, nose: 'steel' },
@@ -117,7 +117,7 @@ export function buildShell(kind, seg = 24) {
 // opts.charges: sections of a bagged charge laid end to end (default 1).
 const CART = {
   bl15: { l: 0.46, r: 0.15, brass: false }, bl92: { l: 0.4, r: 0.1, brass: false }, bl6: { l: 0.34, r: 0.07, brass: false },
-  bl60: { l: 0.42, r: 0.055, brass: false }, rail: { l: 0.5, r: 0.13, brass: false },
+  bl60: { l: 0.42, r: 0.055, brass: false }, rail: { l: 0.62, r: 0.19, brass: false },
   fh15: { l: 0.4, r: 0.065, brass: false }, m21: { l: 0.4, r: 0.09, brass: false }, fk77: { l: 0.28, r: 0.04, brass: true },
 };
 export function buildCartridge(kind, { charges = 1 } = {}) {

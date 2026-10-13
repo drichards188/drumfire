@@ -35,19 +35,22 @@ export default {
     const h = ctx.h;
     for (const sg of items) {
       const { a, b, std } = sg;
-      // the railway gun brings its own track under the car (12 m): leave it clear
-      if (std && Math.hypot((a.x + b.x) / 2 + 3200, (a.z + b.z) / 2 - 300) < 8) continue;
+      // the 18-inch car (21 m) stands on this track and rolls back 6 m along it when the gun fires: near the gun
+      // the bed is sunk so that the rail head is at ground level, where the rig's wheels run, and it stays
+      // clear of everything (no beams, no buffers) for 24 m either way, then rises back to the ordinary bed
+      const dm = std ? Math.hypot((a.x + b.x) / 2 + 3200, (a.z + b.z) / 2 - 300) : 99;
+      const drop = dm < 42 ? 0.7 * (1 - Math.min(1, Math.max(0, (dm - 24) / 18))) : 0;
       const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1, d = [dx / L, dz / L], r = [-d[1], d[0]];
       const gauge = std ? 1.435 : 0.6, bedW = std ? 3.6 : 1.5;
       const lift = lod ? 0.35 : 0.1;
       const ya = h(a.x, a.z), yb = h(b.x, b.z);
       if (std) {
         // a low ballast bank, sunk a little so it sits on whatever the ground does
-        m.slope('ballast', [a.x, ya - 0.2, a.z], [b.x, yb - 0.2, b.z], 5.2, 3.5, 0.5 + (lod ? 0.2 : 0));
+        m.slope('ballast', [a.x, ya - 0.2, a.z], [b.x, yb - 0.2, b.z], 5.2, 3.5, 0.5 + (lod ? 0.2 : 0) - drop * 0.5);
       } else {
         m.ribbon('ballast', [[a.x, ya + lift, a.z], [b.x, yb + lift, b.z]], bedW, grey(0.9));
       }
-      const top = std ? 0.52 : lift;
+      const top = std ? 0.52 - drop : lift;
       for (const s of [-1, 1]) {
         const o = s * gauge / 2;
         m.ribbon('steel', [[a.x + r[0] * o, ya + top + (std ? 0.18 : 0.06), a.z + r[1] * o], [b.x + r[0] * o, yb + top + (std ? 0.18 : 0.06), b.z + r[1] * o]], std ? 0.11 : 0.06, 0xffffff);
