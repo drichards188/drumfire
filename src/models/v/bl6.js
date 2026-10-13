@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { V, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile } from '../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, addWheel, addHandwheel, trailBeam, addDialSight, breechSetter, trayShells, crew, L90, R90 } from '../t/fieldkit.js';
+import { floorFade } from '../rig.js';
+import { buildShell } from '../shells.js';
 
 /**
  * BL 6-inch 26 cwt howitzer on its Mk I travelling carriage (the "Ginger" battery's guns), as the
@@ -34,13 +36,12 @@ export function buildBL6({ girdles = true } = {}) {
   // cheeks: riveted steel plates carrying the trunnion bearings
   const cheek = [[-0.72, 0.8], [-0.46, 1.18], [-0.2, 1.45], [0.3, 1.45], [0.52, 1.18], [0.82, 0.66], [0.82, 0.5], [-0.72, 0.56]];
   for (const s of [-1, 1]) P.add('camo', sideProfile(cheek, 0.03).applyMatrix4(new THREE.Matrix4().makeTranslation(s * 0.3, 0, 0)));
-  P.add('camo', box(0.6, 0.1, 1.1, 0, 0.58, 0.1));
+  P.add('camo', box(0.6, 0.1, 1.1, 0, 0.4, 0.1)); // bed plate, low enough for the breech tail at full elevation
   P.add('camo', box(0.62, 0.08, 0.4, 0, 1.0, -0.62, -0.25)); // front tie plate
-  P.add('steel', xTube(-0.34, 0.34, 0.03, 0.03, 8, 1.4, 0.22));
-  // trunnion bearing caps
+    // trunnion bearing caps
   for (const s of [-1, 1]) P.add('steel', xTube(s * 0.27, s * 0.4, 0.075, 0.075, 12, TR.y, TR.z));
   // box trail: from the carriage bed back to the spade
-  trailBeam(P, 'camo', [{ z: 0.55, y: 0.6, w: 0.6, h: 0.3 }, { z: 1.5, y: 0.5, w: 0.52, h: 0.27 }, { z: 2.5, y: 0.34, w: 0.44, h: 0.23 }, { z: 3.3, y: 0.22, w: 0.34, h: 0.2 }]);
+  trailBeam(P, 'camo', [{ z: 0.55, y: 0.36, w: 0.6, h: 0.24 }, { z: 1.5, y: 0.34, w: 0.52, h: 0.24 }, { z: 2.5, y: 0.34, w: 0.44, h: 0.23 }, { z: 3.3, y: 0.22, w: 0.34, h: 0.2 }]);
   P.add('camo', box(0.44, 0.4, 0.04, 0, 0.14, 3.42, -0.2)); // spade plate, bedded in the mud
   P.add('steel', new THREE.TorusGeometry(0.07, 0.016, 6, 14).rotateX(Math.PI / 2).translate(0, 0.28, 3.55)); // trail eye
   P.add('steel', zTube(3.3, 3.5, 0.045, 0.045, 8, 0, 0.26));
@@ -69,8 +70,8 @@ export function buildBL6({ girdles = true } = {}) {
   for (const z of [-0.7, -0.2, 0.1]) E.add('dark', box(0.1, 0.12, 0.05, 0, 0.24, z)); // clips tying it to the cradle
   // elevating arc (a toothed sector hanging under the cradle at the rear) and its sector pinion housing
   const arc = [];
-  for (let i = 0; i <= 8; i++) { const f = (12 + 44 * (i / 8)) * Math.PI / 180; arc.push([0.52 * Math.sin(f), -0.52 * Math.cos(f)]); }
-  for (let i = 8; i >= 0; i--) { const f = (12 + 44 * (i / 8)) * Math.PI / 180; arc.push([0.4 * Math.sin(f), -0.4 * Math.cos(f)]); }
+  for (let i = 0; i <= 8; i++) { const f = (12 + 44 * (i / 8)) * Math.PI / 180; arc.push([0.46 * Math.sin(f), -0.46 * Math.cos(f)]); }
+  for (let i = 8; i >= 0; i--) { const f = (12 + 44 * (i / 8)) * Math.PI / 180; arc.push([0.34 * Math.sin(f), -0.34 * Math.cos(f)]); }
   E.add('camo', sideProfile(arc, 0.04).applyMatrix4(new THREE.Matrix4().makeTranslation(-0.2, 0, 0)));
   E.add('camo', rbox(0.1, 0.1, 0.26, 0.02, 0, -0.26, 0.1));
   // dial sight bracket on the left
@@ -113,11 +114,15 @@ export function buildBL6({ girdles = true } = {}) {
   rig.anchors.eye = node(trav, 'eye', 0, 1.7, 0.5);
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, -1.46); // in battery (it does not recoil with the barrel)
   rig.anchors.breech = node(el, 'breech', 0, 0, 0.82);
-  rig.anchors.tray = node(el, 'tray', 0, -0.16, 0.8);
+  // the round lies on the bore axis, its base behind the breech and its nose short of it, ready to be rammed
+  const sh6 = buildShell('bl6');
+  rig.anchors.tray = node(el, 'tray', 0, 0, 0.8 + sh6.length / 2 + 0.06);
   rig.anchors.shellStack = node(root, 'shellStack', 1.7, 0.1, 1.7);
-  trayShells(rig, rig.anchors.tray, 'bl6');
+  trayShells(rig, node(el, 'trayShell', 0, -(sh6.radius + 0.02), 0.8 + 0.06), 'bl6');
   rig.recoilLength = 0.9;
-  rig.loadEl = 0.13; // 7.5 deg, the quick-loading gear's position
+  rig.loadEl = 0.13; // 7.5 deg, the quick-loading gear's position (the render layer drops the barrel to it for the loading steps)
+  floorFade(rig, TR.y, 0.9, 0.2, 0.5, 0.1);
+  rig.slideMats = ['dark', 'steel', 'char']; // the barrel's own metal, which slides through the cradle sleeve (clip check)
 
   // crew: x right, z back; headings face the gun
   crew(rig, 'layer', -1.05, 0.15, L90, 'lay');

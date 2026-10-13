@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, topProfile, zLathe, rivets, rivetRow, rivetPoly, chain, handwheel, gearArc, shellGeometry, ibeamX, ibeamZ, ibeamY, mergeAll, Parts, DEG } from '../kit.js';
 import { newGunRig, anchor, crewSpot, addShellProp, finishGun } from '../rig.js';
-import { pivotAt, hb } from '../rig.js';
+import { pivotAt, hb, trayMount, floorFade } from '../rig.js';
 import { mulberry32 } from '../../noise.js';
 
 // BL 15-inch howitzer (Coventry Ordnance Works, 1915), "Granny". From refs/bl15in: the 1,400 lb shell,
@@ -23,14 +23,14 @@ const PH = 0.55; // platform top
 const TY = 2.5; // trunnion height above the platform top
 const MUZ = -3.1, BRE = 1.8; // barrel ends, on the elevation frame's z
 const HX = 0.98; // breech hinge x
-const CX = 3.2, CZ = 3.6; // crane post
-const JIB_R = 3.2; // from the post to the hook
+const CX = 2.6, CZ = 7.0; // crane post: behind the platform, beyond the sweep of the tray at full traverse
+const JIB_R = 4.4; // from the post to the hook
 const SHELL = { len: 1.52, rad: 0.19 };
 const HOIST_TOP = 4.2, HOIST_LOW = 1.15; // hook block height in the crane frame
 
 // the cheek outline as [z, y] from the platform top: front slope, the hump over the trunnion, a low rear
 function cheekOutline() {
-  return [[-2.4, 0], [-2.4, 1.1], [-1.5, 1.75], [-1.0, TY + 0.45], [-0.6, TY + 0.58], [0.6, TY + 0.58], [1.0, TY + 0.45], [1.5, 1.6], [2.4, 1.35], [3.0, 1.2], [3.0, 0]];
+  return [[-2.4, 0], [-2.4, 1.1], [-1.5, 1.75], [-1.0, TY + 0.45], [-0.6, TY + 0.58], [0.6, TY + 0.58], [1.0, TY + 0.45], [1.4, 1.5], [1.9, 0.8], [3.0, 0.8], [3.0, 0]]; // the rear cut low: the opened block and the tray slide pass over it
 }
 function polyTop(poly, z) {
   let best = 0;
@@ -51,12 +51,13 @@ export function buildBL15() {
   const elev = pivotAt(rig, trav, 'elevation', 0, TY, 0);
   const rec = pivotAt(rig, elev, 'recoil', 0, 0, 0);
   const brc = pivotAt(rig, rec, 'breech', HX, 0, BRE + 0.03);
-  const tray = pivotAt(rig, elev, 'tray', 0, -0.2, BRE + 0.08);
   const crane = pivotAt(rig, root, 'crane', CX, 0, CZ);
   const hoist = pivotAt(rig, crane, 'hoist', -JIB_R, HOIST_TOP, 0);
   rig.recoilLength = 0.8;
   rig.loadEl = 0.3;
   rig.breechOpen = { axis: 'y', angle: 1.65 };
+  const tray = trayMount(rig, trav, elev, -0.26, BRE + 0.14, 0.26, 1.64, 2.4);
+  floorFade(rig, TY, BRE + 0.48, 0.64, 0.46);
 
   // ------------------------------------------------------------------ the ground platform (root)
   {
@@ -110,15 +111,13 @@ export function buildBL15() {
     }
     // inner floor and the rear girders tying the cheeks
     PT.add('camo', box(2.4, 0.14, 6.4, 0, 0.1, 0.4));
-    PT.add('camo', box(2.4, 0.62, 0.34, 0, 0.62, 2.85));
-    PT.add('camo', box(2.4, 0.34, 0.3, 0, 1.15, 2.3));
-    PT.add('dark', rivetRow(V(-1.1, 0.8, 3.03), V(1.1, 0.8, 3.03), 0.2, V(0, 0, 1), 0.026));
-    PT.add('dark', rivetRow(V(-1.1, 0.5, 3.03), V(1.1, 0.5, 3.03), 0.2, V(0, 0, 1), 0.026));
+    PT.add('camo', box(2.4, 0.4, 0.34, 0, 0.2, 2.85));
+    PT.add('dark', rivetRow(V(-1.1, 0.3, 3.03), V(1.1, 0.3, 3.03), 0.2, V(0, 0, 1), 0.026));
     // front: the bracing struts up to the earth box
     for (const s of [-1, 1]) PT.add('camo', rod(V(s * 1.3, 1.1, -2.3), V(s * 1.4, 0.2, -3.0), 0.07, 6));
 
     // the earth box in front: a riveted steel tank, panelled, edged with angles, and filled with earth
-    const EB = { w: 3.5, h: 1.8, z0: -4.4, z1: -2.5 };
+    const EB = { w: 3.5, h: 1.3, z0: -4.4, z1: -2.5 }; // low enough for the clip arms to swing over it
     const ez = (EB.z0 + EB.z1) / 2, ed = EB.z1 - EB.z0;
     PT.add('camo', rbox(EB.w, EB.h, ed, 0.03, 0, EB.h / 2 + 0.02, ez));
     for (const s of [-1, 1]) {
@@ -144,7 +143,7 @@ export function buildBL15() {
     PT.add('soil', box(EB.w - 0.25, 0.18, ed - 0.25, 0, EB.h + 0.02, ez));
     for (let i = 0; i < 14; i++) {
       const x = (rnd() - 0.5) * (EB.w - 0.7), z = EB.z0 + 0.35 + rnd() * (ed - 0.7), r = 0.28 + rnd() * 0.3;
-      PT.add('soil', sphere(r, x, EB.h + 0.1, z, 1.2, 0.5 + rnd() * 0.3, 1.1, 7), { tint: rnd() > 0.7 ? 0x9a8f7e : 0xffffff });
+      PT.add('soil', sphere(r, x, EB.h + 0.05, z, 1.2, 0.25 + rnd() * 0.1, 1.1, 7), { tint: rnd() > 0.7 ? 0x9a8f7e : 0xffffff });
     }
 
     // the right-hand platform for the layer and the lanyard man: a steel bracket and a timber deck
@@ -165,7 +164,7 @@ export function buildBL15() {
     PT.add('dark', box(0.2, 0.28, 0.3, 1.5, 0.9, 2.45));
     // the elevating pinion shaft and the layer's handwheel on the left; a brass-bound dial beside it
     PT.add('iron', handwheel(0.46, 6, 0.026, 0.07).translate(-1.75, 0.95, 1.45));
-    PT.add('steel', xTube(-1.8, 0.2, 0.05, 0.05, 8, 0.95, 1.45));
+    PT.add('steel', xTube(-1.8, -0.95, 0.05, 0.05, 8, 0.95, 1.45)); // the pinion shaft ends outside the breech ring's sweep
     PT.add('dark', box(0.26, 0.34, 0.34, -1.52, 0.95, 1.45));
   }
 
@@ -191,6 +190,7 @@ export function buildBL15() {
     // the buffers and recuperators: four cylinders along the cradle with glands and rear caps; their
     // piston rods run forward to a clip on the barrel (recoil group)
     const tubes = [[-0.62, 1.08, 0.15], [0.62, 1.08, 0.15], [-0.55, -1.05, 0.12], [0.55, -1.05, 0.12]];
+    rig.nest = tubes.map(([x, y]) => [x, y]); // cylinder axes the piston rods slide into (used by the clip check)
     for (const [x, y, r] of tubes) {
       PE.add('camo', zTube(-1.55, 1.5, r, r, 16, x, y));
       PE.add('steel', zTube(-1.6, -1.45, r * 1.12, r * 1.12, 16, x, y));
@@ -205,11 +205,11 @@ export function buildBL15() {
     PE.add('steel', gearArc(2.0, 2.16, 26 * DEG, 78 * DEG, 0.3, 30, 0.05));
     PE.add('camo', gearArc(1.45, 2.0, 26 * DEG, 78 * DEG, 0.2));
     PE.add('camo', box(0.42, 0.3, 1.1, 0, -0.95, 0.65));
-    // the sight bracket: a flat blade out on the left of the cradle, with the dial sight and clinometer
-    PE.add('camo', topProfile([[-0.8, 0.3], [-0.8, -0.95], [-1.9, -1.7], [-1.75, -0.4], [-1.3, 0.3]], 0.0, 0.07).translate(0, 0.68, 0));
-    PE.add('camo', box(0.25, 0.3, 0.5, -1.0, 0.82, 0.0));
-    PE.add('brass', yTube(0.76, 1.2, 0.07, 0.07, 12, -1.0, -0.15));
-    PE.add('dark', zTube(-0.45, 0.05, 0.035, 0.03, 8, -1.0, 1.1));
+    // the sight bracket: a blade carried on the left trunnion end, outside the cheek, so it turns clear of it
+    PE.add('camo', topProfile([[-1.7, 0.3], [-1.7, -0.95], [-2.1, -1.5], [-2.05, -0.4], [-1.9, 0.3]], 0.0, 0.07).translate(0, 0.68, 0));
+    PE.add('camo', box(0.12, 0.6, 0.4, -1.72, 0.4, 0.0));
+    PE.add('brass', yTube(0.72, 1.16, 0.07, 0.07, 12, -1.95, -0.15));
+    PE.add('dark', zTube(-0.45, 0.05, 0.035, 0.03, 8, -1.95, 1.1));
     PE.add('brass', yTube(0.88, 0.9, 0.12, 0.12, 14, 0.5, 0.5));
     // the data plate on the cradle top
     PE.add('brass', box(0.42, 0.012, 0.3, 0, 0.882, -0.3));
@@ -224,12 +224,12 @@ export function buildBL15() {
     for (const z of [MUZ + 0.3, -2.0]) PR.add('iron', zTube(z - 0.03, z + 0.03, 0.55, 0.55, 28), { tint: 0x8a8f86 });
     PR.add('dark', zTube(MUZ - 0.002, MUZ + 0.2, 0.21, 0.21, 18)); // the bore, black
     // the clip round the barrel with the arms to the piston rods
-    PR.add('camo', zTube(-2.46, -2.3, 0.6, 0.6, 26));
-    PR.add('steel', zTube(-2.48, -2.46, 0.62, 0.62, 26));
+    PR.add('camo', zTube(-2.74, -2.58, 0.6, 0.6, 26)); // the clip rides ahead of the cradle by more than the stroke
+    PR.add('steel', zTube(-2.76, -2.74, 0.62, 0.62, 26));
     for (const [x, y] of [[-0.62, 1.08], [0.62, 1.08], [-0.55, -1.05], [0.55, -1.05]]) {
-      PR.add('camo', rod(V(x * 0.3, Math.sign(y) * 0.58, -2.38), V(x, y, -2.38), 0.07, 8));
-      PR.add('camo', rbox(0.22, 0.22, 0.22, 0.04, x, y, -2.38));
-      PR.add('steel', zTube(-2.38, -1.45, 0.05, 0.05, 10, x, y)); // piston rod, slides into the gland
+      PR.add('camo', rod(V(x * 0.3, Math.sign(y) * 0.58, -2.66), V(x, y, -2.66), 0.07, 8));
+      PR.add('camo', rbox(0.22, 0.22, 0.22, 0.04, x, y, -2.66));
+      PR.add('steel', zTube(-2.66, -1.45, 0.05, 0.05, 10, x, y)); // piston rod, slides into the gland
     }
     // breech ring details: wedge keys, the data plate on the left
     PR.add('brass', box(0.012, 0.28, 0.4, -0.76, 0.0, 0.7));
@@ -244,7 +244,7 @@ export function buildBL15() {
     PR.add('steel', rbox(0.2, 0.24, 0.36, 0.04, 0, 0.88, BRE - 0.28));
     PR.add('brass', yTube(0.88, 1.08, 0.04, 0.05, 8, 0, BRE - 0.28));
     // lugs where the carrier hinges
-    PR.add('camo', rbox(0.22, 1.0, 0.34, 0.04, HX + 0.06, 0, BRE - 0.12));
+    PR.add('camo', rbox(0.2, 1.0, 0.26, 0.04, HX, 0, BRE - 0.2)); // hinge lug, ends short of the swinging block
   }
 
   // ------------------------------------------------------------------ breech carrier (hinge group; origin at the hinge pin)
@@ -271,24 +271,18 @@ export function buildBL15() {
     const L0 = 0.1, L1 = 3.7; // from the hinge, along z (the tray frame's origin is at the hinge, 0.2 below the axis)
     PTR.add('camo', box(1.2, 0.06, L1 - L0, 0, 0, (L0 + L1) / 2));
     for (const s of [-1, 1]) {
-      PTR.add('camo', box(0.07, 0.24, L1 - L0, s * 0.6, 0.13, (L0 + L1) / 2));
-      PTR.add('dark', rivetRow(V(s * 0.6 + s * 0.04, 0.16, L0 + 0.1), V(s * 0.6 + s * 0.04, 0.16, L1 - 0.1), 0.2, V(s, 0, 0), 0.022));
+      PTR.add('camo', box(0.07, 0.06, L1 - L0, s * 0.6, 0.04, (L0 + L1) / 2)); // low curbs: the round is swung in over them
+      PTR.add('dark', rivetRow(V(s * 0.6 + s * 0.04, 0.04, L0 + 0.1), V(s * 0.6 + s * 0.04, 0.04, L1 - 0.1), 0.2, V(s, 0, 0), 0.022));
       PTR.add('camo', ibeamZ(L0, L1, 0.22, 0.12, 0.025, s * 0.4, -0.14));
       // hinge lugs and the chain back to the cradle
       PTR.add('camo', box(0.12, 0.16, 0.2, s * 0.6, 0.0, 0.05));
       PTR.add('chain', chain(V(s * 0.6, 0.15, L1 - 0.2), V(s * 0.82, 1.0, 0.3), 0.2, 0.07));
     }
-    for (const z of [0.9, 1.9, 2.9, 3.6]) PTR.add('camo', box(1.3, 0.08, 0.1, 0, -0.1, z));
-    // the shell cradle blocks on the tray and the rammer guide at the far end
-    for (const z of [1.3, 2.6]) {
-      PTR.add('timber', box(0.9, 0.06, 0.25, 0, 0.06, z));
-      PTR.add('timber', box(0.3, 0.12, 0.25, -0.2, 0.09, z, 0, 0, 0.5));
-      PTR.add('timber', box(0.3, 0.12, 0.25, 0.2, 0.09, z, 0, 0, -0.5));
-    }
-    PTR.add('camo', box(0.9, 0.35, 0.08, 0, 0.17, L1));
-    // props: two timber legs resting on the platform rear, chained
-    PTR.add('timber', box(0.14, 1.6, 0.14, 0.5, -0.8, 3.5, 0.3));
-    PTR.add('timber', box(0.14, 1.6, 0.14, -0.5, -0.8, 3.5, 0.3));
+    for (const z of [0.9, 1.9, 2.9, 3.6]) PTR.add('camo', box(1.2, 0.08, 0.1, 0, -0.1, z));
+    // the rammer guide at the far end (the shell lies on the plate, no chocks to clip it)
+    for (const s of [-1, 1]) PTR.add('camo', box(0.1, 0.35, 0.08, s * 0.42, 0.17, L1)); // the rammer guide, open in the middle for the staff
+    PTR.add('camo', box(0.94, 0.07, 0.08, 0, 0.5, L1));
+    // (no props: the tray hangs on its loading arm and slides clear on the cross rail)
   }
 
   // ------------------------------------------------------------------ the shell crane
@@ -337,9 +331,11 @@ export function buildBL15() {
     const place = (x, y, z) => {
       for (const [g, k] of [[s.body, 'shell'], [s.band, 'brass'], [s.fuze, 'steel']]) PL.add(k, g.clone().translate(x, y, z));
     };
-    const SX = CX + JIB_R * 2, SZ = CZ;
-    for (const x of [-0.22, 0.22]) place(SX + x, 0.36, SZ + 0.0);
-    place(SX, 0.7, SZ);
+    const SX = CX + JIB_R, SZ = CZ; // where the hook picks up (jib turned to PI)
+    // the pile stands to one side: the hook comes down at the pick point on the sleepers
+    for (const x of [-0.22, 0.22]) place(SX + x, 0.36, SZ + 1.8);
+    place(SX, 0.7, SZ + 1.8);
+    for (const z of [-0.5, 0.5]) PL.add('timber', box(1.4, 0.18, 0.2, SX, 0.09, SZ + 1.8 + z * 1.3));
     for (const z of [-0.5, 0.5]) PL.add('timber', box(1.4, 0.18, 0.2, SX, 0.09, SZ + z * 1.3));
     for (const dz of [-1.0, 1.0]) PL.add('timber', box(0.2, 0.07, 0.2, SX, 0.15, SZ + dz));
     rig.anchors.shellStack = new THREE.Object3D();
@@ -367,22 +363,19 @@ export function buildBL15() {
 
   // props: the shell shown by setShell on the crane, on the tray and (unused here) the trolley
   addShellProp(rig, 'crane', hoist, SHELL.len, SHELL.rad, 0, -1.18, 0);
-  addShellProp(rig, 'tray', tray, SHELL.len, SHELL.rad, 0, 0.2 + 0.0, 2.0);
-  rig.props.tray.position.set(0, 0.2, 1.7);
+  addShellProp(rig, 'tray', tray, SHELL.len, SHELL.rad, 0, 0.26, 1.64);
 
   // anchors
   anchor(rig, rec, 'muzzle', 0, 0, MUZ);
   rig.anchors.muzzles.push(rig.anchors.muzzle);
   anchor(rig, rec, 'breech', 0, 0, BRE);
-  anchor(rig, tray, 'tray', 0, 0.2, 1.7);
   anchor(rig, trav, 'eye', 0, TY + 0.4, 0.2);
 
   // the chain and the tray follow the pose; the render layer calls update() every frame
   rig.update = () => {
     const h = HOIST_TOP - hoist.position.y; // metres the hook hangs below its raised position
     strand.scale.y = strand2.scale.y = 0.28 + h; // from the sheave at y = 4.8 down to the block's rod end
-    const el = elev.rotation.x;
-    tray.rotation.x = -Math.max(0, el - rig.loadEl);
+    rig.trayTilt();
   };
   rig.hoistRange = { up: HOIST_TOP, down: HOIST_LOW };
   rig.update();
@@ -406,8 +399,8 @@ export function buildBL15() {
   crewSpot(rig, 'rammer4', 0.55, PH, 5.9, face.N, 'ram');
   crewSpot(rig, 'crane1', CX + 0.85, 0, CZ - 0.9, face.W, 'operate');
   crewSpot(rig, 'crane2', CX - 1.5, 0, CZ + 1.2, face.W, 'signal');
-  crewSpot(rig, 'ammo1', CX + JIB_R * 2 - 1.2, 0, CZ + 1.6, face.N, 'stand');
-  crewSpot(rig, 'ammo2', CX + JIB_R * 2 + 1.2, 0, CZ + 1.4, face.N, 'crouch');
+  crewSpot(rig, 'ammo1', CX + JIB_R - 1.2, 0, CZ + 1.6, face.N, 'stand');
+  crewSpot(rig, 'ammo2', CX + JIB_R + 1.2, 0, CZ + 1.4, face.N, 'crouch');
 
   return finishGun(rig);
 }

@@ -31,7 +31,7 @@ export const UNITS = [
     pieces: [{ kind: 'bl15', dx: 0, dz: 0 }],
   },
   {
-    id: 2, kind: 'bl92', name: '9.2-inch howitzer', callsign: 'Mother',
+    id: 2, kind: 'bl92', name: '9.2-inch howitzers', callsign: 'Mother',
     battery: '91st Siege Battery', pos: { x: -600, z: 900 }, zero: 88 * DEG,
     pieces: [{ kind: 'bl92', dx: 0, dz: 0 }, { kind: 'bl92', dx: 0, dz: 45 }],
   },

@@ -62,6 +62,8 @@ const blastTrauma = (calibre, d, k = 1) => {
   const r0 = 25 + 6 * calibre;
   return Math.min(1, ((calibre / 15) ** 1.2 * 1.15 * k) / (1 + (d / r0) ** 2));
 };
+// how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
+const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 18 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 
@@ -948,6 +950,12 @@ async function init() {
       cut.a.value.copy(camera.position);
       cut.b.value.copy(chase.focus);
       cut.r.value = chase.mode === 'unit' && !freeCam ? 10 : 0;
+      // the selected unit's own nets are drawn back over its guns (every piece, the battery spreads wide)
+      const cu = UNITS[selected], places = piecePlacements(cu);
+      for (let i = 0; i < cut.p.value.length; i++) {
+        const pl = places[i];
+        cut.p.value[i].set(pl?.x ?? 0, pl?.z ?? 0, pl && state !== 'title' ? NET_CLEAR[cu.kind] : 0);
+      }
     }
 
     terrain.update(camera);

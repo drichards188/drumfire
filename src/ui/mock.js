@@ -169,13 +169,13 @@ export class MockWorld {
       if (p.state === 'dead') continue;
       const wantLoad = !!o.target && u.mode !== 'hold';
       if (p.state === 'recoil') { p.recoil = Math.max(0, p.recoil - dt * 0.8); if (p.recoil <= 0) { p.state = 'idle'; p.loaded = false; } continue; }
-      if (p.state === 'idle' && wantLoad) { p.state = 'loading'; p.stage = 0; p.job = { step: STEP[0][0], t: 0, dur: STEP[0][1] * total }; }
+      if (p.state === 'idle' && wantLoad) { p.state = 'loading'; p.stage = 0; p.job = { step: STEP[0][0], t: 0, dur: STEP[0][1] * total, i: 0, n: STEP.length }; }
       if (p.state === 'loading') {
         p.job.t += dt;
         if (p.job.t >= p.job.dur) {
           p.stage++;
           if (p.stage >= STEP.length) { p.state = 'ready'; p.job = null; p.loaded = true; }
-          else p.job = { step: STEP[p.stage][0], t: 0, dur: STEP[p.stage][1] * total };
+          else p.job = { step: STEP[p.stage][0], t: 0, dur: STEP[p.stage][1] * total, i: p.stage, n: STEP.length };
         }
         if (p.job && p.job.step === 'lay') { const f = p.job.t / p.job.dur; p.az += (p.cmd.az - p.az) * Math.min(1, f * 0.4 + dt); p.el += (p.cmd.el - p.el) * Math.min(1, f * 0.4 + dt); }
       }

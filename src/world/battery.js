@@ -40,6 +40,42 @@ export function positionAnchors(unitId, pieceIndex = 0) {
   };
 }
 
+// The solid props of one gun position in the piece's local frame (-Z the line of fire, +X right), as boxes
+// { name, x0, z0, x1, z1, h } (metres, ground to h): the sandbag walls, the ready-use stack, the cartridge
+// crates and the spent cases standing behind the gun (placed from the piece's world position like the build).
+// The render layer's crew choreography keeps the men out of them (render/crewfield.js).
+export function pitSolids(kind, wx = 0, wz = 0) {
+  const K = KINDS[kind], out = [];
+  if (!K) return out;
+  const add = (name, x0, z0, x1, z1, h) => out.push({ name, x0, z0, x1, z1, h });
+  const wall = (name, ax, az, bx, bz, hh, gaps = []) => {
+    const n = Math.max(1, Math.round(Math.hypot(bx - ax, bz - az) / 2)), along = Math.abs(bz - az) > Math.abs(bx - ax);
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      if (gaps.some((g) => t1 > g[0] && t0 < g[1])) continue;
+      const x0 = ax + (bx - ax) * t0, z0 = az + (bz - az) * t0, x1 = ax + (bx - ax) * t1, z1 = az + (bz - az) * t1;
+      add(name, Math.min(x0, x1) - (along ? 0.5 : 0), Math.min(z0, z1) - (along ? 0 : 0.5), Math.max(x0, x1) + (along ? 0.5 : 0), Math.max(z0, z1) + (along ? 0 : 0.5), hh);
+    }
+  };
+  if (K.half) {
+    wall('wall', -K.half, K.z0, -K.half, K.z1, K.wall);
+    wall('wall', K.half, K.z0, K.half, K.z1, K.wall);
+    wall('wall', -K.half, K.z1, K.half, K.z1, K.wall * 0.9, [[0.4, 0.6]]);
+  }
+  const st = K.stack, w = st.cols * st.r * 2.05 + 0.3;
+  add('stack', st.x - (st.len + 0.4) / 2, st.z - w / 2, st.x + (st.len + 0.4) / 2, st.z + w / 2, 0.1 + st.r * 2 + st.tiers * st.r * 1.78);
+  for (let k = 0; k < 5; k++) {
+    const cx = K.cases[0] + (k % 3) * 0.55, cz = K.cases[1] + ((k / 3) | 0) * 0.45;
+    add('crate', cx - 0.3, cz - 0.25, cx + 0.3, cz + 0.25, 0.35);
+  }
+  const big = kind === 'bl15' || kind === 'bl92';
+  for (let k = 0; k < 6; k++) {
+    const x = -1.5 + h2(k, wz, 5) * 3.2, z = 4.4 + h2(k, wx, 6) * 2.4, r = big ? 0.11 : 0.06;
+    add('case', x - r, z - r, x + r, z + r, r * 6);
+  }
+  return out;
+}
+
 const unitFrame = (u) => frame(u.pos.x, u.pos.z, headingFor(u.zero));
 
 let INDEX = null;

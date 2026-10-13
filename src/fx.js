@@ -104,6 +104,8 @@ const CASE_COL = new THREE.Color(0xb59a62), LINK_COL = new THREE.Color(0x4a4944)
 const MAX_LIDS = 16;
 const _lq = new THREE.Quaternion();
 
+const smooth01 = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+
 export class FX {
   constructor(scene, { maxSmoke = 9000, maxGlow = 4000, maxDebris = 300, maxShards = 640, maxBrass = 1600, maxClods = 1600, lights = 4 } = {}) {
     maxSmoke = Math.min(maxSmoke, 16383); // the sort key packs the index into 14 bits
@@ -151,6 +153,8 @@ export class FX {
           vGlow = iC.y;
           vRot = iC.x;
           vNear = smoothstep(1.0, 4.0 + iA.w * 0.6, -mvPosition.z);
+          // old diffuse smoke (iC.w: 0 fresh, 1 aged cordite or hang) thins out within a few tens of metres of the camera
+          vNear *= mix(1.0, smoothstep(4.0 + iA.w * 0.6, 12.0 + iA.w * 1.8, -mvPosition.z), iC.w);
           gl_Position = projectionMatrix * mvPosition;
           if (vNear < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // fully faded: skip the fill
           #include <fog_vertex>
@@ -998,6 +1002,8 @@ export class FX {
       C[o] = P.rot[i];
       C[o + 1] = P.glow[i] * Math.max(0, P.len[i] > 0 ? 1 - P.age[i] / P.len[i] : 1 - t * 3); // len: how long the orange glow lasts, in seconds
       C[o + 2] = P.tile[i];
+      const kd = P.kind[i];
+      C[o + 3] = kd === SMOKE.HANG ? smooth01((t - 0.03) / 0.17) : kd === SMOKE.CORDITE ? smooth01((t - 0.1) / 0.3) : 0;
       const gyv = P.gy[i], hasG = gyv > -1e8 && P.kind[i] !== SMOKE.SPRAY;
       E4[o] = hasG ? gyv : -1e9;
       E4[o + 1] = 0.16 * sz * P.sy[i];

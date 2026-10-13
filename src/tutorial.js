@@ -36,6 +36,13 @@ const targetDown = (T, key = 'main') => {
 const taken = (T, key = 'main') => !!T.m(key) && T.u.missionId === T.m(key).id;
 // the dead-reckoned "has the gun a round to go": loaded or loading something worth firing
 const idle = (T) => !inFlight(T) && !queued(T.u);
+// the pieces that have fired, or are set to fire, since the step began (or since `T.mem.rt`, set when a wrong
+// number of guns fired and the player is asked to try again): the GUNS selector's work
+const sinceT = (T) => T.mem.rt ?? T.mem.t0 ?? 0;
+const gunsUsed = (T) => T.u.pieces.filter((p) => p.state !== 'dead' && (p.firedAt >= sinceT(T) || p.rounds > 0)).length;
+const gunsLive = (T) => T.u.pieces.filter((p) => p.state !== 'dead').length;
+// what the GUNS selector calls "every gun" on this unit: BATTERY for the four 6-inch, SECTION for a pair
+const allGuns = (T) => ((T.u?.pieces.length ?? 1) > 2 ? 'BATTERY (all four guns)' : 'SECTION (both guns)');
 
 // the adjustment (metres, as order.adj) that would carry the unit's rounds onto the German battery B1: read
 // from where its last bursts fell, the way the player reads the numbered marks on the board
@@ -63,15 +70,23 @@ const takeStep = (o = {}) => ({
   done: (T) => taken(T, o.key),
   demo: (T) => T.once('take', () => T.act('mission', { id: T.m(o.key).id })),
 });
-// a ranging round: one press of Space with ROUNDS at 1 (the lead gun fires)
+// a ranging round: one press of Space with GUNS on 1 GUN and ROUNDS at 1; done when exactly one piece fired
 const rangeStep = (o = {}) => ({
   id: 'range',
   title: o.title ?? 'A ranging round',
   text: o.text,
-  goal: 'Press Space to fire one ranging round',
-  hi: ['fire', 'guns'],
-  done: (T) => shots(T) >= 1,
-  demo: (T) => T.once('fire', () => T.act('fire')),
+  goal: 'Set GUNS to 1 GUN and press Space to fire one ranging round',
+  hi: ['gunsel', 'fire', 'guns'],
+  done: (T) => shots(T) >= 1 && gunsUsed(T) === 1,
+  tick: (T) => {
+    // more than one gun fired: a battery, not a ranging round; say so and count again from here
+    if (gunsUsed(T) > 1 && gunsLive(T) > 1 && !T.mem.said) {
+      T.mem.said = true;
+      T.mem.rt = T.sim.time + 0.01;
+      T.hint('That was more than one gun. Ranging is done with ONE gun: set 1 GUN (G) and fire again.');
+    }
+  },
+  demo: (T) => T.once('fire', () => T.act('fire', { guns: 1 })),
 });
 const reportStep = (o = {}) => ({
   id: 'report',
@@ -94,18 +109,26 @@ const bracketDemo = (T) => {
     return;
   }
   if (R.last && !R.last.ok && !T.corrected()) T.act('correct', { add: R.last.corr.add, right: R.last.corr.right });
-  else if (readyN(u) > 0 || u.pieces.some((p) => p.state !== 'dead')) T.act('fire');
+  else if (readyN(u) > 0 || u.pieces.some((p) => p.state !== 'dead')) T.act('fire', { guns: 1 });
 };
+// fire for effect: ROUNDS up, GUNS on the whole battery (the selector goes there by itself once the observer
+// says on target or ROUNDS is above 1); done when every live piece is firing
 const effectStep = (o = {}) => ({
   id: 'effect',
   title: 'Fire for effect',
   text: o.text,
-  goal: 'Press R until ROUNDS is 4 or more, then Space',
-  hi: ['rounds', 'fire'],
-  done: (T) => (T.u.order.rounds >= 3 && shots(T) >= 1) || targetDown(T),
+  goal: o.goal ?? ((T) => `Press R until ROUNDS PER GUN is 4 or more, check GUNS says ${allGuns(T)}, then press Space`),
+  hi: ['rounds', 'gunsel', 'fire'],
+  done: (T) => (T.u.order.rounds >= 3 && shots(T) >= 1 && gunsUsed(T) >= gunsLive(T)) || targetDown(T),
+  tick: (T) => {
+    if (T.u.order.rounds >= 3 && shots(T) >= 1 && gunsUsed(T) < gunsLive(T) && !T.mem.said) {
+      T.mem.said = true;
+      T.hint('Only some of the guns fired. Set the selector to the whole battery (G) and press Space again.');
+    }
+  },
   demo: (T) => {
     T.once('rounds', () => T.act('rounds', { n: o.n ?? 6 }));
-    if (T.u.order.rounds >= 3) T.once('fire', () => T.act('fire'));
+    if (T.u.order.rounds >= 3) T.once('fire', () => T.act('fire', { guns: 'all' }));
   },
 });
 const killStep = (o = {}) => ({
@@ -126,7 +149,7 @@ const killStep = (o = {}) => ({
     if (!idle(T)) return;
     if (T.rep.last && !T.rep.last.ok && !T.corrected()) T.act('correct', { add: T.rep.last.corr.add, right: T.rep.last.corr.right });
     if (T.u.order.rounds < 3) T.act('rounds', { n: o.n ?? 6 });
-    T.act('fire');
+    T.act('fire', { guns: 'all' });
   },
 });
 
@@ -270,11 +293,17 @@ export const TUTORIALS = [
       {
         id: 'order',
         title: 'Read the fire order',
-        text: 'The FIRE ORDER card now shows the target reference, the line in degrees and minutes, the range in yards, the elevation from the range table and the charge. The board draws the line of fire. ROUNDS is 1: a ranging round, fired by the lead gun alone.',
+        text: 'The FIRE ORDER card now shows the target reference, the line in degrees and minutes, the range in yards, the elevation from the range table and the charge. The board draws the line of fire. ROUNDS is 1: a ranging round.',
         hi: ['order', 'board', 'rtab'],
       },
+      {
+        id: 'guns',
+        title: 'Which guns fire',
+        text: 'A battery ranges with ONE gun, the directing gun, usually No. 1, so that four shells do not land in four places and confuse the observer. When he says on target, the whole battery fires for effect. The GUNS selector on the order card chooses: 1 GUN, SECTION (two guns) or BATTERY (all four). Press G, or click it, to cycle. While ranging it sits on 1 GUN by itself, and goes to BATTERY when the observer says on target. The FIRE key says what will fire: FIRE No. 1.',
+        hi: ['gunsel', 'fire'],
+      },
       rangeStep({
-        text: 'The guns load in about twelve seconds. Press Space and the lead gun fires one round as soon as it is ready. You can run time faster with ].',
+        text: 'The guns load in about twelve seconds. With GUNS on 1 GUN, press Space and No. 1 fires one round as soon as it is ready (if it is not, the next ready gun takes the round). You can run time faster with ].',
       }),
       reportStep({
         text: 'The shell takes some time to land. The board marks the fall of shot with a number. Then the observer telephones; his message appears on the pad as a written slip.',
@@ -292,7 +321,7 @@ export const TUTORIALS = [
       {
         id: 'bracket',
         title: 'Bracket the target',
-        text: 'Fire again. Each report should bring the round nearer: that is bracketing. Correct, fire, wait for the report, and repeat until the observer says "on target". Usually it takes two or three rounds.',
+        text: 'Fire again with the same one gun. Each report should bring the round nearer: that is bracketing. Correct, fire, wait for the report, and repeat until the observer says "on target". Usually it takes two or three rounds.',
         goal: 'Get an "on target" report',
         hi: ['fire', 'pad', 'keypad'],
         limit: 500,
@@ -300,7 +329,7 @@ export const TUTORIALS = [
         demo: bracketDemo,
       },
       effectStep({
-        text: 'The observer is satisfied. Now all four guns fire together. Press R until ROUNDS is 4 or more (the card says "fire for effect"), then Space. The battery fires in a ripple.',
+        text: 'The observer is satisfied. Now all four guns fire together. GUNS has gone to BATTERY by itself (G changes it, FIRE BATTERY says what will fire). Press R until ROUNDS PER GUN is 4 or more (the card says "fire for effect"), then Space. The battery fires in a ripple.',
       }),
       killStep({
         n: 6,
@@ -335,7 +364,7 @@ export const TUTORIALS = [
         text: 'Take the task on the MISSIONS card: Tab, then Enter. The section lays both guns. They load slowly, about twenty-five seconds.',
       }),
       rangeStep({
-        text: 'Fire one ranging round with Space. Only the lead gun fires. Time of flight is half a minute or more, then the aeroplane has to watch, code and send.',
+        text: 'Fire one ranging round with Space. The GUNS selector is on 1 GUN (FIRE No. 1): a section ranges with one gun, and fires both for effect. Time of flight is half a minute or more, then the aeroplane has to watch, code and send.',
       }),
       reportStep({
         title: 'The wireless message',
@@ -367,7 +396,7 @@ export const TUTORIALS = [
       },
       effectStep({
         n: 4,
-        text: 'Fire for effect: press R until ROUNDS is 4 or more, then Space. Both 9.2s fire their series; each shell weighs 290 pounds.',
+        text: 'Fire for effect. Mother is a section of two 9.2-inch howitzers, so here the whole unit is SECTION: GUNS has gone there by itself. Press R until ROUNDS PER GUN is 4 or more, then Space, and both guns fire their series; each shell weighs 290 pounds.',
       }),
       killStep({
         n: 4,
@@ -518,7 +547,7 @@ export const TUTORIALS = [
           T.act('rounds', { n: 3 });
         },
         done: (T) => shots(T) >= 4,
-        demo: (T) => T.once('fire', () => T.act('fire')),
+        demo: (T) => T.once('fire', () => T.act('fire', { guns: 'all' })),
       },
       {
         id: 'incoming',
@@ -572,14 +601,14 @@ export const TUTORIALS = [
       {
         id: 'fire',
         title: 'Fire blind',
-        text: 'There will be no reports, and the reference has an error of a few hundred yards. So fire a big series at once: press R until ROUNDS is 8, then Space. The long, flat 60-pounder trajectory gets there fast.',
-        goal: 'Set ROUNDS to 4 or more and fire',
+        text: 'There will be no reports, and the reference has an error of a few hundred yards. So fire a big series at once: press R until ROUNDS is 8, then Space. GUNS goes to SECTION by itself, so both guns fire. The long, flat 60-pounder trajectory gets there fast.',
+        goal: 'Set ROUNDS PER GUN to 4 or more and fire',
         hi: ['rounds', 'fire'],
         limit: 400,
         done: (T) => T.u.order.rounds >= 3 && shots(T) >= 1,
         demo: (T) => {
           T.once('rounds', () => T.act('rounds', { n: 8 }));
-          if (T.u.order.rounds >= 3) T.once('fire', () => T.act('fire'));
+          if (T.u.order.rounds >= 3) T.once('fire', () => T.act('fire', { guns: 'all' }));
         },
       },
       {
@@ -615,7 +644,7 @@ export const TUTORIALS = [
           const need = counterNeed(T), a = T.u.order.adj;
           if (need) T.act('correct', { add: need.add - a.add, right: need.right - a.right });
           T.act('rounds', { n: 8 });
-          T.act('fire');
+          T.act('fire', { guns: 'all' });
         },
       },
     ],
@@ -1017,8 +1046,9 @@ export class Tutorials {
     this.q('.tc-title').textContent = step.title;
     this.q('.tc-text').textContent = typeof step.text === 'function' ? step.text(this) : step.text;
     const goal = this.q('.tc-goal');
-    goal.hidden = !step.goal;
-    goal.querySelector('span').textContent = step.goal ?? '';
+    const goalText = typeof step.goal === 'function' ? step.goal(this) : step.goal;
+    goal.hidden = !goalText;
+    goal.querySelector('span').textContent = goalText ?? '';
     this.q('#tc-exit').textContent = 'Exit';
     const skip = this.q('#tc-skip');
     skip.textContent = 'Skip step';

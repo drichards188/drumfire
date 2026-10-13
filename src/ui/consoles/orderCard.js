@@ -4,7 +4,8 @@
 // in yards (converted to metres here).
 import { el, setText, setCls, card, label, Btn, Seg } from '../widgets.js';
 import { tut } from '../highlight.js';
-import { ref, dm, elev, yd, FUZE, fromYd, commas } from './common.js';
+import { ref, dm, elev, yd, FUZE, fromYd, commas, gunChoices } from './common.js';
+import { pickGuns } from '../../sim/guns.js';   // pure: which pieces a `guns` choice fires, for the FIRE label
 
 export const STEPS_YD = [10, 25, 50, 100, 200];
 
@@ -53,6 +54,13 @@ export class OrderCard {
     });
     const fz = el('div', 'frowf');
     fz.append(el('i', 'ftitle', 'FUZE'), this.fuze.el);
+    // which guns fire: hidden for a one-piece unit
+    const choices = gunChoices(cfg.pieces || 1);
+    this.gunsRow = el('div', 'frowf frowg');
+    this.guns = new Seg({ cls: 'gunsel', items: choices, onChange: (v) => this.act('guns', v) });
+    this.gunsRow.append(el('i', 'ftitle', 'GUNS'), this.guns.el);
+    if (!choices.length) this.gunsRow.style.display = 'none';
+    tut(this.gunsRow, 'gunsel');
     this.corr = el('div', 'corr');
     this.corrVal = el('b', null, 'none');
     this.corr.append(el('i', null, 'CORRECTIONS MADE'), this.corrVal);
@@ -75,7 +83,7 @@ export class OrderCard {
     bottom.append(kp, fc);
     tut(this.target, 'target'); tut(this.line.el, 'line'); tut(this.range.el, 'range'); tut(this.el_.el, 'elevation'); tut(this.charge.el, 'charge');
     tut(this.tof.el, 'tof'); tut(this.rounds.el, 'rounds'); tut(fz, 'fuze'); tut(this.corr, 'corrections'); tut(c.el, 'order');
-    b.append(this.target, r2, r3, fz, this.corr, bottom);
+    b.append(this.target, r2, r3, fz, this.gunsRow, this.corr, bottom);
   }
 
   update(x) {
@@ -109,8 +117,20 @@ export class OrderCard {
     if (rY) parts.push(`${rY > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(rY)}`);
     setText(this.corrVal, parts.length ? parts.join('  ·  ') : 'none');
     this.bStep.text(`${stepYd} yd`);
-    this.bFire.set(ready > 0 && !!t);
-    this.bFire.text('FIRE', ready > 0 ? `${ready} of ${alive} ready` : 'Space');
-    setCls(this.bFire.el, 'armed', ready > 0 && !!t);
+    // the FIRE key says what it will fire
+    const sel = x.gunsSel, multi = this.guns.btns.size > 0;
+    let main = 'FIRE', sub = ready > 0 ? `${ready} of ${alive} ready` : 'Space', go = ready > 0;
+    if (multi) {
+      const pk = pickGuns(unit, sel === 'all' ? 'all' : +sel);
+      const r = pk.filter((p) => p.state === 'ready').length;
+      main = pk.length === 1 ? `FIRE No. ${pk[0].i + 1}` : pk.length === alive && alive > 2 ? 'FIRE BATTERY' : 'FIRE SECTION';
+      sub = pk.length <= 1 ? (r ? 'ready' : 'not ready') : `${r} of ${pk.length} ready`;
+      go = r > 0;
+      this.guns.set(sel);
+    }
+    this.bFire.set(go && !!t);
+    this.bFire.text(main, sub);
+    setCls(this.bFire.el, 'long', main.length > 6);
+    setCls(this.bFire.el, 'armed', go && !!t);
   }
 }

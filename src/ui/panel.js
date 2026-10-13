@@ -10,10 +10,41 @@ import { Mail } from './messages.js';
 import { mountConsole } from './consoles/console.js';
 import { KIND_SHORT, clockStr, KINDS } from './consoles/common.js';
 import { SECTORS } from '../sector.js';
+import { GUNS } from '../sim/tables.js';
 
 const DESIGN_W = 800;
 const DESIGN_H = 900;
 const MODE_LETTER = { auto: 'A', manual: 'M', hold: 'H' };
+
+// Loading progress of one piece, 0 to 1, weighted by the nominal step durations of GUNS[kind].load
+// (the step index plus job.t / job.dur when the list does not match job.n). Cumulative weights are cached per kind.
+const LOAD_CUM = {};
+function loadCum(kind, n) {
+  const key = kind + n;
+  let c = LOAD_CUM[key];
+  if (c) return c;
+  const L = GUNS[kind] && GUNS[kind].load;
+  const w = L && L.length === n ? L.map((s) => s.dur) : new Array(n).fill(1);
+  let tot = 0; for (const x of w) tot += x;
+  c = { start: [], w: [] };
+  let a = 0;
+  for (let i = 0; i < n; i++) { c.start.push(a / tot); c.w.push(w[i] / tot); a += w[i]; }
+  return LOAD_CUM[key] = c;
+}
+function pieceFill(p) {
+  switch (p.state) {
+    case 'ready': return 1;
+    case 'loading': case 'laying': {
+      const j = p.job;
+      if (!j) return 0;
+      const n = j.n || 1, i = Math.min(n - 1, j.i || 0), c = loadCum(p.kind, n);
+      return Math.min(1, c.start[i] + c.w[i] * Math.min(1, j.t / Math.max(0.01, j.dur)));
+    }
+    case 'recoil': return 0;
+    default: return 0;
+  }
+}
+const PIECE_STATE = { ready: 'rdy', loading: 'ldg', laying: 'ldg', recoil: 'fir', dead: 'dead' };
 
 export class Panel {
   constructor(root, opts = {}) {
@@ -110,11 +141,18 @@ export class Panel {
       main.append(call, line);
       t.title = `${u.name}: HP, ammunition, mode (A: auto or manual; HOLD on the console)`;
       const lamp = el('i', 'tlamp');
+      // loading state: one pip per piece, filling toward READY, and a short summary
+      const lrow = el('div', 'tload');
+      const pcs = el('span', 'tpcs');
+      const pips = (u.pieces || []).map(() => { const f = el('i'); const pip = el('span', 'tpc st-idle'); pip.append(f); pcs.append(pip); return { pip, f, st: '', w: -1 }; });
+      const ltxt = el('span', 'tltxt');
+      lrow.append(pcs, ltxt);
+      main.append(lrow);
       t.append(key, main, lamp);
       t.dataset.tut = `tabs tab-${u.id}`;
       t.addEventListener('pointerdown', (e) => { e.preventDefault(); snd('click'); if (this.opts.onSelect) this.opts.onSelect(u.id); });
       this.tabsEl.append(t);
-      this.tabs.set(u.id, { el: t, call, hp, am, mode, lamp, ammoMax: 0 });
+      this.tabs.set(u.id, { el: t, call, hp, am, mode, lamp, ammoMax: 0, pips, ltxt, ltxtCls: '' });
     });
     this.status = el('div', 'tstatus');
     this.stClock = el('b', 'sclock');
@@ -156,6 +194,27 @@ export class Panel {
       for (const p of u.pieces || []) if (p.firedAt != null && sim.time - p.firedAt < 1.5) fired = true;
       for (const b of this.tracker.enemy) if (b.near && sim.time - b.t < 8 && Math.hypot(b.x - u.pos.x, b.z - u.pos.z) < 450) hit = true;
       setCls(t.lamp, 'fire', fired); setCls(t.lamp, 'hit', hit);
+      // loading state per piece
+      const prs = u.pieces || [];
+      let nReady = 0, nDead = 0, nFire = 0, nLoad = 0, best = -1;
+      for (let k = 0; k < t.pips.length && k < prs.length; k++) {
+        const p = prs[k], pp = t.pips[k];
+        const st = PIECE_STATE[p.state] || 'idle';
+        const fill = pieceFill(p);
+        if (st === 'rdy') nReady++; else if (st === 'dead') nDead++; else if (st === 'fir') nFire++; else if (st === 'ldg') { nLoad++; if (fill > best) best = fill; }
+        if (pp.st !== st) { pp.pip.className = `tpc st-${st}`; pp.st = st; }
+        const w = Math.round(fill * 200) / 2;
+        if (pp.w !== w) { pp.f.style.width = `${w}%`; pp.w = w; }
+      }
+      const np = prs.length;
+      let txt, tc;
+      if (np && nDead === np) { txt = 'DEAD'; tc = 'dead'; }
+      else if (nReady) { txt = np > 1 ? `${nReady}/${np - nDead} READY` : 'READY'; tc = 'rdy'; }
+      else if (nFire) { txt = 'FIRING'; tc = 'fir'; }
+      else if (nLoad) { txt = `LOAD ${Math.floor(best * 100)}%`; tc = 'ldg'; }
+      else { txt = 'IDLE'; tc = 'idle'; }
+      setText(t.ltxt, txt);
+      if (t.ltxtCls !== tc) { t.ltxt.className = `tltxt st-${tc}`; t.ltxtCls = tc; }
       setCls(t.el, 'sel', u.id === view.selectedId);
       setCls(t.el, 'dead', dead);
       setCls(t.el, 'warn', hit);

@@ -9,7 +9,7 @@ import { RangeTable } from './rangeTable.js';
 import { GunsCard } from './gunsCard.js';
 import { MissionList } from './missionList.js';
 import { MessagePad } from './messagePad.js';
-import { KINDS, chargeCount, liveMissions, MISSION_NAME } from './common.js';
+import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault } from './common.js';
 import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
 
@@ -49,9 +49,11 @@ export function mountConsole(ctx) {
         else if (arg === 'right') cmd('correct', { add: 0, right: y });
         else cmd('correct', { add: 0, right: -y });
         break; }
+      case 'guns': memo.guns = arg; snd('click'); break;
+      case 'gunscycle': { const l = gunChoices(cfg.pieces || 1); if (l.length) memo.guns = l[(l.findIndex((c) => c.v === memo.guns) + 1) % l.length].v; snd('click'); break; }
       case 'fire':
         if (!o.target) { say('No target laid: click the board or take a mission.'); snd('click'); break; }
-        cmd('fire');
+        cmd('fire', (cfg.pieces || 1) > 1 ? { guns: memo.guns === 'all' ? 'all' : +memo.guns } : {});
         break;
       case 'cease': send('cease', {}); say('Cease fire.'); break;
       case 'mode': send('mode', { mode: arg }); break;
@@ -168,7 +170,12 @@ export function mountConsole(ctx) {
     const tab = (sim.rangeTable && sim.rangeTable(unit.kind, o.charge || 0)) || [];
     let apex = 0;
     if (tab.length && o.range != null) { let best = 1e9; for (const e of tab) { const d = Math.abs(e.range - o.range); if (d < best) { best = d; apex = e.apex || 0; } } }
-    order.update({ unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / YARD });
+    // the guns selector follows the mission (directing gun while ranging, every gun for effect) until the player
+    // picks one; it falls back to the default whenever the mission, its state, the report or the series length changes
+    const gkey = `${unit.id}|${m ? m.id + m.state + !!m.onTarget : ''}|${(o.rounds || 1) > 1}`;
+    if (memo.gunsKey !== gkey || memo.guns == null) { memo.gunsKey = gkey; memo.guns = gunsDefault(m, o); }
+    if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
+    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / YARD });
     rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
@@ -194,6 +201,7 @@ export function mountConsole(ctx) {
       case 'KeyE': act('charge', 1); return true;
       case 'KeyR': { const o = U.order || {}, l = cfgOf(U).rounds; const i = l.findIndex((v) => v >= (o.rounds || 1)); cmd('rounds', { n: l[(i + 1) % l.length] }); return true; }
       case 'KeyZ': act('fuzecycle'); return true;
+      case 'KeyG': act('gunscycle'); return true;
       case 'KeyA': send('mode', { mode: U.mode === 'auto' ? 'manual' : 'auto' }); return true;
       case 'KeyS': { const al = board.alarm && [...board.alarm][0]; const weak = al || SECTORS.filter((s) => (SIM.front ? SIM.front[s.id] : 1) > 0).sort((a, b) => (SIM.front ? SIM.front[a.id] : 1) - (SIM.front ? SIM.front[b.id] : 1))[0]?.id; if (weak) act('sos', weak); return true; }
       case 'KeyX': act('step'); return true;

@@ -281,7 +281,7 @@ export class Sim {
       case 'charge': g.setCharge(u, args.charge); return true;
       case 'fuze': g.setFuze(u, args.fuze); return true;
       case 'rounds': g.setRounds(u, args.n); return true;
-      case 'fire': return g.fire(u);
+      case 'fire': return g.fire(u, args.guns);
       case 'cease': g.cease(u); return true;
       case 'mode': g.setMode(u, args.mode); return true;
     }

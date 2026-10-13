@@ -13,6 +13,41 @@ import { smooth } from './anim.js';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 1 };
 
+// The breech block and the loading tray from the loading step, in an order that keeps them apart: the
+// block swings open first and the tray slides in behind it; at the close the tray goes clear first and then
+// the block swings shut. Everything else (recoil, laying, idle) has the block shut and the tray out of the way.
+export function loadPose(p, alpha = 0) {
+  const j = p.job;
+  if (!j) return { breech: p.breech, tray: p.breech > 0.99 ? 0 : 1 };
+  const k = Math.min(1, Math.max(0, (j.t + alpha * STEP) / Math.max(0.01, j.dur)));
+  if (p.kind === 'rail') {
+    // the bridge piece folds up behind the breech and down again, and the block must be clear of it both ways
+    switch (j.step) {
+      case 'open': return { breech: smooth(k, 0, 0.45), deck: 1 - smooth(k, 0.4, 0.75), tray: 1 - smooth(k, 0.7, 1) };
+      case 'shell': case 'ram': case 'cartridge': return { breech: 1, deck: 0, tray: 0 };
+      case 'close': return { breech: 1 - smooth(k, 0.5, 1), deck: smooth(k, 0.25, 0.5), tray: smooth(k, 0, 0.25) };
+      default: return { breech: p.breech, deck: 1, tray: 1 };
+    }
+  }
+  switch (j.step) {
+    case 'open': return { breech: smooth(k, 0, 0.7), tray: 1 - smooth(k, 0.7, 1) };
+    case 'shell': case 'ram': case 'cartridge': return { breech: 1, tray: 0 };
+    case 'close': return { breech: 1 - smooth(k, 0.4, 1), tray: smooth(k, 0, 0.4) };
+    default: return { breech: p.breech, tray: 1 };
+  }
+}
+
+// 0..1: how far the light gun's barrel is down at its loading elevation during the loading steps
+function quickLoad(j, alpha) {
+  const k = Math.min(1, Math.max(0, (j.t + alpha * STEP) / Math.max(0.01, j.dur)));
+  switch (j.step) {
+    case 'open': return smooth(k, 0, 1);
+    case 'shell': case 'ram': case 'cartridge': case 'close': case 'prime': return 1;
+    case 'lay': return 1 - smooth(k, 0, 1);
+    default: return 0;
+  }
+}
+
 export class GunViews {
   constructor(scene, sim, terrain, rigs, fx, onlyRigs = false) {
     this.onlyRigs = onlyRigs;
@@ -93,19 +128,20 @@ export class GunViews {
       const p = v.piece, rig = v.rig, g = GUNS[p.kind];
       const dead = p.state === 'dead';
       rig.setTraverse(p.az);
-      rig.setElevation(p.el);
+      // the light guns have no depressing gear of their own in the sim: loaded at the laid elevation, which
+      // at 40 degrees would run the round into the trail. The quick-loading gear (6-inch) and the loading
+      // rest bring the barrel to its loading elevation for the steps and back for the laying.
+      rig.setElevation(p.job && g.load[0].step !== 'depress' ? p.el + (rig.loadEl - p.el) * quickLoad(p.job, alpha) : p.el);
       // recoil: out in ~0.14 s, held a moment, then the run out
       const tf = now - p.firedAt;
       let r = 0;
       if (tf >= 0 && tf < g.runout + 1.2) {
         r = tf < 0.14 ? Math.sin((tf / 0.14) * Math.PI / 2) : tf < 0.45 ? 1 : 1 - smooth(tf, 0.45, 0.45 + g.runout);
       }
-      rig.setRecoil(dead ? 0 : r);
-      // breech from the job
-      let b = p.breech;
-      if (p.job?.step === 'open') b = smooth(Math.min(1, (p.job.t + alpha * STEP) / p.job.dur), 0, 1);
-      else if (p.job?.step === 'close') b = 1 - smooth(Math.min(1, (p.job.t + alpha * STEP) / p.job.dur), 0, 1);
+      rig.setRecoil(dead ? 0 : r * (rig.recoilFade ? rig.recoilFade(p.el) : 1));
+      const { breech: b, tray, deck } = loadPose(p, alpha);
       rig.setBreech(b);
+      rig.setTray?.(tray, deck);
       // the platform kicks: a short shudder through the root, bigger for the big guns
       const kick = KICK[p.kind] ?? 0.5;
       const j = tf >= 0 && tf < 1.4 ? Math.exp(-tf * 4.5) * Math.sin(tf * 38) : 0;

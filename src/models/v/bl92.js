@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, rivetRow, rivetPoly, chain, handwheel, gearArc, shellGeometry, Parts, DEG } from '../kit.js';
 import { newGunRig, anchor, crewSpot, addShellProp, finishGun } from '../rig.js';
-import { pivotAt, hb } from '../rig.js';
+import { pivotAt, hb, trayMount, floorFade } from '../rig.js';
 import { mulberry32 } from '../../noise.js';
 
 // BL 9.2-inch howitzer Mk II on the siege carriage ("Mother"), from refs/bl92in: a wedge-shaped riveted
@@ -13,7 +13,7 @@ import { mulberry32 } from '../../noise.js';
 // loadEl is the handbook's 3 degrees of depression; recoil 1.0 m.
 
 const BH = 0.4; // top of the firing bed
-const TY = 1.8; // trunnion height above the bed
+const TY = 2.2; // trunnion height above the bed (the breech tail clears the bed at 50 degrees)
 const MUZ = -2.7, BRE = 1.75;
 const HX = 0.5;
 const SHELL = { len: 0.95, rad: 0.117 };
@@ -39,9 +39,10 @@ export function buildBL92() {
   const elev = pivotAt(rig, trav, 'elevation', 0, TY, 0);
   const rec = pivotAt(rig, elev, 'recoil', 0, 0, 0);
   const brc = pivotAt(rig, rec, 'breech', HX, 0, BRE + 0.03);
-  const tray = pivotAt(rig, elev, 'tray', 0, -0.12, BRE + 0.1);
   rig.recoilLength = 1.0;
   rig.loadEl = -0.05;
+  const tray = trayMount(rig, trav, elev, -0.19, BRE + 0.1, 0.19, 1.2, 1.5);
+  floorFade(rig, TY, BRE + 0.27, 0.5, 0.32);
   rig.breechOpen = { axis: 'y', angle: 1.65 };
   const outline = cheekOutline();
 
@@ -63,7 +64,7 @@ export function buildBL92() {
   }
   PL.add('rust', new THREE.CylinderGeometry(0.17, 0.17, 0.8, 12).translate(SX + 0.9, 0.45, SZ + 0.7));
   rig.anchors.shellStack = new THREE.Object3D();
-  rig.anchors.shellStack.position.set(SX, 0.4, SZ);
+  rig.anchors.shellStack.position.set(SX - 0.1, 0.15, SZ + 1.2); // beside the standing rounds, where a shell can lie
   root.add(rig.anchors.shellStack);
 
   // ---- body on the bed
@@ -71,22 +72,22 @@ export function buildBL92() {
     PT.add('camo', sideProfile(outline, 0.18, 0.01).translate(s * 0.68, 0, 0));
     const x = s * 0.78;
     PT.add('dark', rivetPoly(outline, (z, y) => V(x, y, z), 0.08, 0.17, V(s, 0, 0), 0.024));
-    for (const z of [-0.9, -0.5, 0.0, 0.6, 1.2, 1.7]) {
+    for (const z of [-0.9, -0.5, 0.6, 1.2, 1.7]) { // none at the trunnion
       const top = topAt(outline, z) - 0.1;
       if (top > 0.4) PT.add('camo', box(0.07, top - 0.1, 0.09, s * 0.82, 0.1 + (top - 0.1) / 2, z));
     }
-    PT.add('camo', rbox(0.38, 0.26, 1.1, 0.06, s * 0.68, TY + 0.58, 0)); // bearing cap
+    PT.add('camo', rbox(0.3, 0.26, 1.1, 0.06, s * 0.73, TY + 0.58, 0)); // bearing cap, its inner edge clear of the cradle
     PT.add('chain', new THREE.TorusGeometry(0.1, 0.022, 6, 12).rotateY(Math.PI / 2).translate(s * 0.8, 1.5, -0.9));
   }
   PT.add('camo', box(1.45, 0.12, 4.3, 0, 0.08, 0.5)); // floor between the cheeks
-  PT.add('camo', box(1.45, 0.4, 0.3, 0, 0.35, 1.95)); // rear cross-girder
-  PT.add('camo', box(1.45, 0.3, 0.26, 0, 1.0, -0.95));
+  PT.add('camo', box(1.45, 0.16, 0.3, 0, 0.2, 1.95)); // rear cross-girder, low so the breech tail passes over it
+  PT.add('camo', box(1.45, 0.3, 0.26, 0, 0.2, -0.95)); // front tie, low: the elevating arc swings through the height it used to stand at
   PT.add('dark', rivetRow(V(-0.65, 0.4, 2.11), V(0.65, 0.4, 2.11), 0.16, V(0, 0, 1), 0.022));
   // rear loading platform: planks on steel brackets, with a footrail
-  for (let i = 0; i < 6; i++) PT.add('timber', box(1.9, 0.05, 0.28, 0, 0.62, 2.2 + i * 0.3));
-  for (const x of [-0.8, 0.8]) PT.add('camo', rod(V(x, 0.58, 2.1), V(x, 0.1, 1.9), 0.04, 6));
+  // (it starts behind the breech tail's sweep at high elevation)
+  for (let i = 0; i < 4; i++) PT.add('timber', box(1.9, 0.05, 0.28, 0, 0.62, 2.8 + i * 0.3));
+  for (const x of [-0.8, 0.8]) PT.add('camo', rod(V(x, 0.6, 3.0), V(x, 0.1, 3.0), 0.04, 6));
   for (const x of [-0.95, 0.95]) PT.add('dark', rod(V(x, 0.64, 3.8), V(x, 1.2, 3.8), 0.02, 5));
-  PT.add('dark', rod(V(-0.95, 1.2, 3.8), V(0.95, 1.2, 3.8), 0.02, 5));
   // the elevating wheel (left), the quick-loading wheel (right), the traversing wheel behind it
   PT.add('iron', handwheel(0.5, 8, 0.028, 0.07).translate(-1.0, 0.95, 0.5));
   PT.add('steel', xTube(-1.05, -0.4, 0.045, 0.045, 8, 0.95, 0.5));
@@ -95,7 +96,7 @@ export function buildBL92() {
   PT.add('dark', box(0.2, 0.26, 0.3, 0.85, 0.8, 0.9));
   PT.add('iron', handwheel(0.3, 6, 0.022, 0.05).translate(-1.0, 0.45, 1.6));
   // the earth box across the front: a steel tank with stanchions, full of earth
-  const EB = { w: 2.9, h: 1.4, z0: -4.0, z1: -2.2 };
+  const EB = { w: 2.9, h: 1.1, z0: -4.0, z1: -2.2 }; // the muzzle at loading depression passes over the heap
   const ez = (EB.z0 + EB.z1) / 2;
   PT.add('camo', rbox(EB.w, EB.h, EB.z1 - EB.z0, 0.03, 0, EB.h / 2, ez));
   for (const s of [-1, 1]) for (const z of [EB.z0, EB.z1]) PT.add('camo', box(0.1, EB.h + 0.2, 0.1, s * (EB.w / 2 - 0.02), EB.h / 2 + 0.1, z));
@@ -106,11 +107,11 @@ export function buildBL92() {
   }
   for (const s of [-1, 1]) for (const yy of [0.3, 0.7, 1.1]) PT.add('dark', rivetRow(V(s * (EB.w / 2 + 0.02), yy, EB.z0 + 0.1), V(s * (EB.w / 2 + 0.02), yy, EB.z1 - 0.1), 0.18, V(s, 0, 0), 0.026));
   PT.add('soil', box(EB.w - 0.2, 0.16, EB.z1 - EB.z0 - 0.2, 0, EB.h + 0.02, ez));
-  for (let i = 0; i < 10; i++) PT.add('soil', sphere(0.2 + rnd() * 0.2, (rnd() - 0.5) * (EB.w - 0.6), EB.h + 0.1, EB.z0 + 0.3 + rnd() * (EB.z1 - EB.z0 - 0.6), 1.2, 0.55, 1.1, 7));
+  for (let i = 0; i < 10; i++) PT.add('soil', sphere(0.2 + rnd() * 0.2, (rnd() - 0.5) * (EB.w - 0.6), EB.h + 0.04, EB.z0 + 0.3 + rnd() * (EB.z1 - EB.z0 - 0.6), 1.2, 0.3, 1.1, 7));
   for (const s of [-1, 1]) PT.add('camo', rod(V(s * 0.8, 0.9, -1.1), V(s * 1.0, 0.5, -2.2), 0.055, 6)); // struts to the box
 
   // ---- cradle, cylinders, arc, sight
-  PE.add('camo', rbox(1.08, 1.0, 2.3, 0.2, 0, 0, -0.2));
+  PE.add('camo', rbox(1.08, 0.88, 2.3, 0.2, 0, 0, -0.2)); // low enough to turn under the bearing caps
   for (const z of [-1.3, 0.9]) PE.add('steel', rbox(1.14, 1.06, 0.08, 0.04, 0, 0, z));
   PE.add('steel', xTube(-1.0, 1.0, 0.2, 0.2, 14));
   for (const s of [-1, 1]) {
@@ -119,6 +120,7 @@ export function buildBL92() {
     PE.add('dark', rivets(Array.from({ length: 8 }, (_, i) => V(s * 0.95, Math.sin(i * Math.PI / 4) * 0.18, Math.cos(i * Math.PI / 4) * 0.18)), V(s, 0, 0), 0.03));
   }
   const tubes = [[-0.34, 0.66, 0.095], [0.34, 0.66, 0.095], [0, -0.64, 0.085]];
+  rig.nest = tubes.map(([x, y]) => [x, y]); // cylinder axes the piston rods slide into (used by the clip check)
   for (const [x, y, r] of tubes) {
     PE.add('camo', zTube(-1.1, 1.2, r, r, 14, x, y));
     PE.add('steel', zTube(-1.16, -1.05, r * 1.12, r * 1.12, 14, x, y));
@@ -130,10 +132,10 @@ export function buildBL92() {
   PE.add('camo', gearArc(1.05, 1.45, 22 * DEG, 74 * DEG, 0.16));
   PE.add('camo', box(0.3, 0.2, 0.9, 0, -0.6, 0.5));
   // the sight bracket and dial sight on the left
-  PE.add('camo', box(0.1, 0.5, 0.7, -0.62, 0.42, 0.1));
-  PE.add('camo', box(0.4, 0.07, 0.5, -0.8, 0.78, 0.1));
-  PE.add('brass', yTube(0.8, 1.12, 0.055, 0.055, 10, -0.9, 0.1));
-  PE.add('dark', zTube(-0.35, 0.1, 0.03, 0.026, 8, -0.9, 1.06));
+  PE.add('camo', box(0.1, 0.5, 0.7, -1.0, 0.42, 0.1)); // outside the left cheek, so it sweeps clear of it
+  PE.add('camo', box(0.4, 0.07, 0.5, -1.12, 0.78, 0.1));
+  PE.add('brass', yTube(0.8, 1.12, 0.055, 0.055, 10, -1.1, 0.1));
+  PE.add('dark', zTube(-0.35, 0.1, 0.03, 0.026, 8, -1.1, 1.06));
   PE.add('brass', box(0.3, 0.012, 0.22, 0, 0.502, -0.5));
   PE.add('white', box(0.5, 0.02, 0.3, 0.0, 0.508, 0.35)); // the white name panel ("Persuader")
 
@@ -143,17 +145,17 @@ export function buildBL92() {
   for (const z of [-0.77, -0.1, 0.55, 1.2]) PR.add('iron', zTube(z - 0.03, z + 0.03, 0.495, 0.495, 32), { tint: 0x9a9f94 });
   PR.add('iron', zTube(MUZ + 0.3 - 0.025, MUZ + 0.3 + 0.025, 0.34, 0.34, 24), { tint: 0x9a9f94 });
   PR.add('dark', zTube(MUZ - 0.002, MUZ + 0.2, 0.14, 0.14, 16));
-  PR.add('camo', zTube(-1.78, -1.66, 0.4, 0.4, 24));
+  PR.add('camo', zTube(-2.58, -2.46, 0.4, 0.4, 24)); // the clip rides ahead of the cradle by more than the stroke
   for (const [x, y] of [[-0.34, 0.66], [0.34, 0.66], [0, -0.64]]) {
-    PR.add('camo', rod(V(x * 0.4, Math.sign(y) * 0.4, -1.72), V(x, y, -1.72), 0.05, 8));
-    PR.add('steel', zTube(-1.72, -1.2, 0.035, 0.035, 8, x, y));
+    PR.add('camo', rod(V(x * 0.4, Math.sign(y) * 0.4, -2.52), V(x, y, -2.52), 0.05, 8));
+    PR.add('steel', zTube(-2.52, -1.2, 0.035, 0.035, 8, x, y));
   }
   PR.add('steel', zTube(BRE - 0.01, BRE + 0.015, 0.4, 0.4, 28), { tint: 0xb0b0a8 });
   for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; PR.add('steel', box(0.07, 0.1, 0.05, Math.cos(a) * 0.3, Math.sin(a) * 0.3, BRE + 0.02, 0, 0, a + Math.PI / 2)); }
   PR.add('dark', zTube(BRE + 0.01, BRE + 0.03, 0.14, 0.14, 16));
   PR.add('steel', rbox(0.16, 0.18, 0.28, 0.03, 0, 0.6, BRE - 0.2));
   PR.add('brass', yTube(0.6, 0.76, 0.03, 0.04, 8, 0, BRE - 0.2));
-  PR.add('camo', rbox(0.18, 0.72, 0.26, 0.03, HX + 0.05, 0, BRE - 0.1));
+  PR.add('camo', rbox(0.14, 0.72, 0.2, 0.03, HX, 0, BRE - 0.16)); // hinge lug, ends short of the swinging block
 
   // ---- breech carrier
   PB.add('steel', yTube(-0.38, 0.38, 0.055, 0.055, 10, 0, 0.1));
@@ -184,13 +186,12 @@ export function buildBL92() {
   PB.build(brc, { dirt: 0.05, y0: BH + TY });
   PTR.build(tray, { dirt: 0.1, y0: BH + TY });
 
-  addShellProp(rig, 'tray', tray, SHELL.len, SHELL.rad, 0, 0.12, 1.2);
+  addShellProp(rig, 'tray', tray, SHELL.len, SHELL.rad, 0, 0.19, 1.2);
   anchor(rig, rec, 'muzzle', 0, 0, MUZ);
   rig.anchors.muzzles.push(rig.anchors.muzzle);
   anchor(rig, rec, 'breech', 0, 0, BRE);
-  anchor(rig, tray, 'tray', 0, 0.12, 1.2);
   anchor(rig, trav, 'eye', 0, TY + 0.2, 0.2);
-  rig.update = () => { tray.rotation.x = -Math.max(0, elev.rotation.x - rig.loadEl); };
+  rig.update = rig.trayTilt;
   rig.update();
   hb(rig, -2.0, 0, -4.1, 2.0, 3.0, 4.0);
   hb(rig, -1.0, 1.0, -2.7, 1.0, 3.6, 3.4);
