@@ -1,7 +1,7 @@
 // The missions list, as a clipboard of task slips: number, kind, map reference, observer, priority and
 // the time left. Tab moves the cursor, Enter takes the mission, a click does both.
 import { el, setText, setCls, card, snd } from '../widgets.js';
-import { MISSION_NAME, OBSERVER, ref, mmss, liveMissions } from './common.js';
+import { MISSION_NAME, OBSERVER, ref, mmss, liveMissions, taskNo } from './common.js';
 
 export class MissionList {
   constructor({ shared, take }) {
@@ -18,7 +18,7 @@ export class MissionList {
     let r = this.rows.get(m.id);
     if (r) return r;
     const e = el('div', 'mrow');
-    const id = el('b', 'mid', String(m.id));
+    const id = el('b', 'mid', taskNo(m.id));
     const t1 = el('div', 'mt1'), t2 = el('div', 'mt2');
     const kind = el('span', 'mkind'), dl = el('span', 'mdl');
     const where = el('span', 'mref'), obs = el('span', 'mobs'), st = el('span', 'mst');

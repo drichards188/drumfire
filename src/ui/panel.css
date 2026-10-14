@@ -310,12 +310,15 @@
 .sh i { font: italic 9px/1.1 var(--serif); color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stime { font: 700 9.5px/1 var(--type); }
 .sb { font: 11px/1.25 var(--type); color: #14120c; padding-top: 2px; }
-.sround { font: italic 700 12px/1.2 var(--serif); color: var(--blue); margin-right: 5px; }
+.sfor { display: flex; align-items: baseline; gap: 6px; }
+.sround { flex: none; white-space: nowrap; font: italic 700 12px/1.2 var(--serif); color: var(--blue); }
+.swho { flex: 1; min-width: 0; font: italic 10px/1.2 var(--serif); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scode { font: 800 15px/1 var(--type); color: var(--red); margin-right: 6px; letter-spacing: .06em; }
 .snote { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; padding: 0; text-align: left; width: 100%; }
 .snote i { font: italic 10px/1.1 var(--serif); color: #6a6a6a; }
 .snote b { font: italic 700 13px/1.1 var(--serif); color: var(--blue); flex: 1; }
 .snote em { font: normal 700 8px/1 var(--serif); letter-spacing: .1em; text-transform: uppercase; color: #2b1d06; background: linear-gradient(var(--brass-hi), var(--brass)); border: 1px solid var(--brass-lo); border-radius: 2px; padding: 2px 4px; }
+.slip.old .snote b { font-weight: 400; color: #6a6a6a; } .slip.old .snote em { display: none; }
 .slip.applied .snote b { text-decoration: line-through; opacity: .55; } .slip.applied .snote em { display: none; }
 .clk { flex: none; display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--rule); padding-top: 3px; }
 .clock { width: 118px; height: 118px; flex: none; }
