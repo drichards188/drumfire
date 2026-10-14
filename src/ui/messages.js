@@ -16,6 +16,22 @@ export function parseClock(c) {
 }
 
 const r5 = (m) => Math.round(m / YARD / 5) * 5;
+export const corrText = (c) => {
+  const a = r5(c.add), r = r5(c.right);
+  return [a ? `${a > 0 ? 'ADD' : 'DROP'} ${Math.abs(a)}` : '', r ? `${r > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(r)}` : ''].filter(Boolean).join(', ');
+};
+
+// A report corrects the lay its round was fired with. Read against the lay of now (corrections made since come
+// off), so applying an older report never doubles a correction already made. `null` when the slip no longer
+// applies: another unit's, a newer report on the same task, or the unit has been laid on another target since.
+export function slipCorr(s, unit) {
+  if (!s.corr || !unit || s.unitId !== unit.id || s.superseded) return null;
+  const o = unit.order;
+  if (!o || !o.target) return null;
+  if (s.tgt0 && Math.hypot(o.target.x - s.tgt0.x, o.target.z - s.tgt0.z) > 150) return null;
+  const a0 = s.adj0 || o.adj || { add: 0, right: 0 }, a = o.adj || { add: 0, right: 0 };
+  return { add: s.corr.add + a0.add - a.add, right: s.corr.right + a0.right - a.right };
+}
 
 export class Mail {
   constructor(onSlip) {
@@ -32,10 +48,10 @@ export class Mail {
     s.id = ++this.n;
     s.clock = s.clock != null ? s.clock : sim.clock;
     const last = this.lastText.get(s.text);
-    if (last != null && (sim.time || 0) - last < 3) return;
+    if (last != null && (sim.time || 0) - last < 3 && s.task == null) return; // two guns' reports may read alike
     this.lastText.set(s.text, sim.time || 0);
     this.slips.unshift(s);
-    if (this.slips.length > 14) this.slips.length = 14;
+    if (this.slips.length > 40) this.slips.length = 40; // the pad shows one unit's share
     if (this.onSlip) this.onSlip(s);
   }
 
@@ -57,22 +73,30 @@ export class Mail {
         this.seenReports.add(k);
         const air = m.observer === 'air';
         const hasErr = rp.over != null && rp.right != null;
+        const f = tracker ? tracker.fired.get(rp.shellId) : null;
+        const u = (sim.units || []).find((q) => q.id === rp.unitId);
+        const piece = f ? f.piece : rp.piece;
         const slip = {
           kind: air ? 'wireless' : m.observer === 'sound' ? 'sound' : 'phone', from: FROM[m.observer] || 'Observer', mission: m.id, unitId: rp.unitId,
           text: rp.text, clock: sim.clock - ((sim.time || 0) - rp.t) / 3600, code: air ? parseClock(rp.clock) : null, rawCode: rp.clock,
           round: tracker ? tracker.numbers.get(rp.shellId) : null, ok: !!rp.ok,
           corr: hasErr && !rp.ok ? { add: -rp.over, right: -rp.right } : null, tag: `M${m.id}`,
+          // which gun fired the round (only worth saying for a unit of several) and the lay it went with
+          gun: piece != null && (u?.pieces?.length || 1) > 1 ? piece + 1 : null, adj0: f?.adj || null, tgt0: f?.target || null,
+          task: m.id, title: m.title || MISSION_NAME[m.kind] || '',
         };
-        if (slip.corr) {
-          const a = r5(slip.corr.add), r = r5(slip.corr.right);
-          slip.note = [a ? `${a > 0 ? 'ADD' : 'DROP'} ${Math.abs(a)}` : '', r ? `${r > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(r)}` : ''].filter(Boolean).join(', ') || 'no correction';
-        } else if (rp.ok) slip.note = 'ON TARGET. Fire for effect.';
+        if (slip.corr) slip.note = corrText(slip.corr) || 'no correction';
+        else if (rp.ok) slip.note = 'ON TARGET. Fire for effect.';
         fresh.push(slip);
       }
     }
     // several arriving in one frame (a loaded game, the first frame) go in in the order they happened
     fresh.sort((a, b) => a.clock - b.clock);
-    for (const s of fresh) this.push(s, sim);
+    for (const s of fresh) {
+      // a newer report on the same task replaces the older ones: only the latest fall of shot is corrected from
+      if (s.unitId != null && (s.corr || s.ok)) for (const o of this.slips) if (o.unitId === s.unitId && o.mission === s.mission && o.corr && !o.applied) o.superseded = s.round || true;
+      this.push(s, sim);
+    }
   }
 
   radio(text, kind, sim) {

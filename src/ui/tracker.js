@@ -11,10 +11,11 @@ export class Tracker {
     this.aimed = new Map();    // unit id -> last order.target seen
     this.enemy = [];           // [{ x, z, t, near }] bursts of enemy shells close to our guns (last 40 s)
     this.numbers = new Map();  // shell id -> n (reports quote it)
+    this.fired = new Map();    // shell id -> { piece, adj, target }: the gun and the lay it was fired with
     this.bursts = [];          // every burst this frame, [{ own, unitId, x, z, y, n }]
   }
 
-  reset() { this.seen.clear(); this.falls.clear(); this.count.clear(); this.aimed.clear(); this.enemy.length = 0; this.numbers.clear(); }
+  reset() { this.seen.clear(); this.falls.clear(); this.count.clear(); this.aimed.clear(); this.enemy.length = 0; this.numbers.clear(); this.fired.clear(); }
 
   update(sim) {
     const now = sim.time || 0;
@@ -33,7 +34,12 @@ export class Tracker {
       let r = this.seen.get(s.id);
       if (!r) {
         const n = s.own ? (this.count.get(s.unitId) || 0) + 1 : 0;
-        if (s.own) { this.count.set(s.unitId, n); this.numbers.set(s.id, n); }
+        if (s.own) {
+          this.count.set(s.unitId, n); this.numbers.set(s.id, n);
+          // the corrections already on the order when the round left, so a report can be read against the lay of now
+          const o = (sim.units || []).find((u) => u.id === s.unitId)?.order;
+          this.fired.set(s.id, { piece: s.piece, adj: o?.adj ? { add: o.adj.add, right: o.adj.right } : null, target: o?.target ? { x: o.target.x, z: o.target.z } : null });
+        }
         r = { own: s.own, unitId: s.unitId, n, x: 0, z: 0, y: 0, aim: s.aim, from: { x: s.pos.x, z: s.pos.z }, t: now };
         this.seen.set(s.id, r);
       }
@@ -55,6 +61,6 @@ export class Tracker {
       }
     }
     while (this.enemy.length && now - this.enemy[0].t > 40) this.enemy.shift();
-    if (this.numbers.size > 400) for (const k of this.numbers.keys()) { this.numbers.delete(k); if (this.numbers.size < 200) break; }
+    for (const m of [this.numbers, this.fired]) if (m.size > 400) for (const k of m.keys()) { m.delete(k); if (m.size < 200) break; }
   }
 }

@@ -4,8 +4,8 @@
 // latest aeroplane report: the target at the centre, twelve o'clock true north, rings Y to F.
 import { el, setText, setCls, card, snd, hw } from '../widgets.js';
 import { tut } from '../highlight.js';
-import { clockStr } from './common.js';
-import { CLOCK_YARDS } from '../messages.js';
+import { clockStr, taskNo } from './common.js';
+import { CLOCK_YARDS, slipCorr, corrText } from '../messages.js';
 import { DEG } from '../../sector.js';
 
 const SERIF = "'Bitstream Charter','Liberation Serif',serif";
@@ -41,7 +41,14 @@ export class MessagePad {
     const head = el('div', 'sh');
     head.append(el('b', null, KIND[s.kind] || 'MESSAGE'), el('i', null, `${s.from}`), el('span', 'stime', clockStr(s.clock)));
     const body = el('div', 'sb');
-    if (s.round) body.append(el('span', 'sround', `Round ${s.round}.`));
+    // which round this is (the number on the board), from which gun, on which task
+    if (s.round || s.task != null) {
+      const who = el('div', 'sfor');
+      if (s.round) who.append(el('span', 'sround', `Round ${s.round}`));
+      const bits = [s.gun ? `No. ${s.gun} gun` : '', s.task != null ? `${taskNo(s.task)} ${s.title || ''}`.trim() : ''].filter(Boolean);
+      if (bits.length) who.append(el('span', 'swho', bits.join(' · ')));
+      body.append(who);
+    }
     const dup = s.code && s.text.replace(/\s/g, '').toUpperCase().includes(s.rawCode.replace(/\s/g, '').toUpperCase());
     if (s.code) body.append(el('span', 'scode', s.rawCode));
     if (!dup) body.append(el('span', 'stext', s.text));
@@ -50,7 +57,9 @@ export class MessagePad {
       const n = el('button', 'snote');
       n.type = 'button';
       n.tabIndex = -1;
-      n.append(el('i', null, s.corr ? 'Corr.' : 'Note'), el('b', null, s.note));
+      const lab = el('i', null, s.corr ? 'Corr.' : 'Note'), txt = el('b', null, s.note);
+      n.append(lab, txt);
+      e._note = { lab, txt, key: '' };
       if (s.corr) {
         tut(n, 'apply');
         n.append(el('em', null, 'apply'));
@@ -62,7 +71,8 @@ export class MessagePad {
   }
 
   update({ mail, unit }) {
-    const slips = mail.slips.filter((s) => s.mission == null || s.kind === 'order' || s.unitId == null || s.unitId === unit.id || true);
+    // this unit's reports, and everything addressed to the whole Group (tasks, warnings)
+    const slips = mail.slips.filter((s) => s.unitId == null || s.unitId === unit.id);
     const ids = slips.map((s) => s.id).join(',');
     if (ids !== this.ids) {
       this.ids = ids;
@@ -70,7 +80,21 @@ export class MessagePad {
       this.list.replaceChildren(...slips.map((s) => this.shown.get(s.id)));
       for (const id of this.shown.keys()) if (!slips.some((s) => s.id === id)) this.shown.delete(id);
     }
-    for (const s of slips) { const e = this.shown.get(s.id); if (e) setCls(e, 'applied', !!s.applied); }
+    for (const s of slips) {
+      const e = this.shown.get(s.id);
+      if (!e) continue;
+      setCls(e, 'applied', !!s.applied);
+      if (!s.corr || !e._note || s.applied) continue;
+      // the pencilled correction is kept against the lay of now; an older or outdated report is struck off
+      const c = slipCorr(s, unit), t = c && corrText(c);
+      const lab = s.superseded ? 'Old' : !c ? 'Old' : t !== s.note ? 'Corr. now' : 'Corr.';
+      const txt = s.superseded ? `superseded by ${s.superseded === true ? 'a later report' : `round ${s.superseded}`}` : !c ? 'laid on another target since' : t || 'already made';
+      const key = lab + txt;
+      if (key === e._note.key) continue;
+      e._note.key = key;
+      setText(e._note.lab, lab); setText(e._note.txt, txt);
+      setCls(e, 'old', !c || !t);
+    }
     // the clock diagram follows the latest aeroplane report
     const latest = slips.find((s) => s.code) || null;
     const key = `${latest ? latest.id : 0}|${hw.scale}|${unit.id}|${unit.order && unit.order.line ? unit.order.line.toFixed(2) : 0}`;
