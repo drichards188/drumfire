@@ -287,7 +287,7 @@ function oldCraterGLSL() {
   const layers = CRATER_LAYERS.map((L) => `
     wm = clamp((${f1(L.rm)} / meshCell - 0.5) / 0.7, 0.0, 1.0);
     w = (1.0 - wm) * (1.0 - smoothstep(0.7, 1.6, fp / ${f1(L.rm)}));
-    if (w > 0.004) t += craterLayer(p, ${f1(L.cell)}, ${L.s}, ${f1(L.r0)}, ${f1(L.r1)}, ${f1(L.p)}, w);`).join('');
+    if (w > 0.004) t += craterLayer(p, ${f1(L.cell)}, ${L.s}, ${f1(L.r0)}, ${f1(L.r1)}, ${f1(L.p)}, w, fp);`).join('');
   return /* glsl */ `
   ${profileGLSL()}
   float zoneMaskGL(float x) { return smoothstep(${f1(ZONE.from)}, ${f1(ZONE.full)}, x) * (1.0 - smoothstep(${f1(ZONE.to)}, ${f1(ZONE.fade)}, x)); }
@@ -299,7 +299,7 @@ function oldCraterGLSL() {
     return zm * (0.4 + 0.6 * exp(-b * b));
   }
   // one layer of the cellular field: (height, d/dx, d/dz, bowl 0..1), scaled by w
-  vec4 craterLayer(vec2 p, float cell, int si, float r0, float r1, float pr, float w) {
+  vec4 craterLayer(vec2 p, float cell, int si, float r0, float r1, float pr, float w, float fp) {
     vec2 c = p / cell;
     ivec2 ic = ivec2(floor(c));
     vec2 f = c - vec2(ic);
@@ -322,7 +322,9 @@ function oldCraterGLSL() {
         float D = R * (${f1(CRATER.kd0)} + ${f1(CRATER.kd1)} * ihash(ci, cj, si + 6));
         float dh = 0.0;
         if (u < 1.0) dh = 4.0 * u * (1.0 - u * u);
-        if (u < 1.8) { float q = (u - ${f1(CRATER.lipAt)}) / ${f1(CRATER.lipW)}; dh += ${f1(CRATER.lip)} * exp(-q * q) * (-2.0 * q / ${f1(CRATER.lipW)}) * (1.0 - smoothstep(1.4, 1.8, u)); }
+        // the lip's slope flips within lipW * R: once a pixel spans that it only flickers, so it fades out first
+        float lf = 1.0 - smoothstep(0.5, 1.5, fp / (${f1(CRATER.lipW)} * R));
+        if (u < 1.8 && lf > 0.0) { float q = (u - ${f1(CRATER.lipAt)}) / ${f1(CRATER.lipW)}; dh += ${f1(CRATER.lip)} * exp(-q * q) * (-2.0 * q / ${f1(CRATER.lipW)}) * (1.0 - smoothstep(1.4, 1.8, u)) * lf; }
         float g = D * dh / R / max(d, 1e-3) * w;
         sum += vec4(D * craterProfile(u) * w, dv.x * g, dv.y * g, 0.0);
         sum.w = max(sum.w, (u < 1.0 ? 1.0 - u * u : 0.0) * w);
@@ -762,6 +764,12 @@ export class Terrain {
             vec2 rip = d1 * 0.03 * (1.0 - smoothstep(20.0, 160.0, tDist));
             nW = normalize(mix(nW, normalize(vec3(rip.x, 1.0, rip.y)), tWater));
             normal = normalize(mat3(viewMatrix) * nW);
+            // specular anti-aliasing (Kaplanyan and Hill 2016): where the normal turns within a pixel (crater
+            // rims, puddle edges, clods far off) widen the highlight instead of letting it sparkle and crawl
+            vec3 nDu = dFdx(nW), nDv = dFdy(nW);
+            float kv = min(0.5 * (dot(nDu, nDu) + dot(nDv, nDv)), 0.18);
+            float ra = roughnessFactor * roughnessFactor;
+            roughnessFactor = sqrt(sqrt(clamp(ra * ra + kv, 0.0, 1.0)));
           }
           `
         );

@@ -70,6 +70,7 @@ export class Director {
     if (o === 'balloon') return 'Balloon';
     if (o === 'sound') return 'Sound ranging';
     if (o === 'map') return 'Map shoot';
+    if (o === 'railspot') return 'Rail spotters';
     return `FOO ${1 + (n % 7)}`;
   }
 
@@ -161,7 +162,7 @@ export class Director {
     } else if (kind === 'railyard') {
       mkind = over.kind ?? 'harass';
       title = over.title ?? 'Shell the railhead, a train is in';
-      observer = over.observer ?? 'map';
+      observer = over.observer ?? 'railspot';
     } else if (kind === 'dump') title = `Destroy the ammunition dump (${t.id})`;
     else if (kind === 'hq') title = 'Destroy the chateau headquarters';
     else if (kind === 'balloon') title = 'Bring down the kite balloon';

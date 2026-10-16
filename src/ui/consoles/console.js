@@ -9,9 +9,10 @@ import { RangeTable } from './rangeTable.js';
 import { GunsCard } from './gunsCard.js';
 import { MissionList } from './missionList.js';
 import { MessagePad } from './messagePad.js';
-import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault } from './common.js';
+import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault, taskNo } from './common.js';
 import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
+import { slipCorr, corrText } from '../messages.js';
 
 export function mountConsole(ctx) {
   const { id, send, memo, shared, mail, tracker } = ctx;
@@ -59,8 +60,15 @@ export function mountConsole(ctx) {
       case 'mode': send('mode', { mode: arg }); break;
       case 'sos': send('sos', { sector: arg }); say(`S.O.S. ${arg}: all guns to the S.O.S. line.`); break;
       case 'apply': {
-        const s = arg || mail.slips.find((x) => x.corr && !x.applied);
-        if (s && s.corr) { cmd('correct', { add: s.corr.add, right: s.corr.right }); s.applied = true; say(`Applied: ${s.note}`); }
+        // only this unit's newest report on its present target; read against the lay of now
+        const s = arg || mail.slips.find((x) => !x.applied && slipCorr(x, U));
+        const c = s && !s.applied ? slipCorr(s, U) : null;
+        if (!c) { say(s && s.unitId !== U.id ? `Select ${s.battery || 'that battery'} to apply its correction.` : 'No correction to apply.'); snd('click'); break; }
+        const t = corrText(c), who = `${s.round ? `round ${s.round}` : 'the report'}${s.gun ? ` (No. ${s.gun} gun)` : ''}`;
+        s.applied = true;
+        if (!t) { say(`Correction for ${who} already made.`); break; }
+        cmd('correct', c);
+        say(`Applied ${t} from ${who}: ${(cfg.pieces || 1) > 1 ? 'every gun' : 'the gun'} re-laid.`);
         break; }
     }
   };
@@ -109,7 +117,7 @@ export function mountConsole(ctx) {
   const rtab = new RangeTable();
   const guns = new GunsCard();
   const missions = new MissionList({ shared, take });
-  const pad = new MessagePad({ apply: (s) => act('apply', s) });
+  const pad = new MessagePad({ apply: (s) => act('apply', s), clear: () => mail.clear() });
 
   tut(rtab.el, 'rtab'); tut(guns.el, 'guns'); tut(missions.el, 'missions'); tut(pad.el, 'pad');
   const top = el('div', 'toprow');
@@ -144,7 +152,7 @@ export function mountConsole(ctx) {
     else if (unit.mode === 'hold') st = 'HOLDING: cease fire. Press A or MANUAL to go on.';
     else if (!o.target) st = 'AWAITING A TARGET. Click the board, or Tab and Enter for a mission.';
     else {
-      const tail = m ? ` (M${m.id} ${m.state === 'ffe' ? 'for effect' : m.state})` : '';
+      const tail = m ? ` (${taskNo(m.id)} ${m.state === 'ffe' ? 'for effect' : m.state})` : '';
       if (ready) st = `${ready} of ${alive} READY. ${unit.mode === 'auto' ? 'Crew will fire' : 'SPACE to fire'}${tail}`;
       else st = `${loading ? loading + ' loading' : ''}${loading && laying ? ', ' : ''}${laying ? laying + ' laying' : ''}${!loading && !laying ? 'reloading' : ''}${tail}`;
     }
@@ -165,7 +173,7 @@ export function mountConsole(ctx) {
 
     const nCharges = chargeCount(sim, unit, cfg);
     const tgtM = m || (o.target ? liveMissions(sim).find((q) => Math.hypot(q.x - o.target.x, q.z - o.target.z) < 90) : null);
-    let tname = tgtM ? `M${tgtM.id}  ${tgtM.title || MISSION_NAME[tgtM.kind]}` : '';
+    let tname = tgtM ? `${taskNo(tgtM.id)}  ${tgtM.title || MISSION_NAME[tgtM.kind]}` : '';
     if (!tname && o.target) { const tg = (sim.targets || []).find((q) => Math.hypot(q.pos.x - o.target.x, q.pos.z - o.target.z) < 90); tname = tg ? tg.name : ''; }
     const tab = (sim.rangeTable && sim.rangeTable(unit.kind, o.charge || 0)) || [];
     let apex = 0;
@@ -179,7 +187,7 @@ export function mountConsole(ctx) {
     rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
-    pad.update({ mail, unit });
+    pad.update({ mail, unit, sim });
     board.update(dt, { sim, unit, tracker, cursorId: shared.cursor, now });
     for (const b of [order.bAdd, order.bDrop, order.bLeft, order.bRight]) b.enable(!dead);
   }
