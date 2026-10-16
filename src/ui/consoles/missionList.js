@@ -12,7 +12,7 @@ export class MissionList {
     this.empty = el('div', 'mnone', 'No calls for fire. The observers are quiet.');
     c.body.append(this.list);
     this.rows = new Map();
-    this.sig = '';
+    this.sig = null;
   }
   rowFor(m) {
     let r = this.rows.get(m.id);
@@ -32,11 +32,9 @@ export class MissionList {
     return r;
   }
   update({ sim, unit }) {
-    const ms = sim.missions || [];
     const now = sim.time || 0;
     const live = liveMissions(sim);
-    const recent = ms.filter((m) => (m.state === 'done' || m.state === 'failed') && now - (m.tEnd != null ? m.tEnd : m.deadline || now) < 25).slice(-2);
-    const show = [...live, ...recent].slice(0, 8);
+    const show = live.slice(0, 8);
     const sig = show.map((m) => m.id).join(',');
     if (sig !== this.sig) {
       this.sig = sig;
@@ -58,8 +56,6 @@ export class MissionList {
       setText(r.stars, '★'.repeat(Math.max(1, Math.min(3, m.priority || 1))));
       setCls(r.e, 'cursor', m.id === this.shared.cursor);
       setCls(r.e, 'mine', mine);
-      setCls(r.e, 'done', m.state === 'done');
-      setCls(r.e, 'failed', m.state === 'failed');
       setCls(r.e, 'sos', m.kind === 'sos');
     }
   }
