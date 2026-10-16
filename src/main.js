@@ -9,6 +9,7 @@ import { groundKindAt } from './terrainHeight.js';
 import { Clouds } from './clouds.js';
 import { Weather, WEATHER } from './weather.js';
 import { PostFX, GRADES } from './post.js';
+import { DynamicResolution } from './dynres.js';
 import { FX } from './fx.js';
 import { Flares } from './flares.js';
 import { HUD } from './hud.js';
@@ -88,7 +89,7 @@ async function init() {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
   const size = () => ({ w: Math.max(2, view.clientWidth), h: Math.max(2, view.clientHeight) });
   let { w: vw, h: vh } = size();
-  renderer.setPixelRatio(Math.min(devicePixelRatio, QUALITY.High.pixelRatio));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(vw, vh, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
@@ -202,6 +203,7 @@ async function init() {
 
   await step(0.72, 'Preparing the lens');
   const post = new PostFX(renderer, scene, camera);
+  const dynRes = new DynamicResolution(renderer);
   // the blast's refraction ring and the heat shimmer over a muzzle (fx sends pooled vectors: post copies)
   fx.onShock = (pos, radius, speed, strength) => post.shockwave?.(pos, { radius, speed, strength });
   fx.onHeat = (pos, radius, life) => post.heat?.(pos, { radius, life });
@@ -251,6 +253,7 @@ async function init() {
   const params = {
     quality: startQuality,
     dynamicRes: !navigator.webdriver,
+    upscaleSharpen: 0.25,
     timeScale: 1,
     difficulty: 'Normal',
     fov: 50,
@@ -292,14 +295,19 @@ async function init() {
   let following = false; // the camera is on a shell (F)
   let cineClock = 0; // title screen: seconds since the last cut
 
-  const basePixelRatio = () => Math.min(devicePixelRatio, QUALITY[params.quality].pixelRatio);
+  // The canvas always has the display's own resolution (up to 2x); the scene renders at the quality
+  // preset's pixel ratio times the dynamic scale and the post chain's last pass scales it up (post.js
+  // UpscaleShader), so a lower resolution reads as slightly soft, never as blocks.
+  const outputPixelRatio = () => Math.min(devicePixelRatio, 2);
+  const scenePixelRatio = () => Math.min(devicePixelRatio, QUALITY[params.quality].pixelRatio) * (params.dynamicRes ? resScale : 1);
   const applyPixelRatio = () => {
-    renderer.setPixelRatio(basePixelRatio() * (params.dynamicRes ? resScale : 1));
+    renderer.setPixelRatio(outputPixelRatio());
     renderer.setSize(vw, vh, false);
-    post.setSize(vw, vh);
+    post.setSize(vw, vh, scenePixelRatio());
   };
   const applyQuality = (name) => {
     const q = QUALITY[name];
+    dynRes.reset();
     resScale = 1;
     applyPixelRatio();
     atmosphere.setShadowQuality(q.shadowMap, q.shadowExtent);
@@ -323,9 +331,11 @@ async function init() {
   const gui = new GUI({ title: 'Settings', container: document.getElementById('gui-host') });
   gui.add(params, 'quality', Object.keys(QUALITY)).name('Quality preset').onChange(applyQuality);
   gui.add(params, 'dynamicRes').name('Dynamic resolution').onChange(() => {
+    dynRes.reset();
     resScale = 1;
     applyPixelRatio();
   });
+  gui.add(params, 'upscaleSharpen', 0, 1, 0.05).name('Upscale sharpening').onChange((v) => { post.upscale.uniforms.uSharp.value = v; });
   const fPlay = gui.addFolder('Game');
   fPlay.add(params, 'difficulty', ['Easy', 'Normal', 'Hard']).name('Difficulty (next game)').listen();
   fPlay.add(params, 'timeScale', TIME_SCALES).name('Time compression ([ ])').listen().onChange((v) => hud.setTimeScale(v));
@@ -834,8 +844,7 @@ async function init() {
     ({ w: vw, h: vh } = size());
     camera.aspect = vw / vh;
     camera.updateProjectionMatrix();
-    renderer.setSize(vw, vh, false);
-    post.setSize(vw, vh);
+    applyPixelRatio();
   }).observe(view);
 
   // ---------------------------------------------------------------- first frame
@@ -874,7 +883,6 @@ async function init() {
   let t = 0;
   let sunTimer = 0;
   let hudTimer = 0;
-  let resTimer = 0;
   let ambTimer = 0;
   let frameAvg = 16;
   const markers = [];
@@ -979,7 +987,7 @@ async function init() {
     fx.wind.set(-4 * weather.state.wind, 0, 1.6 * weather.state.wind);
     fx.update(dt, camera, { ...lightEnv, night: atmosphere.night });
     flares.wind.copy(fx.wind);
-    flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * renderer.getPixelRatio()));
+    flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * post.pixelRatio));
     weather.update(dt, t, camera, atmosphere);
 
     scene.fog.density = params.fogDensity * weather.state.fog;
@@ -1013,7 +1021,11 @@ async function init() {
 
     renderer.info.reset();
     renderer.shadowMap.needsUpdate = true;
-    if (draw) post.render(rawDt);
+    if (draw) {
+      dynRes.begin();
+      post.render(rawDt);
+      dynRes.end();
+    }
     stats.update();
 
     // HUD, console, audio
@@ -1033,16 +1045,9 @@ async function init() {
       audio.update?.(rawDt, camera);
     }
 
-    resTimer -= rawDt;
-    if (params.dynamicRes && resTimer <= 0) {
-      resTimer = 1.5;
-      let next = resScale;
-      if (frameAvg > 20) next = Math.max(0.5, resScale - 0.1);
-      else if (frameAvg < 13.5) next = Math.min(1, resScale + 0.05);
-      if (next !== resScale) {
-        resScale = next;
-        applyPixelRatio();
-      }
+    if (params.dynamicRes && draw && forcedDt == null && dynRes.update(rawDt)) {
+      resScale = dynRes.scale;
+      applyPixelRatio();
     }
 
     // compass: the other batteries, the known targets, the selected unit's mission point
@@ -1075,7 +1080,7 @@ async function init() {
           `state      ${state}  time x${params.timeScale}${freeCam ? '  free camera' : ''}  camera ${chase.mode}\n` +
           `draw calls ${i.render.calls}\n` +
           `triangles  ${(i.render.triangles / 1e6).toFixed(2)}M\n` +
-          `resolution ${Math.round(vw * renderer.getPixelRatio())}x${Math.round(vh * renderer.getPixelRatio())} (${Math.round(resScale * 100)}%)\n` +
+          `resolution ${Math.round(vw * post.pixelRatio)}x${Math.round(vh * post.pixelRatio)} (${Math.round(resScale * 100)}%) on ${Math.round(vw * renderer.getPixelRatio())}x${Math.round(vh * renderer.getPixelRatio())}${post.upscale.enabled ? ' upscaled' : ''}  gpu ${dynRes.gpuTimed ? `${dynRes.gpuMs.toFixed(1)} ms` : 'untimed'}  refresh ${(1000 / dynRes.refreshMs).toFixed(0)} Hz\n` +
           `particles  ${c.smoke ?? 0} smoke, ${c.glow ?? 0} glow, ${c.debris ?? 0} debris  lights ${globalUniforms.uFlareCount.value} (${flares.items.length} flares, ${flares.flashes.length} flashes)\n` +
           `battle     ${sim ? `${sim.state} phase ${sim.phase} shells ${sim.shells.length}` : 'no sim'}\n` +
           `camera     ${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)}  dist ${chase.dist.toFixed(0)}  trauma ${chase.trauma.toFixed(2)}\n` +

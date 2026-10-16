@@ -504,6 +504,63 @@ const GradeShader = {
   `,
 };
 
+// ---------------------------------------------------------------- upscale
+// When the scene renders below the canvas resolution (quality preset, dynamic resolution) the last
+// pass scales it up itself instead of leaving it to the browser's bilinear stretch: a Catmull-Rom
+// bicubic (9 bilinear taps) and a contrast-adaptive sharpen in the spirit of AMD's CAS/RCAS, which
+// keeps edges and the crater field crisp without ringing on the smoke.
+const UpscaleShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uSrc: { value: new THREE.Vector2(1, 1) }, // source size in pixels
+    uSharp: { value: 0.25 }, // 0 bicubic only, 1 strongest (the grade pass has its own sharpen before this)
+  },
+  vertexShader: fsVertex,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform vec2 uSrc;
+    uniform float uSharp;
+    varying vec2 vUv;
+    vec3 catmullRom(vec2 uv) {
+      vec2 pos = uv * uSrc;
+      vec2 c = floor(pos - 0.5) + 0.5;
+      vec2 f = pos - c;
+      vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+      vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+      vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+      vec2 w3 = f * f * (-0.5 + 0.5 * f);
+      vec2 w12 = w1 + w2;
+      vec2 inv = 1.0 / uSrc;
+      vec2 t0 = (c - 1.0) * inv, t3 = (c + 2.0) * inv, t12 = (c + w2 / w12) * inv;
+      vec3 r = texture2D(tDiffuse, vec2(t0.x, t0.y)).rgb * w0.x * w0.y
+        + texture2D(tDiffuse, vec2(t12.x, t0.y)).rgb * w12.x * w0.y
+        + texture2D(tDiffuse, vec2(t3.x, t0.y)).rgb * w3.x * w0.y
+        + texture2D(tDiffuse, vec2(t0.x, t12.y)).rgb * w0.x * w12.y
+        + texture2D(tDiffuse, vec2(t12.x, t12.y)).rgb * w12.x * w12.y
+        + texture2D(tDiffuse, vec2(t3.x, t12.y)).rgb * w3.x * w12.y
+        + texture2D(tDiffuse, vec2(t0.x, t3.y)).rgb * w0.x * w3.y
+        + texture2D(tDiffuse, vec2(t12.x, t3.y)).rgb * w12.x * w3.y
+        + texture2D(tDiffuse, vec2(t3.x, t3.y)).rgb * w3.x * w3.y;
+      return max(r, 0.0);
+    }
+    void main() {
+      vec3 c = catmullRom(vUv);
+      if (uSharp > 0.0) {
+        // the cross one source pixel away; the sharpening weight backs off where the local contrast is
+        // already high (or near black and white), so edges do not ring
+        vec2 px = 1.0 / uSrc;
+        vec3 n = texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb, s = texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb;
+        vec3 e = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb, w = texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb;
+        vec3 mn = min(c, min(min(n, s), min(e, w))), mx = max(c, max(max(n, s), max(e, w)));
+        vec3 amp = sqrt(clamp(min(mn, 1.0 - mx) / max(mx, 1e-4), 0.0, 1.0));
+        vec3 k = -amp * mix(0.125, 0.2, uSharp);
+        c = clamp((c + k * (n + s + e + w)) / (1.0 + 4.0 * k), 0.0, 1.0);
+      }
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `,
+};
+
 export class PostFX {
   constructor(renderer, scene, camera) {
     this.renderer = renderer;
@@ -555,6 +612,10 @@ export class PostFX {
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
 
+    this.upscale = new ShaderPass(UpscaleShader);
+    this.upscale.enabled = false;
+    this.composer.addPass(this.upscale);
+
     this.setSize(size.x, size.y);
     this._v = new THREE.Vector3();
     this._now = 0; // the effects' own clock (seconds of real time)
@@ -587,12 +648,21 @@ export class PostFX {
     this._dzSlow = Math.max(this._dzSlow, k * 0.85);
   }
 
-  setSize(w, h) {
-    const pr = this.renderer.getPixelRatio();
+  /**
+   * w, h: the canvas in CSS pixels; pr: the scene's pixel ratio (defaults to the renderer's). Below the
+   * renderer's own ratio the chain runs at pr and the upscale pass fills the canvas.
+   */
+  setSize(w, h, pr = this.renderer.getPixelRatio()) {
+    const out = this.renderer.getPixelRatio();
+    pr = Math.min(pr, out);
+    this.pixelRatio = pr;
     this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
-    this.dof.uniforms.uResolution.value.set(w * pr, h * pr);
-    this.grade.uniforms.uResolution.value.set(w * pr, h * pr);
+    const sw = Math.max(1, Math.floor(w * pr)), sh = Math.max(1, Math.floor(h * pr));
+    this.dof.uniforms.uResolution.value.set(sw, sh);
+    this.grade.uniforms.uResolution.value.set(sw, sh);
+    this.upscale.enabled = pr < out - 1e-3;
+    this.upscale.uniforms.uSrc.value.set(sw, sh);
   }
 
   setGrade(name) {
