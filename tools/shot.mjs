@@ -22,6 +22,7 @@ const [path = '/', out = 'shots/shot.png'] = args;
 
 const exe = ['chromium-1247', 'chromium-1217']
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
+  .concat(process.env.PLAYWRIGHT_BROWSERS_PATH ? [`${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium`] : [])
   .find((p) => fs.existsSync(p));
 
 const browser = await chromium.launch({

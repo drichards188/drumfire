@@ -268,6 +268,7 @@ export const CAMO = {
   wkhaki: { green: [0x7a7050, 0x8e8260, 0x5c5540], seed: 47 }, // khaki service paint, dusty
   earth: { green: [0x58593a, 0x9a8458, 0x2e2a21], disruptive: true, seed: 57 }, // olive with earth-buff and chocolate patches
   railcamo: { green: [0x8b897a, 0x62684a, 0x35352f], disruptive: true, seed: 67 }, // sand-grey with green and dark patches, as on the railway guns
+  bunt: { green: [0x5d6247, 0x8c7a4c, 0x3f3226], disruptive: true, seed: 77 }, // German Buntfarbenanstrich of 1917: green-grey, ochre and rust-brown (the Dicke Bertha demo)
 };
 
 // Metric tile of a painted steel skin: 4 m square. Returns { map, rough, normal } textures.

@@ -296,6 +296,24 @@ body.ended #end { display: grid; }
 }
 #tutorials:hover:not(:disabled) { background: rgba(233, 223, 196, 0.16); letter-spacing: 0.38em; }
 #tutorials:disabled { opacity: 0; pointer-events: none; }
+/* the Dicke Bertha demo mode (bertha.html), from the title screen */
+#bertha-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 13px var(--mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding: 15px 26px;
+  border: 1px solid rgba(196, 55, 43, 0.6);
+  background: rgba(20, 16, 9, 0.5);
+  color: var(--paper);
+  text-decoration: none;
+  transition: background 0.25s, letter-spacing 0.25s;
+}
+#bertha-link small { font-size: 9px; letter-spacing: 0.2em; color: var(--brass); }
+#bertha-link:hover { background: rgba(196, 55, 43, 0.18); letter-spacing: 0.36em; }
+body:not(.ready) #bertha-link { opacity: 0; pointer-events: none; }
 
 #tut-menu {
   position: absolute;

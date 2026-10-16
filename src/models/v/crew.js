@@ -136,6 +136,9 @@ const COL = {
   shirt: 0xa39d86, brace: 0x3a3226, puttee: 0x6e6646, bootBrown: 0x3a291b, leather: 0x5a3d24, webbing: 0x8a8465, brodie: 0x6c6a55, stahl: 0x60655a, band: 0x2e2b22, brass: 0xb59a4a, arm: 0xcfcab8, skin: [0xc59c84, 0xb88d70, 0xd4ae96, 0xa07a60], hair: [0x3b2d21, 0x5b4431, 0x231b15, 0x6e5536],
   boot: 0x1d1c1b, sole: 0x111111, glove: 0x2a2a25, belt: 0x34352a, buckle: 0x6a6a5e, strap: 0x45463a,
   hiviz: 0xf57a1e, tape: 0xc7c9c2, hardhat: 0xe9621a, eye: 0x1c1612, lip: 0x9a6a58,
+  // German 1917 (the Dicke Bertha demo): field-grey M1915 Bluse with the dark green collar, stone-grey trousers,
+  // blackened jackboots and belt, the grey-painted box buckle, the gas mask tin, the light grey drill jacket
+  gcollar: 0x56604c, steingrau: 0x5f5e55, jackboot: 0x231f1b, gbelt: 0x1f1c18, gbuckle: 0x7d7d74, gascan: 0x58604e, brot: 0x6f6850, canteen: 0x4f4a3e, drill: 0x9c9a88, capband: 0x24221e, piping: 0x9a2a20, cockade: 0xd8d4c8,
 };
 // EMR ("tsifra") as multipliers of the light base colour: base, green, brown, near black (sRGB)
 const EMR = [0x6d6a4e, 0x596040, 0x5c4d37, 0x3b392c];
@@ -334,7 +337,9 @@ function buildGeometry(o) {
   const cloth = COL[o.pattern];
   const skin = COL.skin[o.skin % 4], hair = COL.hair[o.skin % 4];
   const ex = 2.5;
-  const top = o.shirt ?? cloth, tc = o.shirt == null; // jacket or shirt: does the camouflage pattern apply
+  const top = o.shirt ?? o.jacket ?? cloth, tc = o.shirt == null && o.jacket == null; // jacket or shirt: does the camouflage pattern apply
+  const legC = o.trousers ?? cloth;
+  const SG = o.hd ? 24 : 16, AS = o.hd ? 13 : 9; // segments round the body, round a limb
   const trs = (lo) => (x, y) => (y > lo ? top : cloth); // shirt above the belt line, trousers below
 
   // ---- head (bone head) and neck
@@ -375,7 +380,7 @@ function buildGeometry(o) {
     const g = new THREE.SphereGeometry(1, 16, 7, 0, TAU, 0, Math.PI * 0.5);
     scaleUV(g, 1, 1);
     B.add(g.scale(0.12, 0.135, 0.14).translate(0, 1.695, 0.01), 'head', COL.hardhat);
-    B.add(lathe([[-0.014, 0.114], [-0.005, 0.13], [0.004, 0.129], [0.006, 0.116]], 16, 0, 1.695, 0.008, 1, 1.17), 'head', COL.hardhat); // brim
+    B.add(lathe([[-0.014, 0.114], [-0.005, 0.13], [0.004, 0.129], [0.006, 0.116]], SG, 0, 1.695, 0.008, 1, 1.17), 'head', COL.hardhat); // brim
     B.add(box(0.014, 0.022, 0.2, 0, 1.824, 0.012), 'head', COL.hardhat); // ridge
   } else if (o.headgear === 'brodie') {
     // Brodie helmet: a shallow dome with a broad down-sloping brim, matt khaki-grey, chin strap
@@ -385,17 +390,25 @@ function buildGeometry(o) {
     B.add(lathe([[0.0, 0.1], [-0.026, 0.172], [-0.018, 0.176], [0.004, 0.118], [0.01, 0.1]], 22, 0, 1.724, 0.008, 1, 1.12), 'head', COL.brodie);
     for (const s of SIDE) B.add(box(0.008, 0.075, 0.014, s * 0.076, 1.612, 0.0, -0.3, 0, -s * 0.12), 'head', COL.strap);
   } else if (o.headgear === 'stahlhelm') {
-    // M1916 Stahlhelm: a deep dome with the neck guard coming down at the back, a front peak and side lugs
-    const g = new THREE.SphereGeometry(1, 18, 10, 0, TAU, 0, Math.PI * 0.62);
-    scaleUV(g, 1, 1);
-    g.scale(0.124, 0.115, 0.145).translate(0, 1.684, 0.012);
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const z = p.getZ(i), lim = 1.572 + 0.1 * sstep(0.02, -0.11, z) + 0.0; if (p.getY(i) < lim) p.setY(i, lim); }
-    g.computeVertexNormals();
-    B.add(g, 'head', COL.stahl);
-    B.add(box(0.2, 0.014, 0.07, 0, 1.667, -0.135, 0.12), 'head', COL.stahl); // front peak
-    for (const s of SIDE) B.add(lathe([[0, 0.012], [0.012, 0.014], [0.014, 0.0]], 6, s * 0.123, 1.69, 0.0, 1, 1), 'head', COL.brass);
-    for (const s of SIDE) B.add(box(0.008, 0.08, 0.014, s * 0.078, 1.6, 0.0, -0.3, 0, -s * 0.12), 'head', COL.strap);
+    B.add(stahlhelm(), 'head', COL.stahl);
+    // the ventilation lugs, the chin strap
+    for (const s of SIDE) B.add(lathe([[0, 0.011], [0.012, 0.012], [0.016, 0.008], [0.017, 0.0]], 8, 0, 0, 0).rotateZ(-s * Math.PI / 2).translate(s * 0.113, 1.722, 0.004), 'head', COL.stahl);
+    for (const s of SIDE) B.add(box(0.008, 0.085, 0.014, s * 0.081, 1.598, 0.0, -0.3, 0, -s * 0.12), 'head', COL.strap);
+  } else if (o.headgear === 'feldmuetze') {
+    // the round field cap without a peak: a dark band with red piping, a soft crown, the two cockades in front
+    B.add(ringLoft([
+      { y: 1.688, rx: 0.088, rz: 0.103, cz: 0.006 },
+      { y: 1.726, rx: 0.09, rz: 0.105, cz: 0.006 },
+    ], SG), 'head', COL.capband);
+    for (const y of [1.688, 1.726]) B.add(ringLoft([{ y: y - 0.0025, rx: 0.0915, rz: 0.1065, cz: 0.006 }, { y: y + 0.0025, rx: 0.0915, rz: 0.1065, cz: 0.006 }], SG), 'head', COL.piping);
+    B.add(ringLoft([
+      { y: 1.728, rx: 0.091, rz: 0.106, cz: 0.006 },
+      { y: 1.748, rx: 0.104, rz: 0.121, cz: 0.004 },
+      { y: 1.766, rx: 0.106, rz: 0.123, cz: 0.0 },
+      { y: 1.778, rx: 0.099, rz: 0.116, cz: 0.0, dome: 0.005 },
+    ], SG, false, true), 'head', cloth);
+    B.add(lathe([[0, 0.011], [0.004, 0.011], [0.005, 0.0]], 10, 0, 0, 0).rotateX(-Math.PI / 2).translate(0, 1.707, -0.106), 'head', COL.cockade);
+    B.add(lathe([[0, 0.009], [0.004, 0.009], [0.005, 0.0]], 10, 0, 0, 0).rotateX(-Math.PI / 2).translate(0, 1.752, -0.117), 'head', COL.piping);
   } else if (o.headgear === 'peaked') {
     // officer's service dress cap: a flared crown, a dark band, a stiff visor, a small brass badge
     B.add(ringLoft([
@@ -403,8 +416,8 @@ function buildGeometry(o) {
       { y: 1.724, rx: 0.094, rz: 0.11, cz: 0.006 },
       { y: 1.762, rx: 0.112, rz: 0.126, cz: 0.004 },
       { y: 1.792, rx: 0.114, rz: 0.124, cz: 0.004, dome: 0.006 },
-    ], 16, false, true), 'head', cloth, true);
-    B.add(ringLoft([{ y: 1.69, rx: 0.0905, rz: 0.1066, cz: 0.006 }, { y: 1.724, rx: 0.0945, rz: 0.1106, cz: 0.006 }], 16), 'head', COL.band);
+    ], SG, false, true), 'head', cloth, true);
+    B.add(ringLoft([{ y: 1.69, rx: 0.0905, rz: 0.1066, cz: 0.006 }, { y: 1.724, rx: 0.0945, rz: 0.1106, cz: 0.006 }], SG), 'head', COL.band);
     B.add(visor(), 'head', COL.band);
     B.add(box(0.026, 0.026, 0.01, 0, 1.712, -0.106), 'head', COL.brass);
   }
@@ -416,13 +429,13 @@ function buildGeometry(o) {
     { y: 0.93, rx: 0.192, rz: 0.134, cz: 0.006, ex },
     { y: 1.01, rx: 0.183, rz: 0.127, cz: 0.002, ex },
     { y: 1.08, rx: 0.176, rz: 0.122, ex },
-  ], 16, true, false), 'hips', o.shirt != null ? (x, y) => (y > 1.0 ? top : cloth) : cloth, o.shirt == null);
+  ], SG, true, false), 'hips', o.shirt != null ? (x, y) => (y > 1.0 ? top : cloth) : cloth, o.shirt == null);
   B.add(ringLoft([
     { y: 0.99, rx: 0.18, rz: 0.125, ex },
     { y: 1.08, rx: 0.177, rz: 0.123, ex },
     { y: 1.16, rx: 0.182, rz: 0.126, cz: -0.003, ex },
     { y: 1.23, rx: 0.188, rz: 0.128, cz: -0.005, ex },
-  ], 16), 'spine', top, tc);
+  ], SG), 'spine', top, tc);
   B.add(ringLoft([
     { y: 1.15, rx: 0.182, rz: 0.125, ex },
     { y: 1.25, rx: 0.19, rz: 0.13, cz: -0.007, ex },
@@ -431,7 +444,7 @@ function buildGeometry(o) {
     { y: 1.445, rx: 0.183, rz: 0.114, cz: 0.002, ex },
     { y: 1.482, rx: 0.132, rz: 0.09, cz: 0.01 },
     { y: 1.505, rx: 0.072, rz: 0.066, cz: 0.014 },
-  ], 16, false, true), 'chest', top, tc);
+  ], SG, false, true), 'chest', top, tc);
   for (const s of SIDE) {
     B.add(ellipsoid(0.06, 0.06, 0.066, s * 0.178, 1.432, 0.01, 9, 6), 'chest', top, tc); // shoulders
     if (o.vest === 'none') { // chest pockets (under a vest they are hidden)
@@ -443,17 +456,17 @@ function buildGeometry(o) {
     }
   }
   B.add(lathe([[0.0, 0.076], [0.05, 0.074], [0.058, 0.069]], 14, 0, 1.475, 0.016, 1, 0.95), 'chest', top, tc); // collar
-  B.add(ringLoft([{ y: 1.012, rx: 0.184, rz: 0.129, ex }, { y: 1.05, rx: 0.183, rz: 0.128, ex }], 16), 'spine', COL.belt);
+  B.add(ringLoft([{ y: 1.012, rx: 0.184, rz: 0.129, ex }, { y: 1.05, rx: 0.183, rz: 0.128, ex }], SG), 'spine', COL.belt);
   if (o.vest !== 'hiviz') B.add(box(0.05, 0.042, 0.012, 0, 1.031, -0.131), 'spine', COL.buckle); // under the vest it would poke through
 
   // ---- arms: loose sleeves
   for (const s of SIDE) {
     const S = SFX[SIDE.indexOf(s)], x = s * SH_X;
-    B.add(lathe([[-0.345, 0], [-0.332, 0.04], [-0.3, 0.052], [-0.22, 0.056], [-0.12, 0.06], [-0.04, 0.063], [0.0, 0.061], [0.03, 0.044], [0.048, 0]], 9, x, SH_Y, SH_Z, 1, 1.06), 'upperArm' + S, top, tc);
+    B.add(lathe([[-0.345, 0], [-0.332, 0.04], [-0.3, 0.052], [-0.22, 0.056], [-0.12, 0.06], [-0.04, 0.063], [0.0, 0.061], [0.03, 0.044], [0.048, 0]], AS, x, SH_Y, SH_Z, 1, 1.06), 'upperArm' + S, top, tc);
     if (o.shirt == null) B.add(box(0.012, 0.11, 0.085, x + s * 0.059, SH_Y - 0.14, SH_Z, 0, 0, s * 0.04), 'upperArm' + S, cloth, true); // sleeve pocket
     if (o.armband) B.add(lathe([[-0.05, 0.062], [0.05, 0.062]], 9, x, SH_Y - 0.12, SH_Z, 1, 1.06), 'upperArm' + S, o.armband);
     const ey = SH_Y - L_UA;
-    B.add(lathe([[-0.275, 0], [-0.268, 0.044], [-0.25, 0.048], [-0.2, 0.047], [-0.12, 0.05], [-0.04, 0.054], [0.0, 0.054], [0.032, 0.04], [0.048, 0]], 9, x, ey, SH_Z, 1, 1.06), 'forearm' + S,
+    B.add(lathe([[-0.275, 0], [-0.268, 0.044], [-0.25, 0.048], [-0.2, 0.047], [-0.12, 0.05], [-0.04, 0.054], [0.0, 0.054], [0.032, 0.04], [0.048, 0]], AS, x, ey, SH_Z, 1, 1.06), 'forearm' + S,
       o.shirt != null ? (px, py) => (py > ey - 0.1 ? top : skin) : cloth, o.shirt == null); // rolled sleeves: bare below the elbow
     const wy = ey - L_FA, hc = o.gloves ? COL.glove : skin;
     B.add(lathe([[-0.034, 0.03], [-0.026, 0.037], [0.012, 0.036], [0.022, 0.03]], 8, x, wy, SH_Z), 'hand' + S, hc);
@@ -465,7 +478,7 @@ function buildGeometry(o) {
   // ---- legs: baggy trousers with cargo pockets, bloused over high black boots
   for (const s of SIDE) {
     const S = SFX[SIDE.indexOf(s)], x = s * HIP_X;
-    B.add(lathe([[-0.48, 0], [-0.462, 0.056], [-0.425, 0.074], [-0.37, 0.08], [-0.28, 0.088], [-0.18, 0.095], [-0.08, 0.1], [0.0, 0.1], [0.03, 0.094], [0.065, 0.064], [0.085, 0]], 9, x, HIP_Y, -0.004, 1, 1.06), 'thigh' + S, cloth, true);
+    B.add(lathe([[-0.48, 0], [-0.462, 0.056], [-0.425, 0.074], [-0.37, 0.08], [-0.28, 0.088], [-0.18, 0.095], [-0.08, 0.1], [0.0, 0.1], [0.03, 0.094], [0.065, 0.064], [0.085, 0]], AS, x, HIP_Y, -0.004, 1, 1.06), 'thigh' + S, legC, o.trousers == null);
     const ww1 = o.pattern === 'khaki' || o.pattern === 'fieldgrey';
     if (!ww1) {
       B.add(box(0.016, 0.17, 0.13, x + s * 0.088, HIP_Y - 0.25, -0.004, 0, 0, s * 0.05), 'thigh' + S, cloth, true); // cargo pocket
@@ -477,8 +490,13 @@ function buildGeometry(o) {
       B.add(lathe([[-0.262, 0], [-0.256, 0.046], [-0.245, 0.056], [-0.215, 0.058], [-0.15, 0.06], [-0.08, 0.066], [0.0, 0.07], [0.04, 0.058], [0.062, 0]], 9, x, ky, 0.0, 1, 1.06), 'shin' + S, (px, py) => (py < ky - 0.04 ? COL.puttee : cloth));
       for (let k = 0; k < 6; k++) B.add(lathe([[-0.012, 0.052 + 0.0], [0.0, 0.058], [0.012, 0.052]], 9, x, ANKLE_Y + 0.07 + k * 0.045, 0.0, 1, 1.06), 'shin' + S, 0x5a5238);
       B.add(lathe([[-0.03, 0], [-0.025, 0.05], [0.03, 0.052], [0.085, 0.053], [0.1, 0.0]], 8, x, ANKLE_Y, 0.008, 1, 1.12), 'shin' + S, bootCol); // ankle boot
+    } else if (o.legs === 'jackboots') {
+      // trousers tucked into tall marching boots that come up to just under the knee
+      B.add(lathe([[-0.1, 0], [-0.094, 0.066], [-0.07, 0.076], [0.0, 0.075], [0.04, 0.058], [0.062, 0]], AS, x, ky, 0.0, 1, 1.06), 'shin' + S, legC); // tucked in: only above the boot top
+      B.add(lathe([[-0.03, 0], [-0.025, 0.055], [0.04, 0.057], [0.14, 0.058], [0.26, 0.064], [0.33, 0.069], [0.335, 0.066], [0.34, 0.0]], AS, x, ANKLE_Y, 0.006, 1, 1.1), 'shin' + S, (px, py) => (py > ANKLE_Y + 0.318 ? 0x1a1714 : COL.jackboot)); // shaft, its top edge
+      B.add(lathe([[-0.004, 0.0585], [0.004, 0.0585]], AS, x, ANKLE_Y + 0.07, 0.006, 1, 1.1), 'shin' + S, 0x1a1714); // the crease at the ankle
     } else {
-      B.add(lathe([[-0.262, 0], [-0.256, 0.055], [-0.245, 0.074], [-0.215, 0.078], [-0.15, 0.076], [-0.08, 0.074], [0.0, 0.074], [0.04, 0.058], [0.062, 0]], 9, x, ky, 0.0, 1, 1.06), 'shin' + S, cloth, o.pattern === 'emr' || o.pattern === 'mm14');
+      B.add(lathe([[-0.262, 0], [-0.256, 0.055], [-0.245, 0.074], [-0.215, 0.078], [-0.15, 0.076], [-0.08, 0.074], [0.0, 0.074], [0.04, 0.058], [0.062, 0]], AS, x, ky, 0.0, 1, 1.06), 'shin' + S, legC, o.pattern === 'emr' || o.pattern === 'mm14');
       B.add(lathe([[-0.03, 0], [-0.025, 0.055], [0.04, 0.057], [0.12, 0.056], [0.185, 0.059], [0.19, 0.0]], 8, x, ANKLE_Y, 0.008, 1, 1.12), 'shin' + S, bootCol); // boot shaft
     }
     B.add(ringLoft([
@@ -490,7 +508,7 @@ function buildGeometry(o) {
       { y: 0.15, rx: 0.055, rz: 0.036, cz: 0.035, ex },
       { y: 0.195, rx: 0.048, rz: 0.031, cz: 0.03, ex },
       { y: 0.224, rx: 0.033, rz: 0.024, cz: 0.026, dome: 0.008 },
-    ], 10, true, true, (p) => { if (p.z < 0) p.z = 0; }).rotateX(-Math.PI / 2).translate(x, 0, 0), 'foot' + S, (px, py) => (py < 0.022 ? COL.sole : o.boots === 'brown' ? COL.bootBrown : COL.boot));
+    ], 10, true, true, (p) => { if (p.z < 0) p.z = 0; }).rotateX(-Math.PI / 2).translate(x, 0, 0), 'foot' + S, (px, py) => (py < 0.022 ? COL.sole : o.legs === 'jackboots' ? COL.jackboot : o.boots === 'brown' ? COL.bootBrown : COL.boot));
   }
 
   // ---- vests
@@ -524,6 +542,34 @@ function buildGeometry(o) {
       B.add(box(0.1, 0.13, 0.06, -0.2, 0.92, -0.02, 0, 0.1, 0), 'hips', COL.leather); // bread bag
       B.add(box(0.07, 0.15, 0.05, 0.2, 0.9, 0.04, 0, -0.1, 0), 'hips', COL.leather);
     }
+  } else if (o.vest === 'german1917') {
+    // the M1915 Bluse: dark green turn-down collar, a fly front (no buttons show), slanted hip pockets with flaps,
+    // shoulder straps, plain cuffs; the black belt with its box buckle, the gas mask tin slung at the chest in
+    // the ready position, the bread bag and the felt-covered canteen on the right hip at the back
+    B.add(lathe([[0.0, 0.08], [0.035, 0.079], [0.052, 0.072], [0.056, 0.064]], SG, 0, 1.468, 0.016, 1, 0.97), 'chest', COL.gcollar);
+    for (const s of SIDE) B.add(box(0.034, 0.026, 0.008, s * 0.036, 1.492, -0.08, -0.35, s * 0.4, 0), 'chest', COL.gcollar); // collar points
+    B.add(box(0.03, 0.42, 0.012, 0.012, 1.245, -0.134, 0.02), 'chest', (x, y) => (y > 1.3 ? top : top)); // fly front
+    B.add(box(0.03, 0.2, 0.012, 0.012, 0.93, -0.143, -0.03), 'hips', top);
+    for (const s of SIDE) {
+      B.add(box(0.09, 0.016, 0.06, s * 0.17, 1.462, -0.002, 0, 0, s * 0.18), 'chest', top); // shoulder strap
+      B.add(box(0.016, 0.012, 0.012, s * 0.13, 1.47, -0.03), 'chest', COL.gbuckle); // its button
+      B.add(box(0.13, 0.04, 0.014, s * 0.125, 0.9, -0.14, -0.1, s * -0.3, s * 0.3), 'hips', (x, y) => (y > 0.905 ? top : top)); // pocket flap
+      const S = SFX[SIDE.indexOf(s)], ey = SH_Y - L_UA;
+      B.add(lathe([[-0.24, 0.05], [-0.18, 0.052], [-0.175, 0.0]], AS, s * SH_X, ey, SH_Z, 1, 1.06), 'forearm' + S, top); // cuff
+    }
+    B.add(ringLoft([{ y: 1.0, rx: 0.192, rz: 0.134, ex }, { y: 1.048, rx: 0.191, rz: 0.133, ex }], SG), 'spine', COL.gbelt);
+    B.add(box(0.058, 0.044, 0.012, 0, 1.024, -0.137), 'spine', COL.gbuckle);
+    B.add(lathe([[0, 0.016], [0.003, 0.016], [0.004, 0.0]], 10, 0, 0, 0).rotateX(-Math.PI / 2).translate(0, 1.024, -0.144), 'spine', 0x8d8d84); // the boss
+    // gas mask tin: a fluted cylinder across the chest, its strap over the right shoulder and round to the left hip
+    const can = lathe([[-0.105, 0], [-0.104, 0.05], [-0.08, 0.052], [-0.075, 0.049], [-0.03, 0.052], [-0.025, 0.049], [0.02, 0.052], [0.025, 0.049], [0.07, 0.052], [0.075, 0.049], [0.1, 0.052], [0.105, 0.03], [0.108, 0]], 12, 0, 0, 0);
+    B.add(can.rotateX(-0.12).rotateZ(0.35).translate(-0.075, 1.21, -0.178), 'chest', COL.gascan); // hung upright on the chest
+    B.add(box(0.022, 0.36, 0.008, 0.02, 1.37, -0.14, 0.08, 0, -0.62), 'chest', COL.strap);
+    B.add(box(0.026, 0.45, 0.008, 0.01, 1.3, 0.138, 0, 0, 0.62), 'chest', COL.strap);
+    // bread bag and canteen hang from the belt at the back right
+    B.add(box(0.2, 0.17, 0.06, 0.12, 0.92, 0.135, 0, -0.3, 0), 'hips', COL.brot);
+    B.add(box(0.21, 0.04, 0.065, 0.12, 0.99, 0.137, 0, -0.3, 0), 'hips', COL.brot);
+    B.add(ellipsoid(0.048, 0.085, 0.03, 0.2, 0.9, 0.06, 9, 7), 'hips', COL.canteen);
+    B.add(lathe([[0, 0.012], [0.02, 0.012], [0.022, 0.0]], 8, 0.2, 0.985, 0.06), 'hips', 0x3a3530);
   } else if (o.vest === 'sambrown') {
     // officer: Sam Browne belt with the cross strap over the right shoulder, a lanyard loop
     B.add(ringLoft([{ y: 1.0, rx: 0.186, rz: 0.131, ex }, { y: 1.05, rx: 0.185, rz: 0.13, ex }], 16), 'spine', COL.leather);
@@ -547,6 +593,42 @@ function buildGeometry(o) {
     for (const s of SIDE) B.add(box(0.06, 0.11, 0.09, s * 0.182, 0.95, 0.06, 0, s * 0.5, 0), 'hips', cloth, true);
   }
   return B.geometry();
+}
+
+// The M1916 Stahlhelm as one surface: a tall dome, a small step where it meets the skirt, the skirt flaring out
+// to a short visor at the front, low over the ears at the sides and a deep neck guard behind, and back up inside
+// so the rim has a thickness and the inside shows from below. Angle a goes round from the front (-Z).
+function stahlhelm() {
+  const n = 32, rows = [], RX = 0.111, RZ = 0.129, CZ = 0.012;
+  const R = (a) => 1 / Math.hypot(Math.sin(a) / RX, Math.cos(a) / RZ);
+  // [kind, value]: dome rows by polar angle, then the step and skirt by fractions of the way to the rim
+  const prof = [['d', 0], ['d', 0.25], ['d', 0.5], ['d', 0.75], ['d', 1.0], ['d', 1.22], ['s', 0], ['s', 0.06], ['k', 0.35], ['k', 0.7], ['k', 1], ['i', 1], ['i', 0.5], ['i', 0]];
+  for (const [kind, v] of prof) {
+    const ring = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * TAU, F = Math.max(0, Math.cos(a)), Bk = Math.max(0, -Math.cos(a)), r0 = R(a);
+      const yStep = 1.712 + 0.01 * F - 0.012 * Bk, yRim = 1.6 + 0.104 * F ** 2 - 0.034 * Bk ** 1.3, flare = 0.022 + 0.008 * F + 0.034 * Bk ** 1.2;
+      let r, y;
+      if (kind === 'd') { const ph = Math.min(v, 1.22); r = r0 * Math.sin(ph) / Math.sin(1.22); y = 1.704 + 0.128 * Math.cos(ph) - 0.128 * Math.cos(1.22) + (yStep - 1.704); }
+      else if (kind === 's') { r = r0 + v * 0.1 * flare; y = yStep - v * 0.012; }
+      else if (kind === 'k') { const e = v * v; r = r0 + 0.006 + e * flare; y = yStep - 0.012 + (yRim - yStep + 0.012) * v; }
+      else { r = r0 - 0.004 + v * (flare - 0.002); y = yStep - 0.016 + (yRim + 0.004 - yStep + 0.016) * v; }
+      ring.push(Math.sin(a) * r, y, CZ - Math.cos(a) * r);
+    }
+    rows.push(ring);
+  }
+  const pos = [], idx = [], uv = [], cols = n + 1;
+  rows.forEach((ring, j) => { for (let i = 0; i <= n; i++) { pos.push(ring[i * 3], ring[i * 3 + 1], ring[i * 3 + 2]); uv.push(0, 0); } });
+  for (let j = 0; j < rows.length - 1; j++) for (let i = 0; i < n; i++) {
+    const a = j * cols + i, b = a + cols;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 // The field cap's visor: a curved peak round the front of the crown, sloping a little down.
@@ -582,7 +664,10 @@ export const WW1_OUTFITS = {
   gunner: { headgear: 'brodie', vest: 'braces', pattern: 'khaki', shirt: COL.shirt, legs: 'puttees', gloves: false },
   'gunner-tunic': { headgear: 'brodie', vest: 'ww1', pattern: 'khaki', legs: 'puttees', gloves: false },
   officer: { headgear: 'peaked', vest: 'sambrown', pattern: 'khaki', legs: 'boots', gloves: false, boots: 'brown' },
-  german: { headgear: 'stahlhelm', vest: 'german', pattern: 'fieldgrey', legs: 'boots', gloves: false },
+  german: { headgear: 'stahlhelm', vest: 'german1917', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, trousers: COL.steingrau, hd: true },
+  // the German gun crews of 1917: the field cap for the men at the gun, the drill jacket for the heavy work
+  'german-cap': { headgear: 'feldmuetze', vest: 'german1917', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, trousers: COL.steingrau, hd: true },
+  'german-drill': { headgear: 'feldmuetze', vest: 'german1917', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, jacket: COL.drill, trousers: COL.steingrau, hd: true },
   stretcher: { headgear: 'brodie', vest: 'ww1', pattern: 'khaki', legs: 'puttees', gloves: false, armband: 0xe8e6e0 },
 };
 
@@ -597,9 +682,12 @@ function options(opts) {
     shirt: opts.shirt ?? null, // shirt-sleeve order: the torso and sleeves in this colour, forearms bare
     legs: opts.legs || 'boots', // 'boots' (trousers over high boots) | 'puttees' (WW1 other ranks)
     armband: opts.armband ?? null,
+    jacket: opts.jacket ?? null, // a jacket in its own colour with full sleeves (the German drill jacket)
+    trousers: opts.trousers ?? null, // trousers in their own colour
+    hd: !!opts.hd, // more segments round the body and limbs (the close first-person figures)
   };
   o.boots = opts.boots === 'brown' ? 'brown' : 'black';
-  o.key = `${o.boots}|${o.headgear}|${o.vest}|${o.pattern}|${o.gloves}|${o.skin}|${o.shirt}|${o.legs}|${o.armband}`;
+  o.key = `${o.boots}|${o.headgear}|${o.vest}|${o.pattern}|${o.gloves}|${o.skin}|${o.shirt}|${o.legs}|${o.armband}|${o.jacket}|${o.trousers}|${o.hd}`;
   return o;
 }
 

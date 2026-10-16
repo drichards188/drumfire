@@ -107,6 +107,12 @@ export const SECTORS = [
 ];
 
 // ---------------------------------------------------------------------------------------------
+// The Dicke Bertha demo mode (src/bertha/): a German 42 cm M-Gerät on the reverse slope of the ridge, behind
+// the railhead, laid on a base line (`base`, the Grundrichtung) toward the British gun line 9.7 to 13.5 km off.
+// It is not part of the main battle; only its levelled firing bed (flatPads) touches the shared terrain.
+export const BERTHA = { pos: { x: 10000, z: -2600 }, base: 253 * DEG };
+
+// ---------------------------------------------------------------------------------------------
 // Fixed enemy sites (the sim spawns its targets from these; the world builder does not draw them,
 // the render layer does, from models/targets.js). `r` is the footprint radius in metres.
 export const SITES = [
@@ -242,6 +248,8 @@ export function flatPads() {
     const big = u.kind === 'rail' ? [7, 30] : u.kind === 'bl15' ? [12, 12] : [8, 8];
     pads.push({ x: p.x, z: p.z, rx: big[0], rz: big[1], heading: headingFor(p.bearing), blend: 18 });
   }
+  // the Bertha's firing bed: the steel Bettung, the shell and charge stores beside it
+  pads.push({ x: BERTHA.pos.x, z: BERTHA.pos.z, rx: 10, rz: 13, heading: headingFor(BERTHA.base), blend: 20 });
   for (const s of SITES) if (s.kind !== 'balloon') {
     const r = Math.min(s.r, 60);
     pads.push({ x: s.pos.x, z: s.pos.z, rx: r, rz: r, heading: headingFor(s.bearing), blend: 25 });

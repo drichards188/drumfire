@@ -174,7 +174,7 @@ function addItem(kind, x) {
 const all = q.get('all');
 let list;
 if (all === 'guns') list = GUN_KINDS;
-else if (all === 'outfits') list = ['gunner', 'gunner-tunic', 'officer', 'german', 'stretcher'].map((o) => `crew:${q.get('pose') || 'stand'}@${o}`);
+else if (all === 'outfits') list = ['gunner', 'gunner-tunic', 'officer', 'german', 'german-cap', 'german-drill', 'stretcher'].map((o) => `crew:${q.get('pose') || 'stand'}@${o}`);
 else if (all === 'crew') list = CREW_POSES.map((p) => 'crew:' + p);
 else if (q.get('shell')) list = ['shell:' + q.get('shell')];
 else if (q.get('target')) list = ['target:' + q.get('target')];

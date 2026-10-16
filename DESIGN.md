@@ -527,6 +527,73 @@ Every step has an optional `demo(T)` that performs its goal with the same comman
 (and the same keys main handles), so `window.__drumfire.tutorial.autoplay()` can run a whole lesson
 unattended; it is how the lessons are tested (every lesson must complete under autoplay).
 
+## Dicke Bertha mode (demo)
+
+A first-person demo on the German side, meant to become a mode of the main game if it works: `bertha.html`
+(a build input, reached from the title screen's "Dicke Bertha" button, `/bertha.html`). One 42 cm M-Gerät
+at `sector.js` `BERTHA` (10000, -2600, reverse slope behind the ridge, base line 253 degrees) and its
+detachment; the player is one man at a time. It reuses the stage of the main game (atmosphere, terrain,
+world dressing, craters, fx, flares, weather, post, audio, the chase camera for the shell ride, `HUD`), the
+shell integrator (`sim/shells.js` `stepBallistic`, `flyPlane`, `heightAtDistance`; the British counter-battery
+uses `solveElevation`, `autoCharge`, `maxRange`, `shellK` with the British `GUNS`), the British gun rigs
+(`models/guns.js`, standing at their `UNITS` placements as targets), the crew figures (`models/v/crew.js`,
+outfit `german`) and the model kit. Nothing in the main game reads it.
+
+Files (`src/bertha/`): `ballistics.js` (Node-safe: `SHELLS` schwer 810 kg / leicht 400 kg with four charges
+each, a charge is the number of Vorkartuschen ahead of the brass Hauptkartusche; `GUN` limits and crank rates;
+`solve`, `choose`, `table`, `muzzleV`; `STRICH` = 2 pi / 6400), `game.js` (Node-safe `BerthaGame`: stations
+`cmd trav elev load fire`, the Feuerleitung's orders, the loading drill as held actions, laying with instrument
+settings, shells, observer reports and corrected orders, British targets and counter-battery fire; deterministic
+per seed, `assist` lets the crew work every station but the player's), `model.js` (`buildBertha()`: pivots
+`traverse elevation recoil wedge crane hook`, props, anchors `muzzle lanyard sight quadrant tray eye-*`),
+`position.js` (the bed's surroundings, the aiming posts, the lanyard), `crew.js` (figures and poses from the
+game), `hud.js` (order card with its checklist, station bar, prompt, readout, sight reticle, clinometer),
+`index.js` (the page: stage, first-person camera, input, effects, `window.__bertha`), `bertha.css`,
+`preview.html` (dev model viewer: `?cam=az,el,dist&el=&tr=&wedge=&recoil=&crane=swing,drop&props=1&crew=1`).
+
+Game rules: an order (target, grid, shell, fuze, charge, line as deflection from the base line in Strich, elevation
+in Strich) rings at the commander's telephone and must be read back (hold E). The barrel loads at 2 degrees and
+cannot move with the wedge open; the loader opens the wedge, cranes the selected shell, rams it, adds bags (E)
+and the case (R), closes; a wrong round can be unloaded. The line layer sets the deflection on the panoramic
+sight and swings the carriage until the aiming post is on the hair (the sight view is parallax free); the
+elevation layer sets the clinometer and centres the bubble. "Laid" is within 2 Strich. The firer pulls. The
+observer reports the fall 4 to 9 s after the burst, the Feuerleitung corrects its aim point by what was seen
+and sends the next order; a round within 60 m brings fire for effect (2 rounds). Lethal radius against a gun
+in its pit: 40 m (heavy, instant) down to 25 m (light, delay); the Cloth Hall takes 3 hits. British units
+that still have a gun and reach the bed fire back from the second round on, ranging in salvo by salvo; the
+game is lost at 0 condition. Test: `node tools/berthatest.mjs [seeds] --difficulty all [--log]` plays the
+whole drill with the crew logic (perfect, slow): Easy 16/16, Normal 16/16, Hard 2/16 on seeds 1 to 16; a
+human crewing every station alone is slower, so Normal stays winnable but busy.
+
+Language: English by default, German on the title-screen switch, the settings menu or `?lang=de` (remembered in
+localStorage `drumfire.bertha.lang`). `i18n.js` holds the page's strings (`t(key)`, `tt` for textContent, static
+markup tagged `data-i18n`); the game keeps both languages itself (`say(de, en)`, reasons as `{ de, en }`,
+`fmtDefl(rad, lang)`, `SHELLS`/`FUZES`/targets/stations with German and English names), so it stays Node-safe.
+In English the gun is "Big Bertha".
+
+Tutorial (`tutorial.js`, the title screen's "Tutorial" button or `?tutorial=1`): two rounds of one fire mission
+on the quiet range (`BerthaGame({ range: true })`: only the 6-inch battery, a small map error, no counter-battery),
+15 steps on the `#tut-card` card. Each step is a short "why" and a checklist (`todo(game, view)`) of things to do,
+each with its key and a live reading or the way to go ("Barrel now 37.2°, load at 2°", "the post is 12 mils
+right of the line: hold D"); a station step's first item is always "press N to take this man's place", its
+button on the bar is lit, and the first open item is marked as the one to do now. Round two is one checklist of
+the whole drill. The instrument dials click onto the ordered figure when let go within a mil. Tested by driving
+every step with real key events in `tools/shot.mjs` (all 15 reached, two rounds fired).
+
+Crew (`crew.js`): one figure per job (models/v/crew.js outfits `german` with the M1916 helmet at the layers and the
+firer, `german-cap` with the field cap, `german-drill` with the light drill jacket for the loaders and the cart),
+each a small state machine over the game: he walks to his work, cross-fades poses, and his hands go on the moving
+parts with the figure's IK every frame (the line, elevation, crane and breech handwheels, which turn with what they
+drive (`rig.wheels`), the quadrant, the rammer staff as it goes up the bore, the shell on the hook, a powder bag
+carried from the rack at the back of the stage, the lanyard). Before the shot the men at the gun clear to cover and
+cover their ears. The player's man is drawn with his head hidden and the first-person camera sits at his eyes
+(`crew.eye()`), so the player's own arms show on the controls. `__bertha.camAt(x, y, z, lx, ly, lz, fov)` fixes the
+camera in the gun's frame for captures (no arguments releases it).
+
+URL params on `bertha.html`: `?quality=`, `?play=1`, `?tutorial=1`, `?lang=en|de`, `?station=cmd|trav|elev|load|fire`, `?assist=1`, `?hour=`,
+`?weather=`. `window.__bertha`: `game`, `rig`, `station(id)`, `look(yaw, pitch)`, `instrument(on)`,
+`followShell()`, `fastForward(seconds, { scale })`, `frame(dt, draw)`, `start()`.
+
 ## Changelog
 
 - (lead) Initial contract, `src/sector.js`, framework files copied.
@@ -558,3 +625,6 @@ unattended; it is how the lessons are tested (every lesson must complete under a
 - (rail18, integration) Unit 5 is now the British BL 18-inch railway howitzer on the ex-14-inch "Boche-Buster" car, callsign "Wolfe" (after HMS General Wolfe, the monitor whose 18-inch gun fired on the Belgian coast in 1918), replacing the 12-inch "Hilda". History: ordered 1918, proofed 1920 to 1921, never fired in the First World War; in this 1917 game it is a what-if gun (README says so). Sim (`tables.js`): `GUNS.rail` calibre 18, shell 1,134 kg (2,500 lb), charges 340 / 450 / 570 m/s (the handbook's 182 lb and 282 lb bags, 570 m/s on the top charge), game drag `cd` 0.32 so the top charge gives about 20.4 km (22,300 yd) at 40 degrees (the railhead R1 is about 14.8 km away), elevation 10 to 40 degrees (the real gun goes down to 0; 10 keeps the short charges out of the ranges that the other guns cover), traverse +-48 degrees at 1.2 degrees a second (arcade: the real gun has 2 degrees on the car and the rest by moving the car on its curved spur, the game folds both into one slew so every site in the sector is reachable), loading cycle 90 s (depress 7, open 6, shell 24, ram 13, cartridge 18, close 5, prime 4, lay 11; the step names are the 15-inch's, the shell hoist replaces the trolley), crew 14 (the men drawn at the car; the real crew was about 50), hp 170, 36 rounds, flash signature 0.10 (the largest). `SHELLS.rail`: calibre 18, crater 10 m, soft R 68 D 85, hard R 34 D 120, lethal 58, wire 44, piece 66: the biggest in the game. Balance: see Balance (rail18). `fx/artillery.js` calibre scale clamps raised from 1.15 to 1.25 (18 / 15 = 1.2) so an 18-inch blast and burst are the biggest; audio already classes anything above 12 inches as `huge`. Sector: the pad under the car is 14 by 60 m, the spur is straight for 170 m (80 m behind the car, 130 m ahead of it) so the car's 6 m roll-back and its winch-in stay on track. World: `world/rails.js` no longer leaves a gap in the track under the gun; near it the bed is sunk so the rail head is at ground level where the rig's wheels run (rising back to the ordinary bed over 18 m); `world/battery.js` puts the camp beside the spur (22 m to the right of the camp frame), no duckboard walk or spent cases on the track, the reserve shell stack (2,500 lb shells) behind the rig's own two at the foot of the hoist (x 4.75, z 14.6), a camouflage net shifted 14 m to the right over the crates and the shelter, and `pitSolids` follows. Console (`ui`): '18-in Rly', title '18-INCH RAILWAY GUN', the board shows deep guns to 18.5 km east. Crews (`render/crews.js`): the railway gun now uses the 15-inch drill (hoist crane1 and crane2, the rammer team of four, the traverser on the wheel) with 4.2 m staffs; men whose spot has `car: true` ride the car's roll-back (`rig.pivots.car.position.z` is added to their z in `Man.put`); the cordite is carried by the first loader (left side) from the left (the stage is 2.8 m up, there is no ground route to it); the home places keep 6 cm more clearance on this gun. `crewfield.js` resets the car in its sweeps and widens the plan limits to z -16 to 32. Tutorial: the 'heavy' lesson step is 'wolfe' (text: an 18-inch howitzer, 2,500 lb, a what-if gun; about a minute and a half to load). `main.js` KIND rail is calibre 18, `NET_CLEAR.rail` 32.
 - (ui) Report slips say what they report on: the round number (the same number as the fall of shot on the board), the gun that fired it (`No. N gun`, units of several pieces) and the task (`M<id>` and its title). The pad shows only the selected unit's reports (plus the Group's tasks and warnings; `Mail` keeps 40 slips). The tracker records each own shell's piece and the `order.adj` and `order.target` it was fired with (`tracker.fired`); the pencilled correction is read against the lay of now (`messages.js` `slipCorr`: the report's correction less what has been corrected since the round left, "Corr. now" when it differs), a newer report on the same task supersedes the older ones and a re-lay onto another target strikes them off, so "apply" and `.` never take another unit's report or double a correction already made.
 - (framework) Resolution and upscale: the canvas now always has the display's pixel ratio (up to 2); the scene and the post chain render at the quality preset's ratio times the dynamic scale, and a final `post.upscale` pass (Catmull-Rom bicubic plus a contrast-adaptive sharpen, `params.upscaleSharpen`, gear menu "Upscale sharpening") fills the canvas when that is lower. `post.setSize(w, h, pr?)` takes the scene's pixel ratio (default the renderer's, so the dev viewers are unchanged) and keeps it in `post.pixelRatio`; code that wants scene pixels (the flares' pixel size) reads that, not `renderer.getPixelRatio()`. Dynamic resolution moved to `src/dynres.js` `DynamicResolution` (scale 0.67 to 1, GPU timer queries around `post.render` where `EXT_disjoint_timer_query_webgl2` exists, else frame times against the display's refresh, never aiming above 60 fps; a scale that fails right after a climb is retried after a growing back-off). The old rule could never climb back on a 60 Hz display. Terrain: the old craters' lip slope fades out once a pixel spans the lip, and the terrain's roughness is widened by the normal's screen-space variance (specular anti-aliasing), so crater rims and puddles no longer sparkle at a distance. F3 shows scene and canvas resolution, GPU time and refresh.
+- (bertha) The Dicke Bertha first-person demo mode (section "Dicke Bertha mode (demo)"): `bertha.html`, `src/bertha/`, `tools/berthatest.mjs`, a title-screen link. Shared changes: `sector.js` exports `BERTHA` and `flatPads()` levels its bed (terrain changes only around (10000, -2600), far from every main-game site); `models/shells.js` gains shells `m42`, `m42l` and cartridges `m42` (bag), `m42c` (brass case); `models/kit.js` gains the camouflage scheme `bunt`; `src/presets.js` now holds `QUALITY`, `sunAt`, `SUN` and `blastTrauma` (moved out of main.js unchanged, shared by both pages); `tools/shot.mjs` also finds Chromium under `$PLAYWRIGHT_BROWSERS_PATH`.
+- (bertha) English by default with a German switch (`src/bertha/i18n.js`), and a tutorial (`src/bertha/tutorial.js`, `BerthaGame({ range: true })`). The title-screen button now reads "Big Bertha".
+- (bertha, models) Tutorial rewritten as per-step checklists with keys, live readings and directions; aiming posts moved to the front left of the gun (out of the morning sun), the layers' handwheels and the sight behind the road wheels, the loading stage forward under the tray. Crew movement and first-person body (`src/bertha/crew.js`), turning handwheels (`rig.wheels`). `models/v/crew.js`: German 1917 dress for the outfits `german`, `german-cap`, `german-drill` (M1916 Stahlhelm surface, Feldmütze, M1915 Bluse details, stone-grey trousers in jackboots, belt with box buckle, gas mask tin, bread bag and canteen) and the options `jacket`, `trousers`, `hd` (more segments); British outfits are unchanged.

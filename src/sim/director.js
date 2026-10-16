@@ -188,7 +188,6 @@ export class Director {
     const D = this;
     at(8, () => D.wireMission('B', 700));
     at(45, () => D.siteMission('M1', { deadline: 520 }));
-    at(130, () => D.siteMission('K1'));
     at(210, () => D.wireMission('C', 800));
     at(335, () => D.siteMission('M2'));
     at(380, () => D.siteMission('D1'));

@@ -1,0 +1,199 @@
+/* Dicke Bertha: the first-person page. The shared style.css lays out the HUD pieces it reuses (compass,
+   score, clock, time compression, toast, hint, kills, end card, title); this sheet gives the view the
+   whole window and adds the order card, the station bar, the prompt, the readout, the sight and the
+   clinometer. */
+body.bertha #view { flex: 1 1 100%; width: 100%; }
+body.bertha #panel { display: none; }
+body.bertha #unit { top: auto; bottom: 112px; left: 22px; }
+body.bertha .brand h1 { font-size: clamp(42px, 6.4vw, 92px); }
+body.bertha.title #title-screen { max-width: min(600px, 88%); }
+#assist-opt { display: block; margin-top: 12px; font: 12px var(--mono); color: var(--ui-dim); cursor: pointer; }
+#assist-opt input { vertical-align: -2px; margin-right: 6px; accent-color: var(--brass); }
+#back-link {
+  align-self: center;
+  font: 700 12px var(--mono);
+  letter-spacing: 0.2em;
+  color: var(--ui-dim);
+  text-decoration: none;
+  padding: 12px 6px;
+}
+#back-link:hover { color: var(--paper); }
+
+#hp-box { position: absolute; top: 150px; right: 22px; text-align: right; text-shadow: var(--shadow); }
+#hp-box span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }
+#hp-box b { font: 700 18px var(--mono); }
+#hp-box i { display: block; width: 110px; height: 4px; margin-top: 4px; background: rgba(233, 223, 196, 0.15); }
+#hp-box em { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, var(--red), var(--brass)); transition: width 0.4s; }
+body.bertha #timescale { top: 202px; }
+body.bertha #kills { top: 240px; }
+
+/* ---------------------------------------------------------- the order card */
+#order {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  width: min(380px, 40%);
+  padding: 10px 14px 10px;
+  background: linear-gradient(180deg, rgba(233, 223, 196, 0.95), rgba(214, 202, 170, 0.95));
+  color: var(--ink);
+  font: 12px/1.35 var(--mono);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.55);
+  border-left: 4px solid var(--red);
+}
+#order h3 { font: 700 13px var(--serif); letter-spacing: 0.08em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+#order .tag { font: 700 10px var(--mono); letter-spacing: 0.12em; padding: 2px 6px; background: var(--ink); color: var(--paper); text-transform: none; }
+#order .tgt { margin: 6px 0 6px; font: 700 13px var(--serif); }
+#order .tgt small { display: block; font: 10px var(--mono); color: #5a5040; margin-top: 2px; }
+#order table { width: 100%; border-collapse: collapse; }
+#order tr { border-top: 1px dashed rgba(29, 25, 18, 0.25); }
+#order th { text-align: left; font-weight: 700; padding: 3px 4px; width: 32%; }
+#order td { padding: 3px 4px; }
+#order td.st { width: 18px; font-size: 10px; color: #7a6c50; }
+#order td small { color: #6a5e48; }
+#order td:last-child { text-align: right; white-space: nowrap; width: 46px; }
+#order i.ok { font-style: normal; color: #2e6a2a; font-weight: 700; margin-left: 3px; }
+#order i.no { font-style: normal; color: var(--red); font-weight: 700; margin-left: 3px; }
+#order .n { font-weight: 700; }
+#order .legend { margin-top: 6px; font-size: 10px; color: #6a5e48; }
+#order .wait { margin-top: 6px; font: italic 13px var(--serif); }
+#order .wait small { display: block; font: 10px var(--mono); font-style: normal; color: #6a5e48; margin-top: 3px; }
+#order .ring { animation: ring 0.6s ease-in-out infinite alternate; color: #7a1c14; font-weight: 700; }
+@keyframes ring { from { opacity: 0.55; } to { opacity: 1; } }
+
+body.bertha #radio { top: auto; bottom: 150px; left: auto; right: 22px; width: min(420px, 38%); align-items: stretch; }
+body.bertha #radio .line small { display: block; color: var(--ui-dim); font-size: 10px; margin-top: 1px; }
+#radio .line.order { border-color: var(--red); color: #fff4d6; }
+#radio .line.report { border-color: var(--blue); color: #d5e4f4; }
+#radio .line.hit { border-color: var(--brass); color: #fff0c4; }
+#radio .line.hit-us { border-color: var(--red); color: #ffd2cc; }
+#radio .line.near { border-color: var(--amber); }
+#radio .line.ack { border-color: var(--khaki); }
+
+/* ---------------------------------------------------------- crosshair, prompt, readout */
+#crosshair { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: rgba(255, 244, 214, 0.75); box-shadow: 0 0 3px #000; }
+body.sight-on #crosshair, body.following #crosshair { display: none; }
+#prompt { position: absolute; left: 50%; top: 58%; translate: -50% 0; text-align: center; font: 13px var(--mono); text-shadow: var(--shadow); max-width: 70%; }
+#prompt .p-keys span { display: block; margin: 3px 0; padding: 5px 12px; background: var(--plate); }
+#prompt .p-keys span.act { background: rgba(207, 169, 75, 0.3); }
+#prompt .p-keys small { color: var(--ui-dim); }
+#prompt .p-why { font: italic 13px var(--serif); color: var(--ui-dim); }
+#prompt .p-bar { width: 220px; height: 4px; margin: 6px auto 0; background: rgba(233, 223, 196, 0.15); opacity: 0; transition: opacity 0.2s; }
+#prompt .p-bar.on { opacity: 1; }
+#prompt .p-bar i { display: block; height: 100%; width: 0; background: var(--brass); }
+kbd { display: inline-block; min-width: 1.6em; padding: 0 4px; margin: 0 2px; border: 1px solid rgba(233, 223, 196, 0.45); border-bottom-width: 2px; border-radius: 3px; font: 700 11px var(--mono); text-align: center; color: var(--paper); background: rgba(20, 16, 9, 0.6); }
+#order kbd { color: var(--ink); background: none; border-color: rgba(29, 25, 18, 0.4); }
+#readout { position: absolute; left: 22px; bottom: 150px; width: min(400px, 40%); padding: 10px 14px; background: var(--plate); font: 12px/1.45 var(--mono); text-shadow: var(--shadow); }
+#readout h4 { font: 700 13px var(--serif); letter-spacing: 0.06em; margin-bottom: 4px; }
+#readout h4 small { margin-left: 8px; font: 10px var(--mono); color: var(--ui-dim); }
+#readout .keys { margin: 4px 0; }
+#readout .hintline { color: var(--ui-dim); font: italic 12px var(--serif); }
+#readout i.ok { font-style: normal; color: #9fd28a; }
+#readout i.no { font-style: normal; color: #f08a7c; }
+
+/* ---------------------------------------------------------- the station bar */
+#stations { position: absolute; left: 50%; bottom: 18px; translate: -50% 0; display: flex; gap: 6px; pointer-events: auto; }
+#stations button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 128px;
+  padding: 6px 4px 7px;
+  border: 1px solid rgba(233, 223, 196, 0.25);
+  background: rgba(20, 16, 9, 0.62);
+  color: var(--ui-dim);
+  font: 11px var(--serif);
+  cursor: pointer;
+}
+#stations button b { font-size: 12px; color: var(--ui); margin-top: 3px; }
+#stations button small { font: 9px var(--mono); letter-spacing: 0.05em; }
+#stations button.on { border-color: var(--brass); background: rgba(207, 169, 75, 0.25); }
+#stations button.on b { color: #fff4d6; }
+#stations .todo { position: absolute; top: 5px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+#stations button.busy .todo { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: ring 0.7s ease-in-out infinite alternate; }
+
+/* ---------------------------------------------------------- instruments */
+#instrument { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+#sight { position: absolute; inset: 0; display: none; }
+body.sight-on #sight { display: block; }
+#sight .sight-field { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 38vh, rgba(0, 0, 0, 0.97) 39vh); }
+#sight .sight-reticle { position: absolute; left: 50%; top: 50%; }
+#sight .sight-reticle .v { position: absolute; left: -1px; top: -30vh; width: 2px; height: 60vh; background: rgba(10, 10, 8, 0.85); }
+#sight .sight-reticle .h { position: absolute; top: -1px; left: -30vh; width: 60vh; height: 1px; background: rgba(10, 10, 8, 0.6); }
+#sight .ticks i { position: absolute; left: -1px; top: -6px; width: 2px; height: 12px; background: rgba(10, 10, 8, 0.75); }
+#sight .ticks i.long { top: -12px; height: 24px; }
+.sight-scale, .q-scale { position: absolute; left: 50%; bottom: 7vh; translate: -50% 0; text-align: center; font: 12px var(--mono); color: var(--paper); text-shadow: var(--shadow); }
+.sight-scale span, .q-scale span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--brass); }
+.sight-scale b, .q-scale b { font: 700 22px var(--mono); }
+.sight-scale small, .q-scale small { display: block; color: var(--ui-dim); }
+#quadrant { position: absolute; right: 22px; top: 236px; width: 180px; height: 220px; display: none; }
+body.quad-on #quadrant { display: block; }
+body.quad-big #quadrant { right: 50%; top: 50%; width: 46vh; height: 56vh; translate: 50% -50%; }
+#quadrant svg { width: 100%; height: auto; display: block; }
+#quadrant .q-scale { position: static; translate: none; margin-top: -6px; }
+.q-plate { fill: rgba(40, 34, 22, 0.88); stroke: #8a7442; stroke-width: 6; }
+.q-vial { fill: rgba(190, 210, 150, 0.35); stroke: #c9b37a; stroke-width: 3; }
+.q-mark { stroke: #1d1912; stroke-width: 3; }
+.q-bubble { fill: rgba(250, 255, 230, 0.85); stroke: rgba(40, 50, 20, 0.6); stroke-width: 2; }
+.q-tick { stroke: #e9dfc4; stroke-width: 3; }
+.q-num { fill: #e9dfc4; font: 700 16px var(--mono); text-anchor: middle; }
+.q-index { fill: var(--red); }
+
+/* ---------------------------------------------------------- help */
+#help { position: absolute; inset: 0; display: none; place-items: center; background: rgba(10, 8, 4, 0.7); z-index: 20; backdrop-filter: blur(3px); }
+#help.show { display: grid; }
+#help .card { max-width: min(760px, 92%); max-height: 88%; overflow: auto; padding: 22px 28px; background: linear-gradient(180deg, #ece2c8, #d8cba8); color: var(--ink); font: 14px/1.5 var(--serif); box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6); }
+#help h2 { font: 700 20px var(--serif); margin-bottom: 10px; }
+#help ol { padding-left: 22px; }
+#help li { margin: 6px 0; }
+#help p { margin-top: 10px; font-style: italic; }
+#help kbd { color: var(--ink); background: rgba(255, 255, 255, 0.4); border-color: rgba(29, 25, 18, 0.4); }
+#help button { margin-top: 14px; font: 700 12px var(--mono); letter-spacing: 0.25em; padding: 10px 26px; border: 1px solid var(--ink); background: none; cursor: pointer; }
+
+body.title #order, body.title #readout, body.title #stations, body.title #prompt, body.title #crosshair, body.title #instrument { display: none; }
+body.following #prompt, body.following #readout, body.following #instrument { display: none; }
+
+/* ---------------------------------------------------------- language switch, tutorial */
+#lang-switch { display: flex; align-items: center; gap: 6px; margin-top: 12px; font: 700 10px var(--mono); letter-spacing: 0.25em; text-transform: uppercase; color: var(--ui-dim); }
+#lang-switch span { margin-right: 6px; }
+#lang-switch button { font: 700 11px var(--mono); letter-spacing: 0.15em; padding: 5px 12px; border: 1px solid rgba(233, 223, 196, 0.3); background: rgba(20, 16, 9, 0.45); color: var(--ui-dim); cursor: pointer; }
+#lang-switch button.on { border-color: var(--brass); color: #fff4d6; background: var(--brass-soft); }
+#tutorial-btn {
+  font: 700 13px var(--mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding: 15px 30px 15px 34px;
+  border: 1px solid rgba(233, 223, 196, 0.45);
+  background: rgba(20, 16, 9, 0.5);
+  color: var(--paper);
+  cursor: pointer;
+  transition: background 0.25s, letter-spacing 0.25s, opacity 0.4s;
+}
+#tutorial-btn:hover:not(:disabled) { background: rgba(233, 223, 196, 0.16); letter-spacing: 0.38em; }
+#tutorial-btn:disabled { opacity: 0; pointer-events: none; }
+body.bertha #tut-card { left: auto; right: 22px; bottom: auto; top: 240px; width: min(400px, 36%); }
+body.bertha.tutorial #kills, body.bertha.tutorial #hp-box, body.bertha.tutorial #timescale { display: none; }
+body.bertha.tutorial #quadrant { right: auto; left: 22px; top: 270px; }
+body.bertha.tutorial.quad-big #quadrant { left: 50%; top: 50%; translate: -50% -50%; }
+body.bertha.tutorial #radio { width: min(360px, 32%); }
+#stations button.hi { border-color: var(--red); box-shadow: 0 0 0 2px rgba(196, 55, 43, 0.6), 0 0 18px rgba(196, 55, 43, 0.5); animation: ring 0.7s ease-in-out infinite alternate; }
+#order.hi, #readout.hi, #prompt.hi { outline: 2px solid rgba(196, 55, 43, 0.85); outline-offset: 3px; }
+
+/* the tutorial's checklist: one line per thing to do, the current one marked */
+#tut-card .tc-text { font-size: 12.5px; }
+#tut-card .tc-todo { list-style: none; margin: 9px 0 0; padding: 0; font: 12.5px/1.45 var(--mono); }
+#tut-card .tc-todo li { display: flex; gap: 8px; align-items: flex-start; padding: 4px 6px; margin: 2px 0; border-left: 3px solid transparent; }
+#tut-card .tc-todo li > i { flex: 0 0 auto; width: 13px; height: 13px; margin-top: 2px; border: 2px solid #6a4d12; position: relative; }
+#tut-card .tc-todo li.done { color: rgba(29, 25, 18, 0.45); }
+#tut-card .tc-todo li.done > i { border-color: var(--olive); background: var(--olive); }
+#tut-card .tc-todo li.done > i::after { content: ''; position: absolute; left: 2px; top: -2px; width: 4px; height: 8px; border: solid #efe6c8; border-width: 0 2px 2px 0; transform: rotate(40deg); }
+#tut-card .tc-todo li.now { background: rgba(207, 169, 75, 0.28); border-left-color: var(--red); font-weight: 700; color: #2a1e08; }
+#tut-card .tc-todo li.now > i { border-color: var(--red); animation: ring 0.6s ease-in-out infinite alternate; }
+#tut-card .tc-todo li.note > i { border: none; width: 6px; height: 6px; margin: 6px 4px 0; background: #6a4d12; border-radius: 50%; }
+#tut-card .tc-todo li.opt { font-style: italic; }
+#tut-card .tc-todo li.warn { background: rgba(196, 55, 43, 0.18); border-left-color: var(--red); color: #6a120a; font-weight: 700; }
+#tut-card .tc-todo li.warn > i { border-color: var(--red); }
+#tut-card .tc-todo kbd { color: var(--ink); background: rgba(255, 255, 255, 0.55); border-color: rgba(29, 25, 18, 0.5); font-size: 11px; }
+body.bertha #tut-card { width: min(440px, 38%); max-height: calc(100% - 330px); overflow-y: auto; }
+/* looking through an instrument: the card moves to the left, over the dark edge of the eyepiece */
+body.bertha.tutorial.sight-on #tut-card, body.bertha.tutorial.quad-big #tut-card { left: 22px; right: auto; top: 22px; z-index: 30; }

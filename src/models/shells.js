@@ -10,7 +10,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 //   fh15 | m21 | fk77                 German: field grey (the 7.7 cm black with a coloured nose band),
 //                                       copper band, steel nose fuze
 
-export const SHELL_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'fh15', 'm21', 'fk77'];
+export const SHELL_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'fh15', 'm21', 'fk77', 'm42', 'm42l'];
 
 // d: calibre (m), L: overall length (m), og: ogive length in calibres, rho: ogive radius in calibres,
 // band: where the driving band sits (fraction of L from the base), paint, stripe, nose colours.
@@ -23,6 +23,9 @@ const SPEC = {
   fh15: { d: 0.149, L: 0.56, og: 1.4, rho: 2.0, band: 0.1, paint: 0x585d58, stripe: 0xc8a82a, nose: 'steel' },
   m21: { d: 0.211, L: 0.72, og: 1.3, rho: 2.0, band: 0.1, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' },
   fk77: { d: 0.077, L: 0.34, og: 1.6, rho: 2.5, band: 0.12, paint: 0x23262a, stripe: 0xb03a22, nose: 'steel' },
+  // the Dicke Bertha demo: the 42 cm schwere Granate (810 kg) and the longer-ranged leichte Granate (400 kg)
+  m42: { d: 0.42, L: 1.65, og: 1.4, rho: 2.0, band: 0.12, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' },
+  m42l: { d: 0.42, L: 1.3, og: 1.5, rho: 2.2, band: 0.12, paint: 0x5a5e58, stripe: 0x3a6a3a, nose: 'steel' },
 };
 
 const matCache = new Map();
@@ -119,6 +122,7 @@ const CART = {
   bl15: { l: 0.46, r: 0.15, brass: false }, bl92: { l: 0.4, r: 0.1, brass: false }, bl6: { l: 0.34, r: 0.07, brass: false },
   bl60: { l: 0.42, r: 0.055, brass: false }, rail: { l: 0.62, r: 0.19, brass: false },
   fh15: { l: 0.4, r: 0.065, brass: false }, m21: { l: 0.4, r: 0.09, brass: false }, fk77: { l: 0.28, r: 0.04, brass: true },
+  m42: { l: 0.42, r: 0.19, brass: false }, m42c: { l: 0.95, r: 0.205, brass: true }, // the 42 cm Vorkartusche bag and brass Hauptkartusche
 };
 export function buildCartridge(kind, { charges = 1 } = {}) {
   const c = CART[kind];

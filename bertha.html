@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Big Bertha: Drumfire</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 fill=%22%231e1a14%22/%3E%3Cpath d=%22M6 24l4-9 12-9 3 3-10 11-1 4z%22 fill=%22%23c9a24a%22/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/bertha/bertha.css" />
+  </head>
+  <body class="title bertha">
+    <div id="view">
+      <canvas id="c"></canvas>
+
+      <div id="instrument">
+        <div id="sight"><div class="sight-field"></div><div class="sight-reticle"><i class="v"></i><i class="h"></i><div class="ticks"></div></div><div class="sight-scale"><span data-i18n="sightLabel"></span><b id="sight-val">0</b><small id="sight-ord"></small></div></div>
+        <div id="quadrant">
+          <svg viewBox="-200 -200 400 400" aria-hidden="true">
+            <circle r="186" class="q-plate" />
+            <g id="q-arc"></g>
+            <rect x="-110" y="-26" width="220" height="52" rx="26" class="q-vial" />
+            <line x1="-18" y1="-26" x2="-18" y2="26" class="q-mark" /><line x1="18" y1="-26" x2="18" y2="26" class="q-mark" />
+            <ellipse id="q-bubble" cx="0" cy="0" rx="16" ry="13" class="q-bubble" />
+            <polygon points="0,-120 -8,-140 8,-140" class="q-index" />
+          </svg>
+          <div class="q-scale"><span data-i18n="quadLabel"></span><b id="quad-val">0</b><small id="quad-ord"></small></div>
+        </div>
+      </div>
+
+      <div id="hud">
+        <div id="unit"><b id="unit-name" data-i18n="gunName"></b><span id="unit-call" data-i18n="gunCall"></span></div>
+        <div id="compass"><div id="compass-strip"></div><div class="compass-center"></div><div id="heading">000</div></div>
+        <div id="score-box"><span data-i18n="score"></span><b id="score">0</b></div>
+        <div id="clock" title="Time of day"><span data-i18n="clock"></span><b id="clock-val">06:00</b></div>
+        <div id="hp-box" title="Gun condition"><span data-i18n="hp"></span><b id="hp">100</b><i><em id="hp-bar"></em></i></div>
+        <div id="timescale"><button id="ts-down" type="button" title="Slower ([)">&minus;</button><span id="ts-arrows">&#9654;</span><b id="ts-val" title="Back to real time">x1</b><button id="ts-up" type="button" title="Faster (])">+</button></div>
+        <div id="order"></div>
+        <div id="radio"></div>
+        <div id="crosshair"></div>
+        <div id="prompt"><div class="p-keys" id="prompt-keys"></div><div class="p-why" id="prompt-why"></div><div class="p-bar"><i></i></div></div>
+        <div id="readout"></div>
+        <div id="stations"></div>
+        <div id="toast"><div id="toast-main"></div><div id="toast-sub"></div></div>
+        <div id="kills"></div>
+        <div id="hint"></div>
+        <pre id="debug"></pre>
+      </div>
+
+      <div id="end">
+        <div class="card">
+          <h2 id="end-title"></h2>
+          <p id="end-sub"></p>
+          <div id="end-stats"></div>
+          <button id="end-restart" data-i18n="again"></button>
+        </div>
+      </div>
+
+      <div id="title-screen">
+        <div class="brand">
+          <h1 data-i18n="title">BIG BERTHA</h1>
+          <p class="sub" data-i18n="sub"></p>
+          <p class="blurb" data-i18n="blurb"></p>
+        </div>
+        <div class="loader">
+          <div id="load-bar"><div id="load-bar-fill"></div></div>
+          <p id="status" data-i18n="loading"></p>
+        </div>
+        <div id="options">
+          <div id="difficulty">
+            <button data-d="Easy">Easy</button>
+            <button data-d="Normal" class="on">Normal</button>
+            <button data-d="Hard">Hard</button>
+          </div>
+          <label id="assist-opt"><input type="checkbox" id="assist" /> <span data-i18n="assist"></span></label>
+          <div id="lang-switch"><span data-i18n="language"></span><button type="button" data-lang="en">English</button><button type="button" data-lang="de">Deutsch</button></div>
+        </div>
+        <div class="actions">
+          <button id="play" disabled data-i18n="play"></button>
+          <button id="tutorial-btn" disabled data-i18n="tutorial"></button>
+          <a id="back-link" href="/" data-i18n="back"></a>
+        </div>
+        <ul class="keys" data-i18n="keys"></ul>
+      </div>
+
+      <div id="help">
+        <div class="card">
+          <h2 data-i18n="helpTitle"></h2>
+          <div data-i18n="help"></div>
+          <button id="help-close" data-i18n="helpClose"></button>
+        </div>
+      </div>
+
+      <div id="tut-card">
+        <div class="tc-head"><span class="tc-name"></span><span class="tc-step"></span></div>
+        <div class="tc-bar" aria-hidden="true"><i></i></div>
+        <h3 class="tc-title"></h3>
+        <p class="tc-text"></p>
+        <ul class="tc-todo"></ul>
+        <div class="tc-goal"><i class="tc-box"></i><span></span></div>
+        <div class="tc-keys">
+          <button class="tc-btn" id="tc-exit"></button>
+          <span class="tc-spacer"></span>
+          <button class="tc-btn" id="tc-skip"></button>
+          <button class="tc-btn main" id="tc-next"></button>
+        </div>
+      </div>
+
+      <button id="gear" title="Settings">&#9881;</button>
+      <div id="gui-host"></div>
+    </div>
+
+    <script type="module" src="/src/bertha/index.js"></script>
+  </body>
+</html>
