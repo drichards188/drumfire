@@ -204,6 +204,9 @@ export class GunCrew {
       this.pick = new THREE.Vector3(this.cp.x + this.R, 0.52, this.cp.z);
     }
     this.restHoist = rig.hoistRange?.up ?? 3.6;
+    // the shell's middle below the hook and the hook's height at the stack (the 18-inch has a short sling)
+    this.hang = rig.hoistHang ?? 1.18;
+    this.lowHoist = rig.hoistHang != null ? rig.hoistRange.down : 1.72;
     this.restTrolley = this.trolley ? this.trolley.position.z : 0;
     this.trolleyRear = this.restTrolley;
   }
@@ -693,10 +696,10 @@ export class GunCrew {
     if (this.crane) {
       const rest = Math.PI;
       let a = rest, y = this.restHoist;
-      const lowY = 1.72;
+      const lowY = this.lowHoist;
       const T = this.trayAt(this.aT, _a);
       const aT = Math.atan2(T.z - this.cp.z, -(T.x - this.cp.x));
-      const yT = T.y + 1.18;
+      const yT = T.y + this.hang;
       this.craneMode = 'idle';
       if (c.s === 'shell') {
         const k = c.k;
@@ -767,7 +770,7 @@ export class GunCrew {
     if (mode === 'hang' || mode === 'ground') {
       // hang under the hook, offset toward the tray at the end of the lowering
       const a = this.craneA, y = this.craneY;
-      _a.set(this.cp.x - this.R * Math.cos(a), y - 1.18, this.cp.z + this.R * Math.sin(a));
+      _a.set(this.cp.x - this.R * Math.cos(a), y - this.hang, this.cp.z + this.R * Math.sin(a));
       let pitch = 0, yaw = a;
       if (c.s === 'shell' && c.k > 0.74) {
         const e = smooth(c.k, 0.8, 0.95);
