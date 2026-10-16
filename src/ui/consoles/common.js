@@ -36,7 +36,7 @@ export const taskNo = (id) => `M${String(id).replace(/^m/i, '')}`;
 export const MISSION_NAME = {
   cb: 'COUNTER-BATTERY', destroy: 'DESTROY', wire: 'WIRE CUTTING', sos: 'S.O.S.', harass: 'HARASSING FIRE', barrage: 'BARRAGE',
 };
-export const OBSERVER = { foo: 'F.O.O.', air: 'R.F.C. aeroplane', balloon: 'Kite balloon', sound: 'Sound ranging', map: 'Map shoot' };
+export const OBSERVER = { foo: 'F.O.O.', air: 'R.F.C. aeroplane', balloon: 'Kite balloon', sound: 'Sound ranging', map: 'Map shoot', railspot: 'Rail spotters' };
 export const FUZE = {
   instant: { main: '106', sub: 'instantaneous' },
   delay: { main: 'DELAY', sub: 'penetrate' },

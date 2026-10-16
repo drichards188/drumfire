@@ -16,10 +16,22 @@ const KIND = {
 const DIR = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
 export class MessagePad {
-  constructor({ apply }) {
+  constructor({ apply, clear }) {
     this.apply = apply;
-    const c = card('MESSAGES AND SIGNALS', 'Army Form C.2121', 'pad');
+    const c = card('MESSAGES AND SIGNALS', '', 'pad');
     this.el = c.el;
+    const clearButton = el('button', 'pclear', 'CLEAR');
+    clearButton.type = 'button';
+    clearButton.title = 'Clear all messages';
+    clearButton.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      snd('click');
+      clear();
+      this.list.replaceChildren();
+      this.shown.clear();
+      this.ids = '';
+    });
+    c.head.append(clearButton);
     this.list = el('div', 'slips');
     this.cv = el('canvas', 'clock');
     this.decode = el('div', 'cdec', 'RFC clock code: letter = distance, number = hour');
@@ -71,9 +83,9 @@ export class MessagePad {
     return e;
   }
 
-  update({ mail, unit }) {
-    // this unit's reports, and everything addressed to the whole Group (tasks, warnings)
-    const slips = mail.slips.filter((s) => s.unitId == null || s.unitId === unit.id);
+  update({ mail, unit, sim }) {
+    // Every battery's reports are visible; only the selected battery can apply its correction.
+    const slips = mail.slips;
     const ids = slips.map((s) => s.id).join(',');
     if (ids !== this.ids) {
       this.ids = ids;
@@ -87,17 +99,20 @@ export class MessagePad {
       setCls(e, 'applied', !!s.applied);
       if (!s.corr || !e._note || s.applied) continue;
       // the pencilled correction is kept against the lay of now; an older or outdated report is struck off
-      const c = slipCorr(s, unit), t = c && corrText(c);
-      const lab = s.superseded ? 'Old' : !c ? 'Old' : t !== s.note ? 'Corr. now' : 'Corr.';
+      const owner = sim.units.find((u) => u.id === s.unitId);
+      const c = slipCorr(s, owner), t = c && corrText(c);
+      const selected = s.unitId === unit.id;
+      const lab = s.superseded ? 'Old' : !c ? 'Old' : !selected && t ? 'Select battery' : t !== s.note ? 'Corr. now' : 'Corr.';
       const txt = s.superseded ? `superseded by ${s.superseded === true ? 'a later report' : `round ${s.superseded}`}` : !c ? 'laid on another target since' : t || 'already made';
       const key = lab + txt;
       if (key === e._note.key) continue;
       e._note.key = key;
       setText(e._note.lab, lab); setText(e._note.txt, txt);
       setCls(e, 'old', !c || !t);
+      setCls(e, 'other', !selected && !!t);
     }
     // the clock diagram follows the latest aeroplane report
-    const latest = slips.find((s) => s.code) || null;
+    const latest = slips.find((s) => s.code && s.unitId === unit.id) || null;
     const key = `${latest ? latest.id : 0}|${hw.scale}|${unit.id}|${unit.order && unit.order.line ? unit.order.line.toFixed(2) : 0}`;
     if (key !== this.clockKey) { this.clockKey = key; this.drawClock(latest, unit); }
   }

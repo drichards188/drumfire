@@ -6,7 +6,7 @@ import { ref, MISSION_NAME, sectorAt } from './consoles/common.js';
 
 const FROM = {
   foo: 'F.O.O., forward post', air: 'R.F.C. aeroplane (wireless)', balloon: 'Kite balloon section', sound: 'Sound-ranging section',
-  map: 'Group H.Q.',
+  map: 'Group H.Q.', railspot: 'Rail spotters',
 };
 const CODE = { Y: 10, Z: 25, A: 50, B: 100, C: 200, D: 300, E: 400, F: 500 };
 export const CLOCK_YARDS = CODE;
@@ -30,7 +30,11 @@ export function slipCorr(s, unit) {
   if (!o || !o.target) return null;
   if (s.tgt0 && Math.hypot(o.target.x - s.tgt0.x, o.target.z - s.tgt0.z) > 150) return null;
   const a0 = s.adj0 || o.adj || { add: 0, right: 0 }, a = o.adj || { add: 0, right: 0 };
-  return { add: s.corr.add + a0.add - a.add, right: s.corr.right + a0.right - a.right };
+  // The pad prints five-yard increments; apply those same increments to the order.
+  return {
+    add: r5(s.corr.add + a0.add - a.add) * YARD,
+    right: r5(s.corr.right + a0.right - a.right) * YARD,
+  };
 }
 
 export class Mail {
@@ -43,6 +47,7 @@ export class Mail {
     this.lastText = new Map();
   }
   reset() { this.slips.length = 0; this.seenReports.clear(); this.seenMissions.clear(); this.lastText.clear(); }
+  clear() { this.slips.length = 0; this.lastText.clear(); }
 
   push(s, sim) {
     s.id = ++this.n;
@@ -51,7 +56,7 @@ export class Mail {
     if (last != null && (sim.time || 0) - last < 3 && s.task == null) return; // two guns' reports may read alike
     this.lastText.set(s.text, sim.time || 0);
     this.slips.unshift(s);
-    if (this.slips.length > 40) this.slips.length = 40; // the pad shows one unit's share
+    if (this.slips.length > 40) this.slips.length = 40;
     if (this.onSlip) this.onSlip(s);
   }
 

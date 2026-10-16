@@ -1,7 +1,7 @@
 // The missions list, as a clipboard of task slips: number, kind, map reference, observer, priority and
 // the time left. Tab moves the cursor, Enter takes the mission, a click does both.
 import { el, setText, setCls, card, snd } from '../widgets.js';
-import { MISSION_NAME, OBSERVER, ref, mmss, liveMissions, taskNo } from './common.js';
+import { MISSION_NAME, OBSERVER, KIND_SHORT, ref, mmss, liveMissions, taskNo } from './common.js';
 
 export class MissionList {
   constructor({ shared, take }) {
@@ -19,15 +19,15 @@ export class MissionList {
     if (r) return r;
     const e = el('div', 'mrow');
     const id = el('b', 'mid', taskNo(m.id));
-    const t1 = el('div', 'mt1'), t2 = el('div', 'mt2');
+    const t1 = el('div', 'mt1'), title = el('div', 'mtitle'), t2 = el('div', 'mt2'), assigned = el('div', 'massigned');
     const kind = el('span', 'mkind'), dl = el('span', 'mdl');
     const where = el('span', 'mref'), obs = el('span', 'mobs'), st = el('span', 'mst');
     t1.append(kind, dl); t2.append(where, obs, st);
     const stars = el('i', 'mpri');
     e.append(id, el('div', 'mcol'), stars);
-    e.children[1].append(t1, t2);
+    e.children[1].append(t1, title, t2, assigned);
     e.addEventListener('pointerdown', (ev) => { ev.preventDefault(); snd('click'); this.shared.cursor = m.id; this.take(m); });
-    r = { e, kind, dl, where, obs, st, stars, id };
+    r = { e, kind, title, dl, where, obs, st, assigned, stars, id };
     this.rows.set(m.id, r);
     return r;
   }
@@ -46,11 +46,17 @@ export class MissionList {
     for (const m of show) {
       const r = this.rowFor(m);
       const left = m.deadline != null ? m.deadline - now : null;
+      const target = m.targetId && (sim.targetById?.(m.targetId) || sim.targets?.find((t) => t.id === m.targetId));
+      const targetName = target ? `${target.name}${target.name === 'Ammunition dump' ? ` (${target.id})` : ''}` : m.title;
       setText(r.kind, MISSION_NAME[m.kind] || m.kind.toUpperCase());
+      setText(r.title, targetName || MISSION_NAME[m.kind] || m.kind);
+      r.e.title = m.title || '';
       setText(r.dl, left == null ? '' : left < 0 ? 'overdue' : mmss(left));
       setCls(r.dl, 'late', left != null && left < 30);
       setText(r.where, m.gridRef || ref(m.x, m.z));
       setText(r.obs, OBSERVER[m.observer] || '');
+      const guns = (sim.units || []).filter((u) => u.missionId === m.id);
+      setText(r.assigned, guns.length ? `GUNS: ${guns.map((u) => KIND_SHORT[u.kind] || u.name || u.id).join(', ')}` : 'GUNS: unassigned');
       const mine = unit.missionId === m.id;
       setText(r.st, mine ? 'YOURS' : m.state === 'open' ? (m.unitId && m.unitId !== unit.id ? `unit ${m.unitId}` : 'open') : m.state === 'ranging' ? 'ranging' : m.state === 'ffe' ? 'FFE' : m.state);
       setText(r.stars, '★'.repeat(Math.max(1, Math.min(3, m.priority || 1))));

@@ -63,7 +63,7 @@ export function mountConsole(ctx) {
         // only this unit's newest report on its present target; read against the lay of now
         const s = arg || mail.slips.find((x) => !x.applied && slipCorr(x, U));
         const c = s && !s.applied ? slipCorr(s, U) : null;
-        if (!c) { say(s && s.unitId !== U.id ? 'That report is for another unit.' : 'No correction to apply.'); snd('click'); break; }
+        if (!c) { say(s && s.unitId !== U.id ? `Select ${s.battery || 'that battery'} to apply its correction.` : 'No correction to apply.'); snd('click'); break; }
         const t = corrText(c), who = `${s.round ? `round ${s.round}` : 'the report'}${s.gun ? ` (No. ${s.gun} gun)` : ''}`;
         s.applied = true;
         if (!t) { say(`Correction for ${who} already made.`); break; }
@@ -117,7 +117,7 @@ export function mountConsole(ctx) {
   const rtab = new RangeTable();
   const guns = new GunsCard();
   const missions = new MissionList({ shared, take });
-  const pad = new MessagePad({ apply: (s) => act('apply', s) });
+  const pad = new MessagePad({ apply: (s) => act('apply', s), clear: () => mail.clear() });
 
   tut(rtab.el, 'rtab'); tut(guns.el, 'guns'); tut(missions.el, 'missions'); tut(pad.el, 'pad');
   const top = el('div', 'toprow');
@@ -187,7 +187,7 @@ export function mountConsole(ctx) {
     rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
-    pad.update({ mail, unit });
+    pad.update({ mail, unit, sim });
     board.update(dt, { sim, unit, tracker, cursorId: shared.cursor, now });
     for (const b of [order.bAdd, order.bDrop, order.bLeft, order.bRight]) b.enable(!dead);
   }
