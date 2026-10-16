@@ -41,10 +41,11 @@ export class MessagePad {
     const head = el('div', 'sh');
     head.append(el('b', null, KIND[s.kind] || 'MESSAGE'), el('i', null, `${s.from}`), el('span', 'stime', clockStr(s.clock)));
     const body = el('div', 'sb');
-    // which round this is (the number on the board), from which gun, on which task
-    if (s.round || s.task != null) {
+    // round, battery, gun, and task for this report
+    if (s.round || s.battery || s.task != null) {
       const who = el('div', 'sfor');
       if (s.round) who.append(el('span', 'sround', `Round ${s.round}`));
+      if (s.battery) who.append(el('span', 'sbattery', s.battery));
       const bits = [s.gun ? `No. ${s.gun} gun` : '', s.task != null ? `${taskNo(s.task)} ${s.title || ''}`.trim() : ''].filter(Boolean);
       if (bits.length) who.append(el('span', 'swho', bits.join(' · ')));
       body.append(who);

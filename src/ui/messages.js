@@ -81,8 +81,9 @@ export class Mail {
           text: rp.text, clock: sim.clock - ((sim.time || 0) - rp.t) / 3600, code: air ? parseClock(rp.clock) : null, rawCode: rp.clock,
           round: tracker ? tracker.numbers.get(rp.shellId) : null, ok: !!rp.ok,
           corr: hasErr && !rp.ok ? { add: -rp.over, right: -rp.right } : null, tag: `M${m.id}`,
-          // which gun fired the round (only worth saying for a unit of several) and the lay it went with
-          gun: piece != null && (u?.pieces?.length || 1) > 1 ? piece + 1 : null, adj0: f?.adj || null, tgt0: f?.target || null,
+          // battery and gun that fired the round, plus the lay it went with
+          battery: u?.name || '', gun: piece != null && (u?.pieces?.length || 1) > 1 ? piece + 1 : null,
+          adj0: f?.adj || null, tgt0: f?.target || null,
           task: m.id, title: m.title || MISSION_NAME[m.kind] || '',
         };
         if (slip.corr) slip.note = corrText(slip.corr) || 'no correction';

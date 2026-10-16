@@ -312,6 +312,7 @@
 .sb { font: 11px/1.25 var(--type); color: #14120c; padding-top: 2px; }
 .sfor { display: flex; align-items: baseline; gap: 6px; }
 .sround { flex: none; white-space: nowrap; font: italic 700 12px/1.2 var(--serif); color: var(--blue); }
+.sbattery { flex: none; white-space: nowrap; font: 700 10px/1.2 var(--serif); color: var(--blue); }
 .swho { flex: 1; min-width: 0; font: italic 10px/1.2 var(--serif); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scode { font: 800 15px/1 var(--type); color: var(--red); margin-right: 6px; letter-spacing: .06em; }
 .snote { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; padding: 0; text-align: left; width: 100%; }
