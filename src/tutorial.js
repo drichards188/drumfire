@@ -344,7 +344,7 @@ export const TUTORIALS = [
     name: 'The aeroplane and the clock code',
     unit: 2,
     units: [2],
-    blurb: 'The 9.2-inch section with an R.F.C. observer: the wireless message, the clock code on the dial, and decoding it into a correction.',
+    blurb: 'The 9.2-inch section with an R.F.C. observer: the wireless message and decoding its clock code into a correction.',
     outro: 'Letter for distance, number for the hour, twelve at true north: that is all the code. The observer in the air sees what the trench cannot.',
     keep: (T) => T.ensure('main', 'B2', { observer: 'air', title: 'Hostile battery 2', firstError: { over: -150, right: 0 } }),
     steps: [
@@ -357,8 +357,8 @@ export const TUTORIALS = [
       {
         id: 'code',
         title: 'The clock code',
-        text: 'Imagine the target at the centre of a clock face, with twelve o\'clock at TRUE NORTH, not along the line of fire. The letter gives the distance of the burst from the target: Y 10 yards, Z 25, A 50, B 100, C 200, D 300, E 400, F 500. The number is the hour. "B 3" is 100 yards east. The dial on the message pad plots it.',
-        hi: ['clock'],
+        text: 'Imagine the target at the centre of a clock face, with twelve o\'clock at TRUE NORTH, not along the line of fire. The letter gives the distance of the burst from the target: Y 10 yards, Z 25, A 50, B 100, C 200, D 300, E 400, F 500. The number is the hour. "B 3" is 100 yards east. The message pad shows the code and the correction.',
+        hi: ['pad'],
       },
       takeStep({
         text: 'Take the task on the MISSIONS card: Tab, then Enter. The section lays both guns. They load slowly, about twenty-five seconds.',
@@ -368,19 +368,19 @@ export const TUTORIALS = [
       }),
       reportStep({
         title: 'The wireless message',
-        text: 'The message arrives on the pad as a slip, such as "D 9", with the burst plotted on the dial. Aeroplane messages come a little later than a telephone call.',
+        text: 'The message arrives on the pad as a slip, such as "D 9", with the correction written beneath it. Aeroplane messages come a little later than a telephone call.',
         goal: 'Wait for the aeroplane\'s message',
-        hi: ['pad', 'clock'],
+        hi: ['pad'],
       }),
       {
         id: 'decode',
         title: 'Decode it',
         text: (T) => {
           const r = T.rep.last;
-          return `The message is ${r?.clock ? `"${r.clock}"` : 'on the pad'}. Find the hour on the dial: the burst lies that way from the target. The guns are to the west, so a burst west of the target (hours 7 to 11) fell SHORT and wants ADD; east of it (hours 1 to 5) fell OVER and wants DROP; north and south mean LEFT or RIGHT. The letter says how many yards. The pad pencils the answer; the full stop key applies it.`;
+          return `The message is ${r?.clock ? `"${r.clock}"` : 'on the pad'}. Read the hour as the direction from the target. The guns are to the west, so a burst west of the target (hours 7 to 11) fell SHORT and wants ADD; east of it (hours 1 to 5) fell OVER and wants DROP; north and south mean LEFT or RIGHT. The letter says how many yards. The pad pencils the answer; the full stop key applies it.`;
         },
         goal: 'Apply the correction from the code',
-        hi: ['clock', 'pad', 'apply', 'keypad'],
+        hi: ['pad', 'apply', 'keypad'],
         done: (T) => !!T.rep.last && T.corrected(),
         demo: (T) => T.once(`c${T.rep.n}`, () => T.act('correct', { add: T.rep.last.corr.add, right: T.rep.last.corr.right })),
       },
@@ -389,7 +389,7 @@ export const TUTORIALS = [
         title: 'Walk it in',
         text: 'Fire again and decode the next message. The circles shrink as you close in; the aeroplane calls "on target" at A (50 yards) or better. A letter Y or Z is excellent.',
         goal: 'Get a message of A or better',
-        hi: ['fire', 'pad', 'clock'],
+        hi: ['fire', 'pad'],
         limit: 600,
         done: (T) => !!T.m()?.reports.some((r) => r.ok) || targetDown(T),
         demo: bracketDemo,

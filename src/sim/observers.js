@@ -1,7 +1,8 @@
 // Fall-of-shot reports as a period observer would send them: the forward observer by telephone in yards
 // (add or drop, left or right), the aeroplane in the RFC clock code (a circle letter and an hour with 12 at
 // true north from the target), the kite balloon like an observer but from further back. Map shoots and
-// sound ranging give no reports. They arrive a few seconds after the burst.
+// sound ranging give no reports. Rail spotters report on the railhead even after wide misses.
+// Reports arrive a few seconds after the burst.
 import { YARD, DEG } from '../sector.js';
 
 const CIRCLES = [['Y', 10], ['Z', 25], ['A', 50], ['B', 100], ['C', 200], ['D', 300], ['E', 400], ['F', 500]];
@@ -118,7 +119,7 @@ export class Observers {
       // forward observer or kite balloon: yards estimated with an honest error
       const k = m.observer === 'balloon' ? 0.12 : 0.08;
       const kn = sim.scripted ? 0.5 : 1; // steadier estimates on the range
-      if (d > 900 && !sim.scripted) {
+      if (d > 900 && !sim.scripted && m.observer !== 'railspot') {
         rep.observed = false;
         rep.text = `${m.obsName}: round not observed.`;
       } else {
