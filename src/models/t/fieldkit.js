@@ -46,7 +46,7 @@ export function ring(rIn, rOut, x0, x1, seg = 40) {
  * spokes, nave with iron bands and a hub cap. `side` (+1/-1) says which way the hub cap faces.
  * girdle: pedrail shoes strapped round the tyre (the Ypres mud fix), a belt of steel plates with ribs.
  */
-export function addWheel(P, x, y, { R = 0.79, tw = 0.1, spokes = 14, side = 1, nave = 0.13, girdle = false, z = 0 } = {}) {
+export function addWheel(P, x, y, { R = 0.79, tw = 0.1, spokes = 14, side = 1, nave = 0.13, girdle = false, z = 0, cap = 0.07 } = {}) {
   const at = (g) => g.applyMatrix4(xf(x, y, z));
   P.add('dark', at(ring(R - 0.025, R, -tw / 2, tw / 2, 48)));
   P.add('wood', at(ring(R - 0.1, R - 0.025, -tw * 0.42, tw * 0.42, 40)));
@@ -59,7 +59,7 @@ export function addWheel(P, x, y, { R = 0.79, tw = 0.1, spokes = 14, side = 1, n
   P.add('wood', at(xTube(-0.2, 0.2, nave, nave * 0.95, 14)));
   for (const s of [-1, 1]) P.add('dark', at(xTube(s * 0.16, s * 0.2, nave * 1.12, nave * 1.12, 14)));
   P.add('dark', at(xTube(0.0, 0.0 + side * 0.01, nave * 1.15, nave * 1.15, 14)));
-  P.add('steel', at(xTube(side * 0.2, side * 0.27, nave * 0.55, nave * 0.4, 10)));
+  P.add('steel', at(xTube(side * 0.2, side * (0.2 + cap), nave * 0.55, nave * 0.4, 10))); // axle cap: `cap` long
   if (girdle) {
     const n = 10, gw = 0.3, rr = R + 0.012;
     for (let i = 0; i < n; i++) {
