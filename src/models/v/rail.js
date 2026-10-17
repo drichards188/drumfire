@@ -24,27 +24,37 @@ import { mulberry32 } from '../../noise.js';
 // height in the car frame: rig.hoistRange.up raised, .down at the stack); its chain follows in update().
 // setShell takes 'tray' | 'hoist' ('crane' is an alias). loadEl is 3.5 degrees.
 
+// a flat ring about y (a lathe of a rectangle), centred at (x, z)
+const yRing = (y0, y1, r0, r1, seg, x = 0, z = 0) => new THREE.LatheGeometry([new THREE.Vector2(r0, y0), new THREE.Vector2(r1, y0), new THREE.Vector2(r1, y1), new THREE.Vector2(r0, y1), new THREE.Vector2(r0, y0)], seg).translate(x, 0, z);
+
 export const NAME_PLATE = 'H.M.G. BOCHE-BUSTER';
 
-const DECK = 1.6; // top of the girders in the dropped centre, where the roller path sits
-const END = 2.4; // top of the girders over the bogie ends
+// Heights: a car that ran on British lines (Boche-Buster did, 1940) had to fit the loading gauge (about 4 m), so
+// the bore axis is 3.4 m above the rail head, the end decks 1.85 m, and the breech dips into a pit between the
+// girders (PIT) at high elevation instead of the gun standing high on its mounting.
+const DECK = 1.2; // top of the girders in the dropped centre, where the roller path sits
+const END = 1.95; // top of the girders over the bogie ends
 const HALF = 10.4; // the headstocks, z = +-HALF (the buffers reach 0.6 m beyond)
 const TZ = -0.8; // the trunnion axis along the car
-const TY = 2.45; // trunnions above the roller path
+const TY = 2.2; // trunnions above the roller path (bore axis 3.4 m above the rail head)
+const PIT = { z0: 0.85, z1: 3.85, y: 0.32 }; // the breech pit in the car frame (z) and its floor (top, above the rail head)
+const RING = [1.15, 1.42]; // the turntable is a ring: the cradle and the barrel dip through its open centre
 const BRE = 3.4, MUZ = BRE - 16.47; // barrel ends on the elevation frame (z + = back)
 const HX = 0.9; // breech hinge x
 const SHELL = { len: 2.01, rad: 0.2286 }; // the 2,500 lb HE shell
-const STAGE_Y = TY - 1.25; // the loading stage, on the mounting, below the bore axis
+const STAGE_Y = TY - 1.1; // the loading stage, on the mounting, below the bore axis (2.3 m above the rail head)
 const SZ0 = 4.9, SZ1 = 8.0, SW = 1.45; // stage extent (z behind the trunnion axis) and half width
 const CX = 0.55, CZ = 8.4; // the hoist post on the rear deck (car frame), beyond the stage's sweep
 const JIB_R = 4.2; // post to hook
-const JIB_Y = 6.2; // underside of the jib girder
-const HOIST_TOP = 5.7, HOIST_LOW = 1.72;
+const JIB_Y = 5.3; // underside of the jib girder: a low derrick, only as high as the swing over the stage needs
+const HANG = 0.85; // the shell's middle below the hook (a short sling, so the jib can be low)
+const HOIST_TOP = 4.85, HOIST_LOW = 0.52 + HANG; // raised: the sling bar swings over the stage men's heads; low: at the stack
 const WR = 0.42; // wheel radius
 const AXLES = [];
-for (let i = 0; i < 5; i++) AXLES.push(-8.2 + i * 1.05);
-for (let i = 0; i < 5; i++) AXLES.push(-2.1 + i * 1.05);
-for (let i = 0; i < 5; i++) AXLES.push(4.0 + i * 1.05);
+// the middle group stands forward under the turntable, leaving the breech pit between it and the rear group
+for (let i = 0; i < 5; i++) AXLES.push(-9.3 + i * 1.05);
+for (let i = 0; i < 5; i++) AXLES.push(-4.0 + i * 1.05);
+for (let i = 0; i < 5; i++) AXLES.push(4.45 + i * 1.05);
 
 const polyTop = (poly, z, floor = 0) => {
   let best = floor;
@@ -75,43 +85,54 @@ export function buildRail() {
   rig.breechOpen = { axis: 'y', angle: 1.65 };
   rig.carRoll = 6.0;
   rig.hoistRange = { up: HOIST_TOP, down: HOIST_LOW };
+  rig.hoistHang = HANG;
   const tray = trayMount(rig, trav, elev, -0.3, BRE + 0.1, 0.3, 1.55, 1.4);
-  floorFade(rig, DECK + TY - 1.0, BRE + 0.3, 0.62, 0.08, 0.2);
+  floorFade(rig, DECK + TY - PIT.y, BRE + 0.3, 0.62, 0.08, 0.2);
 
-  // ---- the girder body: two deep riveted plate girders with the centre dropped, deck plates, bulkheads
+  // ---- the girder body: two deep riveted plate girders with the centre dropped, deck plates, bulkheads. Under
+  // the well the plates come down below the middle bogie's springs (BELLY) and deeper still round the breech pit.
+  const BELLY = 0.62;
   const prof = [[-HALF, 0.88], [-HALF, END], [-5.4, END]];
   for (let i = 1; i <= 10; i++) { const t = i / 10; prof.push([-5.4 + 1.5 * t, END - (END - DECK) * (1 - Math.cos(t * Math.PI)) / 2]); }
   for (let i = 0; i <= 10; i++) { const t = i / 10; prof.push([3.9 + 1.5 * t, DECK + (END - DECK) * (1 - Math.cos(t * Math.PI)) / 2]); }
-  prof.push([HALF, END], [HALF, 0.88]);
+  prof.push([HALF, END], [HALF, 0.88], [PIT.z1 + 0.4, 0.88], [PIT.z1 + 0.05, PIT.y - 0.08], [PIT.z0 + 0.15, PIT.y - 0.08], [PIT.z0 - 0.05, BELLY], [-4.1, BELLY], [-4.4, 0.88]);
+  const flats = [[-HALF + 0.2, -4.4, 0.9], [-4.1, PIT.z0 - 0.05, BELLY + 0.02], [PIT.z0 + 0.15, PIT.z1 + 0.05, PIT.y - 0.06], [PIT.z1 + 0.4, HALF - 0.2, 0.9]];
+  const polyBot = (z) => { for (const [z0, z1, y] of flats) if (z >= z0 && z <= z1) return y; return 0.9; };
   for (const s of [-1, 1]) {
     PL.add('camo', sideProfile(prof, 0.12, 0.01).translate(s * 1.3, 0, 0));
     PL.add('dark', rivetPoly(prof, (z, y) => V(s * 1.37, y, z), 0.1, 0.2, V(s, 0, 0), 0.026));
-    // vertical stiffeners with their rivet rows, and the lower flange angle
+    // vertical stiffeners with their rivet rows, and the lower flange angles along the flat runs of the bottom edge
     for (let z = -9.0; z <= 9.01; z += 0.9) {
-      const top = polyTop(prof, z, 0.9);
-      PL.add('camo', box(0.06, top - 0.95, 0.1, s * 1.4, 0.95 + (top - 0.95) / 2, z));
-      if (top - 0.95 > 0.5) PL.add('dark', rivetRow(V(s * 1.435, 1.0, z), V(s * 1.435, top - 0.1, z), 0.2, V(s, 0, 0), 0.022));
+      const top = polyTop(prof, z, 0.9), bot = polyBot(z) + 0.05;
+      PL.add('camo', box(0.06, top - bot, 0.1, s * 1.4, bot + (top - bot) / 2, z));
+      if (top - bot > 0.5) PL.add('dark', rivetRow(V(s * 1.435, bot + 0.05, z), V(s * 1.435, top - 0.1, z), 0.2, V(s, 0, 0), 0.022));
     }
-    PL.add('camo', box(0.14, 0.1, 19.0, s * 1.37, 0.9, 0));
-    PL.add('dark', rivetRow(V(s * 1.45, 0.9, -9.4), V(s * 1.45, 0.9, 9.4), 0.2, V(s, 0, 0), 0.026));
+    for (const [z0, z1, y] of flats) {
+      PL.add('camo', box(0.14, 0.1, z1 - z0, s * 1.37, y, (z0 + z1) / 2));
+      PL.add('dark', rivetRow(V(s * 1.45, y, z0 + 0.1), V(s * 1.45, y, z1 - 0.1), 0.2, V(s, 0, 0), 0.026));
+    }
     // inspection doors in the plates
-    for (const z of [-8.0, 7.9]) { PL.add('camo', box(0.04, 0.55, 0.8, s * 1.43, 1.6, z)); PL.add('steel', box(0.03, 0.05, 0.12, s * 1.47, 1.6, z + 0.25)); }
-    for (const z of [-3.0, 3.0]) PL.add('camo', box(0.04, 0.34, 0.6, s * 1.43, 1.2, z));
+    for (const z of [-8.0, 7.9]) { PL.add('camo', box(0.04, 0.5, 0.8, s * 1.43, 1.4, z)); PL.add('steel', box(0.03, 0.05, 0.12, s * 1.47, 1.4, z + 0.25)); }
+    PL.add('camo', box(0.04, 0.3, 0.6, s * 1.43, 0.9, -2.6));
   }
-  PL.add('camo', box(2.5, 0.12, 19.2, 0, 0.94, 0)); // under-plate, the floor of the well
+  // the floor of the well over the middle bogie and the rear end, and the breech pit between them
+  PL.add('camo', box(2.5, 0.12, PIT.z0 + 9.6, 0, 0.94, (PIT.z0 - 9.6) / 2));
+  PL.add('camo', box(2.5, 0.12, 9.6 - PIT.z1, 0, 0.94, (PIT.z1 + 9.6) / 2));
+  PL.add('camo', box(2.48, 0.08, PIT.z1 - PIT.z0, 0, PIT.y - 0.04, (PIT.z0 + PIT.z1) / 2));
+  PL.add('camo', box(2.48, 1.0 - PIT.y + 0.08, 0.12, 0, (1.0 + PIT.y - 0.08) / 2, PIT.z0)); // front wall: also the turntable's rear cross girder
+  PL.add('camo', box(2.48, DECK - PIT.y + 0.08, 0.1, 0, (DECK + PIT.y - 0.08) / 2, PIT.z1)); // rear wall, the bulkhead at the foot of the rise
+  for (const z of [PIT.z0 + 0.6, (PIT.z0 + PIT.z1) / 2, PIT.z1 - 0.6]) PL.add('dark', box(2.4, 0.05, 0.08, 0, PIT.y + 0.025, z)); // floor stiffeners
   for (const e of [-1, 1]) {
     PL.add('camo', box(2.5, 0.1, 5.1, 0, END - 0.15, e * 7.85)); // end decks
-    PL.add('camo', box(2.5, 1.3, 0.1, 0, 1.65, e * 5.3)); // bulkheads under the deck edges
+    PL.add('camo', box(2.5, END - 1.1, 0.1, 0, (END + 0.9) / 2, e * 5.3)); // bulkheads under the deck edges
     for (let k = 0; k < 17; k++) PL.add('timber', box(2.3, 0.03, 0.26, 0, END - 0.09, e * (5.45 + k * 0.3)));
   }
-  PL.add('camo', box(2.5, 1.3, 0.1, 0, 1.65, -3.9));
-  PL.add('camo', box(2.5, 1.3, 0.1, 0, 1.65, 3.9));
-  // the roller path under the turntable (the table itself is on `traverse`)
-  PL.add('camo', yTube(DECK, DECK + 0.12, 1.52, 1.52, 44, 0, TZ));
-  PL.add('steel', yTube(DECK + 0.12, DECK + 0.145, 1.46, 1.46, 44, 0, TZ));
-  for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2; PL.add('dark', rivets([V(Math.cos(a) * 1.5, DECK + 0.115, TZ + Math.sin(a) * 1.5)], V(0, 1, 0), 0.03)); }
-  PL.add('camo', box(2.5, 0.4, 0.5, 0, 1.4, TZ - 1.6)); // cross girders under the ring
-  PL.add('camo', box(2.5, 0.4, 0.5, 0, 1.4, TZ + 1.6));
+  PL.add('camo', box(2.5, DECK - 0.9, 0.1, 0, (DECK + 0.9) / 2, -3.9));
+  // the roller path under the turntable (the table itself is on `traverse`): a ring on the girders
+  PL.add('camo', yRing(DECK - 0.12, DECK, RING[0] - 0.03, RING[1] + 0.08, 44, 0, TZ));
+  PL.add('steel', yRing(DECK - 0.005, DECK + 0.02, RING[0] + 0.02, RING[1] + 0.02, 44, 0, TZ));
+  for (let i = 0; i < 30; i++) { const a = (i / 30) * Math.PI * 2; PL.add('dark', rivets([V(Math.cos(a) * (RING[1] + 0.05), DECK - 0.005, TZ + Math.sin(a) * (RING[1] + 0.05))], V(0, 1, 0), 0.03)); }
+  PL.add('camo', box(2.5, DECK - 0.9, 0.5, 0, (DECK + 0.9) / 2, TZ - 1.6)); // cross girder under the ring
 
   // ---- end details: headstocks, buffers and drawgear, steps, handrails
   for (const e of [-1, 1]) {
@@ -178,8 +199,8 @@ export function buildRail() {
   }
   // ladders up the side to the end decks
   for (const z of [-8.9, 9.1]) for (const s of [-1, 1]) {
-    for (let k = 0; k < 6; k++) PL.add('dark', rod(V(s * 1.5, 0.95 + k * 0.28, z - 0.18), V(s * 1.5, 0.95 + k * 0.28, z + 0.18), 0.016, 5));
-    for (const dz of [-0.18, 0.18]) PL.add('dark', rod(V(s * 1.5, 0.9, z + dz), V(s * 1.5, 2.5, z + dz), 0.018, 5));
+    for (let k = 0; k < 4; k++) PL.add('dark', rod(V(s * 1.5, 0.95 + k * 0.28, z - 0.18), V(s * 1.5, 0.95 + k * 0.28, z + 0.18), 0.016, 5));
+    for (const dz of [-0.18, 0.18]) PL.add('dark', rod(V(s * 1.5, 0.9, z + dz), V(s * 1.5, END + 0.1, z + dz), 0.018, 5));
   }
   // the rear locker: a long roofed box with a curved, corrugated top
   {
@@ -256,30 +277,34 @@ export function buildRail() {
     const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -2 });
     for (const s of [-1, 1]) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.234), mat);
-      m.position.set(s * 1.442, 1.2, 1.3);
+      m.position.set(s * 1.442, 0.72, (PIT.z0 + PIT.z1) / 2);
       m.rotation.y = s * Math.PI / 2;
       car.add(m);
     }
   }
 
   // ---- the upper mounting (turntable, cheeks, running boards, loading stage); y from the roller path
-  const cheek = [[-2.3, 0.34], [-2.3, 1.1], [-1.3, TY - 0.1], [-0.7, TY + 0.65], [0.7, TY + 0.65], [1.1, TY + 0.45], [1.9, 1.4], [2.8, 1.0], [2.9, 0.34]];
-  PT.add('camo', yTube(0.145, 0.34, 1.46, 1.46, 44));
-  PT.add('steel', yTube(0.14, 0.17, 1.5, 1.5, 44));
+  // the cheeks stand on the turntable ring; its centre is open, so the cradle and the barrel at 40 degrees dip
+  // below the roller path into the well and the pit
+  const CB = 0.12; // the ring's top, the cheeks' foot
+  const cheek = [[-2.3, CB], [-2.3, 1.1], [-1.3, TY - 0.1], [-0.7, TY + 0.65], [0.7, TY + 0.65], [1.1, TY + 0.45], [1.9, 1.4], [2.8, 1.0], [2.9, CB]];
+  PT.add('camo', yRing(0.02, CB, RING[0], RING[1], 44));
+  PT.add('steel', yRing(0.0, 0.03, RING[0] - 0.03, RING[1] + 0.04, 44));
+  for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2, r = (RING[0] + RING[1]) / 2; PT.add('dark', rivets([V(Math.cos(a) * r, CB, Math.sin(a) * r)], V(0, 1, 0), 0.028)); }
   for (const s of [-1, 1]) {
     PT.add('camo', sideProfile(cheek, 0.16, 0.01).translate(s * 1.3, 0, 0));
     PT.add('dark', rivetPoly(cheek, (z, y) => V(s * 1.39, y, z), 0.09, 0.2, V(s, 0, 0), 0.024));
     for (const z of [-1.9, -1.4, -0.9, 0.9, 1.5, 2.1]) {
       const top = polyTop(cheek, z, 0.4);
-      PT.add('camo', box(0.06, top - 0.34, 0.09, s * 1.41, 0.34 + (top - 0.34) / 2, z));
+      PT.add('camo', box(0.06, top - CB, 0.09, s * 1.41, CB + (top - CB) / 2, z));
     }
     PT.add('camo', rbox(0.5, 0.3, 1.5, 0.06, s * 1.3, TY + 0.85, 0)); // the trunnion bearing caps
     PT.add('steel', xTube(s * 1.38, s * 1.5, 0.3, 0.3, 20, TY, 0));
-    PT.add('camo', box(0.3, 0.3, 4.0, s * 1.3, 0.5, 0.2)); // the beams under the cheeks
+    PT.add('camo', box(0.3, 0.3, 4.0, s * 1.3, CB + 0.15, 0.2)); // the beams under the cheeks
   }
-  PT.add('camo', box(2.4, 0.3, 0.3, 0, 0.5, -2.1));
+  PT.add('camo', box(2.4, 0.3, 0.3, 0, CB + 0.15, -2.1));
   // elevating gear on the left: pinion on the arc outside the cradle, shaft through the cheek, handwheel
-  const aP = 68 * DEG, RP = 2.07;
+  const aP = 53 * DEG, RP = 2.07; // (meshes with the arc at 13 to 49.5 degrees; high enough that the handwheel clears the board)
   const py = TY - RP * Math.sin(aP), pz = RP * Math.cos(aP);
   PT.add('steel', xTube(-1.2, -0.9, 0.13, 0.13, 14, py, pz));
   PT.add('steel', xTube(-1.7, -0.9, 0.045, 0.045, 8, py, pz));
@@ -303,7 +328,7 @@ export function buildRail() {
   PT.add('camo', box(2 * SW, 0.1, SZ1 - SZ0, 0, STAGE_Y - 0.05, (SZ0 + SZ1) / 2));
   for (let i = 0; i < 11; i++) PT.add('timber', box(2 * SW - 0.1, 0.035, 0.27, 0, STAGE_Y + 0.02, SZ0 + 0.17 + i * 0.28));
   for (const s of [-1, 1]) {
-    PT.add('camo', ibeamZ(2.5, SZ1, 0.26, 0.22, 0.04, s * 1.3, STAGE_Y - 0.23));
+    PT.add('camo', ibeamZ(2.5, SZ1, 0.2, 0.22, 0.04, s * 1.3, STAGE_Y - 0.2)); // shallow: they pass 5 cm over the girders' raised ends
     PT.add('dark', rivetRow(V(s * 1.31, STAGE_Y - 0.1, SZ0), V(s * 1.31, STAGE_Y - 0.1, SZ1), 0.2, V(0, 1, 0), 0.02));
     // the handrail; on the left it has a gap where the loading tray parks
     const r0 = s < 0 ? SZ0 + 1.9 : SZ0 + 0.1;
@@ -313,29 +338,31 @@ export function buildRail() {
   }
   PT.add('dark', rod(V(-SW, STAGE_Y + 0.95, SZ1), V(SW, STAGE_Y + 0.95, SZ1), 0.022, 5));
   PT.add('dark', rod(V(-SW, STAGE_Y + 0.5, SZ1), V(SW, STAGE_Y + 0.5, SZ1), 0.016, 5));
-  for (const s of [-1, 1]) PT.add('camo', rod(V(s * 1.3, STAGE_Y - 0.4, SZ1 - 0.3), V(s * 1.3, STAGE_Y - 0.4, 2.9), 0.04, 6));
+  for (const s of [-1, 1]) PT.add('camo', rod(V(s * 1.3, CB + 0.35, 2.9), V(s * 1.3, STAGE_Y - 0.28, 4.6), 0.04, 6)); // struts from the cheek foot, ahead of the girders' rise
 
   // ---- cradle: the box with its recoil cylinders and recuperator, trunnions, elevating arc, sight
-  PE.add('camo', rbox(1.7, 1.6, 4.2, 0.22, 0, 0, -0.1));
-  for (const z of [-2.25, 2.05]) PE.add('steel', rbox(1.76, 1.66, 0.09, 0.04, 0, 0, z));
+  // the sleigh is about 6.4 m long (Fort Nelson: about 7 m), so the jacket is carried well forward of the trunnions
+  const CR0 = -4.6, CR1 = 1.8;
+  PE.add('camo', rbox(1.7, 1.6, CR1 - CR0, 0.22, 0, 0, (CR0 + CR1) / 2));
+  for (const z of [CR0 - 0.05, -1.4, CR1 + 0.05]) PE.add('steel', rbox(1.76, 1.66, 0.09, 0.04, 0, 0, z));
   PE.add('steel', xTube(-1.45, 1.45, 0.26, 0.26, 18));
   for (const s of [-1, 1]) {
     PE.add('camo', xTube(s * 0.8, s * 1.1, 0.4, 0.4, 22));
     PE.add('steel', xTube(s * 1.1, s * 1.16, 0.33, 0.33, 22));
     PE.add('dark', rivets(Array.from({ length: 10 }, (_, i) => V(s * 1.17, Math.sin(i * Math.PI / 5) * 0.25, Math.cos(i * Math.PI / 5) * 0.25)), V(s, 0, 0), 0.034));
   }
-  const tubes = [[0, 1.0, 0.2], [-0.52, -0.97, 0.13], [0.52, -0.97, 0.13]];
+  const tubes = [[0, 0.9, 0.15], [-0.52, -0.97, 0.13], [0.52, -0.97, 0.13]]; // the recuperator low on the sleigh's back
   rig.nest = tubes.map(([x, y]) => [x, y]);
   for (const [x, y, r] of tubes) {
     const ze = y > 0 ? 2.0 : 1.3; // the lower cylinders end sooner, clear of the turntable when the breech is down
-    PE.add('camo', zTube(-2.1, ze, r, r, 16, x, y));
-    PE.add('steel', zTube(-2.18, -2.0, r * 1.12, r * 1.12, 16, x, y));
+    PE.add('camo', zTube(-4.5, ze, r, r, 16, x, y));
+    PE.add('steel', zTube(-4.58, -4.4, r * 1.12, r * 1.12, 16, x, y));
     PE.add('camo', sphere(r * 1.05, x, y, ze, 1, 1, 0.8, 10));
-    for (const z of [-1.0, 0.0, 1.0]) PE.add('steel', zTube(z - 0.04, z + 0.04, r * 1.15, r * 1.15, 14, x, y));
-    for (const z of [-1.4, -0.2, 1.2]) PE.add('camo', box(0.18, 0.24, 0.26, x, y > 0 ? 0.82 : -0.8, z));
+    for (const z of [-3.4, -2.0, -0.6, 0.8]) PE.add('steel', zTube(z - 0.04, z + 0.04, r * 1.15, r * 1.15, 14, x, y));
+    for (const z of [-3.9, -2.7, -1.4, -0.2, 1.1]) PE.add('camo', box(0.18, 0.2, 0.26, x, y > 0 ? 0.79 : -0.8, z));
   }
-  PE.add('steel', gearArc(1.5, 1.85, 18 * DEG, 86 * DEG, 0.2, 38, 0.05).translate(-0.99, 0, 0));
-  PE.add('camo', gearArc(1.0, 1.5, 18 * DEG, 86 * DEG, 0.2).translate(-0.99, 0, 0));
+  PE.add('steel', gearArc(1.5, 1.85, 12 * DEG, 86 * DEG, 0.2, 40, 0.05).translate(-0.99, 0, 0));
+  PE.add('camo', gearArc(1.0, 1.5, 12 * DEG, 86 * DEG, 0.2).translate(-0.99, 0, 0));
   PE.add('camo', box(0.2, 0.3, 0.8, -0.92, -0.62, 0.9)); // the arc's bracket on the cradle, inside the pinion's reach
   PE.add('camo', box(0.1, 0.55, 0.7, -1.62, 0.5, 0.0)); // the sight bracket stands outside the left cheek
   PE.add('camo', box(0.4, 0.07, 0.5, -1.77, 0.85, 0.0));
@@ -351,10 +378,12 @@ export function buildRail() {
   for (const z of [-11.5, -9.0, -7.0]) PR.add('iron', zTube(z - 0.04, z + 0.04, 0.4 + 0.065 * (z - MUZ - 0.46) / (-5.6 - MUZ - 0.46) + 0.012, 0.4 + 0.065 * (z - MUZ - 0.46) / (-5.6 - MUZ - 0.46) + 0.012, 32), { tint: 0x9a9f94 });
   PR.add('dark', zTube(MUZ - 0.002, MUZ + 0.3, 0.2286, 0.2286, 24));
   PR.add('steel', zTube(MUZ - 0.003, MUZ + 0.004, 0.3, 0.4, 32, 0, 0, false)); // the lip of the muzzle face
-  PR.add('camo', zTube(-3.41, -3.29, 0.68, 0.68, 30)); // the clip rides ahead of the cradle by more than the stroke
-  for (const [x, y] of [[0, 1.0], [-0.52, -0.97], [0.52, -0.97]]) {
-    PR.add('camo', rod(V(x * 0.4, Math.sign(y) * 0.62, -3.35), V(x, y, -3.35), 0.07, 8));
-    PR.add('steel', zTube(-3.35, -2.0, 0.045, 0.045, 8, x, y));
+  // the clip at the jacket's shoulder rides ahead of the sleigh by more than the stroke; its rods run into the cylinders
+  const CLIP = -5.72;
+  PR.add('camo', zTube(CLIP - 0.07, CLIP + 0.07, 0.62, 0.62, 30));
+  for (const [x, y] of tubes) {
+    PR.add('camo', rod(V(x * 0.4, Math.sign(y) * 0.5, CLIP), V(x, y, CLIP), 0.07, 8));
+    PR.add('steel', zTube(CLIP, -4.35, 0.045, 0.045, 8, x, y));
   }
   PR.add('steel', zTube(BRE - 0.01, BRE + 0.015, 0.58, 0.58, 36), { tint: 0xb0b0a8 });
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; PR.add('steel', box(0.09, 0.13, 0.05, Math.cos(a) * 0.44, Math.sin(a) * 0.44, BRE + 0.02, 0, 0, a + Math.PI / 2)); }
@@ -380,14 +409,16 @@ export function buildRail() {
   for (const z of [0.3, 1.4, 2.5]) for (const s of [-1, 1]) PTR.add('camo', box(0.28, 0.07, 0.08, s * 0.34, -0.06, z));
   for (const s of [-1, 1]) PTR.add('chain', chain(V(s * 0.53, 0.22, 2.7), V(s * 0.75, 0.9, 0.2), 0.2, 0.06));
 
-  // ---- the shell hoist: a lattice mast on the rear deck, a lattice jib turning on it, a hook on a chain
+  // ---- the shell hoist: a low lattice mast on the rear deck, a lattice jib turning on it, a hook on a chain
+  const SH = JIB_Y + 0.12; // the head sheave's centre, inside the jib's truss
   {
-    const half = (y) => 0.35 - (0.1 * (y - DY)) / (JIB_Y - DY);
-    const ys = [DY + 0.1, DY + 1.0, DY + 2.0, DY + 3.0, JIB_Y - 0.1];
+    const ys = [DY + 0.1, DY + 1.0, DY + 2.0, JIB_Y - 0.1];
+    const half = (y) => 0.33 - (0.08 * (y - DY)) / (JIB_Y - DY);
     PC.add('camo', yTube(DY + 0.04, DY + 0.18, 0.55, 0.55, 28)); // the slewing base
     for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; PC.add('dark', rivets([V(Math.cos(a) * 0.5, DY + 0.18, Math.sin(a) * 0.5)], V(0, 1, 0), 0.03)); }
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) PC.add('camo', rod(V(sx * half(ys[0]), ys[0], sz * half(ys[0])), V(sx * half(ys[4]), ys[4], sz * half(ys[4])), 0.045, 6));
-    for (let i = 0; i < 4; i++) {
+    const yN = ys[ys.length - 1];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) PC.add('camo', rod(V(sx * half(ys[0]), ys[0], sz * half(ys[0])), V(sx * half(yN), yN, sz * half(yN)), 0.045, 6));
+    for (let i = 0; i < ys.length - 1; i++) {
       const a = half(ys[i]), b = half(ys[i + 1]);
       for (const s of [-1, 1]) {
         PC.add('camo', rod(V(-a, ys[i], s * a), V(b, ys[i + 1], s * b), 0.022, 5)); // x faces (normal z)
@@ -401,10 +432,10 @@ export function buildRail() {
       }
     }
     // a lattice jib on top: triangular truss, a bottom chord each side and a top chord, with its web
-    const jx0 = 1.8, jx1 = -JIB_R - 0.35, JW = 0.3, JH = 0.55;
+    const jx0 = 1.6, jx1 = -JIB_R - 0.3, JW = 0.3, JH = 0.45;
     for (const z of [-JW, JW]) PC.add('camo', rod(V(jx0, JIB_Y, z), V(jx1, JIB_Y, z), 0.04, 6));
     PC.add('camo', rod(V(jx0, JIB_Y + JH, 0), V(jx1, JIB_Y + JH, 0), 0.04, 6));
-    const nb = 14;
+    const nb = 13;
     for (let i = 0; i < nb; i++) {
       const xa = jx0 + ((jx1 - jx0) * i) / nb, xb = jx0 + ((jx1 - jx0) * (i + 1)) / nb;
       for (const z of [-JW, JW]) {
@@ -414,25 +445,27 @@ export function buildRail() {
       PC.add('camo', rod(V(xa, JIB_Y, -JW), V(xa, JIB_Y, JW), 0.02, 4));
     }
     PC.add('camo', box(0.9, 0.18, 0.9, 0, JIB_Y - 0.1, 0));
-    // the king stay: an apex over the post with ties to the head and the tail of the jib
-    PC.add('camo', rod(V(0, JIB_Y, 0), V(0, JIB_Y + 1.15, 0), 0.05, 6));
-    PC.add('dark', rod(V(0, JIB_Y + 1.15, 0), V(jx1 + 0.3, JIB_Y + JH, 0), 0.025, 5));
-    PC.add('dark', rod(V(0, JIB_Y + 1.15, 0), V(jx0, JIB_Y + JH, 0), 0.025, 5));
-    PC.add('rust', box(0.8, 0.6, 0.7, 1.45, JIB_Y - 0.4, 0)); // the counterweight at the tail
-    // the sheave at the head, and the hand winch on the post
-    PC.add('iron', zTube(-0.07, 0.07, 0.2, 0.2, 16, -JIB_R, JIB_Y - 0.12));
-    PC.add('steel', zTube(-0.25, 0.25, 0.025, 0.025, 8, -JIB_R, JIB_Y - 0.12));
-    for (const z of [-0.17, 0.17]) PC.add('camo', box(0.03, 0.36, 0.06, -JIB_R, JIB_Y - 0.05, z));
+    // a short king post with ties to the head and the tail of the jib
+    const KY = JIB_Y + JH + 0.35;
+    PC.add('camo', rod(V(0, JIB_Y, 0), V(0, KY, 0), 0.05, 6));
+    PC.add('dark', rod(V(0, KY, 0), V(jx1 + 0.3, JIB_Y + JH, 0), 0.022, 5));
+    PC.add('dark', rod(V(0, KY, 0), V(jx0, JIB_Y + JH, 0), 0.022, 5));
+    PC.add('camo', rbox(0.7, 0.5, 0.62, 0.04, 1.3, JIB_Y - 0.3, 0)); // the counterweight at the tail, painted like the rest
+    // the sheave at the head, between the chords, and the hand winch on the post
+    PC.add('iron', zTube(-0.07, 0.07, 0.2, 0.2, 16, -JIB_R, SH));
+    PC.add('steel', zTube(-0.25, 0.25, 0.025, 0.025, 8, -JIB_R, SH));
+    for (const z of [-0.17, 0.17]) PC.add('camo', box(0.03, 0.5, 0.06, -JIB_R, SH, z));
     PC.add('camo', rbox(0.4, 0.4, 0.3, 0.04, 0, DY + 1.3, -0.5));
     PC.add('iron', handwheel(0.25, 5, 0.02, 0.05).rotateY(Math.PI / 2).translate(0, DY + 1.3, -0.7));
     PC.add('steel', zTube(-0.7, -0.4, 0.04, 0.04, 8, 0, DY + 1.3));
-    // the hook block and the sling for the shell, on the hoist group
+    // the hook block and a short sling for the shell, on the hoist group
+    const bar = -(HANG - SHELL.rad);
     PH.add('dark', rbox(0.26, 0.4, 0.2, 0.03, 0, 0.0, 0));
     PH.add('steel', new THREE.TorusGeometry(0.11, 0.032, 6, 14, Math.PI * 1.5).rotateZ(Math.PI * 0.75).translate(0, -0.3, 0));
     PH.add('steel', rbox(0.06, 0.3, 0.06, 0.01, 0, 0.17, 0));
-    PH.add('chain', chain(V(0, -0.4, 0), V(0, -0.93, -0.62), 0.02, 0.06));
-    PH.add('chain', chain(V(0, -0.4, 0), V(0, -0.93, 0.62), 0.02, 0.06));
-    PH.add('steel', zTube(-0.64, 0.64, 0.012, 0.012, 6, 0, -0.93));
+    PH.add('chain', chain(V(0, -0.38, 0), V(0, bar, -0.62), 0.02, 0.06));
+    PH.add('chain', chain(V(0, -0.38, 0), V(0, bar, 0.62), 0.02, 0.06));
+    PH.add('steel', zTube(-0.64, 0.64, 0.012, 0.012, 6, 0, bar));
   }
 
   // ---- ready ammunition at the foot of the hoist: shells on baulks beside the track
@@ -465,12 +498,12 @@ export function buildRail() {
   const strand = new THREE.Mesh(chain(V(0, 0, -0.06), V(0, -1, -0.06), 0, 0.08), rig.mats.chain);
   const strand2 = new THREE.Mesh(chain(V(0, 0, 0.06), V(0, -1, 0.06), 0, 0.08), rig.mats.chain);
   const chainGrp = new THREE.Group();
-  chainGrp.position.set(-JIB_R, JIB_Y - 0.12 + 0.2, 0);
+  chainGrp.position.set(-JIB_R, SH + 0.2, 0);
   chainGrp.add(strand, strand2);
   crane.add(chainGrp);
 
   addShellProp(rig, 'tray', tray, SHELL.len, SHELL.rad, 0, 0.3, 1.55);
-  addShellProp(rig, 'hoist', hoist, SHELL.len, SHELL.rad, 0, -1.18, 0).rotation.y = 0;
+  addShellProp(rig, 'hoist', hoist, SHELL.len, SHELL.rad, 0, -HANG, 0).rotation.y = 0;
   rig.props.crane = rig.props.hoist; // the bl15 name, same prop
   anchor(rig, rec, 'muzzle', 0, 0, MUZ);
   rig.anchors.muzzles.push(rig.anchors.muzzle);
@@ -487,22 +520,34 @@ export function buildRail() {
   };
   rig.update = () => {
     const h = hoist.position.y + 0.32; // the block's rod end
-    const sheave = JIB_Y - 0.12 + 0.2;
+    const sheave = SH + 0.2;
     strand.scale.y = strand2.scale.y = Math.max(0.05, sheave - h);
     rig.trayTilt();
   };
   rig.update();
 
+  // the rig itself keeps the breech out of the pit floor and the track in any pose (the model viewer poses full
+  // recoil and an open block at 40 degrees, which the game never does): the stroke is held to recoilFade and the
+  // block may only swing open near the loading angle. Idempotent for render/guns.js, which already applies the fade.
+  {
+    const setR = rig.setRecoil, setB = rig.setBreech, setE = rig.setElevation;
+    let kr = 0, kb = 0;
+    const openMax = () => { const e = elev.rotation.x; return e <= 12 * DEG ? 1 : e >= 22 * DEG ? 0 : 1 - (e - 12 * DEG) / (10 * DEG); };
+    rig.setRecoil = (k) => { kr = k; setR(Math.min(k, rig.recoilFade(elev.rotation.x))); };
+    rig.setBreech = (k) => { kb = k; setB(Math.min(k, openMax())); };
+    if (setE) rig.setElevation = (r) => { setE(r); setR(Math.min(kr, rig.recoilFade(elev.rotation.x))); setB(Math.min(kb, openMax())); };
+  }
+
   hb(rig, -1.6, 0, -HALF - 0.7, 1.6, END + 0.1, HALF + 0.7);
   hb(rig, -2.2, DECK, TZ - 2.4, 2.2, DECK + TY + 1.0, TZ + SZ1 + 0.2);
   hb(rig, -1.0, DECK + TY - 1.0, TZ + MUZ, 1.0, DECK + TY + 4.5, TZ - 2.2);
-  hb(rig, CX - 1.0, END, CZ - 1.0, CX + 1.0, 7.6, CZ + 1.0);
+  hb(rig, CX - 1.0, END, CZ - 1.0, CX + 1.0, JIB_Y + 0.9, CZ + 1.0);
 
   // crew, in root space with the car at rest: y is where the feet stand, heading is rotation.y (0 faces the
   // muzzle). Men marked car travel with the car's roll-back (add car.position.z); the others stand on the ground.
   const E = -Math.PI / 2, W = Math.PI / 2, N = 0, S = Math.PI, SY = DECK + STAGE_Y, BY = DECK + 0.165;
   const spot = (role, x, y, z, h, pose, onCar) => { crewSpot(rig, role, x, y, z, h, pose); if (onCar) rig.anchors.crew[rig.anchors.crew.length - 1].car = true; };
-  spot('sergeant', 0.4, DY, -7.2, N, 'point', true);
+  spot('sergeant', -2.7, 0, -4.6, N, 'point', false); // on the ground at the left front: the depressed barrel passes low over the front deck
   spot('layer', -1.95, BY, TZ + 0.95, E, 'lay', true);
   spot('traverser', 1.95, BY, TZ - 0.9, W, 'operate', true);
   spot('lanyard', 1.0, SY, TZ + 5.6, N, 'lanyard', true);

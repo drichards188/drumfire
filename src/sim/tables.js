@@ -29,7 +29,7 @@ export const GUNS = {
   bl92: {
     name: '9.2-inch howitzer', short: '9.2in', calibre: 9.2, mass: 130, shell: 'bl92',
     charges: [{ name: 'Charge 1', v: 233 }, { name: 'Charge 2', v: 303 }, { name: 'Charge 3', v: 364 }, { name: 'Charge 4', v: 409 }],
-    elMin: D(10), elMax: D(50), restEl: D(35), loadEl: D(-3), traverse: D(58),
+    elMin: D(15), elMax: D(50), restEl: D(35), loadEl: D(-3), traverse: D(58),
     azRate: D(3.0), elRate: D(6),
     load: seq(['depress', 3], ['open', 2], ['shell', 6], ['ram', 3], ['cartridge', 4], ['close', 2], ['prime', 1], ['lay', 4]),
     crew: 10, hp: 110, recoil: 0.7, runout: 4, sheaf: 30,
@@ -40,7 +40,7 @@ export const GUNS = {
   bl6: {
     name: '6-inch 26 cwt howitzer', short: '6in', calibre: 6, mass: 45, shell: 'bl6',
     charges: [{ name: 'Charge 1', v: 187 }, { name: 'Charge 2', v: 250 }, { name: 'Charge 3', v: 313 }, { name: 'Charge 4', v: 373 }],
-    elMin: D(5), elMax: D(40), restEl: D(25), loadEl: D(7.5), traverse: D(68),
+    elMin: D(5), elMax: D(45), restEl: D(25), loadEl: D(7.5), traverse: D(68),
     azRate: D(2.0), elRate: D(2.0),
     load: seq(['open', 1], ['shell', 2.5], ['ram', 1.5], ['cartridge', 2], ['close', 1.5], ['prime', 1.5], ['lay', 2]),
     crew: 8, hp: 70, recoil: 0.5, runout: 2.5, sheaf: 22,
@@ -50,8 +50,10 @@ export const GUNS = {
   },
   bl60: {
     name: '60-pounder', short: '60pdr', calibre: 5, mass: 27, shell: 'bl60',
-    charges: [{ name: 'Reduced', v: 282 }, { name: 'Normal', v: 364 }, { name: 'Full', v: 455 }],
-    elMin: D(4), elMax: D(30), restEl: D(15), loadEl: D(3.5), traverse: D(65),
+    // the Mk I carriage stops at 21.5 degrees (the breech meets the trail above it); the charges are set so the
+    // reach at 21.5 is what it was at 30 (Full about 11 km, the railyard just inside it)
+    charges: [{ name: 'Reduced', v: 317 }, { name: 'Normal', v: 408 }, { name: 'Full', v: 508 }],
+    elMin: D(4), elMax: D(21.5), restEl: D(15), loadEl: D(3.5), traverse: D(65),
     azRate: D(2.2), elRate: D(2.2),
     load: seq(['open', 1], ['shell', 2.5], ['ram', 1.5], ['cartridge', 1.5], ['close', 1], ['prime', 1], ['lay', 1.5]),
     crew: 8, hp: 55, recoil: 0.6, runout: 2, sheaf: 20,
