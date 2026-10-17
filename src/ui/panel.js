@@ -9,7 +9,7 @@ import { Tracker } from './tracker.js';
 import { Mail } from './messages.js';
 import { mountConsole } from './consoles/console.js';
 import { KIND_SHORT, clockStr, KINDS } from './consoles/common.js';
-import { SECTORS } from '../sector.js';
+import { TH } from './theatre.js';
 import { GUNS } from '../sim/tables.js';
 
 const DESIGN_W = 800;
@@ -159,7 +159,7 @@ export class Panel {
     this.stState = el('i', 'sstate');
     this.stScore = el('span', 'sscore');
     this.stFront = el('div', 'sfront');
-    this.fronts = SECTORS.map((s) => { const c = el('i', 'fchip', s.id); this.stFront.append(c); return c; });
+    this.fronts = TH.sectors.map((s) => { const c = el('i', 'fchip', s.id); this.stFront.append(c); return c; });
     this.status.append(this.stClock, this.stState, this.stScore, this.stFront);
     this.tabsEl.append(this.status);
     applyHighlight();
@@ -223,7 +223,7 @@ export class Panel {
     setText(this.stState, sim.state ? String(sim.state).toUpperCase() : '');
     const sc = sim.score;
     setText(this.stScore, sc == null ? '' : typeof sc === 'object' ? `${sc.points != null ? sc.points : sc.score != null ? sc.score : sc.total != null ? sc.total : 0}` : String(Math.round(sc)));
-    SECTORS.forEach((s, i) => {
+    TH.sectors.forEach((s, i) => {
       const f = sim.front ? sim.front[s.id] : 1;
       setCls(this.fronts[i], 'lost', f === 0); setCls(this.fronts[i], 'weak', f > 0 && f < 0.5);
       this.fronts[i].title = `${s.name}: ${f === 0 ? 'LOST' : Math.round(f * 100) + '% holding'}`;

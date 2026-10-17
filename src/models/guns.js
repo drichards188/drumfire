@@ -16,29 +16,47 @@ import { buildRail } from './v/rail.js';
 // every builder that exists has been tried; buildGun is synchronous. Until bl6 or bl60 have loaded (or if
 // their file is absent or throws), buildGun returns a plain stand-in of the right size so callers never fail.
 export const GUN_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail'];
+// The WW2 mode's German pieces and launch sites (src/models/v/de/, DESIGN.md "WW2 mode"), loaded the same lazy way.
+export const GUN_KINDS_WW2 = ['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'bertha', 'karl', 'v1', 'v2'];
 
 const EXT = {
   bl6: { glob: import.meta.glob('./v/bl6.js') },
   bl60: { glob: import.meta.glob('./v/bl60.js') },
+  lefh18: { glob: import.meta.glob('./v/de/lefh18.js') },
+  sfh18: { glob: import.meta.glob('./v/de/sfh18.js') },
+  k18: { glob: import.meta.glob('./v/de/k18.js') },
+  mrs18: { glob: import.meta.glob('./v/de/k18.js') },
+  nbw41: { glob: import.meta.glob('./v/de/nbw41.js') },
+  gustav: { glob: import.meta.glob('./v/de/gustav.js') },
+  bertha: { glob: import.meta.glob('./v/de/bertha.js') },
+  karl: { glob: import.meta.glob('./v/de/karl.js') },
+  v1: { glob: import.meta.glob('./v/de/v1.js') },
+  v2: { glob: import.meta.glob('./v/de/v2.js') },
 };
-const NAMES = { bl6: 'buildBL6', bl60: 'buildBL60' };
+const NAMES = {
+  bl6: 'buildBL6', bl60: 'buildBL60', lefh18: 'buildLeFH18', sfh18: 'buildSFH18', k18: 'buildK18', mrs18: 'buildMrs18',
+  nbw41: 'buildNbW41', gustav: 'buildGustav', bertha: 'buildBerthaGun', karl: 'buildKarl', v1: 'buildV1Site', v2: 'buildV2Site',
+};
+// extra builders a module may export beside its gun (the Gustav's firing position): loadGuns() collects them here
+export const EXTRAS = {};
+const EXTRA_NAMES = { gustav: ['buildGustavSite'] };
 const loaded = {};
-let loading = null;
+const pending = {};
 
-export function loadGuns() {
-  if (!loading) {
-    loading = Promise.all(Object.keys(EXT).map(async (kind) => {
-      try {
-        const load = Object.values(EXT[kind].glob)[0];
-        if (!load) return;
-        const mod = await Promise.race([load(), new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), 8000))]);
-        if (typeof mod[NAMES[kind]] === 'function') loaded[kind] = mod[NAMES[kind]];
-      } catch (e) {
-        console.warn(`guns: ${kind} builder failed to load:`, e.message);
-      }
-    })).then(() => ({ ...loaded }));
-  }
-  return loading;
+// loadGuns() loads the British field guns' builders (as it always did); loadGuns(GUN_KINDS_WW2) the WW2 mode's.
+// Resolves when every builder asked for has been tried.
+export function loadGuns(kinds = ['bl6', 'bl60']) {
+  return Promise.all(kinds.filter((k) => EXT[k]).map((kind) => (pending[kind] ??= (async () => {
+    try {
+      const load = Object.values(EXT[kind].glob)[0];
+      if (!load) return;
+      const mod = await Promise.race([load(), new Promise((_, rej) => setTimeout(() => rej(new Error('timed out')), 8000))]);
+      if (typeof mod[NAMES[kind]] === 'function') loaded[kind] = mod[NAMES[kind]];
+      for (const n of EXTRA_NAMES[kind] ?? []) if (typeof mod[n] === 'function') EXTRAS[n] = mod[n];
+    } catch (e) {
+      console.warn(`guns: ${kind} builder failed to load:`, e.message);
+    }
+  })()))).then(() => ({ ...loaded }));
 }
 loadGuns();
 
@@ -46,6 +64,9 @@ loadGuns();
 const STANDIN = {
   bl6: { len: 2.4, r: 0.17, y: 1.1, name: 'bl6' },
   bl60: { len: 4.2, r: 0.14, y: 1.25, name: 'bl60' },
+  lefh18: { len: 2.9, r: 0.08, y: 1.1 }, sfh18: { len: 4.4, r: 0.11, y: 1.4 }, k18: { len: 8.5, r: 0.13, y: 2.2 },
+  mrs18: { len: 6.5, r: 0.15, y: 2.2 }, nbw41: { len: 1.3, r: 0.25, y: 0.9 }, gustav: { len: 32, r: 0.7, y: 7 },
+  bertha: { len: 5, r: 0.35, y: 2.4 }, karl: { len: 5, r: 0.45, y: 2.4 }, v1: { len: 45, r: 0.3, y: 1 }, v2: { len: 7, r: 0.8, y: 7 },
 };
 function buildStandIn(kind) {
   const s = STANDIN[kind], rig = newGunRig(kind, 'drab'), P = rig.P, root = rig.root;

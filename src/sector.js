@@ -239,6 +239,10 @@ export function piecePlacements(unit) {
   }));
 }
 
+// Extra pads a mode adds before the terrain is first sampled (the WW2 mode's positions, src/ww2/theatre.js): empty in
+// the British game, so its ground is exactly as it was.
+export const PAD_EXTRA = [];
+
 // Pads the terrain levels (terrainHeight.js format): gun platforms, the railway spur bed, sites.
 // { x, z, rx, rz, heading, blend }: a rectangle of half-sizes rx by rz turned by heading, blended out over `blend` m.
 export function flatPads() {
@@ -254,5 +258,6 @@ export function flatPads() {
     const r = Math.min(s.r, 60);
     pads.push({ x: s.pos.x, z: s.pos.z, rx: r, rz: r, heading: headingFor(s.bearing), blend: 25 });
   }
+  pads.push(...PAD_EXTRA);
   return pads;
 }

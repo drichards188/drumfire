@@ -2,6 +2,7 @@
 // highlighted, from sim.rangeTable (the same integrator the shells fly). Ranges are yards here.
 import { el, setText, setCls, card } from '../widgets.js';
 import { toYd, elev, commas } from './common.js';
+import { TH, lenShort } from '../theatre.js';
 
 export class RangeTable {
   constructor() {
@@ -12,7 +13,7 @@ export class RangeTable {
     c.head.append(this.sub);
     const t = el('div', 'rt');
     const head = el('div', 'rtr rth');
-    for (const h of ['YARDS', 'ELEVATION', 'TIME OF FLIGHT']) head.append(el('b', null, h));
+    for (const h of [TH.metric ? 'METRES' : 'YARDS', TH.metric ? 'ELEVATION (STRICH)' : 'ELEVATION', 'TIME OF FLIGHT']) head.append(el('b', null, h));
     t.append(head);
     this.rows = [];
     for (let i = 0; i < 3; i++) {
@@ -28,7 +29,7 @@ export class RangeTable {
   update({ sim, unit }) {
     const o = unit.order || {};
     const tab = (sim.rangeTable && sim.rangeTable(unit.kind, o.charge || 0)) || [];
-    setText(this.sub, tab.length ? `Charge ${(o.charge || 0) + 1}   ${commas(toYd(tab[0].range))} to ${commas(toYd(tab[tab.length - 1].range))} yds` : '');
+    setText(this.sub, tab.length ? `Charge ${(o.charge || 0) + 1}   ${commas(toYd(tab[0].range))} to ${commas(toYd(tab[tab.length - 1].range))} ${lenShort()}` : '');
     if (!tab.length) return;
     let n = 0, best = 1e9;
     for (let i = 0; i < tab.length; i++) { const d = Math.abs(tab[i].range - (o.range || 0)); if (d < best) { best = d; n = i; } }

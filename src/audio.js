@@ -28,8 +28,8 @@ const SHELL_VOICES = 6; // shells in flight that are heard at once, loudest firs
 const AUDIBLE = 0.002;
 
 // per-frame caps and minimum spacing (s) for queued world events; close events get triple caps
-const CAPS = { gun: 4, burst: 5, tremor: 2, load: 3, flare: 2, cook: 4 };
-const GAPS = { gun: 0.02, burst: 0.02, tremor: 0.06, load: 0.05, flare: 0.2, cook: 0.05 };
+const CAPS = { gun: 4, burst: 5, tremor: 2, load: 3, flare: 2, cook: 4, rocket: 3, launch: 2 };
+const GAPS = { gun: 0.02, burst: 0.02, tremor: 0.06, load: 0.05, flare: 0.2, cook: 0.05, rocket: 0.05, launch: 0.1 };
 
 // Real recordings in public/audio, cut into slices [start, length] (seconds, found by onset
 // analysis) that replace or layer into the synthesized banks once both are ready; anything
@@ -53,12 +53,20 @@ const CLS = {
   med: { cal: 6, T: 0.01, crack: 1.1, crackF: 2200, boom: [78, 34, 0.09, 0.3], bodyF: 320, len: 4, roll: [12, 3, 0.28, 520], ref: 420, level: 1.25, near: 1500, mid: 7000, deaf: 45, slap: 110 },
   heavy: { cal: 9.2, T: 0.018, crack: 0.8, crackF: 1700, boom: [58, 24, 0.12, 0.42], bodyF: 250, len: 5.4, roll: [14, 4.2, 0.32, 430], ref: 620, level: 1.4, near: 2000, mid: 8000, deaf: 80, slap: 220 },
   huge: { cal: 15, T: 0.034, crack: 0.65, crackF: 1300, boom: [46, 15, 0.2, 0.62], bodyF: 200, len: 7.6, roll: [16, 6.4, 0.36, 340], ref: 880, level: 1.35, near: 2600, mid: 9000, deaf: 140, slap: 400 },
+  // WW2 only (Karl 23.6 in, Gustav 31.5 in, the V-1 and V-2 warheads): the slam you feel in the floor, an echo
+  // rolling round the horizon for ten seconds; rendered only when the WW2 banks are asked for (enableWW2)
+  colossal: { cal: 28, T: 0.06, crack: 0.5, crackF: 1000, boom: [36, 11, 0.3, 0.95], bodyF: 160, len: 10.5, roll: [22, 9, 0.4, 260], ref: 1400, level: 1.4, near: 3500, mid: 12000, deaf: 260, slap: 700 },
 };
-const ORDER = ['light', 'field', 'med', 'heavy', 'huge'];
-export const classOf = (cal) => (cal < 4 ? 'light' : cal < 5.5 ? 'field' : cal < 7.5 ? 'med' : cal < 12 ? 'heavy' : 'huge');
+const ORDER = ['light', 'field', 'med', 'heavy', 'huge']; // the British game's classes (colossal is apart)
+export const classOf = (cal) => (cal < 4 ? 'light' : cal < 5.5 ? 'field' : cal < 7.5 ? 'med' : cal < 12 ? 'heavy' : cal < 20 ? 'huge' : 'colossal');
+
+// Calibre (in) of a shell kind when the shell object carries none; flight voices pick their kind from shell.kind.
+const KIND_CAL = { lefh18: 4.13, sfh18: 5.87, k18: 6.79, mrs18: 8.3, nbw41: 6.24, bertha: 16.5, karl: 23.6, gustav: 31.5, v1: 22, v2: 26, q25: 3.45, m55: 5.5, rp3: 3, s76: 3, s122: 4.8, s152: 6 };
+const ROCKET_KINDS = { nbw41: 1, rp3: 1 }; // the moaning rush instead of a shell's whistle
+const COLOSSAL_KINDS = { gustav: 1, karl: 1 };
 
 // Loudness of the non-bank sounds (the banks are normalized, these scale them in the mix).
-export const LEVELS = { ui: 0.32, drumfire: 0.5, rain: 0.22, wind: 0.08, thud: 0.5 };
+export const LEVELS = { ui: 0.32, drumfire: 0.5, rain: 0.22, wind: 0.08, thud: 0.5, siren: 0.2 };
 
 // ================================================================== offline synthesis
 
@@ -408,7 +416,7 @@ function rainLoop(sr, r) {
  * (the sub-bass slam of a heavy piece), the propellant roar, and the long echo off the landscape.
  */
 function gunRecipe(sr, r, cls) {
-  const c = CLS[cls], big = cls === 'huge', heavy = cls === 'heavy' || big;
+  const c = CLS[cls], colossal = cls === 'colossal', big = cls === 'huge' || colossal, heavy = cls === 'heavy' || big;
   const x = new Float32Array(Math.ceil(c.len * sr));
   blast(x, sr, 0, 1, c.T * (0.9 + 0.2 * r()), 1.3, big ? 0.0006 : heavy ? 0.0003 : 0.0001);
   // the snap of the muzzle blast
@@ -425,6 +433,14 @@ function gunRecipe(sr, r, cls) {
   if (big) {
     // the ground reflections slap back at once, then the ridge answers
     for (const [d, g] of [[0.07, 0.35], [0.16, 0.28], [0.31, 0.22]]) mixInto(x, onePole(Float32Array.from(x.subarray(0, Math.round(0.9 * sr))), sr, 500), d, g, sr);
+  }
+  if (colossal) {
+    // a slam below the voice of any gun (felt more than heard), the ground heaving under it and the
+    // charge's long, dark roar; then the far woods and hills give it back again and again
+    thump(x, sr, 0.003, 26, 11, 0.4, 0.9, 1.1, 0.004);
+    mixInto(x, layer(sr, r, { dur: c.len * 0.7, attack: 0.05, decay: 1.6, f: 45 }), 0.03, 0.7, sr);
+    mixInto(x, layer(sr, r, { dur: c.len * 0.6, attack: 0.03, decay: 1.1, f: 120 }), 0.01, 0.6, sr);
+    for (const [d, g] of [[0.55, 0.3], [1.1, 0.24], [1.9, 0.2]]) mixInto(x, onePole(onePole(Float32Array.from(x.subarray(0, Math.round(1.2 * sr))), sr, 300), sr, 260), d, g, sr);
   }
   const [count, t1, gain, f] = c.roll;
   roll(x, x.slice(0, Math.round(0.6 * sr)), sr, r, { count, t0: 0.12, t1, gain, f });
@@ -487,6 +503,12 @@ function burstRecipe(sr, r, cls, kind) {
   for (let i = 0; i < n; i++) { // earth and stones raining back
     const t = 0.25 + Math.pow(r(), 0.8) * (1.3 + 1.1 * s);
     mixInto(x, layer(sr, r, { dur: 0.05, attack: 0.0004, decay: 0.012, type: 'bp', f: 300 + r() * 1300, q: 0.8 }), t, (0.05 + 0.07 * r()) * Math.exp(-t / 1.6), sr);
+  }
+  if (cls === 'colossal') {
+    // the earth itself heaving: a second, slower slam and a long roar of the crater's throw falling back
+    thump(x, sr, 0.01, 24, 10, 0.4, 1.3, 1.2, 0.006);
+    mixInto(x, layer(sr, r, { dur: len - 0.3, attack: 0.08, decay: 1.8, f: 40 }), 0.05, 1, sr);
+    mixInto(x, layer(sr, r, { dur: len - 0.5, attack: 0.3, decay: 1.6, f: 100 }), 0.3, 0.6, sr);
   }
   if (big) roll(x, x.slice(0, Math.round(0.5 * sr)), sr, r, { count: 14, t0: 0.2, t1: 2.2 + 0.6 * s, gain: 0.3, f: 360 });
   return saturate(normalize(x), big ? 1.4 : 1.15);
@@ -726,12 +748,304 @@ function whistleRecipe(sr, r) {
   return normalize(x);
 }
 
+// ---------------------------------------------------------------- WW2 (German side): rockets, missiles, aircraft
+
+/**
+ * One 15 cm Nebelwerfer rocket leaving its tube: the ignition's crack, then the motor's howl rising to a
+ * rough, beating shriek (the six angled venturis of the round, the "moaning Minnie") over a rushing roar,
+ * then the pitch sagging as it tears away and the motor burns out (about 1.8 s).
+ */
+function rocketLaunchRecipe(sr, r) {
+  const len = 4.2, n = Math.ceil(len * sr), x = new Float32Array(n);
+  blast(x, sr, 0, 0.6, 0.004, 1.4, 0.0001);
+  thump(x, sr, 0, 150, 60, 0.04, 0.5, 0.12);
+  const burn = 1.5 + 0.3 * r(), env = (t) => (1 - Math.exp(-t / 0.05)) * (t < burn ? 1 : Math.exp(-(t - burn) / 0.7));
+  // the howl: harmonic-rich, a slow wobble, a rasp at ~35 Hz and a second voice a little off it (the beating)
+  const howl = new Float32Array(n), f0 = 240 + 40 * r(), f1 = 600 + 80 * r(), wob = 6 + 2 * r();
+  for (const [det, amp] of [[1, 1], [1.017, 0.6]]) {
+    let ph = r() * TAU;
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      const f = (f0 + (f1 - f0) * (1 - Math.exp(-t / 0.35))) * (t > burn * 0.7 ? 1 - 0.18 * (1 - Math.exp(-(t - burn * 0.7) / 0.9)) : 1) * (1 + 0.035 * Math.sin(TAU * wob * t)) * det;
+      ph += (TAU * f) / sr;
+      // the ten harmonics by the Chebyshev recurrence sin((h+1)a) = 2 cos(a) sin(ha) - sin((h-1)a)
+      const c2 = 2 * Math.cos(ph);
+      let s = 0, s0 = 0, s1 = Math.sin(ph);
+      for (let h = 1; h <= 10; h++) {
+        s += s1 / h;
+        const s2 = c2 * s1 - s0;
+        s0 = s1;
+        s1 = s2;
+      }
+      howl[i] += amp * s * (0.7 + 0.3 * Math.sin(TAU * 35 * t)) * env(t);
+    }
+  }
+  biquad(howl, sr, 'bp', 1300, 0.55);
+  mixInto(x, normalize(howl), 0.01, 0.85, sr);
+  // the motor's rushing roar: bright while it is close, darker as it leaves
+  const roar = new Float32Array(n);
+  for (let i = 0; i < n; i++) roar[i] = (r() * 2 - 1) * env(i / sr);
+  sweepLp(roar, sr, (t) => 600 + 3600 * Math.exp(-t / 1.4));
+  biquad(roar, sr, 'hp', 60);
+  mixInto(x, normalize(roar), 0, 0.75, sr);
+  return saturate(normalize(x), 1.3);
+}
+
+/** The rocket in flight: a tearing, moaning rush (looping), lower and rougher than a shell's whistle. */
+function moanLoop(sr, r) {
+  const T = 4, n = Math.round(T * sr), x = new Float32Array(n);
+  const air = loopNoise(sr, r, n, (b) => biquad(biquad(b, sr, 'bp', 1100, 0.7), sr, 'hp', 400));
+  const low = loopNoise(sr, r, n, (b) => biquad(b, sr, 'lp', 200));
+  const tone = new Float32Array(n), f = snap(430, T), v = snap(3.5, T), am = snap(23, T);
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, ph = TAU * f * t + 6 * Math.sin(TAU * v * t);
+    let s = 0;
+    for (let h = 1; h <= 8; h++) s += Math.sin(h * ph) / h;
+    tone[i] = s * (0.7 + 0.3 * Math.sin(TAU * am * t));
+  }
+  biquad(tone, sr, 'bp', 1000, 0.5);
+  normalize(tone);
+  for (let i = 0; i < n; i++) x[i] = tone[i] * 0.55 + air[i] * 0.8 + low[i] * 0.3;
+  return normalize(x);
+}
+
+/** One combustion pulse of a pulse jet: the bang of the charge, the flame's spit, the tube ringing down. */
+function pulseShape(sr, r) {
+  const x = new Float32Array(Math.ceil(0.03 * sr));
+  blast(x, sr, 0, 1, 0.0035, 1.2, 0.0003);
+  mixInto(x, layer(sr, r, { dur: 0.025, attack: 0.0004, decay: 0.004, f: 3500 }), 0, 0.45, sr);
+  mixInto(x, layer(sr, r, { dur: 0.02, attack: 0.0003, decay: 0.0025, type: 'bp', f: 3000, q: 0.6 }), 0.0005, 0.35, sr); // the spit
+  return x;
+}
+
+/**
+ * The Argus pulse jet of the V-1: about 47 bangs a second, each with its flame's spit, over the drone of
+ * the tube; harsh, with harmonics far up. `jitter` varies each pulse as the valves flutter.
+ */
+function buzzLoop(sr, r) {
+  const T = 2, n = Math.round(T * sr), x = new Float32Array(n), f = snap(47, T), k = Math.round(f * T);
+  const shapes = [0, 1, 2, 3].map(() => pulseShape(sr, r));
+  for (let i = 0; i < k; i++) wrapInto(x, shapes[i & 3], i / f, 0.75 + 0.25 * r(), sr);
+  const roar = loopNoise(sr, r, n, (b) => biquad(b, sr, 'lp', 1500));
+  for (let i = 0; i < n; i++) {
+    const t = i / sr, ph = TAU * f * t;
+    let s = 0;
+    for (let h = 1; h <= 14; h++) s += Math.sin(h * ph) / h;
+    // the exhaust roars in time with the bangs
+    x[i] += 0.25 * s + 0.45 * roar[i] * (0.4 + 0.6 * Math.pow(0.5 + 0.5 * Math.cos(ph), 3));
+  }
+  biquad(x, sr, 'hp', 30);
+  biquad(x, sr, 'lp', 7000);
+  return normalize(saturate(normalize(x), 2.6));
+}
+
+/**
+ * The Walter catapult firing: the steam generator's bang, a violent hiss and roar as the piston and the
+ * V-1 run up the ramp, the piston leaving the tube with a clank, and the pulse jet (already at full power
+ * on the ramp) hammering away down range while the flight voice takes over.
+ */
+function v1LaunchRecipe(sr, r) {
+  const len = 5, n = Math.ceil(len * sr), x = new Float32Array(n);
+  blast(x, sr, 0, 1, 0.009, 1.3, 0.0004);
+  thump(x, sr, 0, 85, 34, 0.08, 0.9, 0.35);
+  mixInto(x, layer(sr, r, { dur: 2.2, attack: 0.008, decay: 0.7, type: 'bp', f: 2600, q: 0.4 }), 0, 0.9, sr); // steam
+  mixInto(x, layer(sr, r, { dur: 2, attack: 0.01, decay: 0.6, f: 700 }), 0, 0.7, sr);
+  mixInto(x, layer(sr, r, { dur: 1.3, attack: 0.4, decay: 0.5, sweep: (t) => 700 + 3200 * Math.min(1, t / 1) }), 0, 0.5, sr); // the piston accelerating
+  modes(x, sr, 1.05, [[260, 0.5, 0.25], [710, 0.3, 0.15], [1650, 0.2, 0.08], [3100, 0.1, 0.05]], r, 0.6); // the piston thrown out
+  // the pulse jet going away: its bangs slowing a little with the Doppler shift and fading
+  const shapes = [0, 1, 2].map(() => pulseShape(sr, r)), jet = new Float32Array(n);
+  for (let t = 0.02, k = 0; t < len - 0.1; k++) {
+    const a = t < 0.8 ? 1 : Math.exp(-(t - 0.8) / 1.4);
+    mixInto(jet, shapes[k % 3], t, a * (0.75 + 0.25 * r()), sr);
+    t += 1 / (47 - 7 * Math.min(1, t / 2.5));
+  }
+  biquad(jet, sr, 'lp', 5000);
+  mixInto(x, normalize(jet), 0, 0.55, sr);
+  return saturate(normalize(x), 1.4);
+}
+
+/** Rocket crackle: sparse sharp spikes of the supersonic exhaust (the "tearing" crackle), at `rate(t)` per second. */
+function crackle(x, sr, r, t0, t1, rate, amp) {
+  const shapes = [0, 1, 2].map(() => {
+    const s = new Float32Array(Math.ceil(0.004 * sr));
+    blast(s, sr, 0, 1, 0.00025 + 0.0002 * r(), 1.5, 0.00002);
+    return s;
+  });
+  for (let t = t0; t < t1; t += (-Math.log(1 - r() * 0.999) / Math.max(rate(t), 1))) mixInto(x, shapes[Math.floor(r() * 3)], t, amp(t) * Math.pow(r(), 2.2), sr);
+}
+
+/**
+ * A V-2's engine on the table: `pre` the preliminary stage (8 t of thrust, a lower roar and crackle while
+ * the rocket stands), else the main stage: an overwhelming roar with a rumble in the chest and the crackle,
+ * holding while the rocket rises off the table, then fading and darkening as it climbs (len s long).
+ */
+function v2Recipe(sr, r, { pre = false, len = 14, hold = 3.2 } = {}) {
+  const n = Math.ceil(len * sr), x = new Float32Array(n);
+  const att = pre ? 0.6 : 0.9, dec = (len - hold) / 3.2;
+  const env = (t) => (1 - Math.exp(-t / att)) * (t < hold ? 1 : Math.exp(-(t - hold) / dec));
+  if (pre) {
+    blast(x, sr, 0, 0.5, 0.003, 1.4, 0.0001); // the igniter's pop
+    thump(x, sr, 0.02, 90, 40, 0.06, 0.4, 0.3);
+  } else thump(x, sr, 0.05, 30, 14, 0.4, 0.8, 0.8, 0.12);
+  const roar = new Float32Array(n), rum = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const e = env(i / sr);
+    roar[i] = (r() * 2 - 1) * e;
+    rum[i] = (r() * 2 - 1) * e;
+  }
+  sweepLp(roar, sr, pre ? () => 900 : (t) => (t < hold ? 3200 : 500 + 2700 * Math.exp(-(t - hold) / (dec * 0.8))));
+  biquad(roar, sr, 'hp', 50);
+  biquad(biquad(rum, sr, 'lp', 70), sr, 'lp', 110);
+  biquad(rum, sr, 'hp', 18);
+  mixInto(x, normalize(roar), 0, pre ? 0.6 : 0.9, sr);
+  mixInto(x, normalize(rum), 0, pre ? 0.7 : 0.9, sr);
+  const ck = new Float32Array(n);
+  crackle(ck, sr, r, 0.1, len - 0.2, (t) => (pre ? 60 : 200) * env(t), (t) => env(t) * (t < hold ? 1 : Math.exp(-(t - hold) / (dec * 0.6))));
+  biquad(ck, sr, 'hp', 700);
+  mixInto(x, normalize(ck), 0, pre ? 0.3 : 0.45, sr);
+  return tail(saturate(normalize(x), 1.3), sr, 0.3);
+}
+
+/** The V-2 roaring overhead (looping, bound to the rocket as it climbs): rumble, roar and crackle. */
+function v2Loop(sr, r) {
+  const T = 4, n = Math.round(T * sr), x = new Float32Array(n);
+  const rum = loopNoise(sr, r, n, (b) => biquad(biquad(b, sr, 'lp', 70), sr, 'lp', 100));
+  const roar = loopNoise(sr, r, n, (b) => biquad(biquad(b, sr, 'lp', 1800), sr, 'hp', 60));
+  for (let i = 0; i < n; i++) x[i] = rum[i] * 0.9 + roar[i] * 0.7;
+  const ck = new Float32Array(n), shapes = [0, 1, 2].map(() => {
+    const s = new Float32Array(Math.ceil(0.004 * sr));
+    blast(s, sr, 0, 1, 0.0003, 1.5, 0.00002);
+    return s;
+  });
+  for (let k = 0; k < 160 * T; k++) wrapInto(ck, shapes[k % 3], r() * T, Math.pow(r(), 2.2), sr);
+  biquad(ck, sr, 'hp', 700);
+  normalize(ck);
+  for (let i = 0; i < n; i++) x[i] += ck[i] * 0.35;
+  return normalize(x);
+}
+
+/**
+ * A V-2 arriving: it is faster than its sound, so the warhead bursts first and the sonic boom's double
+ * crack (bow and tail shocks) comes with it; this is the double crack, an N-wave each, and the heavy
+ * rumble it leaves rolling.
+ */
+function v2BoomRecipe(sr, r) {
+  const x = new Float32Array(Math.ceil(1.6 * sr));
+  for (const [t, a, d] of [[0, 1, 0.022], [0.16 + 0.04 * r(), 0.85, 0.02]]) {
+    const i0 = Math.round(t * sr), m = Math.round(d * sr), rise = Math.max(1, Math.round(0.00015 * sr));
+    for (let i = 0; i < m + rise; i++) {
+      // the N: a jump up, a straight fall through zero to minus, a jump back
+      const v = i < rise ? i / rise : i < m ? 1 - (2 * (i - rise)) / (m - rise) : -1 * (1 - (i - m) / rise);
+      x[i0 + i] += a * v;
+    }
+    thump(x, sr, t, 60, 30, 0.05, 0.35 * a, 0.12);
+  }
+  mixInto(x, layer(sr, r, { dur: 1.4, attack: 0.03, decay: 0.45, f: 160 }), 0.02, 0.35, sr);
+  return x;
+}
+
+/** The roar of the V-2's fall, heard after it has burst (the sound of its coming arrives last), dying away upward. */
+function v2FallRecipe(sr, r) {
+  const len = 4.5, x = new Float32Array(Math.ceil(len * sr));
+  mixInto(x, layer(sr, r, { dur: len, attack: 0.25, decay: 1.3, sweep: (t) => 250 + 2200 * Math.exp(-t / 1.1) }), 0, 1, sr);
+  mixInto(x, layer(sr, r, { dur: len, attack: 0.3, decay: 1.6, f: 90 }), 0, 0.6, sr);
+  return x;
+}
+
+/**
+ * A German air-raid siren (looping): the motor siren's wailing tone, rising and falling every 8 s (the
+ * Fliegeralarm), two rotor voices beating slightly, with the rush of air through the ports.
+ */
+function sirenLoop(sr, r) {
+  const T = 8, n = Math.round(T * sr), x = new Float32Array(n);
+  const air = loopNoise(sr, r, n, (b) => biquad(b, sr, 'bp', 1500, 0.6));
+  for (const [det, amp] of [[1, 1], [1.005, 0.5]]) {
+    // f(t) = det (165 + 185 (1 - cos(2 pi t / T))): whole cycles per loop, so the phase closes exactly
+    for (let i = 0; i < n; i++) {
+      const t = i / sr, ph = TAU * det * (350 * t - (185 * T / TAU) * Math.sin((TAU * t) / T));
+      x[i] += amp * (Math.sin(ph) + 0.5 * Math.sin(2 * ph + 0.4) + 0.3 * Math.sin(3 * ph + 1.1) + 0.12 * Math.sin(4 * ph + 2));
+    }
+  }
+  normalize(x);
+  for (let i = 0; i < n; i++) {
+    const w = 0.5 - 0.5 * Math.cos((TAU * i) / n); // the air rushes louder as the rotor comes up to speed
+    x[i] = x[i] * (0.75 + 0.25 * w) + air[i] * 0.1 * (0.5 + w);
+  }
+  return normalize(x);
+}
+
+/**
+ * The Napier Sabre of a Typhoon at low level (looping): the four-bladed propeller's beat, 24 cylinders
+ * barking out of the stub exhausts in a rough snarl, the roar and the supercharger's whine.
+ */
+function sabreLoop(sr, r) {
+  const T = 4, n = Math.round(T * sr), x = new Float32Array(n);
+  const prop = snap(98, T), bark = snap(186, T), k = Math.round(bark * T);
+  const rough = loopNoise(sr, r, n, (b) => biquad(b, sr, 'lp', 25));
+  const roar = loopNoise(sr, r, n, (b) => biquad(biquad(b, sr, 'lp', 1400), sr, 'hp', 50));
+  const phs = Array.from({ length: 8 }, () => r() * TAU);
+  for (let i = 0; i < n; i++) {
+    const ph = (TAU * prop * i) / sr;
+    let s = 0;
+    for (let h = 1; h <= 8; h++) s += Math.sin(h * ph + phs[h - 1]) / Math.pow(h, 0.8);
+    x[i] = s * 0.35 * (0.8 + 0.4 * rough[i]) + roar[i] * 0.45;
+  }
+  const ex = new Float32Array(n);
+  const pops = [0, 1, 2, 3].map(() => layer(sr, r, { dur: 0.012, attack: 0.0002, decay: 0.0015, type: 'bp', f: 800 + 600 * r(), q: 0.7 }));
+  for (let i = 0; i < k; i++) wrapInto(ex, pops[i & 3], i / bark, 0.45 + 0.55 * r(), sr);
+  normalize(ex);
+  for (let i = 0; i < n; i++) x[i] += ex[i] * 0.55;
+  addTone(x, sr, 2350, 0.03, T);
+  return normalize(saturate(normalize(x), 1.5));
+}
+
+/**
+ * The FF 33 field telephone being rung: the crank's magneto whirring and the polarized bell's clapper
+ * hammering two gongs at the frequency of the current it makes, two long rings.
+ */
+function feldRecipe(sr, r) {
+  const len = 2.5, x = new Float32Array(Math.ceil(len * sr));
+  for (const [t0, d] of [[0.05, 0.9], [1.3, 0.9]]) {
+    mixInto(x, layer(sr, r, { dur: d, attack: 0.05, decay: 0.6, type: 'bp', f: 380, q: 1.5 }), t0, 0.15, sr); // the magneto's gears
+    for (let k = 0, t = t0; t < t0 + d; k++, t += 1 / (16 + 4 * Math.min(1, (t - t0) / 0.2))) {
+      const a = k & 1;
+      modes(x, sr, t, a ? [[1490, 0.4, 0.22], [3620, 0.16, 0.1], [5300, 0.07, 0.05]] : [[1330, 0.4, 0.25], [3250, 0.16, 0.1], [4900, 0.07, 0.05]], r, 0.5 + 0.2 * r());
+      mixInto(x, layer(sr, r, { dur: 0.01, attack: 0.0002, decay: 0.0015, type: 'hp', f: 2500 }), t, 0.15, sr);
+    }
+  }
+  biquad(x, sr, 'hp', 200);
+  return saturate(normalize(x), 1.2);
+}
+
+/** A German field radio: static, the heterodyne's whistle as it is tuned in, a call in the tone, static again. */
+function funkRecipe(sr, r) {
+  const len = 1.9, n = Math.ceil(len * sr), x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = (r() * 2 - 1) * (r() < 0.003 ? 1.6 : 0.12);
+  biquad(x, sr, 'bp', 1700, 0.5);
+  let ph = 0;
+  for (let i = 0; i < Math.round(0.4 * sr); i++) { // the whistle sliding down to the note
+    const t = i / sr;
+    ph += (TAU * (880 + 1800 * Math.exp(-t / 0.12))) / sr;
+    x[i + Math.round(0.05 * sr)] += 0.5 * Math.sin(ph) * Math.min(1, t / 0.02, (0.4 - t) / 0.05);
+  }
+  let t = 0.55;
+  for (const d of [0.2, 0.07, 0.2, 0.07]) { // dah-dit-dah-dit
+    const m = Math.round(d * sr), i0 = Math.round(t * sr), a = Math.round(0.004 * sr);
+    for (let i = 0; i < m; i++) x[i0 + i] += 0.7 * Math.sin((TAU * 880 * i) / sr) * Math.min(1, i / a, (m - i) / a);
+    t += d + 0.07;
+  }
+  biquad(x, sr, 'hp', 300);
+  biquad(x, sr, 'lp', 3000);
+  return x;
+}
+
 /**
  * Every bank as a list of build tasks [group, key, fn], so start() can render the
  * essentials at once and spread the rest over a few frames. `make(channels, sampleRate)`
- * turns sample arrays into an AudioBuffer. Distances: 'near' / 'mid' / 'far'.
+ * turns sample arrays into an AudioBuffer. Distances: 'near' / 'mid' / 'far'. `ww2`: false (the
+ * British game's banks only, as before), true (those, then the WW2 banks), 'only' (just the WW2 banks).
  */
-export function bankTasks(SR, make) {
+export function bankTasks(SR, make, { ww2 = false } = {}) {
   const midSR = Math.min(SR, 32000), farSR = 16000, loopSR = Math.min(SR, 24000);
   const set = (n, seed, fn) => () => Array.from({ length: n }, (_, i) => fn(mulberry(seed + i * 7919)));
   const mono = (sr) => (x) => make([tail(normalize(x, 0.95), sr)], sr);
@@ -756,6 +1070,10 @@ export function bankTasks(SR, make) {
       [g, 'far', set(2, seed + 9, far(farSR, (r) => burstRecipe(farSR, r, cls, kind), n + 2.6, { ...rl, t1: rl.t1 + 1.5 }))]
     );
   };
+  if (ww2 === 'only') {
+    ww2Banks();
+    return tasks;
+  }
   // the essentials, rendered on the first click
   tasks.push(
     ['loop', 'tear', set(1, 211, loopOf(loopSR, tearLoop))],
@@ -801,18 +1119,102 @@ export function bankTasks(SR, make) {
     ['ui', 'bell', set(1, 359, (r) => mono(midSR)(bellRecipe(midSR, r)))],
     ['ui', 'whistle', set(2, 361, (r) => mono(midSR)(whistleRecipe(midSR, r)))]
   );
+  if (ww2) ww2Banks();
   return tasks;
+
+  // The German side (WW2 mode), after the British banks and with seeds of their own, so the British
+  // game renders exactly as before; rocket voices and launches first, the colossal guns last.
+  function ww2Banks() {
+    const farLaunch = (fn, len) => far(farSR, fn, len, { count: 12, t0: 0.3, t1: 3, gain: 0.45, f: 420 });
+    tasks.push(
+      ['loop', 'moan', set(1, 503, loopOf(loopSR, moanLoop))],
+      ['loop', 'buzz', set(1, 509, loopOf(loopSR, buzzLoop))],
+      ['rocket', 'near', set(3, 521, (r) => mono(midSR)(rocketLaunchRecipe(midSR, r)))],
+      ['rocket', 'far', set(2, 527, farLaunch((r) => rocketLaunchRecipe(farSR, r), 6.5))],
+      ['v1', 'launch', set(2, 541, (r) => mono(midSR)(v1LaunchRecipe(midSR, r)))],
+      ['v1', 'far', set(1, 547, farLaunch((r) => v1LaunchRecipe(farSR, r), 7.5))],
+      ['loop', 'v2', set(1, 557, loopOf(loopSR, v2Loop))],
+      ['v2', 'pre', set(1, 563, (r) => mono(loopSR)(v2Recipe(loopSR, r, { pre: true, len: 5.5, hold: 4.6 })))],
+      ['v2', 'main', set(1, 569, (r) => mono(loopSR)(v2Recipe(loopSR, r, { len: 14, hold: 3.2 })))],
+      ['v2', 'ignite', set(1, 571, (r) => mono(loopSR)(v2Recipe(loopSR, r, { len: 4.5, hold: 3 })))],
+      ['v2', 'boom', set(2, 577, (r) => mono(midSR)(v2BoomRecipe(midSR, r)))],
+      ['v2', 'fall', set(1, 587, (r) => mono(midSR)(v2FallRecipe(midSR, r)))],
+      ['loop', 'sabre', set(1, 593, loopOf(loopSR, sabreLoop))],
+      ['loop', 'siren', set(1, 599, loopOf(loopSR, sirenLoop))],
+      ['ui', 'feld', set(1, 601, (r) => mono(midSR)(feldRecipe(midSR, r)))],
+      ['ui', 'funk', set(2, 607, (r) => mono(midSR)(funkRecipe(midSR, r)))]
+    );
+    gun('colossal', 613);
+    bursts('colossal', 'ground', 617);
+  }
 }
 
 // ================================================================== the engine
 
 const MIN_GAIN = { burst: 0.003, load: 0.02, flare: 0.01 };
 const STEPS = { trolley: 'trolley', crane: 'crane', chain: 'crane', ram: 'ram', rammer: 'ram', breech: 'breech', screw: 'screw', clang: 'clang', lock: 'clang', cartridge: 'cartridge', charge: 'cartridge', bag: 'cartridge', ready: 'ready', fire: 'fire', whistle: 'whistle' };
-const UI = { phone: 'phone', wireless: 'wireless', click: 'click', paper: 'paper', bell: 'bell', whistle: 'whistle', gong: 'bell', switch: 'click', button: 'click', lock: 'click', alarm: 'phone', warning: 'phone' };
+const UI = { phone: 'phone', wireless: 'wireless', click: 'click', paper: 'paper', bell: 'bell', whistle: 'whistle', gong: 'bell', switch: 'click', button: 'click', lock: 'click', alarm: 'phone', warning: 'phone', feldfernsprecher: 'feld', fernsprecher: 'feld', feld: 'feld', funk: 'funk', funkspruch: 'funk' };
+const UI_WW2 = { feld: 'phone', funk: 'wireless' }; // what plays while the WW2 banks are still being rendered
+
+// Sources that move and are heard where they were when the sound left them (aircraft, the climbing V-2):
+// a ring of past positions, sampled every `dt` s, searched for the emission whose sound arrives now.
+const HIST = 256;
+function track(dt) {
+  return { dt, t: new Float64Array(HIST), x: new Float64Array(HIST), y: new Float64Array(HIST), z: new Float64Array(HIST), on: new Uint8Array(HIST), head: -1, n: 0, last: -1e9 };
+}
+function trackPush(tr, now, p, on, force = false) {
+  if (!force && now - tr.last < tr.dt) return;
+  tr.last = now;
+  const h = (tr.head = (tr.head + 1) % HIST);
+  tr.t[h] = now;
+  tr.x[h] = p.x;
+  tr.y[h] = p.y;
+  tr.z[h] = p.z;
+  tr.on[h] = on ? 1 : 0;
+  tr.n = Math.min(tr.n + 1, HIST);
+}
+/** The retarded source: position, closing speed toward the listener `L` and whether it was sounding; false while nothing has arrived yet. */
+function retarded(tr, L, now, out) {
+  let nf = 0, ni = -1;
+  for (let k = 0; k < tr.n; k++) {
+    const i = (tr.head - k + HIST) % HIST;
+    const dx = tr.x[i] - L.x, dy = tr.y[i] - L.y, dz = tr.z[i] - L.z, d = Math.hypot(dx, dy, dz);
+    const f = now - tr.t[i] - d / SOUND_SPEED; // >= 0: this emission has reached the listener
+    if (f < 0) {
+      nf = f;
+      ni = i;
+      continue;
+    }
+    // between this (older, arrived) and the newer one not yet arrived; or the newest of all
+    const u = ni < 0 ? 0 : f / (f - nf), j = ni < 0 ? i : ni;
+    out.x = tr.x[i] + (tr.x[j] - tr.x[i]) * u;
+    out.y = tr.y[i] + (tr.y[j] - tr.y[i]) * u;
+    out.z = tr.z[i] + (tr.z[j] - tr.z[i]) * u;
+    out.t = tr.t[i] + (tr.t[j] - tr.t[i]) * u;
+    out.on = tr.on[ni < 0 || u < 0.5 ? i : j];
+    out.newest = ni < 0;
+    // the source's velocity there, from the pair that brackets it (or the newest two)
+    const a = ni < 0 ? (i - 1 + HIST) % HIST : i, b = ni < 0 ? i : j, dt = tr.t[b] - tr.t[a];
+    out.closing = 0;
+    if (dt > 1e-3 && (ni >= 0 || tr.n > 1)) {
+      const vx = (tr.x[b] - tr.x[a]) / dt, vy = (tr.y[b] - tr.y[a]) / dt, vz = (tr.z[b] - tr.z[a]) / dt;
+      const ex = out.x - L.x, ey = out.y - L.y, ez = out.z - L.z, d2 = Math.max(Math.hypot(ex, ey, ez), 0.5);
+      out.closing = -(vx * ex + vy * ey + vz * ez) / d2;
+    }
+    out.d = Math.max(Math.hypot(out.x - L.x, out.y - L.y, out.z - L.z), 0.5);
+    return true;
+  }
+  return false;
+}
 
 export class AudioEngine {
-  constructor({ context = null } = {}) {
+  constructor({ context = null, ww2 = false } = {}) {
     this.ctx = null;
+    this.wantWW2 = ww2; // render the WW2 banks at start (else on the first WW2 call, or enableWW2())
+    this.ww2 = false;
+    this.movers = []; // aircraft and climbing rockets: looping voices heard at their retarded position
+    this.sirenV = null;
+    this.ret = { x: 0, y: 0, z: 0, t: 0, d: 1, closing: 0, on: 0, newest: false };
     this.given = context;
     this.volume = 0.8;
     this.muted = false;
@@ -930,7 +1332,9 @@ export class AudioEngine {
       chans.forEach((c, i) => b.copyToChannel(c, i));
       return b;
     };
-    const tasks = bankTasks(ctx.sampleRate, make);
+    this.make = make;
+    this.ww2 = this.wantWW2;
+    const tasks = bankTasks(ctx.sampleRate, make, { ww2: this.ww2 });
     const split = tasks.indexOf(null);
     for (const t of tasks.slice(0, split)) this.runTask(t);
     this.pending = tasks.slice(split + 1);
@@ -950,9 +1354,30 @@ export class AudioEngine {
 
   // one bank per tick so the first seconds never stall
   pump() {
-    if (!this.pending.length) return;
+    if (!this.pending.length) {
+      this.pumping = false;
+      return;
+    }
+    this.pumping = true;
     this.runTask(this.pending.shift());
     setTimeout(() => this.pump(), 12);
+  }
+
+  /**
+   * Render the WW2 banks (rockets, the V-1 and V-2, the colossal guns, aircraft, siren, German console
+   * sounds) over the next frames. Called by the first WW2 sound if nobody did; pass `{ ww2: true }` to the
+   * constructor, or call this early (on choosing the WW2 mode), so the first rocket is not a placeholder.
+   */
+  enableWW2() {
+    if (this.ww2) return;
+    if (!this.ctx) {
+      this.wantWW2 = true;
+      return;
+    }
+    this.ww2 = true;
+    for (const t of bankTasks(this.ctx.sampleRate, this.make, { ww2: 'only' })) if (t) this.pending.push(t);
+    if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
+    else if (!this.pumping) this.pump();
   }
 
   // Real recordings: fetched and decoded in the background; once the synthesized banks are done
@@ -1355,6 +1780,11 @@ export class AudioEngine {
 
   /** The bank of a class, or the nearest class that has been rendered yet (the rest arrive over the first seconds). */
   classBank(prefix, cls) {
+    if (cls === 'colossal') {
+      if (this.bank[prefix + cls]) return this.bank[prefix + cls];
+      this.enableWW2();
+      cls = 'huge'; // until it is rendered
+    }
     const i = ORDER.indexOf(cls);
     for (let k = 0; k < ORDER.length; k++) {
       for (const j of k ? [i - k, i + k] : [i]) {
@@ -1377,7 +1807,7 @@ export class AudioEngine {
       const big = c.cal >= 9;
       const r = this.direct({ level: Math.min(1.1, (0.8 * c.slap * k) / Math.max(d, c.slap * 0.25)), bus: this.blastBus, force: true });
       if (r) {
-        this.playBuf(r, pick(this.bank.slap?.[big ? 'big' : 'small']));
+        this.playBuf(r, pick(this.bank.slap?.[big ? 'big' : 'small']), { rate: c.cal >= 20 ? 0.75 : 1 });
         this.finish(r);
       }
       this.duck(big ? 0.2 : 0.35, big ? 2.2 : 1.2, true);
@@ -1400,7 +1830,7 @@ export class AudioEngine {
       this.shock(r.d, c, p);
     });
     // heavy pieces also come through the ground, ahead of the air
-    if (c.cal >= 9) this.tremor(pos, c, c.cal >= 15 ? 1 : 0.6);
+    if (c.cal >= 9) this.tremor(pos, c, c.cal >= 20 ? 1.3 : c.cal >= 15 ? 1 : 0.6);
   }
 
   tremor(pos, c, k) {
@@ -1409,7 +1839,7 @@ export class AudioEngine {
       const d = this.dist(p), g = this.gainAt(d, ref, level);
       const r = this.direct({ level: g, bus: this.blastBus, filter: { type: 'lowpass', freq: 160 }, force: true });
       if (!r) return;
-      this.playBuf(r, pick(this.bank.tremor?.[c.cal >= 15 ? 'big' : 'small']));
+      this.playBuf(r, pick(this.bank.tremor?.[c.cal >= 15 ? 'big' : 'small']), { rate: c.cal >= 20 ? 0.7 : 1 });
       this.finish(r);
     }, { speed: GROUND_SPEED });
   }
@@ -1417,11 +1847,13 @@ export class AudioEngine {
   /**
    * A shell bursting at `pos` (metres, world). `fuze`: 'air' or 'time' bursts in the air (a hail of
    * shrapnel); anything else (default) is a ground burst: a crump, earth thrown up and debris falling.
+   * A V-2 (`fuze: 'v2'` or `kind: 'v2'`) comes with the sonic boom's double crack and, last, the roar of its fall.
    */
-  burst(pos, calibre = 6, { fuze = 'impact', ground } = {}) {
+  burst(pos, calibre = 6, { fuze = 'impact', ground, kind } = {}) {
     if (!this.ctx) return;
     const cls = classOf(calibre), c = CLS[cls], s = c.cal / 6;
-    const air = ground === false || fuze === 'air' || fuze === 'time' || fuze === 'shrapnel';
+    const air = cls !== 'colossal' && (ground === false || fuze === 'air' || fuze === 'time' || fuze === 'shrapnel');
+    if (fuze === 'v2' || kind === 'v2') this.v2Arrival(pos, s);
     const ref = 55 * Math.pow(s, 0.9) + 20, level = air ? 1.05 : 1.2 + 0.1 * Math.min(s, 2.5);
     const rate = Math.pow(c.cal / Math.max(calibre, 1), 0.2) * (0.96 + Math.random() * 0.08);
     this.enqueue('burst', pos, ref, level, (p) => {
@@ -1468,18 +1900,22 @@ export class AudioEngine {
    * Bind a flight voice to a sim shell `{ pos, vel, alive, calibre, own }`; it is read every update
    * and stops when `alive` goes false. Own shells leave the gun (the camera often rides along behind
    * one: the air roars past it); big shells passing overhead are the freight train.
+   * WW2 kinds by `shell.kind`: 'nbw41' (and 'rp3') the rocket's moaning rush; 'v1' the pulse jet's buzz
+   * until `shell.engineOff` is set (it stops dead, heard d / 343 s later); 'v2' none (it outruns its sound);
+   * 'gustav' and 'karl' a deeper, heavier freight train; the other German guns by calibre as before.
    */
   shell(sh) {
-    if (!sh || this.shells.has(sh)) return;
-    this.shells.set(sh, { incoming: false });
+    if (!sh || this.shells.has(sh) || sh.kind === 'v2') return;
+    if (ROCKET_KINDS[sh.kind] || sh.kind === 'v1' || COLOSSAL_KINDS[sh.kind]) this.enableWW2();
+    this.shells.set(sh, { incoming: false, t0: this.ctx?.currentTime ?? 0, offAt: Infinity });
   }
 
   /** An enemy shell coming down close to the listener: adds the rising scream to its flight voice. */
   incoming(sh) {
-    if (!sh) return;
+    if (!sh || sh.kind === 'v2') return;
     const e = this.shells.get(sh);
     if (e) e.incoming = true;
-    else this.shells.set(sh, { incoming: true });
+    else this.shells.set(sh, { incoming: true, t0: this.ctx?.currentTime ?? 0, offAt: Infinity });
   }
 
   buildShellVoice() {
@@ -1504,6 +1940,18 @@ export class AudioEngine {
     return { lp, pan, out, parts, sh: null };
   }
 
+  /** The WW2 loops join a voice the first time it carries one of their kinds (British voices never build them). */
+  addPart(v, k) {
+    const buf = this.bank.loop?.[k]?.[0];
+    if (!buf || v.parts[k]) return;
+    const g = this.ctx.createGain();
+    g.gain.value = 0;
+    g.connect(v.lp);
+    const src = this.loop(buf);
+    src.connect(g);
+    v.parts[k] = { g, src };
+  }
+
   updateShells(dt, now) {
     const l = this.listenerPos, lv = this.listenerVel;
     const cand = [];
@@ -1518,7 +1966,7 @@ export class AudioEngine {
       const spd = v ? Math.hypot(v.x, v.y, v.z) : 0, sp = clamp(spd / 450, 0, 1);
       // closing speed along the line of sight, relative to the listener (a camera riding the shell hears no shift)
       const closing = v ? -((v.x - lv.x) * dx + (v.y - lv.y) * dy + (v.z - lv.z) * dz) / d : 0;
-      const cal = sh.calibre ?? 6, size = clamp(cal / 15, 0.15, 1.1), big = smooth(cal, 7, 12);
+      const cal = sh.calibre ?? KIND_CAL[sh.kind] ?? 6, size = clamp(cal / 15, 0.15, 1.1), big = smooth(cal, 7, 12);
       const own = sh.own ? 1 : 0.9;
       const g = {
         tear: 0.6 * sp * Math.min(1, (120 + 200 * size) / d) * (0.55 + 0.45 * size) * own,
@@ -1526,10 +1974,34 @@ export class AudioEngine {
         whistle: 0.2 * sp * Math.min(1, 90 / d) * (1 - 0.6 * big),
         train: big * 0.95 * Math.pow(clamp(1 - d / 4000, 0, 1), 1.6) * smooth(sp, 0.1, 0.4) * (0.5 + 0.5 * Math.min(1, 600 / d)),
         scream: e.incoming ? 0.75 * Math.pow(clamp(1 - d / 2400, 0, 1), 1.5) * (closing > 0 ? 1 : 0.35) : 0,
+        moan: 0,
+        buzz: 0,
       };
-      const score = g.tear + g.rush + g.train * 1.2 + g.scream + g.whistle;
+      let kind = 0; // 0 a shell, 1 a rocket, 2 the V-1, 3 a colossal shell
+      if (ROCKET_KINDS[sh.kind]) {
+        // the moan carries well beyond the tearing; louder while the motor still burns (about 1.8 s)
+        kind = 1;
+        const burning = sh.burning ?? now - e.t0 < 1.8;
+        g.moan = 0.8 * Math.min(1, 400 / d) * (burning ? 1 : 0.6) * (0.4 + 0.6 * sp);
+        g.tear *= 0.4;
+        g.whistle = 0;
+        g.train = 0;
+      } else if (sh.kind === 'v1') {
+        // the pulse jet: heard for many km; when it cuts out the silence reaches the listener d / 343 s later
+        kind = 2;
+        if (sh.engineOff && e.offAt === Infinity) e.offAt = now + d / SOUND_SPEED;
+        g.buzz = now < e.offAt ? 0.95 * Math.pow(Math.min(1, 700 / d), 0.85) : 0;
+        g.tear = g.whistle = g.train = 0;
+        g.rush *= 0.5;
+      } else if (COLOSSAL_KINDS[sh.kind] || cal >= 20) {
+        // the 600 and 800 mm shells: a lower, slower train that carries twice as far
+        kind = 3;
+        g.train = 1.1 * Math.pow(clamp(1 - d / 8000, 0, 1), 1.4) * smooth(sp, 0.1, 0.4) * (0.5 + 0.5 * Math.min(1, 1200 / d));
+        g.whistle = 0;
+      }
+      const score = g.tear + g.rush + g.train * 1.2 + g.scream + g.whistle + g.moan + g.buzz;
       if (score < 0.004) continue;
-      cand.push({ sh, e, d, closing, g, score, size, big, p });
+      cand.push({ sh, e, d, closing, g, score, size, big, p, kind });
     }
     cand.sort((a, b) => b.score - a.score);
     const keep = cand.slice(0, SHELL_VOICES);
@@ -1547,11 +2019,15 @@ export class AudioEngine {
       const dop = clamp(SOUND_SPEED / Math.max(SOUND_SPEED - clamp(c.closing, -300, 300), 60), 0.5, 2.2);
       // heavy shells howl lower; the train is allowed to swing a whole octave as it passes
       const base = 1.18 - 0.5 * c.size;
-      const rates = { tear: base * dop, rush: (0.9 + 0.2 * (1 - c.size)) * Math.sqrt(dop), whistle: base * dop, train: (1.05 - 0.3 * c.size) * dop, scream: (0.8 + 0.7 * (1 - clamp(c.d / 1800, 0, 1))) * dop };
+      const rates = { tear: base * dop, rush: (0.9 + 0.2 * (1 - c.size)) * Math.sqrt(dop), whistle: base * dop, train: (1.05 - 0.3 * c.size) * dop, scream: (0.8 + 0.7 * (1 - clamp(c.d / 1800, 0, 1))) * dop, moan: dop, buzz: dop };
+      if (c.kind === 3) rates.train *= 0.72;
+      if (c.kind === 1) this.addPart(v, 'moan');
+      else if (c.kind === 2) this.addPart(v, 'buzz');
       for (const k in v.parts) {
         const part = v.parts[k];
         if (part.src) part.src.playbackRate.setTargetAtTime(rates[k], now, 0.06);
-        part.g.gain.setTargetAtTime(c.g[k], now, 0.05);
+        // the V-1's engine stops dead, not in a fade
+        part.g.gain.setTargetAtTime(c.g[k], now, k === 'buzz' && !c.g.buzz ? 0.006 : 0.05);
       }
       v.lp.frequency.setTargetAtTime(this.absorb(c.d), now, 0.08);
       this.setPannerPos(v.pan, c.p.x, c.p.y, c.p.z, 0.04);
@@ -1596,12 +2072,200 @@ export class AudioEngine {
     });
   }
 
-  /** Console and field-station sounds: 'phone' (buzzer), 'wireless' (morse), 'click', 'paper', 'bell', 'whistle'. */
+  // ------------------------------------------------------------------ WW2: rockets, missiles, aircraft, siren
+
+  /** A one-shot from bank `group` (near / far by distance) as a world sound with the travel delay. */
+  oneShot(kind, pos, group, { ref, level, near = 600, reverb = 0.35, shock = null, rate = 1, extra = 0 }) {
+    this.enqueue(kind, pos, ref, level, (p) => {
+      const r = this.route(p, { ref, level, reverb, bus: this.blastBus });
+      if (!r) return;
+      const set = this.bank[group[0]];
+      const list = (r.d < near ? set?.[group[1]] : set?.[group[2] ?? group[1]]) ?? set?.[group[1]];
+      this.playBuf(r, pick(list), { rate: rate * (0.97 + Math.random() * 0.06) });
+      this.finish(r);
+      if (shock) this.shock(r.d, shock, p);
+    }, { extra });
+  }
+
+  /**
+   * One 15 cm Nebelwerfer rocket leaving its tube at `pos`: the rising, beating howl and the rushing roar.
+   * A ripple is six of these about 1.6 s apart: call it per rocket, or once with `{ n: 6, gap: 1.6 }`.
+   */
+  rocket(pos, { n = 1, gap = 1.6 } = {}) {
+    if (!this.ctx) return;
+    this.enableWW2();
+    for (let i = 0; i < n; i++) this.oneShot('rocket', pos, ['rocket', 'near', 'far'], { ref: 140, level: 1.25, near: 700, shock: { cal: 6, deaf: 22, slap: 30 }, extra: i * gap, rate: 0.96 + 0.08 * Math.random() });
+  }
+
+  /** The V-1's steam catapult firing at `pos` (the foot of the ramp): bang, hissing roar, the jet hammering away. */
+  v1Launch(pos) {
+    if (!this.ctx) return;
+    this.enableWW2();
+    this.oneShot('launch', pos, ['v1', 'launch', 'far'], { ref: 220, level: 1.3, near: 1500, shock: { cal: 9, deaf: 45, slap: 60 } });
+  }
+
+  /**
+   * A V-2's engine at `pos` (the firing table): k 0 the preliminary stage (a lower roar and crackle while it
+   * stands, about 5 s), k 1 the main stage (the overwhelming roar). With `obj` ({ pos, alive, burning? },
+   * pos updated by the sim) the main stage's roar follows the rocket up, heard where it was when the sound
+   * left it, until `alive` is false or `burning` false (burn-out); without it, a 14 s roar fading as it climbs.
+   */
+  v2Launch(pos, k = 1, obj = null) {
+    if (!this.ctx) return;
+    this.enableWW2();
+    if (!k) return this.oneShot('launch', pos, ['v2', 'pre'], { ref: 500, level: 1.1, reverb: 0.4 });
+    const p0 = here(pos), follow = obj?.pos;
+    this.oneShot('launch', p0, ['v2', follow ? 'ignite' : 'main'], { ref: 1500, level: 1.35, near: 1e9, reverb: 0.5, shock: { cal: 12, deaf: 120, slap: 0 } });
+    this.enqueue('launch', p0, 1500, 1, () => this.duck(0.35, follow ? 4 : 8, true));
+    if (follow) this.mover(obj, 'v2', { ref: 3000, level: 1.1, dt: 0.25, attack: 2.5, life: 200, bus: this.blastBus, onKey: 'burning' });
+  }
+
+  /** The sonic boom's double crack with a V-2's burst, and the roar of its fall arriving last. */
+  v2Arrival(pos, s) {
+    this.enableWW2();
+    const ref = 55 * Math.pow(s, 0.9) + 20;
+    this.enqueue('burst', pos, ref * 1.5, 1.2, (p) => {
+      const r = this.route(p, { ref: ref * 1.5, level: 1.2, reverb: 0.4, bus: this.blastBus });
+      if (!r) return;
+      this.playBuf(r, pick(this.bank.v2?.boom));
+      this.playBuf(r, pick(this.bank.v2?.fall), { at: 1.3 + Math.random() * 0.5, gain: 0.55, rate: 0.9 + Math.random() * 0.15 });
+      this.finish(r);
+    });
+  }
+
+  /**
+   * A low-flying aircraft's engine bound to `obj` ({ pos, alive }): a Typhoon's Napier Sabre, heard where
+   * the aircraft was when the sound left it, with Doppler; it ends when `alive` turns false.
+   */
+  aircraft(obj) {
+    if (!this.ctx || !obj?.pos || this.movers.some((m) => m.obj === obj)) return;
+    this.enableWW2();
+    this.mover(obj, 'sabre', { ref: 160, level: 1.0, dt: 0.1, attack: 0.3, life: 1e9, bus: this.sfx, onKey: 'alive' });
+  }
+
+  /** A looping voice on a moving object, started when its bank is ready (the WW2 banks may still be rendering). */
+  mover(obj, loop, opts) {
+    const tr = track(opts.dt);
+    trackPush(tr, this.ctx.currentTime, obj.pos, true, true);
+    this.movers.push({ obj, loop, ...opts, tr, src: null, nodes: null, t0: this.ctx.currentTime, dead: false, fade: 0 });
+  }
+
+  updateMovers(now) {
+    const L = this.listenerPos, R = this.ret;
+    let j = 0;
+    for (const m of this.movers) {
+      const o = m.obj;
+      // emissions: while the object lives and its engine runs; one last sample marks the end
+      if (!m.dead) {
+        const on = o.alive !== false && (m.onKey === 'alive' || o[m.onKey] !== false);
+        if (on && o.pos) trackPush(m.tr, now, o.pos, true);
+        else {
+          trackPush(m.tr, now, o.pos ?? L, false, true);
+          m.dead = true;
+        }
+      }
+      if (!m.src && this.bank.loop?.[m.loop]) {
+        const ctx = this.ctx;
+        const g = ctx.createGain(), lp = ctx.createBiquadFilter(), pan = this.panner(false), out = ctx.createGain();
+        g.gain.value = 0;
+        lp.type = 'lowpass';
+        out.gain.value = m.level;
+        const src = this.loop(this.bank.loop[m.loop][0]);
+        src.connect(g).connect(lp).connect(pan).connect(out).connect(m.bus);
+        m.src = src;
+        m.nodes = { g, lp, pan, out };
+      }
+      const heard = retarded(m.tr, L, now, R);
+      const over = (m.dead && heard && !R.on) || now - m.t0 > m.life;
+      if (m.nodes) {
+        const n = m.nodes;
+        let gain = 0;
+        if (heard && R.on) {
+          gain = Math.min(1, m.ref / R.d) * Math.min(1, (now - m.t0) / m.attack);
+          const dop = clamp(SOUND_SPEED / Math.max(SOUND_SPEED - clamp(R.closing, -300, 300), 60), 0.5, 2.2);
+          m.src.playbackRate.setTargetAtTime(dop, now, 0.08);
+          n.lp.frequency.setTargetAtTime(this.absorb(R.d), now, 0.1);
+          this.setPannerPos(n.pan, R.x, R.y, R.z, 0.05);
+        }
+        n.g.gain.setTargetAtTime(gain, now, over ? 0.15 : 0.08);
+      }
+      if (over) {
+        m.fade ||= now;
+        if (now - m.fade > 1) {
+          if (m.src) {
+            m.src.stop();
+            for (const k in m.nodes) m.nodes[k].disconnect();
+            m.src.disconnect();
+          }
+          continue;
+        }
+      }
+      this.movers[j++] = m;
+    }
+    this.movers.length = j;
+  }
+
+  /** The air-raid siren over the launch site: `on` winds it up into its rising and falling wail, off winds it down. */
+  siren(on = true) {
+    if (!this.ctx) return;
+    this.enableWW2();
+    const ctx = this.ctx, now = ctx.currentTime, v = this.sirenV;
+    if (on) {
+      if (v && !v.off) return;
+      const buf = this.bank.loop?.siren?.[0];
+      if (!buf) {
+        this.sirenWanted = true; // update() starts it once the bank is ready
+        return;
+      }
+      this.sirenWanted = false;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const g = ctx.createGain(), lp = ctx.createBiquadFilter(), sp = ctx.createStereoPanner(), send = ctx.createGain();
+      lp.type = 'lowpass';
+      lp.frequency.value = 3200;
+      sp.pan.value = 0.35;
+      send.gain.value = 0.7;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(LEVELS.siren, now + 4);
+      // the rotor spinning up: the pitch climbs from a growl to the wail
+      src.playbackRate.setValueAtTime(0.25, now);
+      src.playbackRate.linearRampToValueAtTime(1, now + 5);
+      src.connect(lp).connect(g).connect(sp).connect(this.ambBus);
+      g.connect(send).connect(this.reverbSend);
+      src.start(now, 0);
+      this.sirenV = { src, nodes: [src, g, lp, sp, send], g, off: false };
+    } else {
+      this.sirenWanted = false;
+      if (!v || v.off) return;
+      v.off = true;
+      // the siren running down: the long falling moan as the rotor slows
+      for (const [prm, to] of [[v.src.playbackRate, 0.15], [v.g.gain, 0]]) {
+        prm.cancelScheduledValues(now);
+        prm.setValueAtTime(prm.value, now);
+        prm.linearRampToValueAtTime(to, now + 9);
+      }
+      setTimeout(() => {
+        v.src.stop();
+        for (const n of v.nodes) n.disconnect();
+        if (this.sirenV === v) this.sirenV = null;
+      }, 9500);
+    }
+  }
+
+  /**
+   * Console and field-station sounds: 'phone' (buzzer), 'wireless' (morse), 'click', 'paper', 'bell', 'whistle';
+   * the German console's 'feldfernsprecher' (the FF 33's crank and bell) and 'funk' (a field radio's call).
+   */
   ui(name) {
     if (!this.ctx) return;
-    const key = UI[name] ?? 'click';
-    const loud = key === 'whistle' || key === 'phone';
-    const r = this.direct({ level: LEVELS.ui * (loud ? 1.3 : 1), reverb: key === 'click' || key === 'paper' ? 0 : 0.12, force: loud, pan: key === 'wireless' ? -0.25 : 0 });
+    let key = UI[name] ?? 'click';
+    if (UI_WW2[key]) {
+      this.enableWW2();
+      if (!this.bank.ui?.[key]) key = UI_WW2[key];
+    }
+    const loud = key === 'whistle' || key === 'phone' || key === 'feld';
+    const r = this.direct({ level: LEVELS.ui * (loud ? 1.3 : 1), reverb: key === 'click' || key === 'paper' ? 0 : 0.12, force: loud, pan: key === 'wireless' || key === 'funk' ? -0.25 : 0 });
     if (!r) return;
     this.playBuf(r, pick(this.bank.ui?.[key]) ?? pick(this.bank.ui?.click), { rate: key === 'click' ? 0.92 + Math.random() * 0.16 : 1 });
     this.finish(r);
@@ -1754,6 +2418,8 @@ export class AudioEngine {
     this.land(now);
     this.flush(now);
     this.updateShells(dt, now);
+    if (this.movers.length) this.updateMovers(now);
+    if (this.sirenWanted && this.bank.loop?.siren) this.siren(true);
     this.updateAmbience(dt, now);
     // the pressure of a close blast: a dull mix and ringing, recovering over a few seconds
     this.deaf = Math.max(0, this.deaf - dt * 0.4);

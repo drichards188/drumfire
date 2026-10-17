@@ -6,6 +6,7 @@ import { Clods } from './fx/clods.js';
 import { makeAtlasData } from './fx/atlas.js';
 import { Emitters } from './fx/emitters.js';
 import * as art from './fx/artillery.js';
+import * as rk from './fx/rockets.js';
 
 export { SMOKE, seedFx };
 const tmpV = new THREE.Vector3();
@@ -357,6 +358,7 @@ export class FX {
     this.sites = []; // ground fires left by impacts: { p, k, t, life, acc }
     this.ground = () => 0; // (x, z) -> ground height, set by main (terrain.heightAt)
     this.dt = 1 / 60;
+    this.time = 0; // game seconds run through update (the V-1's pulse jet keys its throb on it)
     this.alloc = { smoke: maxSmoke, glow: maxGlow };
     this._order = new Float64Array(maxSmoke);
     this._cam = new THREE.Vector3();
@@ -453,8 +455,13 @@ export class FX {
     }
   }
 
-  /** Smoke puff for trails behind damaged aircraft and burning wreckage. k: 0 grey .. 1 black and burning. */
-  trail(p, vel, k) {
+  /**
+   * Smoke puff for trails behind damaged aircraft and burning wreckage. k: 0 grey .. 1 black and burning.
+   * With a string kind it is one frame of a WW2 rocket or missile instead: trail(pos, vel, 'rocket' |
+   * 'v1' | 'v2', dt), see fx/rockets.js (pos the nozzle, dt game seconds since the last call).
+   */
+  trail(p, vel, k, dt) {
+    if (typeof k === 'string') { rk.trail(this, p, vel, k, dt); return; }
     const black = k > 0.5;
     const c = black ? 0.035 : 0.3 - k * 0.3;
     this.addSmoke(black ? SMOKE.BLACK : SMOKE.TRAIL, p.x + rr(-0.3, 0.3), p.y + rr(-0.3, 0.3), p.z + rr(-0.3, 0.3), vel.x * 0.15, vel.y * 0.15, vel.z * 0.15, rr(2.5, 4.5) * (black ? 1.5 : 1), 1 + k, 4 + k * 5, c, c, c * 1.05, black ? 0.75 : 0.5, { drag: 1.2, glow: black ? 0.05 : 0 });
@@ -526,6 +533,15 @@ export class FX {
 
   /** An ammunition dump going up; size ~1 a stack, ~3 a depot. */
   cookOff(p, size = 1) { this.curGy = this.ground(p.x, p.z); art.cookOff(this, p, size); this.curGy = null; }
+
+  /** One 15 cm Nebelwerfer rocket leaving its tube: p the mouth, dir the unit line of flight (fx/rockets.js). */
+  rocketLaunch(p, dir) { this.curGy = this.ground(p.x, p.z); rk.rocketLaunch(this, p, dir); this.curGy = null; }
+
+  /** The V-1's steam catapult shot: p the foot of the ramp, dir the unit vector up it, len its length. */
+  v1Launch(p, dir, len = 48) { this.curGy = this.ground(p.x, p.z); rk.v1Launch(this, p, dir, len); this.curGy = null; }
+
+  /** The A4 lighting on its table: p the nozzle, k 0 the pre-stage, 1 the main stage (then call trail(.., 'v2', dt) every frame). */
+  v2Ignition(p, k = 1) { this.curGy = this.ground(p.x, p.z); rk.v2Ignition(this, p, k); this.curGy = null; }
 
   _pop(x, y, z, s) { art.pop(this, x, y, z, 0.6 + s * 3); }
 
@@ -924,6 +940,7 @@ export class FX {
   // ---------------------------------------------------------------- update
   update(dt, camera, { sunDir, sunColor, sunIntensity = 6.5, ambient, night = 0 }) {
     this.dt = dt > 0 ? dt : this.dt;
+    this.time += dt;
     const cam = this._cam.copy(camera.position);
     // by night the exposure is wide open: flashes and fires would bloom across half the sky
     this.glowMat.uniforms.uGlowScale.value = 1 - 0.65 * night;

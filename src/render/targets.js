@@ -11,7 +11,10 @@ import { smooth } from './anim.js';
 // Parts are wrapped in a Group so a model part can be moved to where the sim has its part (batteries and
 // dumps place their parts by the sim's spacing, the convoy drives): damage code moves the part itself.
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
-const MOVES = new Set(['battery', 'dump', 'crossroads']);
+const MOVES = new Set(['battery', 'dump', 'crossroads', 'abattery', 'amedium', 'adump', 'aconvoy']);
+// WW2 road traffic: the vehicles face -Z in the model and are turned to their direction of travel
+const DRIVES = new Set(['aconvoy']);
+const DUMPS = new Set(['dump', 'adump']);
 const FALL = 14; // s a shot-down balloon takes to come down
 
 export class TargetViews {
@@ -90,7 +93,7 @@ export class TargetViews {
     for (const v of this.views.values()) {
       const t = v.t, parts = t.parts, model = v.model;
       const show = t.present !== false;
-      v.group.visible = show || v.kind === 'crossroads' || v.kind === 'railyard';
+      v.group.visible = show || v.kind === 'crossroads' || v.kind === 'railyard' || DRIVES.has(v.kind);
       if (!show) {
         for (const p of model.parts) p.visible = false;
         continue;
@@ -126,14 +129,33 @@ export class TargetViews {
           const w = v.wraps[i], h = w.userData.home;
           const dx = parts[i].x - t.pos.x, dz = parts[i].z - t.pos.z;
           const c = Math.cos(-v.group.rotation.y), s = Math.sin(-v.group.rotation.y);
-          w.position.set(dx * c + dz * s - h.x, 0, -dx * s + dz * c - h.z);
+          if (DRIVES.has(v.kind)) {
+            // turn the wrapper to the way the part moved since the last frame (kept while it stands still)
+            // and place it so the part, at its home offset inside the wrapper, lands on the sim's position
+            // (the reference point stays until the part has gone 0.3 m, so slow time scales still turn it;
+            // a jump of more than 30 m is a convoy starting over, not a direction)
+            const lx = dx * c + dz * s, lz = -dx * s + dz * c, ud = w.userData;
+            const md = ud.lx == null ? Infinity : Math.hypot(lx - ud.lx, lz - ud.lz);
+            if (md > 0.3) {
+              if (md < 30) w.rotation.y = Math.atan2(-(lx - ud.lx), -(lz - ud.lz));
+              ud.lx = lx;
+              ud.lz = lz;
+            }
+            const cy = Math.cos(w.rotation.y), sy = Math.sin(w.rotation.y);
+            w.position.set(lx - (h.x * cy + h.z * sy), 0, lz - (-h.x * sy + h.z * cy));
+          } else w.position.set(dx * c + dz * s - h.x, 0, -dx * s + dz * c - h.z);
         }
         // a part newly destroyed burns
         if (!sp.alive && !v.dead[i] && v.kind !== 'balloon') {
           v.dead[i] = true;
           if (fx && model.anchors?.burn?.[i]) {
             model.anchors.burn[i].getWorldPosition(_v);
-            fx.burnSite?.(_v, v.kind === 'dump' ? 1.6 : 1, v.kind === 'dump' ? 90 : 45);
+            fx.burnSite?.(_v, DUMPS.has(v.kind) ? 1.6 : 1, DUMPS.has(v.kind) ? 90 : 45);
+          }
+          // targets with vents (the Sevastopol cliff magazine's tunnel mouths): smoke pours out of each
+          for (const a of (fx && model.anchors?.vents?.[i]) || []) {
+            a.getWorldPosition(_v);
+            fx.burnSite?.(_v, 1.3, 120);
           }
         } else if (sp.alive && v.dead[i]) v.dead[i] = false;
         if (v.kind === 'balloon' && i === 0 && !sp.alive) {

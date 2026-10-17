@@ -1,6 +1,7 @@
 // Game tables: guns, shells, targets, difficulty. Arcade values with period flavour, not weapons data.
 // Angles in radians, lengths in metres, times in seconds, masses in kg (calibres in inches for display).
 import { DEG } from '../sector.js';
+import { GUNS_WW2, SHELLS_WW2, TARGETS_WW2, FFE_WW2 } from './tables_ww2.js';
 
 export const G = 9.81;
 export const STEP = 0.05;
@@ -145,3 +146,10 @@ export const PHASES = [
   { n: 4, title: 'Night', sub: 'Harassing fire on the roads and the railhead.', t0: 1300 },
   { n: 5, title: 'Zero hour', sub: 'The creeping barrage. Lift it on the timetable.', t0: 1850 },
 ];
+
+// The German guns, shells and targets of the WW2 mode join the same tables under their own kind names
+// (tables_ww2.js); nothing British reads them.
+Object.assign(GUNS, GUNS_WW2);
+Object.assign(SHELLS, SHELLS_WW2);
+Object.assign(TARGETS, TARGETS_WW2);
+Object.assign(FFE, FFE_WW2);

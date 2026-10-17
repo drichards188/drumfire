@@ -2,7 +2,7 @@
 // artillery board, the fire order card, the range table, the guns, the missions and the message pad. Each
 // kind differs only through KINDS (common.js): rounds offered, fuzes, charges, the note under the header.
 import { el, setText, setCls, label, Seg, Btn, Bar, snd } from '../widgets.js';
-import { SECTORS, YARD } from '../../sector.js';
+import { TH, lenU, lenShort } from '../theatre.js';
 import { Board } from '../board.js';
 import { OrderCard, STEPS_YD } from './orderCard.js';
 import { RangeTable } from './rangeTable.js';
@@ -13,6 +13,7 @@ import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault
 import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
 import { slipCorr, corrText } from '../messages.js';
+import { SpecialCard } from './special.js';
 
 export function mountConsole(ctx) {
   const { id, send, memo, shared, mail, tracker } = ctx;
@@ -44,7 +45,7 @@ export function mountConsole(ctx) {
       case 'step': memo.step = ((memo.step == null ? 2 : memo.step) + 1) % STEPS_YD.length; snd('click'); break;
       case 'corr': {
         if (!o.target) { say('Lay on a target first.'); break; }
-        const y = (e && e.shiftKey ? 10 : stepYd()) * YARD;
+        const y = (e && e.shiftKey ? 10 : stepYd()) * lenU();
         if (arg === 'add') cmd('correct', { add: y, right: 0 });
         else if (arg === 'drop') cmd('correct', { add: -y, right: 0 });
         else if (arg === 'right') cmd('correct', { add: 0, right: y });
@@ -58,7 +59,7 @@ export function mountConsole(ctx) {
         break;
       case 'cease': send('cease', {}); say('Cease fire.'); break;
       case 'mode': send('mode', { mode: arg }); break;
-      case 'sos': send('sos', { sector: arg }); say(`S.O.S. ${arg}: all guns to the S.O.S. line.`); break;
+      case 'sos': send('sos', { sector: arg }); say(`${TH.sos} ${arg}: all guns to the ${TH.sos} line.`); break;
       case 'apply': {
         // only this unit's newest report on its present target; read against the lay of now
         const s = arg || mail.slips.find((x) => !x.applied && slipCorr(x, U));
@@ -92,8 +93,8 @@ export function mountConsole(ctx) {
     onChange: (v) => act('mode', v),
   });
   const sosBox = el('div', 'sosbox');
-  const sosChips = SECTORS.map((s) => {
-    const b = new Btn({ main: s.id, sub: s.name.slice(0, 7), cls: 'sos', onClick: () => act('sos', s.id), tip: `Call S.O.S. on ${s.name} (S)` });
+  const sosChips = TH.sectors.map((s) => {
+    const b = new Btn({ main: s.id, sub: s.name.slice(0, 7), cls: 'sos', onClick: () => act('sos', s.id), tip: `Call ${TH.sos} on ${s.name} (S)` });
     const strength = new Bar({ cls: 'mini' });
     const w = el('div', 'sosc');
     w.append(b.el, strength.el);
@@ -122,7 +123,14 @@ export function mountConsole(ctx) {
   tut(rtab.el, 'rtab'); tut(guns.el, 'guns'); tut(missions.el, 'missions'); tut(pad.el, 'pad');
   const top = el('div', 'toprow');
   const right = el('div', 'rightcol');
-  right.append(order.el, rtab.el);
+  // the WW2 special weapons: their procedure card takes the range table's place (Gustav, Karl), or the whole column
+  // (the launch sites, which have no fire order)
+  const SPECIAL = new Set(['gustav', 'karl', 'v1', 'v2']);
+  const special = SPECIAL.has(ctx.kind) ? new SpecialCard({ kind: ctx.kind, send: (n, a) => send(n, a) }) : null;
+  if (special) tut(special.el, 'special');
+  if (special && cfg0.launcher) right.append(special.el);
+  else if (special) right.append(order.el, special.el);
+  else right.append(order.el, rtab.el);
   top.append(board.el, right);
   const bot = el('div', 'botrow');
   bot.append(guns.el, missions.el, pad.el);
@@ -147,9 +155,13 @@ export function mountConsole(ctx) {
     let st;
     const alarmSet = board.alarm || new Set();
     if (dead) st = 'BATTERY SILENCED: every piece knocked out';
-    else if (alarmSet.size) { const a = [...alarmSet][0]; st = `S.O.S. ${a}, ${SECTORS.find((s) => s.id === a).name}! Press S: every gun to the S.O.S. line.`; }
+    else if (alarmSet.size) { const a = [...alarmSet][0]; st = `${TH.sos} ${a}, ${TH.sectors.find((s) => s.id === a)?.name ?? ''}! Press S: every gun to the ${TH.sos} line.`; }
     else if (now - toastT < 3200) st = toast;
     else if (unit.mode === 'hold') st = 'HOLDING: cease fire. Press A or MANUAL to go on.';
+    else if (cfg.launcher && unit.special) {
+      const sp = unit.special, s = sp.steps[sp.i];
+      st = sp.done ? 'NO ROUNDS LEFT: the site stands down.' : sp.fault ? `FAULT: ${sp.fault.text}. Fix (O), carry on or scrub.` : sp.cover ? 'IN COVER: work stopped (B to go back to work).' : `${sp.doing ? 'WORKING' : 'NEXT'}: ${s?.name ?? ''}${s?.set && sp.settings[s.set] == null ? ' (dial it first)' : sp.doing ? '' : '. Enter to start.'}`;
+    } else if (unit.gate) st = `NOT READY: ${unit.gate}. See the ${unit.kind === 'gustav' ? 'PREPARATION' : 'KARL'} card.`;
     else if (!o.target) st = 'AWAITING A TARGET. Click the board, or Tab and Enter for a mission.';
     else {
       const tail = m ? ` (${taskNo(m.id)} ${m.state === 'ffe' ? 'for effect' : m.state})` : '';
@@ -183,8 +195,8 @@ export function mountConsole(ctx) {
     const gkey = `${unit.id}|${m ? m.id + m.state + !!m.onTarget : ''}|${(o.rounds || 1) > 1}`;
     if (memo.gunsKey !== gkey || memo.guns == null) { memo.gunsKey = gkey; memo.guns = gunsDefault(m, o); }
     if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
-    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / YARD });
-    rtab.update({ sim, unit });
+    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU() });
+    if (special) special.update(unit); else rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
     pad.update({ mail, unit, sim });
@@ -195,6 +207,8 @@ export function mountConsole(ctx) {
   function key(e, down) {
     if (!U) return false;
     const c = e.code;
+    if (special && down && special.key(e, U)) return true;
+    if (cfgOf(U).launcher && (c === 'Space' || c.startsWith('Arrow'))) return true;
     if (c === 'Space') { order.bFire.press(down); if (down) act('fire'); return true; }
     if (!down) return c.startsWith('Arrow');
     if (e.repeat && c.startsWith('Arrow')) return true;
@@ -211,7 +225,7 @@ export function mountConsole(ctx) {
       case 'KeyZ': act('fuzecycle'); return true;
       case 'KeyG': act('gunscycle'); return true;
       case 'KeyA': send('mode', { mode: U.mode === 'auto' ? 'manual' : 'auto' }); return true;
-      case 'KeyS': { const al = board.alarm && [...board.alarm][0]; const weak = al || SECTORS.filter((s) => (SIM.front ? SIM.front[s.id] : 1) > 0).sort((a, b) => (SIM.front ? SIM.front[a.id] : 1) - (SIM.front ? SIM.front[b.id] : 1))[0]?.id; if (weak) act('sos', weak); return true; }
+      case 'KeyS': { const al = board.alarm && [...board.alarm][0]; const weak = al || TH.sectors.filter((s) => (SIM.front ? SIM.front[s.id] : 1) > 0).sort((a, b) => (SIM.front ? SIM.front[a.id] : 1) - (SIM.front ? SIM.front[b.id] : 1))[0]?.id; if (weak) act('sos', weak); return true; }
       case 'KeyX': act('step'); return true;
       case 'Backspace': case 'Delete': act('cease'); return true;
       case 'Period': act('apply'); return true;

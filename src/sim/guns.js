@@ -28,7 +28,7 @@ export function pickGuns(u, guns) {
 
 export function createUnits(sim) {
   const diff = sim.difficulty;
-  return UNITS.map((def) => {
+  return (sim.theatre?.units ?? UNITS).map((def) => {
     const g0 = GUNS[def.kind];
     const pieces = piecePlacements(def).map((pl) => {
       const g = GUNS[pl.kind];
@@ -47,15 +47,15 @@ export function createUnits(sim) {
       id: def.id, kind: def.kind, name: def.name, callsign: def.callsign, battery: def.battery,
       pos: { x: def.pos.x, y: sim.heightAt(def.pos.x, def.pos.z), z: def.pos.z }, zero: def.zero, alive: true,
       mode: 'auto', pieces, missionId: null, charges: g0.charges.length, arc: g0.traverse,
-      ammo: { he: Math.round(g0.ammo.he * n * diff.ammo), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
-      signature: 0,
+      ammo: { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo)), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
+      signature: 0, def, gate: def.special ? 'not ready' : null,
       order: {
         x: def.pos.x, z: def.pos.z, line: def.zero, range: 0, charge: -1, el: g0.restEl, tof: 0, fuze: 'instant',
         rounds: 1, adj: { add: 0, right: 0 }, target: null, ok: false, reason: '', chargeAuto: true, h: 0, sheaf: null, shift: 0,
       },
       stats: { rounds: 0, hits: 0, kills: 0 },
       // internal
-      bias: null, firing: false, underFire: -999, lastShot: -999, ammoMax: { he: Math.round(g0.ammo.he * n * diff.ammo), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
+      bias: null, firing: false, underFire: -999, lastShot: -999, ammoMax: { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo)), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
       ai: null, hits: 0, lost: 0,
     };
   });
@@ -156,8 +156,9 @@ export class Guns {
       if (ok) any = true; else if (!reason) reason = why;
       if (!first && sol) first = sol;
     });
-    o.ok = any;
-    o.reason = any ? '' : reason || 'no pieces';
+    o.why = any ? '' : reason || 'no pieces'; // the guns' own reason, even while a controller holds the unit
+    o.ok = any && !u.gate;
+    o.reason = u.gate ? u.gate : any ? '' : reason || 'no pieces';
     if (first) {
       o.el = first.el;
       o.tof = first.tof;
@@ -195,7 +196,7 @@ export class Guns {
   // start the series: every live piece (or the `guns` chosen with pickGuns) fires `order.rounds` rounds
   fire(u, guns) {
     const sim = this.sim, o = u.order;
-    if (!o.target || !o.ok || !u.alive) return false;
+    if (!o.target || !o.ok || !u.alive || u.gate) return false;
     const live = u.pieces.filter((p) => p.state !== 'dead' && !p.blocked);
     const m = u.missionId != null ? sim.missionById(u.missionId) : null;
     // without `guns`: ranging means one gun (the lead) fires a single round; the whole battery is for effect
@@ -247,7 +248,7 @@ export class Guns {
   }
 
   needLoad(u, p) {
-    if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold') return false;
+    if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold' || u.gate) return false;
     if (!u.order.target || p.blocked || !p.cmd.ok) return false;
     if (p.crew < Math.ceil(p.crewMax * 0.3)) return false;
     const sh = u.order.fuze === 'shrapnel';
@@ -264,7 +265,7 @@ export class Guns {
       // supplies and replacements
       const quiet = sim.time - u.underFire > 40;
       for (const k of ['he', 'shrapnel']) if (u.ammo[k] < u.ammoMax[k]) {
-        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length;
+        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length * (u.def?.resupply ?? (u.def?.special ? 0 : 1));
         if (u._ac >= 1) {
           u._ac -= 1;
           u.ammo[k]++;
@@ -307,15 +308,28 @@ export class Guns {
 
   updatePiece(u, p, dt) {
     const sim = this.sim, g = GUNS[p.kind];
-    const heavy = g.load[0].step === 'depress';
+    const heavy = g.load[0]?.step === 'depress';
     // recoil: a quick kick back, then a slow run out
     if (p.state === 'recoil') {
-      const t = sim.time - p.firedAt;
+      // a rocket launcher's ripple: the rest of the tubes go off one by one
+      if (p.ripple) {
+        if (sim.time >= p.ripple.next && p.ripple.i < g.salvo.n) {
+          // the order was changed under the ripple (a new lay out of reach, a cease): the rest stay in their tubes
+          if (!u.order.ok || u.order.charge < 0 || u.mode === 'hold') p.ripple.i = g.salvo.n;
+          else {
+            this.fireShell(u, p);
+            return;
+          }
+        }
+        if (p.ripple.i < g.salvo.n) return;
+      }
+      const t = sim.time - (p.ripple ? p.ripple.last : p.firedAt);
       const k = t < 0.18 ? t / 0.18 : Math.max(0, 1 - (t - 0.18) / g.runout);
       p.recoil = t < 0.18 ? Math.sin(k * Math.PI / 2) : k * k * (3 - 2 * k);
       if (t > 0.18 + g.runout) {
         p.recoil = 0;
         p.state = 'idle';
+        p.ripple = null;
       }
       this.slew(p, dt, p.el);
       return;
@@ -340,9 +354,12 @@ export class Guns {
       if (job.t >= job.dur) {
         if (st.step === 'depress' && Math.abs(p.el - g.loadEl) > 0.002) return;
         if (st.step === 'lay' && !this.laid(p)) return;
-        if (st.step === 'ram') {
+        // the round is in when it is rammed (a rocket launcher has no rammer: when the rockets are in the tubes)
+        if (st.step === 'ram' || (st.step === 'shell' && g.salvo)) {
           p.loaded = true;
-          if (u.order.fuze === 'shrapnel') u.ammo.shrapnel = Math.max(0, u.ammo.shrapnel - 1); else u.ammo.he = Math.max(0, u.ammo.he - 1);
+          const n = g.salvo ? Math.min(g.salvo.n, u.ammo.he) : 1;
+          p.tubes = n;
+          if (u.order.fuze === 'shrapnel') u.ammo.shrapnel = Math.max(0, u.ammo.shrapnel - 1); else u.ammo.he = Math.max(0, u.ammo.he - n);
           p.shot = u.order.fuze;
         }
         p.ji++;
@@ -442,6 +459,20 @@ export class Guns {
       fuzeErr: sim.gauss() * 22,
     };
     sim.shells.push(shell);
+    if (g.salvo) {
+      // one round of a launcher is a ripple: the first rocket starts it, recoil (above) fires the rest
+      shell.tube = p.ripple ? p.ripple.i : 0;
+      const n = p.tubes ?? g.salvo.n;
+      if (p.ripple) {
+        p.ripple.i++;
+        p.ripple.next = sim.time + g.salvo.dt;
+        p.ripple.last = sim.time;
+        if (p.ripple.i >= n) p.ripple.i = g.salvo.n;
+        sim.events.fire?.(u, p, shell);
+        return shell;
+      }
+      p.ripple = { i: n > 1 ? 1 : g.salvo.n, next: sim.time + g.salvo.dt, last: sim.time };
+    }
     p.loaded = false;
     p.rounds = Math.max(0, p.rounds - 1);
     p.state = 'recoil';

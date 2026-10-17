@@ -5,6 +5,7 @@
 import { el, setText, setCls, card, label, Btn, Seg } from '../widgets.js';
 import { tut } from '../highlight.js';
 import { ref, dm, elev, yd, FUZE, fromYd, commas, gunChoices } from './common.js';
+import { TH, lenU, lenName, lenShort } from '../theatre.js';
 import { pickGuns } from '../../sim/guns.js';   // pure: which pieces a `guns` choice fires, for the FIRE label
 
 export const STEPS_YD = [10, 25, 50, 100, 200];
@@ -38,7 +39,7 @@ export class OrderCard {
     this.target = el('div', 'tgt');
     this.tRef = el('div', 'tref', '--');
     this.tName = el('div', 'tname', 'No target laid');
-    const stamp = el('div', 'tstamp', 'F.O.');
+    const stamp = el('div', 'tstamp', TH.orderStamp);
     this.target.append(el('i', 'ftitle', 'TARGET'), this.tRef, this.tName, stamp);
     this.line = field('LINE'); this.range = field('RANGE', 'wide'); this.el_ = field('ELEVATION');
     const r2 = el('div', 'frow3');
@@ -71,7 +72,7 @@ export class OrderCard {
     this.bDrop = k('DROP', '↓', () => this.act('corr', 'drop'), 'kd');
     this.bLeft = k('LEFT', '←', () => this.act('corr', 'left'), 'kl');
     this.bRight = k('RIGHT', '→', () => this.act('corr', 'right'), 'kr');
-    this.bStep = new Btn({ main: '50 yd', sub: 'X step', cls: 'key kstep', onClick: () => this.act('step') });
+    this.bStep = new Btn({ main: TH.metric ? '50 m' : '50 yd', sub: 'X step', cls: 'key kstep', onClick: () => this.act('step') });
     for (const [b, n] of [[this.bAdd, 'add'], [this.bDrop, 'drop'], [this.bLeft, 'left'], [this.bRight, 'right'], [this.bStep, 'step']]) tut(b.el, `${n} keypad`);
     kp.append(this.bAdd.el, this.bLeft.el, this.bStep.el, this.bRight.el, this.bDrop.el);
     this.bFire = new Btn({ main: 'FIRE', sub: 'Space', cls: 'fire', hold: true, onDown: () => this.act('fire'), onUp: () => {} });
@@ -93,30 +94,30 @@ export class OrderCard {
     setText(this.tRef, t ? ref(t.x, t.z) : '-- . -- . -');
     setText(this.tName, missionName || (t ? 'Map point' : 'Click the board, or take a mission (Tab, Enter)'));
     setCls(this.target, 'none', !t);
-    setText(this.line.v, t ? dm(o.line) : '---°--′');
-    setText(this.line.s, o.adj && Math.abs(o.adj.right) > 0.5 ? `${o.adj.right > 0 ? 'right' : 'left'} ${commas(Math.abs(o.adj.right) / 0.9144)}` : 'on the line');
+    setText(this.line.v, t ? dm(o.line) : TH.metric ? '--‑--' : '---°--′');
+    setText(this.line.s, o.adj && Math.abs(o.adj.right) > 0.5 ? `${o.adj.right > 0 ? 'right' : 'left'} ${commas(Math.abs(o.adj.right) / lenU())}` : TH.metric ? 'Strich, on the line' : 'on the line');
     setText(this.range.v, t ? yd(o.range) : '----');
-    setText(this.range.s, 'yards');
-    setText(this.el_.v, t ? elev(o.el) : '--°--′');
-    setText(this.el_.s, t ? 'from the range table' : '');
+    setText(this.range.s, lenName());
+    setText(this.el_.v, t ? elev(o.el) : TH.metric ? '---' : '--°--′');
+    setText(this.el_.s, t ? (TH.metric ? 'Strich, range table' : 'from the range table') : '');
     setText(this.charge.v, String((o.charge || 0) + 1));
     setText(this.charge.s, `of ${nCharges}`);
     this.charge.dec.enable((o.charge || 0) > 0);
     this.charge.inc.enable((o.charge || 0) < nCharges - 1);
     setText(this.tof.v, t ? `${Math.round(o.tof)} sec` : '--');
-    setText(this.tof.s, t ? `apex ${commas(x.apexYd || 0)} yds` : '');
+    setText(this.tof.s, t ? `apex ${commas(x.apexYd || 0)} ${lenShort()}` : '');
     setText(this.rounds.v, String(o.rounds || 1));
     setText(this.rounds.s, this.cfg.rounds.length > 1 && (o.rounds || 1) > 1 ? 'fire for effect' : 'ranging round');
     this.rounds.dec.enable((o.rounds || 1) > this.cfg.rounds[0]);
     this.rounds.inc.enable((o.rounds || 1) < this.cfg.rounds[this.cfg.rounds.length - 1]);
     this.fuze.set(o.fuze || 'instant');
     const a = o.adj || { add: 0, right: 0 };
-    const addY = Math.round(a.add / 0.9144), rY = Math.round(a.right / 0.9144);
+    const addY = Math.round(a.add / lenU()), rY = Math.round(a.right / lenU());
     const parts = [];
     if (addY) parts.push(`${addY > 0 ? 'ADD' : 'DROP'} ${Math.abs(addY)}`);
     if (rY) parts.push(`${rY > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(rY)}`);
     setText(this.corrVal, parts.length ? parts.join('  ·  ') : 'none');
-    this.bStep.text(`${stepYd} yd`);
+    this.bStep.text(`${stepYd} ${TH.metric ? 'm' : 'yd'}`);
     // the FIRE key says what it will fire
     const sel = x.gunsSel, multi = this.guns.btns.size > 0;
     let main = 'FIRE', sub = ready > 0 ? `${ready} of ${alive} ready` : 'Space', go = ready > 0;

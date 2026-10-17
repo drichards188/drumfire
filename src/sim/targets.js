@@ -18,7 +18,7 @@ export class Targets {
     const sim = this.sim;
     this.pending.length = 0;
     this.wires = [];
-    sim.targets = SITES.map((s) => this.make(s));
+    sim.targets = (sim.theatre?.sites ?? SITES).map((s) => this.make(s));
     this.byId = new Map(sim.targets.map((t) => [t.id, t]));
   }
 

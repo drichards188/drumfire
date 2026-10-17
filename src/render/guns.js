@@ -12,7 +12,7 @@ import { smooth } from './anim.js';
 // shot and is winched forward before the round goes in), and the loading crew (crews.js). Rigs are the ones main built
 // (`rigs`, keyed `${unitId}:${pieceIndex}`) or built here when main has none.
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
-const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4 };
+const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4, lefh18: 0.25, sfh18: 0.3, k18: 0.5, mrs18: 0.5, nbw41: 0.05, gustav: 0.6, bertha: 0.8, karl: 0.9, v1: 0, v2: 0 };
 
 // How far back along the rails the railway car stands `tf` s after the shot (0..1 of rig.carRoll): a fast run
 // back against the brakes (decelerating over 1.9 s), a pause, then the slow winch-in that ends as the round
@@ -82,7 +82,7 @@ export class GunViews {
         if (!rig && this.onlyRigs) continue;
         if (!rig) {
           try { rig = buildGun(p.kind); } catch (e) { console.warn('buildGun', p.kind, e.message); continue; }
-          const pl = piecePlacements(UNITS.find((d) => d.id === u.id))[p.i];
+          const pl = piecePlacements(u.def ?? UNITS.find((d) => d.id === u.id))[p.i];
           rig.root.position.set(pl.x, this.terrain.heightAt(pl.x, pl.z), pl.z);
           rig.root.rotation.y = headingFor(pl.bearing);
           this.scene.add(rig.root);

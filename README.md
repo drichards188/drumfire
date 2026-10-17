@@ -35,6 +35,26 @@ Keys 1 to 5 select a unit.
 
 The heavies are slow and powerful (the 15-inch loads in about 50 s, the 18-inch railway gun in about 90 s, the 60-pounder in about 10 s), and each kind has its own loading crew and machinery: the 15-inch shell crane, the railway gun's shell hoist and tray, the pair carrying a 9.2-inch round from the stack. The 60-pounders can also fire shrapnel (airbursts over wire and open ground). The 18-inch railway gun (2,500 lb shells, about 20 km) reaches the deep targets (railhead, headquarters, far batteries) and fires the biggest burst in the game. It is a what-if gun: the real British 18-inch railway howitzer was ordered in 1918 and proofed in 1920 or 1921 and never fired in the war (the 18-inch naval guns of the monitors General Wolfe and Lord Clive did fire on the Belgian coast in 1918), so in 1917 the Group has it in its place of the 12-inch railway howitzers that really served at Ypres.
 
+## WW2 mode: the German side
+
+On the title screen, **WW2 German** switches to a second mode (`/?mode=ww2`): German artillery in the Second World War, in five separate operations, because these weapons never served together. Pick one on the title screen, or open it directly:
+
+| Operation | URL | What you do |
+|---|---|---|
+| Flanders, autumn 1944 | `/?mode=ww2&op=flanders` | The backbone battle on the game's Ypres map, sides turned round: seven units (keys 1 to 7) against the Allied gun line, tanks, dumps, the AOP strip, the HQ and the railhead; Sperrfeuer when their infantry attacks, Störungsfeuer at night, a Feuerwalze for our counter-attack |
+| Sevastopol, June 1942 | `/?mode=ww2&op=sevastopol` | Build the 80 cm Gustav on its firing curve (work gangs on survey, track, gantry cranes, assembly, ammunition train, flak, camouflage), then spend its few 4.8 t shells on the coastal turrets, the forts and the cliff magazine; a 21 cm Mörser battery supports |
+| Brest-Litovsk, 22 June 1941 | `/?mode=ww2&op=karl` | The 60 cm Karl-Gerät: drive to a firing position, turn the whole vehicle onto the target (4 degrees of traverse), lower the hull, load 2.2 t shells from the Munitionsschlepper's crane, fire, fetch more shells, displace |
+| V-1 launch site | `/?mode=ww2&op=v1` | The launch drill at the Walter catapult: missile, wings, compass in the Richthaus, air log, sled, fuel, steam generator, fuzes, clear, fire; faults, air raids (take cover), the flight and its report |
+| V-2 mobile battery | `/?mode=ww2&op=v2` | Erect the A4 on its firing table, align it, set the Brennschluss, checks, alcohol, T-Stoff and Z-Stoff, liquid oxygen (it boils off: launch or top up), withdraw, Vorstufe, Hauptstufe |
+
+Add `&play=1` to skip the title screen. The roster (Flanders): 1 10.5 cm leFH 18 (four field howitzers), 2 15 cm sFH 18 (four heavy howitzers), 3 17 cm K 18 (two long guns, counter-battery), 4 21 cm Mörser 18 (two heavy mortars), 5 15 cm Nebelwerfer 41 (three six-tube launchers: a round is a ripple of six rockets), 6 80 cm Gustav (the railway slot: it must be built before it fires and has eight shells), 7 42 cm Big Bertha. **Gustav and Big Bertha in Flanders are alternate history** and are labelled so in the game (Big Bertha is a 1914 to 1918 weapon; the Gustav fired only at Sevastopol). The Big Bertha first-person demo stays available from the title screen.
+
+The console works the same way in metres and Strich (6400 to the circle), German grid references (r and h in km) and German words: the VB (forward observer) telephones "weiter 150, links 50", the Storch radios in metres, Gegenbatterie, Sperrfeuer (S), Feuerwalze. The special weapons have a procedure card instead of the range table: the Gustav's preparation tasks (+ and - put work gangs on them, J all hands), the Karl's positions (T turn, L lower or raise, Y fetch shells), the launch drills (Enter next step, arrow keys dial the compass and the range, B take cover, O fix a fault).
+
+Tutorials in the WW2 mode: Die Grundlagen (the leFH 18, metres and Strich), Der Nebelwerfer, Gustav: railway preparation, Karl-Gerät, V-1: the launch drill, V-2: the A4 drill (`/?mode=ww2&tutorial=w-basics|w-werfer|w-gustav|w-karl|w-v1|w-v2`; a lesson on another operation reloads the page there).
+
+History and game numbers are kept apart: `docs/WW2.md` has the real specifications with their sources, every departure of the game's tables from them, and the balancing assumptions. The V-weapons were used chiefly against cities and were built with concentration-camp forced labour; their missions target the port of Antwerp, score only the launch drill and whether the round reached the target area, and never count casualties.
+
 ## Controls
 
 Main keys:
@@ -126,6 +146,7 @@ DESIGN.md            the contract between the modules, with a changelog
 ```bash
 node tools/simtest.mjs 1 2 3 --both --quiet                   # headless battles: all-auto vs a scripted player
 node tools/simtest.mjs 1 2 3 --all --difficulty all --table   # + a scripted player on all five units; --jobs N, --log
+node tools/ww2test.mjs 1 2 3 --op all --difficulty all          # the WW2 operations with the auto crews; --log, --quiet
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
 ```

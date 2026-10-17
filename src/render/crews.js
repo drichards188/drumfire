@@ -4,6 +4,9 @@ import { buildShell, buildCartridge } from '../models/shells.js';
 import { GUNS, STEP } from '../sim/tables.js';
 import { ramp, smooth, lerp, wrapPi, headingOf, clamp01 } from './anim.js';
 import { CrewField, newPoly, polyAt, finishPoly } from './crewfield.js';
+import { crewForRoleDE } from '../models/v/crew.js';
+import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crews_de.js';
+import { ROLES_HEAVY } from './crews_heavy.js';
 
 // The loading choreography of one gun: the crew (crew.js figures at the rig's crew spots), the shell,
 // the bag and the rammer staff as props, and the rig's mechanisms (the 15-inch crane, the railway
@@ -29,7 +32,11 @@ const ROLES = {
   // (the 2.8 m high loading stage is only reached by ladder, so the cordite is carried by the first loader (on the left, away from the block's swing), who stands on it)
   // the 18-inch railway gun: the 15-inch's drill (a shell hoist, a rammer team on the loading stage) on the car
   rail: { sergeant: 'cmd', layer: 'lay', traverser: 'wheel', lanyard: 'lan', loader1: 'guide0', loader2: 'guide1', rammer1: 'ram', rammer2: 'ram', rammer3: 'ram', rammer4: 'ram', crane1: 'winch', crane2: 'signal', ammo1: 'sling', ammo2: 'idle' },
+  // the WW2 German pieces (crews_de.js, crews_heavy.js)
+  ...ROLES_DE, ...ROLES_HEAVY,
 };
+// kinds drilled as light guns (shell and cartridge men turn with the traverse, the loader alone works the block)
+const LIGHT = new Set(['bl6', 'bl60', ...LIGHT_DE]);
 // roles that stay in the world frame (the rest turn with the gun's traverse)
 const WORLD_ROLES = new Set(['crane1', 'crane2', 'ammo1', 'ammo2', 'crane', 'shell', 'cartridge']);
 
@@ -58,8 +65,8 @@ class Man {
     this.role = spot.role;
     this.idx = idx;
     this.beh = ROLES[crew.kind]?.[spot.role] ?? 'idle';
-    this.world = (WORLD_ROLES.has(spot.role) && crew.kind !== 'bl6' && crew.kind !== 'bl60') || /sergeant|officer|ears/.test(spot.role);
-    const o = crewOutfit(spot.role, idx);
+    this.world = (WORLD_ROLES.has(spot.role) && !LIGHT.has(crew.kind)) || /sergeant|officer|ears/.test(spot.role) || !!WORLD_DE[crew.kind]?.has(spot.role);
+    const o = crewOutfit(spot.role, idx, crew.kind);
     this.fig = buildCrewman(o);
     this.root = this.fig.root;
     this.root.visible = false;
@@ -128,7 +135,8 @@ class Man {
   }
 }
 
-function crewOutfit(role, i) {
+function crewOutfit(role, i, kind) {
+  if (GUNS[kind]?.side === 'german') return crewForRoleDE(role, i); // the WW2 German crews (crew.js german44)
   if (/sergeant|officer/.test(role)) return { outfit: 'officer', skin: i % 4 };
   const o = (i % 3 === 2) ? 'gunner-tunic' : 'gunner';
   return { outfit: o, skin: i % 4 };
@@ -160,7 +168,7 @@ export class GunCrew {
     const bag = buildCartridge(kind === 'rail' ? 'rail' : kind);
     this.bag = propOf(bag);
     this.bagLen = bag.length;
-    const staffLen = { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 4.2 }[kind] ?? 2;
+    const staffLen = rig.staffLen ?? { bl6: 1.7, bl60: 1.8, bl92: 2.6, bl15: 3.4, rail: 4.2, ...STAFF_DE }[kind] ?? 2; // (the super-heavies give their own)
     this.staffLen = staffLen;
     const wood = new THREE.MeshStandardMaterial({ color: 0x7a6040, roughness: 0.8 });
     const iron = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6, metalness: 0.5 });
@@ -200,8 +208,10 @@ export class GunCrew {
     if (this.crane) {
       this.R = -this.hoist.position.x;
       this.cp = this.crane.position;
-      // the ground shell sits where the hook can reach it (jib turned to PI)
-      this.pick = new THREE.Vector3(this.cp.x + this.R, 0.52, this.cp.z);
+      // the ground shell sits where the hook can reach it (jib turned to PI, or to rig.craneRest: the Karl's
+      // carrier and the Bertha's cart; rig.pickY is the shell's middle there when it is not on the ground)
+      const rest = rig.craneRest ?? Math.PI;
+      this.pick = new THREE.Vector3(this.cp.x - this.R * Math.cos(rest), rig.pickY ?? 0.52, this.cp.z + this.R * Math.sin(rest));
     }
     this.restHoist = rig.hoistRange?.up ?? 3.6;
     // the shell's middle below the hook and the hook's height at the stack (the 18-inch has a short sling)
@@ -375,7 +385,7 @@ export class GunCrew {
     if (s === 'ram') this.staffA = (a ?? this.aT) - this.half - (k > 0.8 ? 0.9 * smooth(k, 0.8, 1) : 0) + (k > 0.8 ? 0 : 0);
     else if (s === 'cartridge') {
       const push = smooth(c.k, 0.55, 0.72) - smooth(c.k, 0.78, 0.95);
-      if (c.k > 0.5 && c.k < 0.97 && this.kind !== 'bl6' && this.kind !== 'bl60') this.staffA = lerp(-0.7, 0.1, push);
+      if (c.k > 0.5 && c.k < 0.97 && !LIGHT.has(this.kind)) this.staffA = lerp(-0.7, 0.1, push);
     }
   }
 
@@ -385,7 +395,9 @@ export class GunCrew {
     m.home(h);
     const p = c.p, s = c.s, k = c.k;
     m.noEars = false;
-    const moving = Math.abs(p.cmd.az - p.az) > 3e-4 || Math.abs(p.cmd.el - p.el) > 3e-4 || s === 'lay' || s === 'depress';
+    const de = DE_ACT[m.beh]; // the Nebelwerfer's drill (crews_de.js)
+    if (de) { de(this, m, c, h); return; }
+    const moving =Math.abs(p.cmd.az - p.az) > 3e-4 || Math.abs(p.cmd.el - p.el) > 3e-4 || s === 'lay' || s === 'depress';
     switch (m.beh) {
       case 'lay':
         m.put(h.x, h.y, h.z, h.h, 'lay', moving ? (p.az + p.el) * 30 : 0);
@@ -406,6 +418,7 @@ export class GunCrew {
       case 'pair0': case 'pair1': this.pairMan(m, c, h); break;
       case 'guide0': case 'guide1': this.guideMan(m, c, h); break;
       case 'winch': case 'signal': case 'sling': case 'trolley': this.craneMan(m, c, h); break;
+      case 'liftL': case 'liftR': case 'shove': this.liftMan(m, c, h); break; // the Gustav's lift men (ROLES_HEAVY)
       default:
         m.put(h.x, h.y, h.z, h.h, 'stand', this.idleT + m.seed);
     }
@@ -487,7 +500,7 @@ export class GunCrew {
       }
     }
     // on the heavies the first two heave the breech block round by hand
-    if (idx < 2 && this.kind !== 'bl6' && this.kind !== 'bl60' && (c.s === 'open' || c.s === 'close')) {
+    if (idx < 2 && !LIGHT.has(this.kind) && (c.s === 'open' || c.s === 'close')) {
       this.grip.getWorldPosition(_a).applyMatrix4(_inv);
       m.hand('R', _a.x, _a.y, _a.z, 1);
       m.hand('L', _a.x, _a.y - 0.12, _a.z + 0.12, 1);
@@ -693,8 +706,11 @@ export class GunCrew {
   // ---------------------------------------------------------------- mechanisms and props
   mechanisms(c) {
     const rig = this.rig;
+    if (this.kind === 'gustav') this.liftMech(c);
     if (this.crane) {
-      const rest = Math.PI;
+      const rest = rig.craneRest ?? Math.PI;
+      // a crane that rides a traversing carriage (the Bertha's) moves its rest and its pick-up with it
+      if (rig.craneRest != null) this.pick.set(this.cp.x - this.R * Math.cos(rest), this.pick.y, this.cp.z + this.R * Math.sin(rest));
       let a = rest, y = this.restHoist;
       const lowY = this.lowHoist;
       const T = this.trayAt(this.aT, _a);
@@ -732,19 +748,21 @@ export class GunCrew {
 
   props(c) {
     const rig = this.rig;
+    if (DE_PROPS[this.kind]) { DE_PROPS[this.kind](this, c); return; } // the Nebelwerfer's rockets (crews_de.js)
     // never the rig's own tray props: the choreography draws its own shell
     rig.setShell?.('tray', false);
     rig.setShell?.('crane', false);
     rig.setShell?.('trolley', false);
     rig.setShell?.('cartridge', false);
     const A = this.shellA;
-    if (this.crane) this.craneShells(c);
+    if (this.kind === 'gustav') this.liftShells(c);
+    else if (this.crane) this.craneShells(c);
     else if (this.kind === 'rail') this.railShells(c);
     else if (c.s === 'ram' && this.shellA_a != null) {
       // being rammed home along the tray
       this.trayAt(this.shellA_a, _c);
       this.placeProp(A, _c, this.az, Math.asin(this.u.y), c.k < 0.82);
-    } else if (c.s === 'shell' && c.k >= 0.91 && this.kind !== 'bl92') {
+    } else if (c.s === 'shell' && c.k >= 0.91 && this.kind !== 'bl92' && !/^pair/.test(ROLES[this.kind]?.loader1 ?? '')) {
       // laid on the tray by the single carrier (his role draws it until then)
       this.trayAt(this.aT, _c);
       this.placeProp(A, _c, this.az, Math.asin(this.u.y), true);
@@ -766,7 +784,7 @@ export class GunCrew {
     const showGround = !(c.s === 'shell' && c.k > 0.27) && !['ram', 'cartridge', 'close'].includes(c.s);
     _c.copy(this.pick);
     this.placeProp(B, _c, Math.PI / 2 + 0.0, 0, showGround && mode !== 'hang');
-    B.rotation.set(0, 0, 0);
+    B.rotation.set(0, this.rig.pickYaw ?? 0, 0); // (the Karl's lie across its carrier's hold)
     if (mode === 'hang' || mode === 'ground') {
       // hang under the hook, offset toward the tray at the end of the lowering
       const a = this.craneA, y = this.craneY;
@@ -785,6 +803,67 @@ export class GunCrew {
       this.trayAt(aa, _c);
       this.placeProp(A, _c, this.az, Math.asin(this.u.y), !(c.s === 'ram' && c.k > 0.82));
     } else A.visible = false;
+  }
+
+  // ---------------------------------------------------------------- the 80 cm Gustav (kind 'gustav' only)
+  // Its shell comes from the wagon coupled behind (anchors.shellStack) into the shell lift's cage at the rear
+  // left (pivot hoist, rig.hoistRange.down at the wagon's deck), up to the platform, across on the transfer
+  // trolley to the middle (anchors.liftMid), forward along the platform and onto the tray; the charge lift on
+  // the right (hoist2) goes down and comes back up with the cartridges meanwhile. 'shell' step k:
+  // 0-0.12 cage down, 0.12-0.3 the shell rolled in, 0.3-0.55 up, 0.55-0.7 across, 0.7-1 forward onto the tray.
+  liftMech(c) {
+    const H2 = this.rig.pivots.hoist2, up = this.restHoist, dn = this.lowHoist;
+    let y = up, y2 = up;
+    if (c.s === 'shell') {
+      const k = c.k;
+      y = k < 0.12 ? lerp(up, dn, smooth(k, 0, 0.12)) : k < 0.3 ? dn : lerp(dn, up, smooth(k, 0.3, 0.55));
+      y2 = up - (up - dn) * (smooth(k, 0.08, 0.25) - smooth(k, 0.6, 0.85));
+    }
+    this.hoist.position.y = y;
+    if (H2) H2.position.y = y2;
+  }
+
+  liftMan(m, c, h) {
+    const k = c.s === 'shell' ? c.k : -1;
+    let on;
+    if (m.beh === 'shove') on = k > 0.12 && k < 0.3;
+    else if (m.beh === 'liftL') on = (k >= 0 && k < 0.12) || (k > 0.3 && k < 0.7);
+    else on = (k > 0.08 && k < 0.25) || (k > 0.6 && k < 0.85) || (c.s === 'cartridge' && c.k < 0.3);
+    const pose = on ? (m.beh === 'shove' ? 'push' : 'operate') : 'stand';
+    m.put(h.x, h.y, h.z, h.h, pose, on ? c.now * 1.2 : this.idleT + m.seed);
+  }
+
+  liftShells(c) {
+    const A = this.shellA, B = this.shellB, s = c.s, k = c.k, rig = this.rig;
+    // the shell's heading on the wagon (it stands on the curve, turned a little from the gun's axis)
+    _a.set(0, 0, -1).transformDirection(rig.anchors.shellStack.matrixWorld).transformDirection(_inv);
+    const wy = headingOf(_a.x, _a.z);
+    const waiting = !(s === 'shell' && k > 0.12) && s !== 'ram' && s !== 'cartridge' && s !== 'close' && s !== 'prime' && !c.loaded;
+    this.placeProp(B, this.S, wy, 0, waiting);
+    if (s === 'ram' && this.shellA_a != null) {
+      this.trayAt(this.shellA_a, _c);
+      this.placeProp(A, _c, this.az, Math.asin(this.u.y), k < 0.82);
+      return;
+    }
+    if (s !== 'shell' || k <= 0.12) { A.visible = false; return; }
+    this.hoist.getWorldPosition(_a).applyMatrix4(_inv);
+    _a.y -= this.hang; // the shell's middle in the cage
+    let yaw = this.az, pitch = 0;
+    if (k < 0.3) {
+      const e = smooth(k, 0.14, 0.28);
+      _c.copy(this.S).lerp(_a, e);
+      yaw = wy + wrapPi(this.az - wy) * e;
+    } else if (k < 0.55) _c.copy(_a);
+    else {
+      rig.anchors.liftMid.getWorldPosition(_b).applyMatrix4(_inv);
+      if (k < 0.7) _c.copy(_a).lerp(_b, smooth(k, 0.57, 0.7));
+      else {
+        const T = this.trayAt(this.aT, _a), e = smooth(k, 0.72, 0.97), r = smooth(k, 0.88, 0.97);
+        _c.set(lerp(_b.x, T.x, e), lerp(_b.y, T.y, r), lerp(_b.z, T.z, e));
+        pitch = Math.asin(this.u.y) * r;
+      }
+    }
+    this.placeProp(A, _c, yaw, pitch, true);
   }
 
   railShells(c) {

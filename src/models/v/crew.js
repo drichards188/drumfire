@@ -140,6 +140,9 @@ const COL = {
   // blackened jackboots and belt, the grey-painted box buckle, the gas mask tin, the light grey drill jacket
   gcollar: 0x56604c, steingrau: 0x5f5e55, jackboot: 0x231f1b, gbelt: 0x1f1c18, gbuckle: 0x7d7d74, gascan: 0x58604e, brot: 0x6f6850, canteen: 0x4f4a3e, drill: 0x9c9a88, capband: 0x24221e, piping: 0x9a2a20, cockade: 0xd8d4c8,
 };
+// German 1944 (the WW2 mode's gun crews): the M40 field blouse in a greener field grey, the M35 helmet painted
+// field grey-green, black leather Y straps and pouches, the fluted gas mask canister, canvas gaiters
+Object.assign(COL, { fg44: 0x5a5f4e, fg44t: 0x585b4d, helm44: 0x4f5548, ystrap: 0x1c1a17, pouch44: 0x211f1b, can44: 0x59604c, gaiter: 0x6b6449, tab44: 0x3d4234, red44: 0x9a2a20, button44: 0x6e7064 });
 // EMR ("tsifra") as multipliers of the light base colour: base, green, brown, near black (sRGB)
 const EMR = [0x6d6a4e, 0x596040, 0x5c4d37, 0x3b392c];
 const TILE = 0.3; // metres of cloth per repeat of the pattern texture
@@ -409,6 +412,23 @@ function buildGeometry(o) {
     ], SG, false, true), 'head', cloth);
     B.add(lathe([[0, 0.011], [0.004, 0.011], [0.005, 0.0]], 10, 0, 0, 0).rotateX(-Math.PI / 2).translate(0, 1.707, -0.106), 'head', COL.cockade);
     B.add(lathe([[0, 0.009], [0.004, 0.009], [0.005, 0.0]], 10, 0, 0, 0).rotateX(-Math.PI / 2).translate(0, 1.752, -0.117), 'head', COL.piping);
+  } else if (o.headgear === 'm35') {
+    // M1935 Stahlhelm: lower and smoother than the M1916, a smaller flare and short visor, small vent rivets
+    B.add(stahlhelm35(), 'head', COL.helm44);
+    for (const s of SIDE) B.add(lathe([[0, 0.006], [0.004, 0.006], [0.005, 0.0]], 8, 0, 0, 0).rotateZ(-s * Math.PI / 2).translate(s * 0.112, 1.735, 0.012), 'head', COL.helm44);
+    for (const s of SIDE) B.add(box(0.008, 0.08, 0.012, s * 0.083, 1.605, 0.0, -0.3, 0, -s * 0.12), 'head', COL.ystrap);
+  } else if (o.headgear === 'm43') {
+    // the M43 field cap (Einheitsfeldmütze): a soft crown with a short peak, the turned-up flaps buttoned in front
+    B.add(ringLoft([
+      { y: 1.686, rx: 0.09, rz: 0.105, cz: 0.006 },
+      { y: 1.73, rx: 0.093, rz: 0.108, cz: 0.006 },
+      { y: 1.77, rx: 0.09, rz: 0.106, cz: 0.004 },
+      { y: 1.79, rx: 0.082, rz: 0.098, cz: 0.004, dome: 0.006 },
+    ], SG, false, true), 'head', cloth);
+    B.add(ringLoft([{ y: 1.684, rx: 0.0935, rz: 0.1085, cz: 0.006 }, { y: 1.722, rx: 0.0955, rz: 0.1105, cz: 0.006 }], SG), 'head', cloth);
+    B.add(visor(), 'head', cloth);
+    for (const s of SIDE) B.add(box(0.012, 0.012, 0.006, s * 0.012, 1.705, -0.112), 'head', COL.button44);
+    B.add(box(0.03, 0.016, 0.004, 0, 1.745, -0.106), 'head', COL.cockade);
   } else if (o.headgear === 'peaked') {
     // officer's service dress cap: a flared crown, a dark band, a stiff visor, a small brass badge
     B.add(ringLoft([
@@ -490,6 +510,12 @@ function buildGeometry(o) {
       B.add(lathe([[-0.262, 0], [-0.256, 0.046], [-0.245, 0.056], [-0.215, 0.058], [-0.15, 0.06], [-0.08, 0.066], [0.0, 0.07], [0.04, 0.058], [0.062, 0]], 9, x, ky, 0.0, 1, 1.06), 'shin' + S, (px, py) => (py < ky - 0.04 ? COL.puttee : cloth));
       for (let k = 0; k < 6; k++) B.add(lathe([[-0.012, 0.052 + 0.0], [0.0, 0.058], [0.012, 0.052]], 9, x, ANKLE_Y + 0.07 + k * 0.045, 0.0, 1, 1.06), 'shin' + S, 0x5a5238);
       B.add(lathe([[-0.03, 0], [-0.025, 0.05], [0.03, 0.052], [0.085, 0.053], [0.1, 0.0]], 8, x, ANKLE_Y, 0.008, 1, 1.12), 'shin' + S, bootCol); // ankle boot
+    } else if (o.legs === 'gaiters') {
+      // trousers to the ankle, short canvas gaiters with two straps over ankle boots (1944)
+      B.add(lathe([[-0.29, 0], [-0.285, 0.054], [-0.27, 0.06], [-0.2, 0.062], [-0.12, 0.066], [-0.05, 0.072], [0.0, 0.074], [0.04, 0.058], [0.062, 0]], AS, x, ky, 0.0, 1, 1.06), 'shin' + S, legC);
+      B.add(lathe([[-0.005, 0.0], [0.0, 0.053], [0.05, 0.054], [0.12, 0.058], [0.135, 0.055], [0.14, 0.0]], 9, x, ANKLE_Y, 0.004, 1, 1.1), 'shin' + S, COL.gaiter);
+      for (const dy of [0.045, 0.1]) B.add(lathe([[-0.006, 0.0565], [0.006, 0.0565]], 9, x, ANKLE_Y + dy, 0.004, 1, 1.1), 'shin' + S, COL.ystrap);
+      B.add(lathe([[-0.03, 0], [-0.025, 0.05], [0.03, 0.052], [0.05, 0.05], [0.055, 0.0]], 8, x, ANKLE_Y, 0.008, 1, 1.12), 'shin' + S, COL.jackboot); // ankle boot
     } else if (o.legs === 'jackboots') {
       // trousers tucked into tall marching boots that come up to just under the knee
       B.add(lathe([[-0.1, 0], [-0.094, 0.066], [-0.07, 0.076], [0.0, 0.075], [0.04, 0.058], [0.062, 0]], AS, x, ky, 0.0, 1, 1.06), 'shin' + S, legC); // tucked in: only above the boot top
@@ -570,6 +596,43 @@ function buildGeometry(o) {
     B.add(box(0.21, 0.04, 0.065, 0.12, 0.99, 0.137, 0, -0.3, 0), 'hips', COL.brot);
     B.add(ellipsoid(0.048, 0.085, 0.03, 0.2, 0.9, 0.06, 9, 7), 'hips', COL.canteen);
     B.add(lathe([[0, 0.012], [0.02, 0.012], [0.022, 0.0]], 8, 0.2, 0.985, 0.06), 'hips', 0x3a3530);
+  } else if (o.vest === 'german44') {
+    // M40 field blouse: collar with the Litzen tabs, five buttons, pleated chest pockets and the hip pockets with
+    // their flaps, shoulder straps with the artillery's red piping; the black belt and Y straps, two triple ammunition
+    // pouches, the bread bag and canteen on the right hip, the fluted gas mask canister slung behind on the left
+    B.add(lathe([[0.0, 0.079], [0.035, 0.078], [0.052, 0.071], [0.056, 0.063]], SG, 0, 1.468, 0.016, 1, 0.97), 'chest', top);
+    for (const s of SIDE) {
+      B.add(box(0.034, 0.026, 0.008, s * 0.036, 1.492, -0.08, -0.35, s * 0.4, 0), 'chest', top); // collar points
+      B.add(box(0.026, 0.016, 0.006, s * 0.04, 1.484, -0.084, -0.35, s * 0.4, 0), 'chest', COL.tab44); // collar tabs
+      B.add(box(0.12, 0.12, 0.016, s * 0.092, 1.3, -0.135, 0.06, 0, s * 0.1), 'chest', top); // chest pocket
+      B.add(box(0.124, 0.035, 0.02, s * 0.093, 1.37, -0.139, 0.06, 0, s * 0.1), 'chest', top); // its flap
+      B.add(box(0.012, 0.012, 0.008, s * 0.093, 1.36, -0.151), 'chest', COL.button44);
+      B.add(box(0.115, 0.125, 0.01, s * 0.112, 0.885, -0.136, -0.03, s * -0.22, 0), 'hips', top); // hip pocket
+      B.add(box(0.12, 0.035, 0.014, s * 0.112, 0.94, -0.139, -0.03, s * -0.22, 0), 'hips', top);
+      B.add(box(0.09, 0.016, 0.06, s * 0.17, 1.462, -0.002, 0, 0, s * 0.18), 'chest', top); // shoulder strap
+      B.add(box(0.092, 0.017, 0.004, s * 0.17, 1.462, -0.032, 0, 0, s * 0.18), 'chest', COL.red44);
+      const S = SFX[SIDE.indexOf(s)], ey = SH_Y - L_UA;
+      B.add(lathe([[-0.24, 0.05], [-0.18, 0.052], [-0.175, 0.0]], AS, s * SH_X, ey, SH_Z, 1, 1.06), 'forearm' + S, top); // cuff
+    }
+    for (let k = 0; k < 5; k++) B.add(box(0.013, 0.013, 0.008, 0, 1.43 - k * 0.1, -0.137 - (k > 3 ? 0.008 : 0)), k > 3 ? 'spine' : 'chest', COL.button44);
+    B.add(ringLoft([{ y: 1.0, rx: 0.192, rz: 0.134, ex }, { y: 1.046, rx: 0.191, rz: 0.133, ex }], SG), 'spine', COL.ystrap);
+    B.add(box(0.058, 0.044, 0.012, 0, 1.023, -0.137), 'spine', COL.gbuckle);
+    // Y straps: two in front from the pouches over the shoulders, one down the back
+    for (const s of SIDE) {
+      B.add(box(0.026, 0.38, 0.008, s * 0.095, 1.27, -0.142, 0.05, 0, s * 0.07), 'chest', COL.ystrap);
+      B.add(box(0.026, 0.012, 0.25, s * 0.12, 1.484, 0.0, 0, 0, s * 0.12), 'chest', COL.ystrap);
+      B.add(box(0.026, 0.3, 0.008, s * 0.05, 1.34, 0.134, -0.05, 0, -s * 0.35), 'chest', COL.ystrap);
+      // triple pouches
+      for (const k of [0, 1, 2]) B.add(box(0.044, 0.08, 0.042, s * (0.07 + k * 0.045), 1.075, -0.158), 'spine', COL.pouch44);
+    }
+    B.add(box(0.03, 0.18, 0.008, 0, 1.13, 0.137), 'spine', COL.ystrap);
+    // bread bag, canteen with its cup, the entrenching tool on the left hip, the canister behind
+    B.add(box(0.2, 0.17, 0.06, 0.13, 0.92, 0.13, 0, -0.35, 0), 'hips', COL.brot);
+    B.add(ellipsoid(0.048, 0.085, 0.032, 0.21, 0.88, 0.06, 9, 7), 'hips', COL.canteen);
+    B.add(lathe([[0, 0.022], [0.04, 0.022], [0.042, 0.0]], 8, 0.21, 0.93, 0.06), 'hips', COL.ystrap);
+    B.add(box(0.14, 0.2, 0.03, -0.205, 0.9, 0.03, 0, 0.3, 0), 'hips', COL.pouch44);
+    const can = lathe([[-0.13, 0], [-0.128, 0.05], [-0.1, 0.053], [-0.095, 0.05], [-0.04, 0.053], [-0.035, 0.05], [0.02, 0.053], [0.025, 0.05], [0.08, 0.053], [0.085, 0.05], [0.12, 0.053], [0.128, 0.03], [0.13, 0]], 12, 0, 0, 0);
+    B.add(can.rotateZ(0.5).translate(-0.12, 0.98, 0.17), 'hips', COL.can44);
   } else if (o.vest === 'sambrown') {
     // officer: Sam Browne belt with the cross strap over the right shoulder, a lanyard loop
     B.add(ringLoft([{ y: 1.0, rx: 0.186, rz: 0.131, ex }, { y: 1.05, rx: 0.185, rz: 0.13, ex }], 16), 'spine', COL.leather);
@@ -631,6 +694,40 @@ function stahlhelm() {
   return g;
 }
 
+// The M1935 Stahlhelm: the M1916's construction (dome, step, skirt and the rolled-in rim) with a lower dome, a
+// smaller flare all round, a shorter visor and a neck guard that comes down less: the WW2 silhouette.
+function stahlhelm35() {
+  const n = 32, rows = [], RX = 0.111, RZ = 0.128, CZ = 0.012;
+  const R = (a) => 1 / Math.hypot(Math.sin(a) / RX, Math.cos(a) / RZ);
+  const prof = [['d', 0], ['d', 0.25], ['d', 0.5], ['d', 0.75], ['d', 1.0], ['d', 1.25], ['s', 0], ['k', 0.35], ['k', 0.7], ['k', 1], ['i', 1], ['i', 0.5], ['i', 0]];
+  for (const [kind, v] of prof) {
+    const ring = [];
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * TAU, F = Math.max(0, Math.cos(a)), Bk = Math.max(0, -Math.cos(a)), r0 = R(a);
+      const yStep = 1.708 + 0.008 * F - 0.01 * Bk, yRim = 1.618 + 0.082 * F ** 2 - 0.026 * Bk ** 1.3, flare = 0.012 + 0.004 * F + 0.022 * Bk ** 1.2;
+      let r, y;
+      if (kind === 'd') { const ph = Math.min(v, 1.25); r = r0 * Math.sin(ph) / Math.sin(1.25); y = yStep + 0.13 * (Math.cos(ph) - Math.cos(1.25)); }
+      else if (kind === 's') { r = r0 + 0.002; y = yStep - 0.006; }
+      else if (kind === 'k') { const e = v * v; r = r0 + 0.004 + e * flare; y = yStep - 0.006 + (yRim - yStep + 0.006) * v; }
+      else { r = r0 - 0.004 + v * (flare - 0.002); y = yStep - 0.012 + (yRim + 0.004 - yStep + 0.012) * v; }
+      ring.push(Math.sin(a) * r, y, CZ - Math.cos(a) * r);
+    }
+    rows.push(ring);
+  }
+  const pos = [], idx = [], uv = [], cols = n + 1;
+  rows.forEach((ring) => { for (let i = 0; i <= n; i++) { pos.push(ring[i * 3], ring[i * 3 + 1], ring[i * 3 + 2]); uv.push(0, 0); } });
+  for (let j = 0; j < rows.length - 1; j++) for (let i = 0; i < n; i++) {
+    const a = j * cols + i, b = a + cols;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
 // The field cap's visor: a curved peak round the front of the crown, sloping a little down.
 function visor() {
   const pos = [], idx = [], uv = [], n = 10;
@@ -670,6 +767,16 @@ export const WW1_OUTFITS = {
   'german-drill': { headgear: 'feldmuetze', vest: 'german1917', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, jacket: COL.drill, trousers: COL.steingrau, hd: true },
   stretcher: { headgear: 'brodie', vest: 'ww1', pattern: 'khaki', legs: 'puttees', gloves: false, armband: 0xe8e6e0 },
 };
+// WW2 German gun crews (DESIGN.md "WW2 mode"): the M35 helmet and M40 blouse with Y straps, marching boots or
+// ankle boots and gaiters, and the M43 cap for the gun commander. Looked up by the same `outfit` option.
+export const WW2_OUTFITS = {
+  german44: { headgear: 'm35', vest: 'german44', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, trousers: COL.fg44t, hd: true },
+  'german44-gaiters': { headgear: 'm35', vest: 'german44', pattern: 'fieldgrey', legs: 'gaiters', gloves: false, trousers: COL.fg44t, hd: true },
+  'german44-cap': { headgear: 'm43', vest: 'german44', pattern: 'fieldgrey', legs: 'jackboots', gloves: false, trousers: COL.fg44t, hd: true },
+};
+Object.assign(WW1_OUTFITS, WW2_OUTFITS);
+// the German WW2 kinds whose crews wear them (crewForRole's optional third argument)
+const WW2_KINDS = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'bertha', 'karl', 'v1', 'v2']);
 
 function options(opts) {
   if (opts.outfit && WW1_OUTFITS[opts.outfit]) opts = { ...WW1_OUTFITS[opts.outfit], ...opts, outfit: undefined };
@@ -1253,12 +1360,20 @@ function reach(fig, side, point, blend, fingers, palm, pole) {
 }
 
 // The outfit options for a gun-crew role at spot i (varied skin so a crew is not clones).
-export function crewForRole(role, i = 0) {
+export function crewForRole(role, i = 0, kind = null) {
   const skin = [0, 1, 2, 0, 3, 1][i % 6];
+  if (kind && WW2_KINDS.has(kind)) return crewForRoleDE(role, i);
   if (/officer|observer/.test(role)) return { outfit: 'officer', skin };
   if (/german/.test(role)) return { outfit: 'german', skin };
   if (/stretcher|medic/.test(role)) return { outfit: 'stretcher', skin };
   // sergeants and the layer wear the tunic; the men on the hard work are in shirt sleeves
   if (/sergeant|layer|lanyard|sight|signal/.test(role)) return { outfit: 'gunner-tunic', skin };
   return { outfit: i % 3 === 2 ? 'gunner-tunic' : 'gunner', skin };
+}
+
+// A WW2 German crew: the commander in the M43 cap, the rest helmeted, every third man in gaiters.
+export function crewForRoleDE(role, i = 0) {
+  const skin = [0, 1, 2, 0, 3, 1][i % 6];
+  if (/officer|sergeant|firer|cmd/.test(role)) return { outfit: 'german44-cap', skin };
+  return { outfit: i % 3 === 1 ? 'german44-gaiters' : 'german44', skin };
 }

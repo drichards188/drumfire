@@ -6,6 +6,7 @@ import { el, setText, setCls, card, snd, hw } from '../widgets.js';
 import { tut } from '../highlight.js';
 import { clockStr, taskNo } from './common.js';
 import { CLOCK_YARDS, slipCorr, corrText } from '../messages.js';
+import { TH } from '../theatre.js';
 import { DEG } from '../../sector.js';
 
 const SERIF = "'Bitstream Charter','Liberation Serif',serif";
@@ -157,6 +158,6 @@ export class MessagePad {
       g.beginPath(); g.arc(px, py, 7, 0, Math.PI * 2); g.lineWidth = 1; g.stroke();
       const comp = DIR[Math.round(((hour % 12) * 30) / 22.5) % 16];
       setText(this.decode, `${s.rawCode}: ${yards} yds, ${hour} o'clock (${comp} of target)`);
-    } else setText(this.decode, 'RFC clock code: letter = distance in yards, number = hour, 12 = true north');
+    } else setText(this.decode, TH.metric ? 'Reports in metres: weiter / kürzer (add / drop), rechts / links (right / left). Press . to apply.' : 'RFC clock code: letter = distance in yards, number = hour, 12 = true north');
   }
 }

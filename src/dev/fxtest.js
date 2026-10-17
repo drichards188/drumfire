@@ -3,6 +3,12 @@
 // stepped deterministically), &night=1, &cam=az,el,dist (compass bearing of the camera from the target,
 // elevation, metres), &flat=1, &grade=1917, &sun=elevation, &post=0, &live=1 (real time; keys 1 to 5
 // fire an effect, N toggles night), &dazzle=k.
+// WW2: ?fx=rocket (one Nebelwerfer rippling six rockets 1.6 s apart, &n=1..6), ?fx=salvo (three
+// launchers, 18 rockets), ?fx=v1launch (the steam catapult and the V-1 flying off the ramp), ?fx=v1 (a
+// V-1 cruising past), ?fx=v2ign (pre-stage at 0 s, main stage at 3 s, lift-off at 4 s, climbing),
+// ?fx=trail (18 Nebelwerfer rockets, a V-1 and a V-2 in flight at once, for the cost), ?fx=gustav (an
+// 80 cm burst; &cal=23.6 for Karl), ?fx=gustavgun (the 80 cm gun firing). &scale=k runs the flyers
+// k times faster per step (time compression).
 import * as THREE from 'three';
 import { globalUniforms, patchSceneFog, MAX_FLARE_LIGHTS } from '../shaderlib.js';
 import { Atmosphere } from '../atmosphere.js';
@@ -102,6 +108,31 @@ function setup() {
   } else if (kind === 'cookoff') {
     target.set(0, ground(0, 0) + 30, 0);
     camSpec = [200, 6, 380 * num('size', 1.5)];
+  } else if (kind === 'rocket') {
+    target.set(6, ground(0, 0) + 10, 0);
+    camSpec = [205, 7, 150];
+  } else if (kind === 'salvo') {
+    target.set(80, ground(0, 0) + 40, 0);
+    camSpec = [200, 6, 520];
+  } else if (kind === 'v1launch') {
+    target.set(20, ground(0, 0) + 8, 0);
+    camSpec = [210, 6, 170];
+  } else if (kind === 'v1') {
+    target.set(0, ground(0, 0) + 250, 0);
+    camSpec = [180, 2, 160];
+  } else if (kind === 'v2ign') {
+    target.set(0, ground(0, 0) + 14, 0);
+    camSpec = [205, 5, 260];
+  } else if (kind === 'trail') {
+    target.set(200, ground(0, 0) + 200, 0);
+    camSpec = [200, 5, 1300];
+  } else if (kind === 'gustav') {
+    target.set(0, ground(0, 0) + 110, 0);
+    camSpec = [200, 4, 1100];
+  } else if (kind === 'gustavgun') {
+    GUN.set(0, ground(0, 0) + 9, 0);
+    target.set(20, GUN.y + 8, 0);
+    camSpec = [num('az', 190), 7, 260];
   } else {
     target.set(0, ground(0, 0) + 30, -1900);
     camSpec = [175, 3, 1400];
@@ -133,6 +164,111 @@ function barrageScript() {
 }
 let script = [];
 
+// ------------------------------------------------------------ WW2 rockets and missiles
+// Flyers: { pos, vel, dir, kind, start, t, burn, acc (m/s^2 along dir while it burns), coast (trail
+// after burnout too), grav, mesh }. Stepped in step(); trail() is called each step while it burns.
+const flyers = [];
+const props = new THREE.Group();
+scene.add(props);
+const grey = new THREE.MeshStandardMaterial({ color: 0x55584f, roughness: 0.8 });
+const pale = new THREE.MeshStandardMaterial({ color: 0x8c8f84, roughness: 0.7 });
+function flyer(o) {
+  const f = { pos: o.pos.clone(), vel: (o.vel || new THREE.Vector3()).clone(), dir: o.dir.clone().normalize(), kind: o.kind, start: o.start ?? 0, t: 0, burn: o.burn ?? 1e9, acc: o.acc ?? 0, coast: !!o.coast, grav: o.grav ?? 9.8, mesh: o.mesh || null, lift: o.lift ?? 0, nozzle: o.nozzle ?? 0 };
+  if (f.mesh) { props.add(f.mesh); f.mesh.position.copy(f.pos); }
+  flyers.push(f);
+  return f;
+}
+const _fv = new THREE.Vector3(), _fu = new THREE.Vector3(0, 1, 0);
+function stepFlyers(dt) {
+  for (const f of flyers) {
+    if (T < f.start) {
+      // standing (a V-1 on its ramp with the jet already running): the flame, no motion
+      if (f.kind === 'v1' && f.pre) fx.trail(f.pos, _fv.copy(f.dir).multiplyScalar(0.01), 'v1', dt);
+      continue;
+    }
+    f.t += dt;
+    const burning = f.t < f.burn;
+    if (burning && f.t > f.lift) f.vel.addScaledVector(f.dir, f.acc * dt);
+    if (f.t > f.lift) f.vel.y -= f.grav * dt;
+    if (f.kind === 'v2' && f.t < f.lift) f.vel.set(0, 0, 0);
+    f.pos.addScaledVector(f.vel, dt);
+    const gy = ground(f.pos.x, f.pos.z);
+    if (f.pos.y < gy) { f.pos.y = gy; f.vel.set(0, 0, 0); }
+    if (burning || f.coast) fx.trail(f.nozzle ? _fv.copy(f.pos).addScaledVector(f.dir, f.nozzle) : f.pos, f.vel.lengthSq() > 1e-4 ? f.vel : _fu.copy(f.dir).multiplyScalar(0.01), f.kind, dt);
+    if (f.mesh) { f.mesh.position.copy(f.pos); f.mesh.quaternion.setFromUnitVectors(_fu.set(0, 1, 0), f.dir); }
+  }
+}
+
+// a Nebelwerfer 41 stand-in: six tubes on a ring, the mouths at about 1.3 m
+function nebelwerfer(x, z, az, start) {
+  const el = 45 * D2R;
+  const dir = new THREE.Vector3(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el));
+  const gy = ground(x, z);
+  const side = new THREE.Vector3(-Math.sin(az), 0, Math.cos(az)), up = new THREE.Vector3().crossVectors(side, dir).normalize();
+  const tubes = new THREE.Group();
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 10), grey);
+    m.position.set(x, gy + 1.1, z).addScaledVector(side, Math.cos(a) * 0.24).addScaledVector(up, Math.sin(a) * 0.24).addScaledVector(dir, -0.65);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    tubes.add(m);
+  }
+  props.add(tubes);
+  const n = num('n', 6), order = [0, 3, 1, 4, 2, 5];
+  for (let k = 0; k < n; k++) {
+    const a = (order[k] / 6) * Math.PI * 2;
+    const mouth = new THREE.Vector3(x, gy + 1.1, z).addScaledVector(side, Math.cos(a) * 0.24).addScaledVector(up, Math.sin(a) * 0.24);
+    const t = start + k * 1.6;
+    script.push({ t, f: () => fx.rocketLaunch(mouth, dir) });
+    flyer({ pos: mouth, dir, kind: 'rocket', start: t, burn: 1.8, acc: 196, vel: dir.clone().multiplyScalar(20) });
+  }
+}
+
+function ww2Trigger() {
+  props.clear();
+  flyers.length = 0;
+  script = [];
+  const add = (t, f) => script.push({ t, f });
+  if (kind === 'rocket') nebelwerfer(0, 0, 0, 0.2);
+  else if (kind === 'salvo' || kind === 'trail') {
+    for (let i = 0; i < 3; i++) nebelwerfer(-i * 12, i * 40 - 40, 0, 0.2 + i * 0.4);
+    if (kind === 'trail') {
+      // a V-1 crossing and a V-2 climbing, already under way
+      flyer({ pos: new THREE.Vector3(-900, ground(0, 0) + 260, 260), dir: new THREE.Vector3(1, 0, 0), vel: new THREE.Vector3(170, 0, 0), kind: 'v1', grav: 0 });
+      flyer({ pos: new THREE.Vector3(700, ground(700, -300) + 20, -300), dir: new THREE.Vector3(0, 1, 0), vel: new THREE.Vector3(0, 30, 0), kind: 'v2', acc: 18, burn: 65 });
+    }
+  } else if (kind === 'v1launch' || kind === 'v1') {
+    if (kind === 'v1') {
+      flyer({ pos: new THREE.Vector3(-600, target.y, 0), dir: new THREE.Vector3(1, 0, 0), vel: new THREE.Vector3(170, 0, 0), kind: 'v1', grav: 0, mesh: v1Mesh(), nozzle: -4.4 });
+    } else {
+      const sl = 6 * D2R, len = 48, dir = new THREE.Vector3(Math.cos(sl), Math.sin(sl), 0);
+      const foot = new THREE.Vector3(0, ground(0, 0), 0);
+      const ramp = new THREE.Mesh(new THREE.BoxGeometry(len, 0.8, 1.4), pale);
+      ramp.position.copy(foot).addScaledVector(dir, len / 2).add(new THREE.Vector3(0, 0.4, 0));
+      ramp.rotation.z = sl;
+      props.add(ramp);
+      // the jet runs on the ramp for a second before the shot, then piston and missile run up it in 1 s
+      const tail = foot.clone().add(new THREE.Vector3(0, 1.9, 0));
+      const m = v1Mesh();
+      m.geometry.translate(0, 4.2, 0); // the tail pipe's mouth at the flyer's point
+      const f = flyer({ pos: tail, dir, kind: 'v1', start: 1, acc: 90, grav: 0, burn: 1, mesh: m });
+      f.pre = true;
+      f.coast = true;
+      add(1, () => fx.v1Launch(foot, dir, len));
+      add(2.0, () => { f.acc = 2; f.grav = 0.3; });
+    }
+  } else if (kind === 'v2ign') {
+    const p = new THREE.Vector3(0, ground(0, 0) + 1.6, 0);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.83, 0.83, 14, 16), pale);
+    body.geometry.translate(0, 7, 0);
+    add(0, () => fx.v2Ignition(p, 0));
+    add(3, () => fx.v2Ignition(p, 1));
+    flyer({ pos: p, dir: new THREE.Vector3(0, 1, 0), kind: 'v2', start: 3, lift: 1.2, acc: 16, grav: 9.8, burn: 65, mesh: body });
+  }
+  script.sort((a, b) => a.t - b.t);
+}
+const v1Mesh = () => new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 7.7, 12), grey); // along its dir, centred
+
 function trigger() {
   fx.reset();
   flares.clear();
@@ -149,8 +285,15 @@ function trigger() {
     fx.shrapnel(new THREE.Vector3(0, ground(0, 0) + 30, 0), cal || 4.5, new THREE.Vector3(0.5, -1, 0.1));
   } else if (kind === 'cookoff') {
     fx.cookOff(new THREE.Vector3(0, ground(0, 0), 0), num('size', 1.5));
-  } else {
+  } else if (kind === 'gustav') {
+    fx.shellBurst(new THREE.Vector3(0, ground(0, 0), 0), { calibre: num('cal', 31.5), fuze: q.get('fuze') || 'impact', ground: q.get('ground') || 'mud', crater: true });
+  } else if (kind === 'gustavgun') {
+    const el = num('elev', 50) * D2R;
+    fx.gunBlast(GUN, new THREE.Vector3(Math.cos(el), Math.sin(el), 0), num('cal', 31.5), { night });
+  } else if (kind === 'barrage') {
     script = barrageScript();
+  } else {
+    ww2Trigger();
   }
   const dz = num('dazzle', 0);
   if (dz > 0) post.dazzle(dz);
@@ -187,7 +330,8 @@ function postSettings() {
 }
 
 function step(dt) {
-  if (kind === 'barrage') while (scriptI < script.length && script[scriptI].t <= T) script[scriptI++].f();
+  while (scriptI < script.length && script[scriptI].t <= T) script[scriptI++].f();
+  stepFlyers(dt);
   T += dt;
   clock += dt;
   const u0 = performance.now();
@@ -218,7 +362,7 @@ trigger();
 window.__fx = {
   fx, post, camera, trigger, flashes, upd,
   stepTo(t, once = false) {
-    const dt = 1 / 30;
+    const dt = num('scale', 1) / 30; // &scale=k: time compression, as the game hands fx a longer dt
     let sinceDraw = 0;
     while (T < t - 1e-6) {
       frameEnv();

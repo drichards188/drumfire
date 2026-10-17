@@ -8,12 +8,18 @@ import {
 } from '../sector.js';
 import { el, hw, snd, setText, Btn } from './widgets.js';
 import { dm, yd, SOS_X, KINDS, liveMissions } from './consoles/common.js';
+import { TH, lenU, lenShort } from './theatre.js';
+
+// the WW2 kinds drawn with the British map symbols
+const SYM = { abattery: 'battery', amedium: 'battery', sbattery: 'battery', adump: 'dump', aconvoy: 'crossroads', aop: 'balloon', turret: 'mebu', fort: 'mebu', magazine: 'mebu', citadel: 'mebu', gate: 'mebu', eastfort: 'mebu', tanks: 'tanks' };
 
 const TAU = Math.PI * 2;
 const SERIF = "'Bitstream Charter','Liberation Serif','DejaVu Serif',Georgia,serif";
 const TYPE = "'Courier 10 Pitch','Liberation Mono','FreeMono',monospace";
 const INK = '#1b1913', BLUE = '#1d3f8f', RED = '#a8241b', GREEN = '#506b34', BRASS = '#9a7421';
-const MPP_MIN = 1.4, MPP_MAX = 60;
+const MPP_MIN = 1.4;
+const MPP_MAX_ = 60; // the British sheet; a WW2 operation may spread wider (TH.mppMax)
+const mppMax = () => TH.mppMax ?? MPP_MAX_;
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const rnd = (seed) => { let a = seed >>> 0; return () => { a = (Math.imul(a, 1664525) + 1013904223) >>> 0; return a / 4294967296; }; };
 
@@ -103,18 +109,24 @@ export class Board {
   fit() {
     const { sim, unit } = this.last;
     if (!unit || !this.W) return;
+    if (TH.fit) {
+      const f = TH.fit(sim, unit);
+      this.view = { cx: f.cx, cz: f.cz, mpp: Math.max(MPP_MIN, Math.min(mppMax(), Math.max(f.w / this.W, f.h / this.H) * 1.08)) };
+      this.memo.view = this.view;
+      return;
+    }
     const cfg = KINDS[unit.kind] || {};
     const reach = Math.max(rangeSpan(sim, unit.kind, 0).max, ...[1, 2, 3].map((c) => rangeSpan(sim, unit.kind, c).max)) || 11000;
     const x0 = Math.min(unit.pos.x - 700, 2600), x1 = Math.min(unit.pos.x + reach * 1.02, cfg.deep ? 18500 : 14000);
     const zc = Math.max(-1500, Math.min(1500, unit.pos.z * 0.35));
-    const mpp = Math.max(MPP_MIN, Math.min(MPP_MAX, Math.max((x1 - x0) / this.W, 8000 / this.H) * 1.04));
+    const mpp = Math.max(MPP_MIN, Math.min(mppMax(), Math.max((x1 - x0) / this.W, 8000 / this.H) * 1.04));
     this.view = { cx: (x0 + x1) / 2, cz: zc, mpp };
     this.memo.view = this.view;
   }
   zoom(f, px, py) {
     const v = this.view;
     if (!v) return;
-    const m = Math.max(MPP_MIN, Math.min(MPP_MAX, v.mpp * f));
+    const m = Math.max(MPP_MIN, Math.min(mppMax(), v.mpp * f));
     if (px != null) {
       // keep the world point under the cursor still
       const wx = v.cx + (px - this.W / 2) * v.mpp, wz = v.cz + (py - this.H / 2) * v.mpp;
@@ -201,6 +213,10 @@ export class Board {
     const px = 1 / v.mpp;                       // pixels per metre
     const x0 = this.wx(0), x1 = this.wx(W), z0 = this.wz(0), z1 = this.wz(H);
 
+    if (!TH.salient) {
+      this.drawGrid(g, x0, x1, z0, z1);
+      return;
+    }
     // contours of the ridges on the German side
     g.lineWidth = 0.8;
     for (let k = 0; k < 6; k++) {
@@ -304,6 +320,7 @@ export class Board {
 
   drawGrid(g, x0, x1, z0, z1) {
     const v = this.view;
+    if (TH.metric) return this.drawGridM(g, x0, x1, z0, z1);
     const e0 = toGrid(x0, z0).e, e1 = toGrid(x1, z0).e;
     const nTop = toGrid(x0, z0).n, nBot = toGrid(x0, z1).n;
     const sq = 1000 * YARD / v.mpp;             // pixels per 1000-yard square
@@ -357,11 +374,37 @@ export class Board {
     }
   }
 
+  // the German grid: a line every kilometre (every 500 m zoomed in), numbered by the kilometres of the reference
+  drawGridM(g, x0, x1, z0, z1) {
+    const v = this.view, sq = 1000 / v.mpp, step = sq > 170 ? 500 : sq < 30 ? 5000 : 1000;
+    g.lineCap = 'butt';
+    for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) {
+      const kilo = x % 1000 === 0, big = x % 10000 === 0;
+      g.strokeStyle = big ? 'rgba(25,55,110,.8)' : kilo ? 'rgba(40,80,140,.42)' : 'rgba(40,80,140,.2)';
+      g.lineWidth = big ? 1.6 : 0.8;
+      g.beginPath(); g.moveTo(this.sx(x), 0); g.lineTo(this.sx(x), this.H); g.stroke();
+    }
+    for (let z = Math.floor(z0 / step) * step; z <= z1; z += step) {
+      const kilo = z % 1000 === 0, big = z % 10000 === 0;
+      g.strokeStyle = big ? 'rgba(25,55,110,.8)' : kilo ? 'rgba(40,80,140,.42)' : 'rgba(40,80,140,.2)';
+      g.lineWidth = big ? 1.6 : 0.8;
+      g.beginPath(); g.moveTo(0, this.sz(z)); g.lineTo(this.W, this.sz(z)); g.stroke();
+    }
+    if (sq > 40) {
+      g.font = `italic 9px ${SERIF}`; g.fillStyle = 'rgba(30,70,130,.55)'; g.textAlign = 'left'; g.textBaseline = 'top';
+      const lab = Math.max(1000, step);
+      for (let x = Math.floor(x0 / lab) * lab; x <= x1; x += lab) g.fillText(String(Math.round(((50000 + x) / 1000) % 100)).padStart(2, '0'), this.sx(x) + 2, 2);
+      for (let z = Math.floor(z0 / lab) * lab; z <= z1; z += lab) g.fillText(String(Math.round(((52000 - z) / 1000) % 100)).padStart(2, '0'), 2, this.sz(z) + 2);
+    }
+  }
+
   drawTrenches(g, z0, z1) {
     const v = this.view;
+    // our lines blue, the enemy's red: the WW2 mode stands on the German side
+    const own = TH.lines ? RED : BLUE, foe = TH.lines ? BLUE : RED;
     const style = {
-      britishFront: [BLUE, 1.7, null, 1], britishSupport: [BLUE, 1.2, [7, 4], 1], germanFront: [RED, 1.7, null, -1],
-      germanSupport: [RED, 1.2, [7, 4], -1], germanReserve: [RED, 1.1, [3, 4], -1],
+      britishFront: [own, 1.7, null, 1], britishSupport: [own, 1.2, [7, 4], 1], germanFront: [foe, 1.7, null, -1],
+      germanSupport: [foe, 1.2, [7, 4], -1], germanReserve: [foe, 1.1, [3, 4], -1],
     };
     g.lineJoin = 'round';
     for (const k in style) {
@@ -414,8 +457,8 @@ export class Board {
     };
     if (v.mpp < 22) {
       const zz = Math.max(Math.min(this.wz(this.H * 0.5), 5800), -5800);
-      tag(LINES.britishFront, 'BRITISH FRONT LINE', BLUE, zz, -120);
-      tag(LINES.germanFront, 'GERMAN FRONT LINE', RED, zz, 135);
+      tag(LINES.britishFront, TH.lines?.british ?? 'BRITISH FRONT LINE', TH.lines ? RED : BLUE, zz, -120);
+      tag(LINES.germanFront, TH.lines?.german ?? 'GERMAN FRONT LINE', TH.lines ? BLUE : RED, zz, 135);
     }
   }
   lx(pts, z) {
@@ -458,17 +501,17 @@ export class Board {
       const x = this.wx(h.px), z = this.wz(h.py);
       const range = Math.hypot(x - unit.pos.x, z - unit.pos.z), br = bearingOf(x - unit.pos.x, z - unit.pos.z);
       const t = this.pickTarget(h.px, h.py);
-      setText(this.refEl, `${gridRef(x, z)}   ${yd(range)} yds   ${dm(br)}${t ? '   ' + t.name : ''}`);
+      setText(this.refEl, `${TH.ref(x, z)}   ${yd(range)} ${lenShort()}   ${dm(br)}${t ? '   ' + t.name : ''}`);
       this.cv.classList.toggle('pick', !!t);
-    } else { setText(this.refEl, 'J.14.c.3.7 : sheet 28, square, quarter, 50-yard tenths'); this.cv.classList.remove('pick'); }
+    } else { setText(this.refEl, TH.refHint); this.cv.classList.remove('pick'); }
   }
 
   drawSos(g, sim, missions, T) {
     const alarm = new Set();
-    for (const m of missions) if (m.kind === 'sos' && m.state !== 'done' && m.state !== 'failed') for (const s of SECTORS) if (m.z >= s.from && m.z < s.to) alarm.add(s.id);
+    for (const m of missions) if (m.kind === 'sos' && m.state !== 'done' && m.state !== 'failed') for (const s of TH.sectors) if (m.z >= s.from && m.z < s.to) alarm.add(s.id);
     if (this.sosCall) for (const id of Object.keys(this.sosCall)) if (T - this.sosCall[id] < 40) alarm.add(id);
     this.alarm = alarm;
-    for (const s of SECTORS) {
+    for (const s of TH.sectors) {
       const str = sim.front ? sim.front[s.id] : 1;
       const lost = str === 0, red = alarm.has(s.id);
       const zA = Math.max(s.from, this.wz(0) - 500), zB = Math.min(s.to, this.wz(this.H) + 500);
@@ -492,7 +535,7 @@ export class Board {
         g.strokeStyle = '#2a0f0a'; g.lineWidth = 1; g.stroke();
         g.fillStyle = '#f4e9c8'; g.font = `bold 10px ${SERIF}`; g.textAlign = 'center'; g.textBaseline = 'middle';
         g.fillText(s.id, X, Z + 0.5);
-        if (red) { g.fillStyle = '#d42a1b'; g.font = `bold 10px ${TYPE}`; this.halo(g, 'S.O.S.', X, Z - 15); }
+        if (red) { g.fillStyle = '#d42a1b'; g.font = `bold 10px ${TYPE}`; this.halo(g, TH.sos, X, Z - 15); }
       }
     }
   }
@@ -562,6 +605,11 @@ export class Board {
         g.beginPath(); g.moveTo(-s * 0.5, s * 0.8); g.lineTo(-s * 0.5, -s); g.stroke();
         g.beginPath(); g.moveTo(-s * 0.5, -s); g.lineTo(s * 0.9, -s * 0.5); g.lineTo(-s * 0.5, 0); g.closePath(); g.fill();
         break;
+      case 'tanks': // a rhomboid tank outline
+        g.beginPath(); g.moveTo(-s * 1.2, s * 0.4); g.lineTo(-s * 0.9, -s * 0.5); g.lineTo(s * 0.9, -s * 0.5); g.lineTo(s * 1.2, s * 0.4); g.closePath();
+        g.fillStyle = 'rgba(232,222,190,.9)'; g.fill(); g.stroke();
+        g.beginPath(); g.moveTo(-s * 0.3, -s * 0.5); g.lineTo(-s * 1.3, -s * 0.5); g.stroke();
+        break;
       case 'crossroads':
         g.lineWidth = 2; g.beginPath(); g.moveTo(-s, 0); g.lineTo(s, 0); g.moveTo(0, -s); g.lineTo(0, s); g.stroke();
         g.lineWidth = 1; g.setLineDash([2, 2]); g.beginPath(); g.arc(0, 0, s * 1.05, 0, TAU); g.stroke(); g.setLineDash([]);
@@ -594,7 +642,7 @@ export class Board {
       if (dead) {
         g.strokeStyle = '#3a342b'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(X - s, Z - s); g.lineTo(X + s, Z + s); g.moveTo(X + s, Z - s); g.lineTo(X - s, Z + s); g.stroke();
       } else {
-        this.symbol(g, t.kind, X, Z, s, RED, T);
+        this.symbol(g, SYM[t.kind] ?? t.kind, X, Z, s, RED, T);
         if (t.maxHp && t.hp < t.maxHp) {         // damage: a ruled tick under the symbol
           g.fillStyle = '#2a2018'; g.fillRect(X - 8, Z + s + 3, 16, 3);
           g.fillStyle = '#b8321f'; g.fillRect(X - 8, Z + s + 3, 16 * Math.max(0, t.hp / t.maxHp), 3);
@@ -639,7 +687,7 @@ export class Board {
     const L = Math.hypot(bx - ax, bz - az);
     g.strokeStyle = 'rgba(20,40,110,.9)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(ax, az); g.lineTo(bx, bz); g.stroke();
     if (L > 30) {
-      const ux = (bx - ax) / L, uz = (bz - az) / L, step = 1000 * YARD / this.view.mpp;
+      const ux = (bx - ax) / L, uz = (bz - az) / L, step = 1000 * lenU() / this.view.mpp;
       g.lineWidth = 1;
       for (let k = 1; k * step < L - 4 && k < 40; k++) {
         const X = ax + ux * k * step, Z = az + uz * k * step;
@@ -649,7 +697,7 @@ export class Board {
       let ang = Math.atan2(bz - az, bx - ax), flip = ang > Math.PI / 2 || ang < -Math.PI / 2;
       g.save(); g.translate((ax + bx) / 2, (az + bz) / 2); g.rotate(flip ? ang + Math.PI : ang);
       g.font = `bold 10px ${TYPE}`; g.fillStyle = '#142e7a'; g.textAlign = 'center'; g.textBaseline = 'bottom';
-      this.halo(g, `${dm(o.line)}  ${yd(o.range)} yds`, 0, -3);
+      this.halo(g, `${dm(o.line)}  ${yd(o.range)} ${lenShort()}`, 0, -3);
       g.restore();
     }
     // the target point, ringed in red; the corrected aimpoint in blue with a short arrow between
@@ -794,12 +842,12 @@ export class Board {
     }
     g.restore();
     // scale bar in thousands of yards
-    const yardPx = YARD / this.view.mpp;
+    const yardPx = lenU() / this.view.mpp;
     let bar = 1000; while (bar * yardPx > 150) bar /= 2; while (bar * yardPx < 60) bar *= 2;
     const bx = 14, bz = H - 34;
     g.fillStyle = INK; g.fillRect(bx, bz, bar * yardPx, 3);
     g.fillRect(bx, bz - 3, 1.2, 9); g.fillRect(bx + bar * yardPx - 1, bz - 3, 1.2, 9);
-    g.font = `9px ${TYPE}`; g.textAlign = 'left'; g.textBaseline = 'bottom'; this.halo(g, `${commasInt(bar)} yds`, bx, bz - 4);
+    g.font = `9px ${TYPE}`; g.textAlign = 'left'; g.textBaseline = 'bottom'; this.halo(g, `${commasInt(bar)} ${lenShort()}`, bx, bz - 4);
     // dark edge
     const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.max(W, H) * 0.75);
     gr.addColorStop(0, 'rgba(60,40,15,0)'); gr.addColorStop(1, 'rgba(60,40,15,.32)');

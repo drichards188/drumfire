@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SMOKE, FLAME, FLASH, SPARK, rand, rr, clamp, rdir } from './kinds.js';
 import { CLOD } from './clods.js';
+import { runRocketEmitter } from './rockets.js';
 
 // The artillery set: muzzle blast, shell burst, shrapnel and ammunition cook-off. Everything here
 // spawns into the fx pools; the things that happen later (the column, the base surge, the mushroom,
@@ -23,6 +24,11 @@ function lod(fx, p) {
 // 1 up to 600 m, 3.2 at 3.6 km and beyond.
 const farScale = (fx, p) => clamp(1 + (fx._cam.distanceTo(p) - 600) / 1400, 1, 3.2);
 const cnt = (n, q, min = 2) => Math.max(min, Math.round(n * q));
+// The WW2 giants (Karl 23.6 in, the V-1 22, the V-2 26, Gustav 31.5): 0 up to 18.75 in (where the old
+// scale clamp of 1.25 sits, so every calibre up to there is exactly as before), 1 at Gustav. They scale
+// on past the clamp, more gently, and the terms that could white the screen out (the flash, the
+// shockwave, the long column) are capped.
+const bigK = (calibre) => (calibre > 18.75 ? clamp((calibre - 18.75) / 12.75, 0, 1.2) : 0);
 
 // A flash seen by the lights: one of the pooled point lights for the nearest blasts, and the analytic
 // lights through fx.onFlash (main wires it to flares.flash).
@@ -53,11 +59,12 @@ function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
  * the cordite cloud that hangs and drifts.
  */
 export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
-  const sc = clamp(calibre / 15, 0.16, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const big = bigK(calibre), sc = clamp(calibre / 15, 0.16, 1.25) * (1 + 0.4 * big), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sL = Math.min(sc, 1.25), sF = Math.min(sc, 1.4); // capped scale for opacity, and for the flash and shock
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z);
   const nb = night ? 1.8 : 1; // the glow pass is turned down by night: put the light back
-  const kc = 0.3 + 0.7 * sc;
+  const kc = 0.3 + 0.7 * Math.min(sc, 1.4);
   const hgt = Math.max(0, p.y - gy), reach = clamp(1 - hgt / (30 * k8), 0.3, 1);
   const hl = Math.hypot(dir.x, dir.z);
   // horizontal line of fire (straight up: any way)
@@ -82,11 +89,11 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
     V.copy(dir).multiplyScalar(rr(30, 95)).add(rdir(W).multiplyScalar(rr(4, 22)));
     fx.addGlow(SPARK, p.x + dir.x * 2, p.y + dir.y * 2, p.z + dir.z * 2, V.x, V.y, V.z, rr(0.25, 0.9), 0.1, 0.06, 40 * nb, 18 * nb, 4 * nb, 1, { len: 0.035, drag: 0.7, buoy: -9.8 });
   }
-  flash(fx, p, 0xffb070, 6e6 * sc * sc * (night ? 1.3 : 1), 0.18 + 0.3 * sc, 0.006, 30);
+  flash(fx, p, 0xffb070, 6e6 * sF * sF * (night ? 1.3 : 1), 0.18 + 0.3 * sF, 0.006, 30);
 
   // --- the cloud: a dense mass of many overlapping puffs thrown forward and out. Darker, denser
   // cores (the fireball lights them orange for a few frames), paler and more open at the edge.
-  const lifeK = 0.4 + 0.6 * sc, coreA = 0.65 + 0.35 * sc;
+  const lifeK = 0.4 + 0.6 * sc, coreA = 0.65 + 0.35 * sL;
   const nCore = cnt(240 * kc, q, 16);
   for (let i = 0; i < nCore; i++) {
     const w = Math.pow(rand(), 0.7); // 0 at the heart, 1 at the rim
@@ -103,7 +110,7 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
   }
   // the cloud that stays: big soft puffs that roll, thin and drift on the wind for ten to twenty seconds
   // (a small calibre leaves a thinner, shorter hang: a battery firing together should drift, not bank up)
-  const hangK = 0.25 + 0.75 * sc * sc, hangLife = 4 + 15 * sc;
+  const hangK = 0.25 + 0.75 * sL * sL, hangLife = 4 + 15 * sc;
   const nHang = cnt(26 * kc * (0.45 + 0.55 * sc), q, 4);
   for (let i = 0; i < nHang; i++) {
     rdir(V);
@@ -141,8 +148,21 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
   }
 
   fx.heatAt(V.copy(dir).multiplyScalar(3 * k8).add(p), 7 * k8, 1.6);
-  fx.shockAt(p, 90 + 260 * sc, 340, 0.35 + 0.65 * sc);
-  fx.gustAt?.(p, hx, hz, 30 * k8 * reach, 0.6 + 0.4 * sc); // the blast flattening the grass (a hook for the ground cover)
+  fx.shockAt(p, 90 + 260 * sc, 340, 0.35 + 0.65 * sF);
+  fx.gustAt?.(p, hx, hz, 30 * k8 * reach, 0.6 + 0.4 * sL); // the blast flattening the grass (a hook for the ground cover)
+
+  if (big > 0) {
+    // a railway giant: a fireball rolling out ahead of the muzzle, flame licking back over the barrel,
+    // and the dust and smoke of the whole emplacement thrown up round it
+    for (let i = 0; i < cnt(8 + 10 * big, q, 4); i++) {
+      const f = rr(4, 22) * k8;
+      fx.addGlow(FLAME, p.x + dir.x * f + rr(-4, 4) * k8, p.y + dir.y * f + rr(-3, 4) * k8, p.z + dir.z * f + rr(-4, 4) * k8, dir.x * rr(10, 30) * ks + rr(-6, 6), dir.y * rr(10, 30) * ks + rr(0, 6), dir.z * rr(10, 30) * ks + rr(-6, 6), rr(0.3, 0.6), 5 * k8, rr(9, 15) * k8, 15 * nb, 6 * nb, 1.3 * nb, 1, { drag: 2, buoy: 2 });
+    }
+    for (let i = 0; i < cnt(40 * big + 20, q, 8); i++) {
+      const a = rand() * TAU, r = rr(4, 26) * k8, v = rr(10, 30) * ks;
+      fx.addSmoke(SMOKE.PUFF, p.x + Math.cos(a) * r, gy + 0.5, p.z + Math.sin(a) * r, Math.cos(a) * v, rr(3, 10) * ks, Math.sin(a) * v, rr(12, 22), 4 * k8, rr(16, 30) * k8 * z, 0.31, 0.27, 0.21, 0.5, { drag: 0.7, buoy: 0.4 });
+    }
+  }
 }
 
 // Launch speed that makes a drag-and-gravity climb (dv/dt = -D v - g) peak at height h:
@@ -178,11 +198,12 @@ const FUZES = {
  * crater: a hole was dug (the lip then sheds more earth).
  */
 export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mud', crater = true } = {}) {
-  const sc = clamp(calibre / 15, 0.14, 1.25), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const big = bigK(calibre), sc = clamp(calibre / 15, 0.14, 1.25) * (1 + 0.45 * big), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
+  const sF = Math.min(sc, 1.4); // capped scale for the flash and the shock
   const q = lod(fx, p), z = fx.lodZ;
   const gy = fx.ground(p.x, p.z), y0 = Math.abs(p.y - gy) < 4 ? gy : p.y;
   const G = GROUNDS[ground] || GROUNDS.mud, FZ = FUZES[fuze] || FUZES.impact;
-  const kc = 0.3 + 0.7 * sc;
+  const kc = 0.3 + 0.7 * Math.min(sc, 1.4); // counts: a giant gets bigger pieces, not ever more of them
   const x = p.x, zz = p.z;
 
   // --- the flash and fireball, inside the rising earth
@@ -192,10 +213,10 @@ export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mu
     rdir(V);
     fx.addGlow(FLAME, x + V.x * 3 * k8, y0 + 1.5 * k8, zz + V.z * 3 * k8, V.x * rr(10, 26) * ks, rr(8, 30) * ks, V.z * rr(10, 26) * ks, rr(0.35, 0.8), 4 * k8, rr(10, 17) * k8 * fl, 20, 8, 2, 1, { drag: 2.2 });
   }
-  flash(fx, V.set(x, y0 + 4 * k8, zz), 0xff9a50, 1.3e7 * sc * sc * fl, 0.25 + 0.35 * sc, 0.03);
+  flash(fx, V.set(x, y0 + 4 * k8, zz), 0xff9a50, 1.3e7 * sF * sF * fl, 0.25 + 0.35 * sF, 0.03);
 
   // --- the geyser: earth thrown up the column at speeds that top out at the burst's height, falling back
-  const H = 115 * k8 * FZ.h * G.h, g = 9.8, w = FZ.w;
+  const H = 115 * k8 * FZ.h * G.h * (1 + 0.25 * big), g = 9.8, w = FZ.w;
   const R0 = 4.5 * k8 * w;
   const nG = cnt(230 * kc, q, 12);
   const nBlack = ground === 'water' ? 0 : 1;
@@ -254,7 +275,7 @@ export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mu
     const v = rr(0.25, 1) * vmax * (el > 0.5 ? 0.8 : 1);
     const big = rand() < 0.1;
     const m = rand();
-    const sz = (G.water ? rr(0.12, 0.3) : rr(0.2, 0.95) * (big ? 1.8 : 1)) * Math.pow(sc, 0.45) * (ground === 'rubble' ? 0.8 : 1);
+    const sz = (G.water ? rr(0.12, 0.3) : rr(0.2, 0.95) * (big ? 1.8 : 1)) * Math.pow(Math.min(sc, 1.4), 0.45) * (ground === 'rubble' ? 0.8 : 1);
     const cr = G.clod[0] * (0.6 + m), cg = G.clod[1] * (0.6 + m), cb = G.clod[2] * (0.6 + m);
     fx.clods.add(G.water ? CLOD.WATER : CLOD.EARTH, x + Math.cos(a) * R0, y0 + 1, zz + Math.sin(a) * R0, Math.cos(a) * s * v, c * v, Math.sin(a) * s * v, sz, cr, cg, cb, { life: 22, drag: 0.05, gy, flat: ground === 'rubble' ? 0.5 : 1 });
   }
@@ -278,10 +299,34 @@ export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mu
   const surgeCol = G.dust;
   fx.emitters.add(6, Tup * 0.35, 0, 0, x, y0, zz, sc * Math.pow(fa, 1.25), H, G.smoke[0] * 1.3, G.smoke[1] * 1.3, G.smoke[2] * 1.3, q); // the cauliflower head
   fx.emitters.add(2, Tup * 0.95, 0, 0, x, y0, zz, sc * Math.pow(fa, 1.25), FZ.w, surgeCol[0], surgeCol[1], surgeCol[2], q);
-  const colDur = (G.water ? 8 : 14 + 40 * sc) * (q < 0.6 ? 0.7 : 1);
-  fx.emitters.add(1, 0.5, colDur, (G.water ? 2 : 2.5 + 8 * sc) * q, x, y0, zz, sc * Math.pow(fa, 1.25), G.water ? 1 : 0, G.smoke[0], G.smoke[1], G.smoke[2], FZ.h);
+  const colDur = (G.water ? 8 : 14 + 40 * Math.min(sc, 1.35)) * (q < 0.6 ? 0.7 : 1);
+  fx.emitters.add(1, 0.5, colDur, (G.water ? 2 : 2.5 + 8 * Math.min(sc, 1.4)) * q, x, y0, zz, sc * Math.pow(fa, 1.25), G.water ? 1 : 0, G.smoke[0], G.smoke[1], G.smoke[2], FZ.h);
 
-  fx.shockAt(V.set(x, y0 + 2, zz), 120 + 600 * sc, 343, 0.3 + 1.0 * sc * (fuze === 'delay' ? 0.8 : 1));
+  fx.shockAt(V.set(x, y0 + 2, zz), 120 + 600 * sc, 343, 0.3 + 1.0 * sF * (fuze === 'delay' ? 0.8 : 1));
+
+  if (big > 0) bigBurst(fx, x, y0, zz, big, sc, k8, ks, q, z, H, Tup, G, FZ, fa, gy);
+}
+
+// What only the WW2 giants add (a 7 t Gustav shell threw earth and rock several hundred metres): a
+// second, faster dust ring racing out far past the first, boulders, a rolling dark mushroom head over
+// the column and a wider second base surge as it falls back.
+function bigBurst(fx, x, y0, zz, big, sc, k8, ks, q, z, H, Tup, G, FZ, fa, gy) {
+  const R0 = 4.5 * k8 * FZ.w;
+  const nRing = cnt(60 + 70 * big, q, 16);
+  for (let i = 0; i < nRing; i++) {
+    const a = ((i + rand()) / nRing) * TAU, v = rr(70, 120) * Math.sqrt(sc) * FZ.ring;
+    fx.addSmoke(SMOKE.PUFF, x + Math.cos(a) * R0 * 1.5, y0, zz + Math.sin(a) * R0 * 1.5, Math.cos(a) * v, 0.4, Math.sin(a) * v, rr(7, 12), 4 * k8 * z, rr(16, 30) * k8 * z, G.dust[0], G.dust[1], G.dust[2], 0.45, { drag: rr(0.5, 0.75), hug: 0.3, stretch: [2.6, 0.55] });
+  }
+  if (!G.water) {
+    // (few: every lump over 0.7 m trails dust puffs all the way, clods.js)
+    for (let i = 0; i < cnt(4 + 6 * big, q, 2); i++) {
+      const a = rand() * TAU, el = rr(0.35, 1.25), v = rr(35, 80) * Math.sqrt(sc), m = rand();
+      fx.clods.add(CLOD.EARTH, x + Math.cos(a) * R0, y0 + 2, zz + Math.sin(a) * R0, Math.cos(a) * Math.sin(el) * v, Math.cos(el) * v + 10, Math.sin(a) * Math.sin(el) * v, rr(1.8, 3.4) * Math.sqrt(fa), G.clod[0] * (0.6 + m), G.clod[1] * (0.6 + m), G.clod[2] * (0.6 + m), { life: 40, drag: 0.015, gy });
+    }
+  }
+  const s = sc * Math.pow(fa, 1.25);
+  fx.emitters.add(7, Tup * 0.55, 0, 0, x, y0, zz, s, H, G.smoke[0] * 1.3, G.smoke[1] * 1.3, G.smoke[2] * 1.3, q);
+  fx.emitters.add(2, Tup * 1.5, 0, 0, x, y0, zz, s * 1.15, FZ.w * 1.6, G.dust[0], G.dust[1], G.dust[2], q);
 }
 
 // ---------------------------------------------------------------- shrapnel
@@ -459,6 +504,22 @@ export function runEmitter(fx, E, i, dt) {
       }
       break;
     }
+    case 7: {
+      // the giant's mushroom: a broad dark head rolling over high on the column, and the stem boiling up
+      const sc = E.a[i], k8 = Math.pow(sc, 0.8), q = E.f[i], Hc = E.b[i];
+      AX.set(0, 1, 0);
+      V.set(x, y + Hc * 0.92, z);
+      vortex(fx, V, AX, 11 * k8, 7 * k8, cnt(70, q, 24), 7 * Math.sqrt(sc), 10 * Math.sqrt(sc), 24, 7 * k8 * fx.lodZ, 22 * k8 * fx.lodZ, [E.c[i], E.d[i], E.e[i]], 0.88, { drag: 0.4, buoy: 0.3, kind: SMOKE.BLACK });
+      for (let j = 0; j < cnt(36, q, 10); j++) {
+        const h = rr(0.1, 0.85) * Hc, a = rand() * TAU, r = rr(0, 6) * k8;
+        fx.addSmoke(SMOKE.BLACK, x + Math.cos(a) * r, y + h, z + Math.sin(a) * r, rr(-2, 2), rr(4, 12), rr(-2, 2), rr(18, 30), 8 * k8 * fx.lodZ, rr(20, 34) * k8 * fx.lodZ, E.c[i] * 0.8, E.d[i] * 0.8, E.e[i] * 0.8, 0.75, { drag: 0.35, buoy: 0.5 });
+      }
+      E.type[i] = 0;
+      break;
+    }
+    default:
+      if (E.type[i] >= 10) runRocketEmitter(fx, E, i, dt);
+      break;
     case 5: {
       // the balls come down in a patch: small spurts of dust, a few ricochet glints
       const r = E.a[i], q = E.f[i], dx = E.c[i], dz = E.d[i], n = cnt(34, q, 8);

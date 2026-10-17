@@ -741,11 +741,12 @@ export class Tutorials {
    * (back to the demonstration battle), select(id), selectedId(), cam(), nudgeCam(), scale(), setScale(k),
    * follow() (F), following(), hint(text), frame(dt, draw).
    */
-  constructor({ sim, hud, host }) {
+  // defs: the lessons (the British TUTORIALS by default; the WW2 mode passes its own, src/ww2/tutorial.js)
+  constructor({ sim, hud, host, defs = TUTORIALS }) {
     this.sim = sim;
     this.hud = hud;
     this.host = host;
-    this.defs = TUTORIALS;
+    this.defs = defs;
     this.run = null; // the lesson in progress
     this.auto = null;
     this.done = this.load();
@@ -845,6 +846,8 @@ export class Tutorials {
   start(id) {
     const def = this.defs.find((d) => d.id === id);
     if (!def || !this.sim) return false;
+    // a WW2 lesson of another operation is a page load away (the theatre is fixed for the page)
+    if (this.host.redirect?.(def)) return false;
     if (this.run) this.stopRun();
     this.hud.showTutorialMenu(false);
     this.host.enter(def);
@@ -1148,3 +1151,6 @@ export class Tutorials {
     }
   }
 }
+
+// the shared steps and helpers, for the WW2 mode's lessons (src/ww2/tutorial.js)
+export const LESSON_KIT = { inFlight, readyN, queued, shots, target, targetDown, taken, idle, gunsUsed, gunsLive, takeStep, rangeStep, reportStep, bracketDemo, effectStep, killStep };

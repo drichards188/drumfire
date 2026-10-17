@@ -64,14 +64,16 @@ export function heightAtDistance(v, el, k, D) {
 const _tables = new Map();
 const RANGE_STEP = 100 * YARD;
 
-// Range table of a gun at a charge: rows every 100 yards on the rising branch (the low angle solution),
-// { range (m), el (rad), tof (s), apex (m) }, plus rMin, rMax (m) and elOpt, the elevation of the longest range
+// Range table of a gun at a charge: rows every 100 yards (a German gun's `rowStep`, 100 m) on the rising branch (the
+// low angle solution), { range (m), el (rad), tof (s), apex (m) }, plus rMin, rMax (m) and elOpt, the elevation of the
+// longest range. A gun with `high` (the Karl-Gerät, 55 to 70 degrees) has only the falling branch: rows run from the
+// shortest range (steepest) to the longest, each with its high-angle elevation.
 export function rangeTable(kind, charge) {
   const key = kind + ':' + charge;
   let tb = _tables.get(key);
   if (tb) return tb;
   const g = GUNS[kind], ch = g.charges[Math.max(0, Math.min(g.charges.length - 1, charge))];
-  const k = KS[kind];
+  const k = KS[kind], stepR = g.rowStep ?? RANGE_STEP;
   const pts = [];
   let best = 0, elOpt = g.elMin;
   for (let el = g.elMin; el <= g.elMax + 1e-9; el += 0.25 * Math.PI / 180) {
@@ -82,10 +84,11 @@ export function rangeTable(kind, charge) {
       elOpt = el;
     }
   }
-  const rise = pts.filter((p) => p.el <= elOpt + 1e-9);
+  // the branch the gun lays on, in order of increasing range
+  const rise = g.high ? pts.filter((p) => p.el >= elOpt - 1e-9).reverse() : pts.filter((p) => p.el <= elOpt + 1e-9);
   const rows = [];
   const r0 = rise[0].range, r1 = rise[rise.length - 1].range;
-  for (let r = Math.ceil(r0 / RANGE_STEP) * RANGE_STEP; r <= r1; r += RANGE_STEP) {
+  for (let r = Math.ceil(r0 / stepR) * stepR; r <= r1; r += stepR) {
     let i = 1;
     while (i < rise.length - 1 && rise[i].range < r) i++;
     const a = rise[i - 1], b = rise[i];
@@ -97,12 +100,24 @@ export function rangeTable(kind, charge) {
   return tb;
 }
 
-// Elevation for a target at horizontal distance D and height dh above the muzzle (the low angle solution),
-// by bisection over the same integrator. null when out of range either way.
+// Elevation for a target at horizontal distance D and height dh above the muzzle (the low angle solution, or the
+// high one for a `high` gun), by bisection over the same integrator. null when out of range either way.
 export function solveElevation(kind, charge, D, dh = 0) {
   const g = GUNS[kind], ch = g.charges[Math.max(0, Math.min(g.charges.length - 1, charge))];
   const k = KS[kind];
   const tb = rangeTable(kind, charge);
+  if (g.high) {
+    // falling branch: the steeper the shorter; at D the shell is above dh when the elevation is too low
+    let lo = Math.max(g.elMin, tb.elOpt), hi = g.elMax;
+    if (heightAtDistance(ch.v, lo, k, D).y - dh < 0) return null; // out of range even at the flattest
+    if (heightAtDistance(ch.v, hi, k, D).y - dh > 0) return null; // inside the minimum range
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2;
+      if (heightAtDistance(ch.v, mid, k, D).y - dh > 0) lo = mid; else hi = mid;
+    }
+    const el = (lo + hi) / 2;
+    return { el, tof: heightAtDistance(ch.v, el, k, D).t };
+  }
   let lo = g.elMin, hi = Math.min(g.elMax, tb.elOpt);
   const ylo = heightAtDistance(ch.v, lo, k, D).y - dh;
   if (ylo > 0) return null;

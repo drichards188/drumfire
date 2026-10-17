@@ -4,7 +4,12 @@
 // buildTarget (targets.js) builds the same positions. `alt` is the kite balloon's height.
 // y is the height above the site's ground.
 
+import { layoutWest } from './ww2/layout_west.js';
+import { layoutEast } from './ww2/layout_east.js';
+
 export function partLayout(kind, { alt = 900 } = {}) {
+  const ww2 = layoutWest(kind) ?? layoutEast(kind);
+  if (ww2) return ww2;
   switch (kind) {
     case 'battery': // four howitzers staggered along the battery front, each in its own pit
       return [{ x: -27, z: -6, y: 0 }, { x: -9, z: 6, y: 0 }, { x: 9, z: -5, y: 0 }, { x: 27, z: 7, y: 0 }];

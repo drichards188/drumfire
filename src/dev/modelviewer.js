@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { buildGun, GUN_KINDS, loadGuns } from '../models/guns.js';
+import { buildGun, GUN_KINDS, GUN_KINDS_WW2, loadGuns } from '../models/guns.js';
 import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole } from '../models/v/crew.js';
 
 // Standalone model viewer for the guns, the crews, and (when the field models agent's files exist) the
@@ -58,7 +58,14 @@ controls.enableDamping = false;
 // the field models agent's registries, when they exist
 const optional = async (g) => { try { const f = Object.values(g)[0]; return f ? await f() : null; } catch (e) { console.warn('optional module failed', e.message); return null; } };
 const [shellsMod, targetsMod] = await Promise.all([optional(import.meta.glob('../models/shells.js')), optional(import.meta.glob('../models/targets.js'))]);
-await loadGuns();
+await loadGuns([...GUN_KINDS, ...GUN_KINDS_WW2]);
+// the WW2 Allied models and aircraft (models/t/ww2), when they exist
+const alliedMod = {};
+if (q.get('aircraft') || q.get('allied')) {
+  alliedMod.aircraft = await optional(import.meta.glob('../models/t/ww2/aircraft.js'));
+  alliedMod.allied = await optional(import.meta.glob('../models/t/ww2/allied.js'));
+  alliedMod.guns = await optional(import.meta.glob('../models/t/ww2/allied_guns.js'));
+}
 
 const items = []; // { root, rig, kind }
 const labels = [];
@@ -125,7 +132,25 @@ function addItem(kind, x) {
       const t = targetsMod.buildTarget(id);
       root.add(t.root);
       rig = { target: t };
+      // &dmg=k sets every part's damage (&dmgpart=i only that part)
+      if (q.get('dmg')) t.parts.forEach((_, i) => { if (q.get('dmgpart') == null || Number(q.get('dmgpart')) === i) t.setDamage(i, Number(q.get('dmg'))); });
     } else console.warn('registry not available for', kind);
+  } else if (kind.startsWith('aircraft:') && alliedMod.aircraft) {
+    // ?aircraft=typhoon|il2|storch|auster|all (WW2 aircraft, parked; &fly=1 levels them with the gear up)
+    const a = alliedMod.aircraft.buildAircraft(kind.slice(9));
+    if (q.get('fly') === '1') { a.setParked(false); a.setGear(0); a.root.position.y = 3; a.prop.userData.disc.visible = true; }
+    root = new THREE.Group();
+    root.add(a.root);
+  } else if (kind.startsWith('allied:') && alliedMod.allied) {
+    // ?allied=q25|m55 (the Allied gun rigs) or sherman|ql|k5|carrier (single Allied vehicles)
+    const id = kind.slice(7);
+    if (id === 'q25' || id === 'm55') {
+      rig = id === 'q25' ? alliedMod.guns.build25pdr() : alliedMod.guns.build55in();
+      root = rig.root;
+    } else {
+      root = new THREE.Group();
+      root.add(alliedMod.allied.buildAlliedTraffic(id, 3));
+    }
   } else {
     rig = buildGun(kind);
     root = rig.root;
@@ -148,6 +173,7 @@ function addItem(kind, x) {
       else if (key === 'crane') rig.pivots.crane && (rig.pivots.crane.rotation.y = v);
       else if (key === 'hoist') rig.pivots.hoist && (rig.pivots.hoist.position.y = v);
       else if (key === 'trolley') rig.pivots.trolley && (rig.pivots.trolley.position.z = v);
+      else if (!rig.pivots[key.split('.')[0]] && typeof rig['set' + key[0].toUpperCase() + key.slice(1)] === 'function') rig['set' + key[0].toUpperCase() + key.slice(1)](v); // rig setters (setErect, setWings, ...)
       else { const [k, axis] = key.split('.'); if (rig.pivots[k]) rig.pivots[k].rotation[axis || 'x'] = v; }
     }
     if (q.get('load')) rig.setShell?.(q.get('load'), true);
@@ -178,12 +204,27 @@ else if (all === 'outfits') list = ['gunner', 'gunner-tunic', 'officer', 'german
 else if (all === 'crew') list = CREW_POSES.map((p) => 'crew:' + p);
 else if (q.get('shell')) list = ['shell:' + q.get('shell')];
 else if (q.get('target')) list = ['target:' + q.get('target')];
+else if (q.get('aircraft')) list = (q.get('aircraft') === 'all' ? ['typhoon', 'il2', 'storch', 'auster'] : q.get('aircraft').split(',')).map((k) => 'aircraft:' + k);
+else if (q.get('allied')) list = q.get('allied').split(',').map((k) => 'allied:' + k);
 else list = [q.get('kind') || 'bl15'];
 
 let xo = 0;
 for (const k of list) {
   addItem(k, xo);
   xo += all === 'crew' || all === 'outfits' ? 1.3 : 24;
+}
+// the Gustav's firing position around the first item, in its frame (heavy models agent):
+//   &site=gustav&stage=survey:1,track:1,cranes:1,ammo:1,flak:1,camo:1   (with kind=gustav: &pose=assembly:0.6)
+// (both roots stand on the ground; the rail head is site.railHead above it in each)
+if (q.get('site') === 'gustav') {
+  const { EXTRAS } = await import('../models/guns.js');
+  if (EXTRAS.buildGustavSite) {
+    const site = EXTRAS.buildGustavSite(), st = {};
+    for (const kv of (q.get('stage') || '').split(',')) { const [k, v] = kv.split(':'); if (k) st[k] = Number(v); }
+    site.setStage(st);
+    scene.add(site.root);
+    window.__site = site;
+  } else console.warn('buildGustavSite not loaded');
 }
 const info = document.getElementById('info');
 const center = new THREE.Vector3();

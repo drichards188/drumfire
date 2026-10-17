@@ -346,3 +346,46 @@
 .card.guns.few .ghead { flex-wrap: wrap; row-gap: 4px; }
 .card.guns.few .glist { justify-content: flex-start; }
 .card.guns.few .grow { flex: none; justify-content: flex-start; padding: 8px 4px 10px; }
+
+/* ---------- the WW2 special weapons' procedure card (consoles/special.js) ---------- */
+.card.special { flex: none; height: 244px; }
+.card.special.sp-gustav .sp-name i { display: none; }
+.card.special.sp-gustav .sp-head, .card.special.sp-karl .sp-head { max-height: 36px; overflow: hidden; }
+.sp-pos .btn .lbl i { display: none; }
+.sp-pos .btn { min-height: 0; padding: 1px 0; }
+.sp-btns .btn { flex: 1 1 22%; min-width: 0; }
+.sp-foot .btn { width: 100%; }
+.card.special.sp-v1, .card.special.sp-v2 { flex: 1; height: auto; }
+.card.special .cbody { gap: 3px; padding: 3px 7px 5px; overflow: hidden; }
+.sp-head, .sp-note, .sp-data, .sp-flights { font: 9.5px/1.25 var(--type); color: var(--ink); }
+.sp-note { color: var(--muted); }
+.sp-flights { color: #142e7a; font-weight: 700; }
+.sp-list { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.sp-row { display: flex; align-items: center; gap: 6px; padding: 1px 2px; border-bottom: 1px dotted var(--rule); }
+.sp-row .bar { flex: none; width: 70px; height: 7px; }
+.sp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sp-name b { font: 700 9.5px/1.1 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-name i { font: italic 8px/1.1 var(--serif); color: var(--muted); }
+.sp-row.done { opacity: .55; }
+.sp-row.done .sp-name b::after { content: '  done'; color: #1d5a22; }
+.sp-row.wait { opacity: .45; }
+.sp-row.doing .sp-name b, .sp-row.cur .sp-name b { color: #142e7a; }
+.sp-row.cur { background: rgba(185,146,58,.18); }
+.sp-ctl { display: flex; align-items: center; gap: 3px; }
+.sp-gangs { font: 700 11px/1 var(--type); width: 12px; text-align: center; }
+.sp-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+.sp-pos { display: flex; flex-direction: column; gap: 3px; }
+.sp-pos .btn { width: 100%; }
+.sp-k { font: 700 9px/1 var(--serif); letter-spacing: .1em; width: 70px; }
+.sp-set { display: flex; gap: 6px; }
+.sp-dial { flex: 1; display: flex; flex-direction: column; align-items: center; border: 1px solid var(--rule); padding: 2px; }
+.sp-dv { font: 700 17px/1.1 var(--type); color: var(--ink); }
+.sp-dv.off { color: var(--red); }
+.sp-du { font: italic 8px/1 var(--serif); color: var(--muted); }
+.sp-drow { display: flex; gap: 2px; margin-top: 2px; }
+.sp-drow .btn { min-width: 0; padding: 0 3px; }
+.sp-fault { display: none; padding: 3px 5px; border: 2px solid var(--red); background: rgba(168,36,27,.1); font: 9.5px/1.2 var(--type); }
+.sp-fault.on { display: flex; flex-direction: column; gap: 3px; }
+.sp-foot.hide { display: none; }
+.sp-btns .btn.sp-go { flex: 2 1 40%; }
+.sp-go .lbl b { font-size: 13px; color: #6e1810; }

@@ -15,13 +15,14 @@ import { Flares } from './flares.js';
 import { HUD } from './hud.js';
 import { Tutorials } from './tutorial.js';
 import { ChaseCamera } from './camera.js';
-import { UNITS, piecePlacements, headingFor, DEG, YARD } from './sector.js';
+import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
+import { ww2Theatre, OPS, OP_IDS } from './ww2/theatre.js';
 import { QUALITY, sunAt, blastTrauma } from './presets.js';
 
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
 // always boots (import.meta.glob also bundles whichever exist).
-const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js']);
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js']);
 const optional = async (path) => {
   try {
     return (await OPTIONAL[path]?.()) ?? null;
@@ -41,6 +42,11 @@ const step = async (p, msg) => {
 };
 const query = new URLSearchParams(location.search);
 const SANDBOX = !!query.get('sandbox');
+// The mode: the British game of 1917 (default) or the WW2 German mode (?mode=ww2&op=...). The WW2 theatre must exist
+// before the terrain is first sampled: it adds its positions' levelled pads (src/ww2/theatre.js).
+const WW2 = query.get('mode') === 'ww2';
+const TH = WW2 ? ww2Theatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : null;
+const UNITS = TH ? TH.units : UNITS_1917;
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -51,9 +57,20 @@ const KIND = {
   bl6: { eye: 2.2, dist: 100, calibre: 6 },
   bl60: { eye: 2, dist: 52, calibre: 5 },
   rail: { eye: 4.5, dist: 50, calibre: 18 },
+  // the WW2 mode's German pieces and sites
+  lefh18: { eye: 2, dist: 85, calibre: 4.13 },
+  sfh18: { eye: 2.4, dist: 95, calibre: 5.87 },
+  k18: { eye: 3, dist: 75, calibre: 6.8 },
+  mrs18: { eye: 3, dist: 70, calibre: 8.3 },
+  nbw41: { eye: 1.4, dist: 60, calibre: 5.9 },
+  gustav: { eye: 8, dist: 115, calibre: 31.5 },
+  bertha: { eye: 4, dist: 46, calibre: 16.5 },
+  karl: { eye: 4, dist: 42, calibre: 23.6 },
+  v1: { eye: 3, dist: 90, calibre: 22 },
+  v2: { eye: 8, dist: 120, calibre: 26 },
 };
 // how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
-const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32 };
+const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sfh18: 10, k18: 14, mrs18: 14, nbw41: 6, gustav: 40, bertha: 14, karl: 16, v1: 30, v2: 20 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 
@@ -105,8 +122,12 @@ async function init() {
     world: await optional('./world/index.js'),
     craters: await optional('./craters.js'),
     render: await optional('./render/index.js'),
+    ww2render: WW2 ? await optional('./ww2/render.js') : null,
+    ww2ui: WW2 ? await optional('./ww2/ui.js') : null,
+    ww2tut: WW2 ? await optional('./ww2/tutorial.js') : null,
   };
   await mods.guns?.loadGuns?.();
+  if (WW2) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW2);
 
   // ---------------------------------------------------------------- the world and the gun line
   await step(0.45, 'Digging the trenches');
@@ -159,7 +180,7 @@ async function init() {
   try {
     if (mods.sim?.Sim) {
       // the pure ground classifier, so the sim stays deterministic (runtime craters only change the look)
-      sim = new mods.sim.Sim({ heightAt, los, groundAt: groundKindAt, seed: (Math.random() * 1e9) | 0 });
+      sim = new mods.sim.Sim({ heightAt, los, groundAt: groundKindAt, seed: (Math.random() * 1e9) | 0, theatre: TH });
       sim.newGame({ attract: true });
     }
   } catch (e) {
@@ -173,6 +194,14 @@ async function init() {
     console.warn('render layer failed:', e.message);
   }
 
+  // the WW2 mode's own pictures: the special weapons' sites and stages, rockets and missiles, aircraft (src/ww2/render.js)
+  let ww2r = null;
+  try {
+    if (WW2 && mods.ww2render?.createWW2Render) ww2r = mods.ww2render.createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns });
+  } catch (e) {
+    console.warn('WW2 render failed:', e.message);
+  }
+
   patchSceneFog(scene);
 
   await step(0.72, 'Preparing the lens');
@@ -184,7 +213,9 @@ async function init() {
   const chase = new ChaseCamera(camera, canvas, { ground: terrain.heightAt });
   let audio = null;
   try {
-    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine() : null;
+    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : undefined) : null;
+    if (WW2) audio?.enableWW2?.();
+    if (ww2r) ww2r.audio = audio;
   } catch (e) {
     console.warn('AudioEngine failed:', e.message);
   }
@@ -209,6 +240,7 @@ async function init() {
   }
   const panelEl = document.getElementById('panel');
   let panel = null;
+  if (TH) mods.ww2ui?.ww2Ui?.(TH);
   try {
     if (mods.panel?.Panel) {
       panelEl.replaceChildren();
@@ -378,7 +410,8 @@ async function init() {
     // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
     chase.goalYaw += 0.75;
     chase.goalPitch = 0.17;
-    hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}`);
+    hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}${u.alt ? '  \u00b7  ALTERNATE HISTORY' : ''}`);
+    if (u.alt && state === 'playing') hud.hint(u.alt, 4200);
     renderLayer?.select?.(u.id);
     drumfire.events.select?.(u.id, i);
   };
@@ -448,17 +481,49 @@ async function init() {
     following = false;
     newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0 });
     selectUnit(selected);
-    hud.toast('Drumfire', 'Heavy artillery, Ypres salient, 1917', 3200);
+    if (TH) hud.toast(TH.op.title, TH.op.sub, 4200);
+    else hud.toast('Drumfire', 'Heavy artillery, Ypres salient, 1917', 3200);
     hud.setScore(0);
     try {
       audio?.start?.();
     } catch (e) {
       console.warn('audio.start failed:', e.message);
     }
-    hud.radio('Group HQ: all batteries, stand to. Observers report at first light.', 'info');
+    hud.radio(TH ? `Arko: ${TH.op.short}. All units, stand to.` : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
     drumfire.events.start?.(params.difficulty);
   };
   playBtn.addEventListener('click', start);
+
+  // the mode switch on the title screen; in the WW2 mode the operations, each with its history note
+  for (const el of document.querySelectorAll('#modes a')) el.classList.toggle('on', el.dataset.m === (WW2 ? 'ww2' : '1917'));
+  if (TH) {
+    const op = TH.op;
+    document.title = `Drumfire WW2: ${op.short}`;
+    document.querySelector('.brand .sub').textContent = `German artillery, ${op.title}`;
+    document.querySelector('.brand .blurb').textContent = op.blurb;
+    const opsEl = document.getElementById('ops'), note = document.getElementById('op-note');
+    opsEl.hidden = false;
+    note.hidden = false;
+    for (const id of OP_IDS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = OPS[id].short;
+      b.title = OPS[id].sub;
+      b.classList.toggle('on', id === TH.opId);
+      b.addEventListener('click', () => {
+        if (id !== TH.opId) location.href = `/?mode=ww2&op=${id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+      });
+      opsEl.append(b);
+    }
+    const alts = op.units.filter((u) => u.alt).map((u) => u.alt);
+    note.replaceChildren();
+    const h = document.createElement('b');
+    h.textContent = 'History. ';
+    note.append(h, op.history, ...alts.map((t) => Object.assign(document.createElement('span'), { className: 'alt-badge', textContent: t.split(':')[0], title: t })));
+    playBtn.textContent = op.kind === 'v1' || op.kind === 'v2' ? 'Begin the mission' : 'Take command';
+    const k = document.querySelector('.keys li');
+    if (k) k.innerHTML = `<kbd>1</kbd>-<kbd>${UNITS.length}</kbd> select unit`;
+  }
 
   // ---------------------------------------------------------------- tutorials (src/tutorial.js)
   // A lesson runs the sim in scripted mode and ALWAYS in daylight: the sun follows the sim clock (held at 10:00),
@@ -473,7 +538,14 @@ async function init() {
     ? new Tutorials({
         sim,
         hud,
+        defs: WW2 ? mods.ww2tut?.WW2_TUTORIALS ?? [] : undefined,
         host: {
+          // a WW2 lesson on another operation: load the page there (the theatre is fixed per page)
+          redirect(def) {
+            if (!WW2 || !def.op || def.op === TH.opId) return false;
+            location.href = `/?mode=ww2&op=${def.op}&tutorial=${def.id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+            return true;
+          },
           enter(def) {
             state = 'tutorial';
             hud.showTitle(false);
@@ -598,6 +670,7 @@ async function init() {
   const handlers = {
     // a gun fired: muzzle blast, light, recoil, sound, shake
     fire(unit, piece, shell) {
+      if (ww2r?.fire?.(unit, piece, shell, atmosphere.night)) return;
       const cal = shell?.calibre ?? KIND[piece?.kind ?? unit?.kind]?.calibre ?? 6;
       const rig = rigs.get(`${unit.id}:${piece?.i ?? 0}`);
       const night = atmosphere.night;
@@ -640,7 +713,7 @@ async function init() {
           console.warn('craters.add failed:', e.message);
         }
       }
-      audio?.burst?.(_q, cal, { fuze: info.fuze, ground: info.ground });
+      audio?.burst?.(_q, cal, { fuze: shell?.kind === 'v2' ? 'v2' : info.fuze, ground: info.ground, kind: shell?.kind });
       renderLayer?.onBurst?.(_q, info);
       const d = nearD(_q);
       // re-seat the dressing on the new crater, only where it is built in detail (near the camera)
@@ -761,8 +834,8 @@ async function init() {
     const win = s === 'victory';
     hud.showEnd(
       {
-        title: win ? 'Objectives taken' : 'The line is lost',
-        sub: win ? 'The Group has done its work.' : 'The sector is overrun.',
+        title: sim.over?.title ?? (TH ? (win ? 'Operation successful' : 'Operation failed') : win ? 'Objectives taken' : 'The line is lost'),
+        sub: sim.over?.sub ?? (TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
         victory: win,
         stats: [
           ['Score', (typeof sc === 'number' ? sc : sc?.points ?? 0).toLocaleString('en-US')],
@@ -778,7 +851,7 @@ async function init() {
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && tutorial?.escape()) return;
     if (e.repeat || e.target.closest?.('input, textarea, select')) return;
-    if (/^Digit[1-5]$/.test(e.code) && !e.ctrlKey && !e.metaKey) unitKey(Number(e.code.slice(5)) - 1);
+    if (/^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && Number(e.code.slice(5)) <= UNITS.length) unitKey(Number(e.code.slice(5)) - 1);
     else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
       if (following) {
         chase.releaseShot();
@@ -901,6 +974,7 @@ async function init() {
       }
     }
     if (sim) renderLayer?.update?.(dt, rawDt, sim, fx, camera);
+    if (sim) ww2r?.update?.(dt, rawDt, sim, camera);
     world?.update?.(dt, camera);
     craters?.update?.(dt, camera);
     if (sim) {

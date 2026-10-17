@@ -1,7 +1,7 @@
 // The message log: observers' reports, wireless from the aeroplanes, tasks from Group. Collected from
 // the sim's missions and reports each frame (nothing to wire), plus whatever main forwards from
 // `sim.events.radio` through Panel.radio(). Slips are plain data; consoles/messagePad.js draws them.
-import { YARD } from '../sector.js';
+import { lenU, TH } from './theatre.js';
 import { ref, MISSION_NAME, sectorAt } from './consoles/common.js';
 
 const FROM = {
@@ -15,7 +15,7 @@ export function parseClock(c) {
   return m ? { letter: m[1].toUpperCase(), hour: Number(m[2]), yards: CODE[m[1].toUpperCase()] } : null;
 }
 
-const r5 = (m) => Math.round(m / YARD / 5) * 5;
+const r5 = (m) => Math.round(m / lenU() / 5) * 5;
 export const corrText = (c) => {
   const a = r5(c.add), r = r5(c.right);
   return [a ? `${a > 0 ? 'ADD' : 'DROP'} ${Math.abs(a)}` : '', r ? `${r > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(r)}` : ''].filter(Boolean).join(', ');
@@ -32,8 +32,8 @@ export function slipCorr(s, unit) {
   const a0 = s.adj0 || o.adj || { add: 0, right: 0 }, a = o.adj || { add: 0, right: 0 };
   // The pad prints five-yard increments; apply those same increments to the order.
   return {
-    add: r5(s.corr.add + a0.add - a.add) * YARD,
-    right: r5(s.corr.right + a0.right - a.right) * YARD,
+    add: r5(s.corr.add + a0.add - a.add) * lenU(),
+    right: r5(s.corr.right + a0.right - a.right) * lenU(),
   };
 }
 
@@ -68,8 +68,8 @@ export class Mail {
         if (m.state === 'open' || m.state === 'ranging' || m.state === 'ffe') {
           const r = m.gridRef || ref(m.x, m.z);
           const dl = m.deadline != null ? ` Engage within ${Math.max(1, Math.round((m.deadline - (sim.time || 0)) / 60))} minutes.` : '';
-          const what = m.kind === 'sos' ? `S.O.S. called on ${sectorAt(m.z).name} front. All guns to the S.O.S. line.` : `${m.title || MISSION_NAME[m.kind]} at ${r}.${dl}`;
-          fresh.push({ kind: 'order', from: 'Group H.Q.', text: what, mission: m.id, tag: `TASK ${m.id}`, clock: sim.clock - ((sim.time || 0) - (m.t0 || 0)) / 3600 });
+          const what = m.kind === 'sos' ? `${TH.sos} called on ${sectorAt(m.z).name} front. All guns to the ${TH.sos} line.` : `${m.title || MISSION_NAME[m.kind]} at ${r}.${dl}`;
+          fresh.push({ kind: 'order', from: TH.hq, text: what, mission: m.id, tag: `TASK ${m.id}`, clock: sim.clock - ((sim.time || 0) - (m.t0 || 0)) / 3600 });
         }
       }
       for (const rp of m.reports || []) {
@@ -82,8 +82,8 @@ export class Mail {
         const u = (sim.units || []).find((q) => q.id === rp.unitId);
         const piece = f ? f.piece : rp.piece;
         const slip = {
-          kind: air ? 'wireless' : m.observer === 'sound' ? 'sound' : 'phone', from: FROM[m.observer] || 'Observer', mission: m.id, unitId: rp.unitId,
-          text: rp.text, clock: sim.clock - ((sim.time || 0) - rp.t) / 3600, code: air ? parseClock(rp.clock) : null, rawCode: rp.clock,
+          kind: air ? 'wireless' : m.observer === 'sound' ? 'sound' : 'phone', from: (TH.observerFrom || FROM)[m.observer] || 'Observer', mission: m.id, unitId: rp.unitId,
+          text: rp.text, clock: sim.clock - ((sim.time || 0) - rp.t) / 3600, code: air && !rp.metric ? parseClock(rp.clock) : null, rawCode: rp.clock,
           round: tracker ? tracker.numbers.get(rp.shellId) : null, ok: !!rp.ok,
           corr: hasErr && !rp.ok ? { add: -rp.over, right: -rp.right } : null, tag: `M${m.id}`,
           // battery and gun that fired the round, plus the lay it went with
@@ -109,6 +109,6 @@ export class Mail {
     if (!text) return;
     const k = kind === 'wireless' ? 'wireless' : kind === 'phone' ? 'phone' : kind === 'alert' ? 'alert' : kind === 'warn' ? 'alert' : kind === 'kill' ? 'kill' : 'order';
     if (kind === 'info') return;           // the task slips already tell this
-    this.push({ kind: k, from: k === 'wireless' ? 'Wireless' : k === 'phone' ? 'Telephone' : k === 'kill' ? 'Observer' : 'Group H.Q.', text, tag: '' }, sim);
+    this.push({ kind: k, from: k === 'wireless' ? 'Wireless' : k === 'phone' ? 'Telephone' : k === 'kill' ? 'Observer' : TH.hq, text, tag: '' }, sim);
   }
 }

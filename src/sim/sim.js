@@ -19,19 +19,26 @@ const _st = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
 const TAKE_MANUAL = new Set(['mission', 'lay', 'correct', 'charge', 'fuze', 'rounds', 'fire']);
 
 export class Sim {
-  constructor({ heightAt, los = null, seed = 1, groundAt = null } = {}) {
+  // `theatre` (optional, the WW2 mode: src/ww2/theatre.js) supplies the units and sites and may replace the modules
+  // (Targets, Observers, Enemy, Infantry, Crews, Director, plus an extra `Special` stepped after the guns). Without
+  // it everything is the British game exactly as before.
+  constructor({ heightAt, los = null, seed = 1, groundAt = null, theatre = null } = {}) {
     this.heightAt = heightAt;
     this.los = los;
     this.groundAt = groundAt;
     this.events = {};
     this.seed = seed;
+    this.theatre = theatre;
+    const M = theatre?.modules ?? {};
+    this.bounds = theatre?.bounds ?? 40000;
     this.guns = new Guns(this);
-    this.targetAI = new Targets(this);
-    this.observers = new Observers(this);
-    this.enemyAI = new Enemy(this);
-    this.infAI = new Infantry(this);
-    this.crews = new Crews(this);
-    this.director = new Director(this);
+    this.targetAI = new (M.Targets ?? Targets)(this);
+    this.observers = new (M.Observers ?? Observers)(this);
+    this.enemyAI = new (M.Enemy ?? Enemy)(this);
+    this.infAI = new (M.Infantry ?? Infantry)(this);
+    this.crews = new (M.Crews ?? Crews)(this);
+    this.director = new (M.Director ?? Director)(this);
+    this.special = M.Special ? new M.Special(this) : null;
     this.script = new Script(this);
     this.newGame();
   }
@@ -45,6 +52,7 @@ export class Sim {
     this.rng = mulberry32(seed);
     this.difficultyName = difficulty;
     this.difficulty = { ...(DIFFICULTY[difficulty] ?? DIFFICULTY.Normal) };
+    this.over = null; // the WW2 mode: { title, sub, stats } the end card shows
     this.attract = attract;
     if (attract) Object.assign(this.difficulty, { err: 0.5, dmg: 0, ammo: 3 });
     this.time = 0;
@@ -71,6 +79,7 @@ export class Sim {
     this.infAI.reset();
     this.crews.reset();
     this.director.reset();
+    this.special?.reset();
     this._missionMap = new Map();
     if (scripted) this.script.begin();
     this.state = attract ? 'attract' : 'playing';
@@ -153,6 +162,7 @@ export class Sim {
     this.enemyAI.update(dt);
     this.crews.update(dt);
     this.guns.update(dt);
+    this.special?.update(dt, over);
     this.moveShells(dt);
     this.targetAI.update(dt);
     this.infAI.update(dt);
@@ -168,6 +178,8 @@ export class Sim {
         shells.splice(i, 1);
         continue;
       }
+      // a guided missile (the WW2 mode's V-1 and V-2) is flown by its controller (sim.special)
+      if (s.guided) continue;
       s.prev.x = s.pos.x;
       s.prev.y = s.pos.y;
       s.prev.z = s.pos.z;
@@ -209,7 +221,7 @@ export class Sim {
         const p = { x, y: this.heightAt(x, z), z };
         s.pos.x = p.x; s.pos.y = p.y; s.pos.z = p.z;
         this.burst(s, p, false);
-      } else if (s.t > 240 || Math.abs(s.pos.x) > 40000 || Math.abs(s.pos.z) > 40000) {
+      } else if (s.t > 240 || Math.abs(s.pos.x) > this.bounds || Math.abs(s.pos.z) > this.bounds) {
         s.alive = false;
       }
     }
@@ -285,10 +297,11 @@ export class Sim {
       case 'cease': g.cease(u); return true;
       case 'mode': g.setMode(u, args.mode); return true;
     }
-    return false;
+    return this.special?.command(u, name, args) ?? false;
   }
 
   sosCommand(sector) {
+    if (this.theatre?.sosCommand) return this.theatre.sosCommand(this, sector);
     const a = this.assaults.find((q) => q.sector === sector && q.state === 'called');
     const m = a?.missionId ? this.missionById(a.missionId) : null;
     let n = 0;
