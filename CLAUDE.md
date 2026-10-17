@@ -52,11 +52,11 @@ The director runs five phases on the sim clock (`PHASES`): Registration (0 s), t
 
 | Difficulty | all auto | scripted 15in+9.2in+6in | scripted all five |
 |---|---|---|---|
-| Easy | 39 | 65 | 69 |
-| Normal | 20 | 46 | 58 |
-| Hard | 1 | 8 | 15 |
+| Easy | 39 | 64 | 68 |
+| Normal | 18 | 46 | 56 |
+| Hard | 2 | 8 | 14 |
 
-All nine cells were re-run on seeds 1 to 72 after the railway gun became the 18-inch (before: Easy 39 / 66 / 69, Normal 14 / 48 / 61, Hard 0 / 4 / 15; the rail unit gets about 1.3 kills a game from about 25 rounds).
+All nine cells were re-run on seeds 1 to 72 after the elevation limits followed the real carriages (9.2-inch from 15 degrees, 6-inch to 45, 60-pounder to 21.5 with faster charges keeping its reach; before: Easy 39 / 65 / 69, Normal 20 / 46 / 58, Hard 1 / 8 / 15). Before that, the railway gun became the 18-inch (Easy 39 / 66 / 69, Normal 14 / 48 / 61, Hard 0 / 4 / 15 with the 12-inch); the rail unit gets about 1.5 kills a game from about 21 rounds.
 
 On Normal the auto crews hold the SOS 46 % of the time (scripted all five 77 %), and 50 % of the infantry reach the objective with auto crews against 68 % with the scripted player (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Keep the all-auto crews losing most games and the scripted player winning most on Normal. Tuning knobs: `DIFFICULTY`, the dispersion and calibration in `GUNS`, the `SHELLS` radii, the counter-battery cadence in `enemy.js` (one round per gun per 85 s / (cb * activity)), the breach penalty in `director.js` (0.5 of a sector per group in), the AI delays in `crews.js`. Single games flip near the loss line, so decide on 72 seeds or more.
 
