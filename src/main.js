@@ -13,6 +13,11 @@ import { DynamicResolution } from './dynres.js';
 import { FX } from './fx.js';
 import { Flares } from './flares.js';
 import { HUD } from './hud.js';
+import { Progression } from './progression.js';
+import { BATTERIES, missionById } from './campaign-data.js';
+import { setUiTheatre } from './ui/theatre.js';
+import { campaignTheatre, sandboxTheatre } from './campaign.js';
+import { mountProgression, mountCampaignObjectives } from './ui/progression.js';
 import { Tutorials } from './tutorial.js';
 import { ChaseCamera } from './camera.js';
 import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
@@ -45,7 +50,12 @@ const SANDBOX = !!query.get('sandbox');
 // The mode: the British game of 1917 (default) or the WW2 German mode (?mode=ww2&op=...). The WW2 theatre must exist
 // before the terrain is first sampled: it adds its positions' levelled pads (src/ww2/theatre.js).
 const WW2 = query.get('mode') === 'ww2';
-const TH = WW2 ? ww2Theatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : null;
+let careerStorage;
+try { careerStorage = window.localStorage; } catch { /* Session-only career. */ }
+const career = new Progression(careerStorage);
+const requestedMission = missionById(query.get('campaign'));
+const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
+const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : null;
 const UNITS = TH ? TH.units : UNITS_1917;
 
 // ---------------------------------------------------------------- game values for the look and feel
@@ -241,13 +251,22 @@ async function init() {
   const panelEl = document.getElementById('panel');
   let panel = null;
   if (TH) mods.ww2ui?.ww2Ui?.(TH);
+  if (CAMPAIGN_MISSION) setUiTheatre({ salient: false, sectors: [], mppMax: 120,
+    fit: (s) => {
+      const points = [...s.units.map(u => u.pos), ...s.targets.map(t => t.pos)];
+      const xs = points.map(p => p.x), zs = points.map(p => p.z);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+      return { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0 + 1500, h: Math.max(3000, z1 - z0 + 1500) };
+    } });
   try {
     if (mods.panel?.Panel) {
       panelEl.replaceChildren();
       panel = new mods.panel.Panel(panelEl, {
         audio,
         onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
-        onCommand: (id, name, args) => sim?.command(id, name, args),
+        onCommand: (id, name, args) => canCommand(id) && sim?.command(id, name, args),
+        isUnlocked: (u) => canCommand(u.id),
+        keyFor: (id) => (UNITS.findIndex(u => u.id === id) + 1) % 10,
       });
     }
   } catch (e) {
@@ -397,8 +416,13 @@ async function init() {
   view.appendChild(stats.dom);
 
   // ---------------------------------------------------------------- units and camera
+  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || career.unlocked(UNITS.find(u => u.id === id)?.kind);
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
+    if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
+      hud.hint(`Earn ${UNITS[i].name} in its campaign mission first.`, 2500);
+      return;
+    }
     selected = i;
     const u = UNITS[i];
     freeCam = false;
@@ -473,13 +497,21 @@ async function init() {
   };
 
   const start = () => {
+    if (!UNITS.some(u => canCommand(u.id))) return;
+    if (!CAMPAIGN_MISSION && WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind)) return;
     state = 'playing';
+    if (!canCommand(UNITS[selected].id)) selected = UNITS.findIndex(u => canCommand(u.id));
     hud.hideEnd();
     hud.showTitle(false);
     chase.autoOrbit = 0;
     chase.cine(false);
     following = false;
-    newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0 });
+    newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
+      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
+    if (CAMPAIGN_MISSION) {
+      sim.director.update(0);
+      selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
+    }
     selectUnit(selected);
     if (TH) hud.toast(TH.op.title, TH.op.sub, 4200);
     else hud.toast('Drumfire', 'Heavy artillery, Ypres salient, 1917', 3200);
@@ -489,14 +521,14 @@ async function init() {
     } catch (e) {
       console.warn('audio.start failed:', e.message);
     }
-    hud.radio(TH ? `Arko: ${TH.op.short}. All units, stand to.` : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
+    hud.radio(WW2 ? `Arko: ${TH.op.short}. All units, stand to.` : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
     drumfire.events.start?.(params.difficulty);
   };
   playBtn.addEventListener('click', start);
 
   // the mode switch on the title screen; in the WW2 mode the operations, each with its history note
   for (const el of document.querySelectorAll('#modes a')) el.classList.toggle('on', el.dataset.m === (WW2 ? 'ww2' : '1917'));
-  if (TH) {
+  if (WW2 && !CAMPAIGN_MISSION) {
     const op = TH.op;
     document.title = `Drumfire WW2: ${op.short}`;
     document.querySelector('.brand .sub').textContent = `German artillery, ${op.title}`;
@@ -524,6 +556,37 @@ async function init() {
     const k = document.querySelector('.keys li');
     if (k) k.innerHTML = `<kbd>1</kbd>-<kbd>${UNITS.length}</kbd> select unit`;
   }
+
+  const navigate = (mission = null) => {
+    const url = new URL(location.href);
+    for (const key of ['campaign', 'op', 'play', 'sandbox', 'tutorial', 'unit']) url.searchParams.delete(key);
+    if (mission) url.searchParams.set('campaign', mission.id);
+    location.href = url.href;
+  };
+  if (CAMPAIGN_MISSION) {
+    document.querySelector('.brand .sub').textContent = `Campaign · ${CAMPAIGN_MISSION.title}`;
+    document.querySelector('.brand .blurb').textContent = CAMPAIGN_MISSION.briefing;
+    const briefing = document.createElement('p');
+    briefing.id = 'campaign-briefing';
+    briefing.textContent = `Loaned battery: ${BATTERIES.find(b => b.kind === CAMPAIGN_MISSION.reward).name}. Win to keep it.\n` +
+      CAMPAIGN_MISSION.roster.map(k => { const b = BATTERIES.find(b => b.kind === k); return `${b.name}: ${b.role}${b.fuze ? ` (${b.fuze} fuze, ${Math.round(b.damage * 100)}% effective target damage, ${b.rounds}+ ${b.rounds === 1 ? 'round' : 'rounds'})` : ' (bearing ±1°, range ±1%, no oxygen shortfall)'}.`; }).join('\n');
+    document.getElementById('options').before(briefing);
+    const sandbox = document.createElement('button');
+    sandbox.id = 'career-sandbox'; sandbox.type = 'button'; sandbox.textContent = 'Sandbox';
+    sandbox.addEventListener('click', () => navigate());
+    document.querySelector('.actions').append(sandbox);
+  }
+  const returnMenu = document.createElement('button');
+  returnMenu.id = 'return-menu'; returnMenu.type = 'button'; returnMenu.textContent = 'Main menu';
+  returnMenu.addEventListener('click', () => navigate());
+  document.getElementById('view').append(returnMenu);
+  const refreshCareer = mountProgression(career, WW2 ? 'ww2' : '1917', CAMPAIGN_MISSION, navigate, () => {
+    const locked = !CAMPAIGN_MISSION && WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind);
+    playBtn.disabled = !!locked || !document.body.classList.contains('ready');
+    playBtn.textContent = locked ? 'Earn this battery in campaign' : CAMPAIGN_MISSION ? 'Begin campaign mission' : 'Play sandbox';
+  });
+  const updateCampaignObjectives = mountCampaignObjectives();
+  document.querySelector('.keys li').textContent = UNITS.length === 10 ? '1–9, 0 select battery' : `1–${UNITS.length} select battery`;
 
   // ---------------------------------------------------------------- tutorials (src/tutorial.js)
   // A lesson runs the sim in scripted mode and ALWAYS in daylight: the sun follows the sim clock (held at 10:00),
@@ -600,7 +663,10 @@ async function init() {
         },
       })
     : null;
-  document.getElementById('tutorials').addEventListener('click', () => tutorial?.openMenu());
+  document.getElementById('tutorials').addEventListener('click', () => {
+    if (CAMPAIGN_MISSION) { const url = new URL(location.href); url.searchParams.delete('campaign'); url.searchParams.set('lessons', '1'); location.href = url.href; }
+    else tutorial?.openMenu();
+  });
 
   // ---------------------------------------------------------------- sandbox
   // ?sandbox=1: no title, straight to the gun line. B fires a fake 15-inch blast at the selected
@@ -829,8 +895,12 @@ async function init() {
     hud.setScore(typeof sc === 'number' ? sc : sc?.points ?? 0);
   };
   const endGame = (s) => {
-    state = 'ended';
     const sc = sim.score;
+    if (CAMPAIGN_MISSION && s === 'victory' && !sim.attract && !sim.scripted) {
+      career.complete(CAMPAIGN_MISSION.id);
+      refreshCareer();
+    }
+    state = 'ended';
     const win = s === 'victory';
     hud.showEnd(
       {
@@ -838,6 +908,7 @@ async function init() {
         sub: sim.over?.sub ?? (TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
         victory: win,
         stats: [
+          ...(CAMPAIGN_MISSION ? [['Battery reward', s === 'victory' ? BATTERIES.find(b => b.kind === CAMPAIGN_MISSION.reward).name : 'Not yet earned']] : []),
           ['Score', (typeof sc === 'number' ? sc : sc?.points ?? 0).toLocaleString('en-US')],
           ...Object.entries(sc && typeof sc === 'object' ? sc : {}).filter(([k, v]) => k !== 'points' && typeof v === 'number').slice(0, 5).map(([k, v]) => [k, Math.round(v)]),
           ['Pieces serving', `${sim.units.reduce((n, u) => n + u.pieces.filter((p) => p.state !== 'dead').length, 0)}`],
@@ -851,7 +922,7 @@ async function init() {
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && tutorial?.escape()) return;
     if (e.repeat || e.target.closest?.('input, textarea, select')) return;
-    if (/^Digit[1-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && Number(e.code.slice(5)) <= UNITS.length) unitKey(Number(e.code.slice(5)) - 1);
+    if (/^Digit[0-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && (Number(e.code.slice(5)) || 10) <= UNITS.length) unitKey((Number(e.code.slice(5)) || 10) - 1);
     else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
       if (following) {
         chase.releaseShot();
@@ -920,7 +991,7 @@ async function init() {
   post.render(0.016);
   hud.setLoading(1, '');
   hud.ready();
-  playBtn.disabled = false;
+  refreshCareer();
   document.getElementById('tutorials').disabled = !tutorial;
   hud.setTimeScale(1);
 
@@ -960,6 +1031,7 @@ async function init() {
     scene.environmentIntensity = params.envIntensity * atmosphere.baseEnvIntensity * (1 - weather.state.storm * 0.35) + weather.flash * 2.5;
 
     if (dt > 0) sim?.update(dt);
+    updateCampaignObjectives(sim, state === 'playing' && !!CAMPAIGN_MISSION);
     if (tutorial?.active && !DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
     tutorial?.update(rawDt);
     if (SANDBOX || !sim) stepFakeShells(dt);
@@ -1139,13 +1211,11 @@ async function init() {
   renderer.setAnimationLoop(() => frame());
 
   if (SANDBOX) {
-    state = 'playing';
-    hud.showTitle(false);
-    chase.cine(false);
-    selectUnit(selected);
-    hud.setScore(0);
+    start();
   } else if (query.get('tutorial') && tutorial) {
     tutorial.start(query.get('tutorial'));
+  } else if (query.get('lessons')) {
+    tutorial?.openMenu();
   } else if (query.get('play')) {
     selectUnit(selected);
     start();

@@ -28,7 +28,7 @@ export function pickGuns(u, guns) {
 
 export function createUnits(sim) {
   const diff = sim.difficulty;
-  return (sim.theatre?.units ?? UNITS).map((def) => {
+  return (sim.theatre?.units ?? UNITS).filter(def => !sim.allowedKinds || sim.allowedKinds.has(def.kind)).map((def) => {
     const g0 = GUNS[def.kind];
     const pieces = piecePlacements(def).map((pl) => {
       const g = GUNS[pl.kind];
@@ -468,6 +468,7 @@ export class Guns {
         p.ripple.next = sim.time + g.salvo.dt;
         p.ripple.last = sim.time;
         if (p.ripple.i >= n) p.ripple.i = g.salvo.n;
+        sim.director.onFire?.(u, p, shell);
         sim.events.fire?.(u, p, shell);
         return shell;
       }
@@ -485,6 +486,7 @@ export class Guns {
     const balloon = sim.balloonUp() ? 1.35 : 1;
     u.signature = Math.min(1, u.signature + g.sig * night * balloon * sim.difficulty.sig);
     sim.stats.rounds++;
+    sim.director.onFire?.(u, p, shell);
     sim.events.fire?.(u, p, shell);
     return shell;
   }

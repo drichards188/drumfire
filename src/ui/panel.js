@@ -130,7 +130,7 @@ export class Panel {
     this.tabs.clear();
     units.forEach((u, i) => {
       const t = el('div', 'tab');
-      const key = el('span', 'tkey', String(i + 1));
+      const key = el('span', 'tkey', String(this.opts.keyFor?.(u.id) ?? i + 1));
       const main = el('div', 'tmain');
       const call = el('b', 'tcall');
       const hp = new Bar({ cls: 'mini' }), am = new Bar({ cls: 'mini ammo' });
@@ -187,7 +187,10 @@ export class Panel {
       const ammo = u.ammo ? (u.ammo.he || 0) + (u.ammo.shrapnel || 0) : 0;
       t.ammoMax = Math.max(t.ammoMax, ammo, 1);
       t.am.set(ammo / t.ammoMax);
-      setText(t.mode, MODE_LETTER[u.mode] || '?');
+      const locked = this.opts.isUnlocked && !this.opts.isUnlocked(u);
+      setCls(t.el, 'locked', locked);
+      setText(t.el.querySelector('.tkey'), locked ? 'LOCK' : String(this.opts.keyFor?.(u.id) ?? units.indexOf(u) + 1));
+      setText(t.mode, locked ? 'AI' : MODE_LETTER[u.mode] || '?');
       const dead = u.alive === false;
       // lamp: amber when a piece fired in the last two seconds; red flashing when enemy shells burst on the battery
       let fired = false, hit = false;

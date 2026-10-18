@@ -166,6 +166,9 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   }
 
   function update(dt, rawDt, s = sim, camera) {
+    for (const [id, site] of sites) site.root.visible = !!s.unitById(id);
+    for (const [key, works] of w.batteryWorks ?? []) works.root.visible = !!s.unitById(Number(key.split(':')[0]));
+    for (const [key, position] of w.gunPositions ?? []) position.root.visible = !!s.unitById(Number(key.split(':')[0]));
     for (const u of s.units) {
       if (u.special) poseSpecial(u, rawDt);
       if (u.kind === 'nbw41') for (const p of u.pieces) {

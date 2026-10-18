@@ -45,7 +45,8 @@ export class Sim {
 
   // scripted: the tutorial range (no phases, spawns or German fire unless sim.script asks, our pieces take no damage,
   // every unit on hold, daylight only); see script.js
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false } = {}) {
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null } = {}) {
+    this.allowedKinds = allowedKinds == null ? null : new Set(allowedKinds);
     this.seed = seed;
     this.scripted = scripted;
     this.invulnerable = scripted;

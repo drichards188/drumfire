@@ -394,7 +394,7 @@ class LaunchCtl {
     const u = this.u, sim = this.sim, op = sim.theatre.op;
     u.mode = u.def.mode ?? 'manual';
     u.gate = 'launch drill';
-    const T = op.target;
+    const T = u.def.target ?? op.target;
     // the solution the battery's firing data gives: the target's bearing and range, the air log or cut-off for the wind
     const headwind = -Math.cos(sim.wind.bearing - T.bearing) * sim.wind.speed;
     const st = u.special = {
@@ -732,7 +732,7 @@ class LaunchCtl {
       sim.events.special?.(this.u, 'result', f);
     }
     // the mission ends when every round is spent and every flight is settled
-    if (st.done && !st.ended && st.flights.every((f) => f.state !== 'flying') && !sim.attract) {
+    if (st.done && !st.ended && st.flights.every((f) => f.state !== 'flying') && !sim.attract && !sim.theatre.campaign && sim.theatre.op.kind === this.kind) {
       st.ended = true;
       const hit = st.flights.filter((f) => f.state === 'target area').length, n = st.flights.length;
       const what = this.kind === 'v1' ? 'flying bombs' : 'rockets';

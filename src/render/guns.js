@@ -69,6 +69,7 @@ export class GunViews {
     this.camera = null;
     this.selected = null;
     this.build(sim);
+    this.allViews = [...this.views];
   }
 
   build(sim) {
@@ -99,7 +100,14 @@ export class GunViews {
   }
 
   reset(sim) {
-    // same rigs and crews, new sim objects
+    // Unavailable batteries have neither a simulation unit nor a visible gun/crew.
+    for (const v of this.allViews) {
+      const active = !!sim.unitById(v.unit.id);
+      v.rig.root.visible = active;
+      if (!active) v.crew?.setLevel(0);
+    }
+    this.views = this.allViews.filter(v => sim.unitById(v.unit.id));
+    this.byKey = new Map(this.views.map(v => [v.key, v]));
     for (const v of this.views) {
       const u = sim.unitById(v.unit.id);
       v.unit = u;
