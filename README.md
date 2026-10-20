@@ -73,4 +73,4 @@ Full list: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#not-done-yet).
 - **Recordings:** four CC0 recordings from Freesound; sources in [public/audio/CREDITS.md](public/audio/CREDITS.md).
 - **Reference photos:** mostly from Wikimedia Commons, used only locally to check the models.
 
-The repository has no licence file.
+**Licence:** © 2026 David Richards. Drumfire is source-available under [PolyForm Strict 1.0.0](LICENSE): you may play and study it for non-commercial purposes, but not copy, change or publish your own version of it, or use it commercially. Contributions are welcome here; see [Contributing](CONTRIBUTING.md). The libraries and recordings above keep their own licences.
