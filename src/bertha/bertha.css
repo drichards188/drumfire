@@ -5,6 +5,10 @@
 body.bertha #view { flex: 1 1 100%; width: 100%; }
 body.bertha #panel { display: none; }
 body.bertha #unit { top: auto; bottom: 112px; left: 22px; }
+/* the unit's name with its WIP badge beside it (bertha.html), and the title screen's WIP note */
+body.bertha #unit > b { display: block; font-size: 18px; font-weight: 700; letter-spacing: 0.03em; line-height: 1.2; }
+body.bertha #unit-name { display: inline; font-size: inherit; }
+body.bertha .brand .wip-note { margin: 8px 0 0; font: 12px var(--mono); color: var(--ui-dim); }
 body.bertha .brand h1 { font-size: clamp(42px, 6.4vw, 92px); }
 body.bertha.title #title-screen { max-width: min(600px, 88%); }
 #assist-opt { display: block; margin-top: 12px; font: 12px var(--mono); color: var(--ui-dim); cursor: pointer; }
@@ -109,6 +113,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 0 4px; margin: 0 2px; bo
 #stations button small { font: 9px var(--mono); letter-spacing: 0.05em; }
 #stations button.on { border-color: var(--brass); background: rgba(207, 169, 75, 0.25); }
 #stations button.on b { color: #fff4d6; }
+/* the crew-assist switch at the end of the station bar (hud.js setAssist) */
+#stations #assist-btn { width: 112px; border-style: dashed; }
+#stations #assist-btn small { margin-top: 2px; color: var(--ui-dim); }
+#stations #assist-btn.on { border-style: solid; border-color: var(--brass); background: rgba(207, 169, 75, 0.18); }
+#stations #assist-btn.on small { color: #fff4d6; }
+#stations #assist-btn.off { opacity: 0.45; cursor: default; }
 #stations .todo { position: absolute; top: 5px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
 #stations button.busy .todo { background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: ring 0.7s ease-in-out infinite alternate; }
 
@@ -197,3 +207,50 @@ body.bertha.tutorial #radio { width: min(360px, 32%); }
 body.bertha #tut-card { width: min(440px, 38%); max-height: calc(100% - 330px); overflow-y: auto; }
 /* looking through an instrument: the card moves to the left, over the dark edge of the eyepiece */
 body.bertha.tutorial.sight-on #tut-card, body.bertha.tutorial.quad-big #tut-card { left: 22px; right: auto; top: 22px; z-index: 30; }
+
+/* ---------------------------------------------------------- the next job, refusals, the order card's additions */
+#prompt .p-keys span.warn { box-shadow: inset 3px 0 0 var(--amber); }
+#prompt .p-next { margin-top: 8px; padding: 5px 12px; font: 12.5px var(--mono); color: #fff4d6; background: rgba(20, 16, 9, 0.66); border-left: 3px solid var(--brass); }
+#prompt .p-next:empty { display: none; }
+#prompt .p-next b { color: var(--brass); }
+#prompt .p-next .wait, #prompt .p-next .crew { color: var(--ui-dim); font-style: italic; }
+#prompt .p-flash { max-height: 0; overflow: hidden; margin: 0 auto; font: 12.5px var(--mono); opacity: 0; transition: opacity 0.25s, max-height 0.25s; }
+#prompt .p-flash.on { max-height: 80px; opacity: 1; margin-top: 6px; padding: 5px 12px; background: rgba(60, 20, 12, 0.78); border-left: 3px solid var(--red); color: #ffe2d8; }
+#prompt .p-flash.on.info { background: rgba(20, 16, 9, 0.7); border-left-color: var(--olive); color: #e8f0d8; }
+#prompt .p-flash i.ok { font-style: normal; color: #9fd28a; }
+#prompt .p-flash i.no { font-style: normal; color: #f6b0a2; }
+#prompt .p-why.flash { animation: why-flash 0.7s ease-out; }
+@keyframes why-flash { 0% { color: #fff4d6; text-shadow: 0 0 10px var(--red); } 100% { color: var(--ui-dim); } }
+#stations .nx { position: absolute; top: -17px; left: 50%; translate: -50% 0; font: 700 9px var(--mono); letter-spacing: 0.2em; text-transform: uppercase; font-style: normal; color: var(--brass); opacity: 0; }
+#stations button.next { border-color: var(--brass); box-shadow: 0 0 0 1px rgba(207, 169, 75, 0.6), 0 0 14px rgba(207, 169, 75, 0.35); }
+#stations button.next .nx { opacity: 1; animation: ring 0.7s ease-in-out infinite alternate; }
+#order .corr { font-size: 10px; color: #7a1c14; font-weight: 700; }
+#order tr.blank th, #order tr.blank td { color: rgba(29, 25, 18, 0.35); }
+#order td small { font-size: 10px; }
+#order .flight, #order .fall { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(29, 25, 18, 0.3); font-size: 11px; }
+#order .flight span { display: block; font-weight: 700; }
+#order .flight i { display: block; height: 4px; margin: 4px 0 3px; background: rgba(29, 25, 18, 0.15); }
+#order .flight em { display: block; height: 100%; background: var(--red); }
+#order .flight small { color: #6a5e48; }
+#order .flight.splash span { color: #7a1c14; animation: ring 0.6s ease-in-out infinite alternate; }
+#order .fall b { color: #1f3f6a; }
+#readout .ready { color: #c9f0a8; font: 700 13px var(--mono); }
+#readout ul.targets { list-style: none; margin: 4px 0; padding: 0; font-size: 11px; }
+#readout ul.targets li.done { color: var(--ui-dim); text-decoration: line-through; }
+#readout ul.targets li.cur { color: #fff4d6; font-weight: 700; }
+#readout ul.targets small { color: var(--ui-dim); }
+/* the chamber as the loader sees it: the shell, the bags, the brass case, the wedge */
+#readout .chamber { margin: 6px 0; }
+#readout .c-row { display: flex; align-items: center; gap: 3px; height: 26px; }
+#readout .c-row span { display: block; height: 18px; border: 1px solid transparent; }
+#readout .c-shell { width: 58px; background: linear-gradient(90deg, #6d7268 0, #4b4f4b 70%, #c8a82a 70%, #c8a82a 78%, #4b4f4b 78%); clip-path: polygon(22% 0, 100% 0, 100% 100%, 22% 100%, 0 50%); }
+#readout .c-shell.light { width: 46px; background: linear-gradient(90deg, #6d7268 0, #5a5e58 70%, #3a6a3a 70%, #3a6a3a 80%, #5a5e58 80%); }
+#readout .c-bag { width: 16px; background: #d9c9a0; border-radius: 3px; }
+#readout .c-bag.over { background: #e07a5a; }
+#readout .c-case { width: 30px; background: linear-gradient(180deg, #e8c66a, #a8822e); }
+#readout .c-row span.empty { background: none; border: 1px dashed rgba(233, 223, 196, 0.45); clip-path: none; }
+#readout .c-wedge { width: 7px; height: 26px !important; background: #3a3d3a; border: 1px solid #8b8f93 !important; transition: transform 0.3s; }
+#readout .c-wedge.open { transform: translateX(14px); opacity: 0.5; }
+#readout .chamber small { color: var(--ui-dim); font-size: 11px; }
+#title-hint { margin-top: 10px; font: italic 13px var(--serif); color: var(--brass); }
+body:not(.title) #title-hint { display: none; }

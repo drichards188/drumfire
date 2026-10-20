@@ -1,7 +1,13 @@
-// The missions list, as a clipboard of task slips: number, kind, map reference, observer, priority and
-// the time left. Tab moves the cursor, Enter takes the mission, a click does both.
+// The missions list, as a clipboard of task slips: number, kind, the range from the selected battery (red when it
+// cannot reach), observer, priority and the time left. Tab moves the cursor, Enter takes the mission, a click does both.
 import { el, setText, setCls, card, snd } from '../widgets.js';
-import { MISSION_NAME, OBSERVER, KIND_SHORT, ref, mmss, liveMissions, taskNo } from './common.js';
+import { MISSION_NAME, OBSERVER, KIND_SHORT, mmss, liveMissions, taskNo, yd } from './common.js';
+import { lenShort } from '../theatre.js';
+
+// priority 1 to 10 (director PRIORITY, targets' own) as one to three stars: 9+ urgent (SOS, barrage, the biggest
+// targets), 6 to 8 important (counter-battery, harassing, tanks), the rest routine
+const starsOf = (p = 5) => (p >= 9 ? 3 : p >= 6 ? 2 : 1);
+const STAR_TIP = ['', 'Priority: routine', 'Priority: important', 'Priority: urgent'];
 
 export class MissionList {
   constructor({ shared, take }) {
@@ -53,17 +59,35 @@ export class MissionList {
       r.e.title = m.title || '';
       setText(r.dl, left == null ? '' : left < 0 ? 'overdue' : mmss(left));
       setCls(r.dl, 'late', left != null && left < 30);
-      setText(r.where, m.gridRef || ref(m.x, m.z));
+      // the range from the battery in the console, and whether its top charge reaches (or it is too close)
+      const D = unit.pos ? Math.hypot(m.x - unit.pos.x, m.z - unit.pos.z) : null;
+      const lim = this.limits(sim, unit);
+      const out = D != null && lim && (D > lim.max || D < lim.min);
+      setText(r.where, D == null ? '' : `${yd(D)} ${lenShort()}${out ? (D > lim.max ? ' (out of range)' : ' (too close)') : ''}`);
+      setCls(r.where, 'out', !!out);
       setText(r.obs, OBSERVER[m.observer] || '');
       const guns = (sim.units || []).filter((u) => u.missionId === m.id);
       setText(r.assigned, guns.length ? `GUNS: ${guns.map((u) => KIND_SHORT[u.kind] || u.name || u.id).join(', ')}` : 'GUNS: unassigned');
       const mine = unit.missionId === m.id;
       setText(r.st, mine ? 'YOURS' : m.state === 'open' ? (m.unitId && m.unitId !== unit.id ? `unit ${m.unitId}` : 'open') : m.state === 'ranging' ? 'ranging' : m.state === 'ffe' ? 'FFE' : m.state);
-      setText(r.stars, '★'.repeat(Math.max(1, Math.min(3, m.priority || 1))));
+      const ns = starsOf(m.priority);
+      setText(r.stars, '★'.repeat(ns));
+      r.stars.title = STAR_TIP[ns];
       setCls(r.e, 'cursor', m.id === this.shared.cursor);
       setCls(r.e, 'mine', mine);
       setCls(r.e, 'sos', m.kind === 'sos');
     }
+  }
+  // the unit kind's reach from its range tables (lowest charge's minimum, top charge's maximum), cached per kind
+  limits(sim, unit) {
+    const k = unit.kind, n = unit.charges;
+    if (!sim.rangeTable || !n || unit.special?.solution) return null; // launch sites: their own firing data
+    this.reach ??= new Map();
+    if (!this.reach.has(k)) {
+      const lo = sim.rangeTable(k, 0) || [], hi = sim.rangeTable(k, n - 1) || [];
+      this.reach.set(k, lo.length && hi.length ? { min: Math.min(...lo.map((e) => e.range)), max: Math.max(...hi.map((e) => e.range)) } : null);
+    }
+    return this.reach.get(k);
   }
   cycle(dir, sim) {
     const live = liveMissions(sim);

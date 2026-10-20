@@ -1,7 +1,7 @@
 {
   "name": "threejs-drumfire",
   "version": "0.1.0",
-  "description": "Drumfire: WW1 heavy artillery at Ypres, built on the MaxGFX three.js framework",
+  "description": "Drumfire: command heavy artillery from a fire control console, in three.js",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",

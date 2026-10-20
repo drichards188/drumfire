@@ -1,14 +1,19 @@
 // The guns' state: for each piece the loading drill as it happens (shell, ram, bags, close, prime, lay,
 // ready), three lamps (laid, loaded, ready), crew, health and barrel wear; then ammunition and how well
-// the enemy has located the battery.
-import { el, setText, setCls, setStyle, card, Lamp, Bar } from '../widgets.js';
+// the enemy has located the battery. The WW1 mode's 42 cm guns add their bed (src/ww1/special.js): its line, the arc
+// the handwheels give, and the key that relays it onto the ordered target's line (T), with its progress.
+import { el, setText, setCls, setStyle, card, Lamp, Bar, Btn } from '../widgets.js';
 import { STEPS, stepIndex, KIND_SHORT } from './common.js';
 
 const LAID_TOL = 0.004;   // radians: a piece within about a quarter of a degree of its ordered line and elevation is laid
 const SHORT = { shell: 'SHELL', ram: 'RAM', cartridge: 'BAGS', close: 'CLOSE', prime: 'PRIME', lay: 'LAY', ready: 'READY' };
 
+const DEG = Math.PI / 180;
+const brg = (r) => `${Math.round((((r / DEG) % 360) + 360) % 360)}°`;
+const span = (s, long) => (s < 120 ? `${Math.ceil(s)}${long ? ' seconds' : ' s'}` : `${Math.round(s / 60)}${long ? ' minutes' : ' min'}`);
+
 export class GunsCard {
-  constructor() {
+  constructor({ onBed = null } = {}) {
     const c = card('THE GUNS', '', 'guns');
     this.el = c.el;
     this.sub = el('i', null, '');
@@ -20,7 +25,12 @@ export class GunsCard {
     const sw = el('div', 'gsig');
     sw.append(el('i', null, 'ENEMY HAS LOCATED US'), this.sig.el);
     this.ammo.append(el('i', null, 'H.E.'), this.he, el('i', null, 'SHRAPNEL'), this.sh);
-    c.body.append(this.list, this.ammo, sw);
+    this.bed = el('div', 'gbed');
+    this.bedText = el('i', null, '');
+    this.bedBar = new Bar({ cls: 'bedbar' });
+    this.bedBtn = new Btn({ main: 'BETTUNG UMLEGEN', sub: 'T: relay the bed', cls: 'bedbtn', onClick: () => onBed?.() });
+    this.bed.append(this.bedText, this.bedBar.el, this.bedBtn.el);
+    c.body.append(this.list, this.bed, this.ammo, sw);
     this.rows = [];
     this.n = -1;
   }
@@ -82,10 +92,30 @@ export class GunsCard {
       else if (p.state === 'recoil') st = 'in recoil';
       else if (p.state === 'ready') st = laid ? 'laid and loaded: ready to fire' : 'loaded; laying';
       else if (p.state === 'laying') st = 'laying on the ordered line';
-      else if (p.job) st = (p.job.step === 'depress' ? 'run out to loading elevation' : p.job.step === 'open' ? 'opening the breech' : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
+      else if (p.job) st = (p.job.step === 'depress' ? 'run out to loading elevation' : p.job.step === 'open' ? 'opening the breech' : p.job.step === 'lay' && unit.gate ? `loaded; waiting: ${unit.gate}` : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
+      // a special weapon's controller holding the unit (the Karl's hull turning): say what it is doing, not idle
+      else if (unit.gate && unit.special) st = (p.loaded ? `loaded; ${unit.gate}` : unit.gate).toLowerCase();
+      // a gun that cannot carry out the order says why (the status line has the whole reason)
+      else if (unit.order?.target && p.blocked) st = p.cmd?.why === 'inside minimum range' ? 'too close' : p.cmd?.why || 'cannot lay';
+      else if (unit.order?.target && !p.loaded && p.crew < Math.ceil(p.crewMax * 0.3)) st = 'too few men to serve it';
+      else if (unit.order?.target && !p.loaded && unit.mode !== 'hold' && (unit.ammo?.[unit.order.fuze === 'shrapnel' ? 'shrapnel' : 'he'] ?? 1) <= 0) st = 'no shells';
       else st = p.loaded ? 'loaded' : 'idle';
       setText(w.state, st);
     });
+    // the bed (WW1 Bertha and Gamma): where it lies, and relaying it onto the target's line
+    const bed = unit.special?.bed;
+    setCls(this.bed, 'on', !!bed);
+    if (bed) {
+      const moving = bed.state === 'moving', o = unit.order || {};
+      const off = o.target && o.line != null ? Math.atan2(Math.sin(o.line - unit.zero), Math.cos(o.line - unit.zero)) : 0;
+      setText(this.bedText, moving
+        ? `Bettung umlegen onto ${brg(bed.to)}: ${span(bed.dur - bed.t)} to go. The gun cannot fire.`
+        : `Bed on ${brg(unit.zero)}: the gun traverses ${+(unit.arc / DEG).toFixed(1)}° either way.${o.target && Math.abs(off) > unit.arc ? ` The target lies ${Math.round(Math.abs(off) / DEG)}° ${off > 0 ? 'right' : 'left'}: relay the bed${bed.dur ? ` (about ${span(bed.dur)})` : ''}.` : ''}`);
+      this.bedBar.set(moving ? bed.t / bed.dur : 0);
+      setCls(this.bedBar.el, 'hide', !moving);
+      this.bedBtn.enable(!moving && !!o.target && Math.abs(off) > 2 * DEG);
+      this.bedBtn.el.title = moving ? 'The bed is being relaid.' : !o.target ? 'Lay on a target first: the bed is relaid onto its line.' : `Relay the bed onto the target's line (${brg(o.line)})${bed.dur ? `: the gun is out of action for about ${span(bed.dur, true)}` : ''}.`;
+    }
     const a = unit.ammo || {};
     setText(this.he, a.he != null ? String(a.he) : '--');
     setText(this.sh, a.shrapnel != null ? String(a.shrapnel) : '--');

@@ -7,13 +7,16 @@
 // batteries stood and fire west at the Allied gun line, which sits in the British gun pits. The other operations
 // stand in the open, undisturbed country 25 km and more west of the salient (terrainHeight.js "far country"), so
 // none of them shows the 1917 craters.
-import { DEG } from '../sector.js';
+import { DEG, headingFor } from '../sector.js';
+import { gustavLayout } from './gustav_layout.js';
 
 const P = (x, z) => ({ x, z });
 
 // unit definitions follow sector.js UNITS: id, kind, name, callsign, battery, pos, zero (bearing of the zero line),
 // pieces [{ kind, dx, dz }]; plus `role` (what the unit is for), `note` (shown on the console), `alt` (an
-// alternate-history label shown wherever the unit is), `special` (a controller in special.js gates it).
+// alternate-history note: kept with the data, not shown in the game), `special` (a controller in special.js gates it).
+// The operations' `history` notes are kept the same way (docs/WW2.md has the sources); the titles, subs and blurbs
+// the player reads make no claims about the real events or places.
 const LEFH = (id, pos, zero, callsign = 'Anton') => ({
   id, kind: 'lefh18', name: '10.5 cm leFH 18', callsign, battery: '1. Batterie, leichte Abteilung', pos, zero,
   pieces: [{ kind: 'lefh18', dx: 0, dz: -45 }, { kind: 'lefh18', dx: 4, dz: -15 }, { kind: 'lefh18', dx: 2, dz: 15 }, { kind: 'lefh18', dx: -3, dz: 45 }],
@@ -33,9 +36,9 @@ const MRS = (id, pos, zero, callsign = 'Emil') => ({
 export const OPS = {
   // ------------------------------------------------------------------ the backbone battle
   flanders: {
-    id: 'flanders', title: 'Flanders, autumn 1944', short: 'Flanders 1944',
-    sub: 'An Artillerie-Kommandeur\'s group holds the old Ypres ridge against a British and Canadian attack.',
-    blurb: 'Seven German units on the ridge where the 1917 German batteries stood: field and heavy howitzers, the long 17 cm gun, the 21 cm mortars, the Nebelwerfer, and two alternate-history guests, the Gustav railway gun and Big Bertha. Counter-battery fire against the Allied gun line, Sperrfeuer when their infantry comes, a Feuerwalze for our own counter-attack.',
+    id: 'flanders', title: 'The ridge battle', short: 'Open battle',
+    sub: 'An Artillerie-Kommandeur\'s group holds the ridge against a British and Canadian attack.',
+    blurb: 'Six German units on the ridge: field and heavy howitzers, the long 17 cm gun, the 21 cm mortars, the Nebelwerfer and the Gustav railway gun. Counter-battery fire against the Allied gun line, Sperrfeuer when their infantry comes, a Feuerwalze for our own counter-attack.',
     history: 'A fictional engagement, staged on the game\'s 1917 Ypres map (its WW1 craters and trenches are kept). It is modelled on the German rearguard battles in Flanders and on the Scheldt in September and October 1944. Every gun but two served there: the Gustav railway gun never fired in the West, and Big Bertha is a 1914 to 1918 weapon; both are labelled as alternate history.',
     kind: 'battle', enemy: 'british', clockStart: 5.25,
     units: [
@@ -54,16 +57,11 @@ export const OPS = {
       },
       {
         id: 6, kind: 'gustav', name: '80 cm Schwerer Gustav', callsign: 'Gustav', battery: 'schwere Artillerie-Abteilung (E) 672',
-        pos: P(13500, 600), zero: 268 * DEG, pieces: [{ kind: 'gustav', dx: 0, dz: 0 }], special: 'gustav',
-        role: 'The railway slot: a 1,350 t gun that must be built on its curved track before it can fire, with a handful of 4.8 t shells.',
+        pos: P(13500, 600), zero: 272 * DEG, arc: 18 * DEG,
+        pieces: [{ kind: 'gustav', dx: 0, dz: 0 }], special: 'gustav',
+        role: 'The railway slot: a 1,350 t gun already assembled on its curved track, with a handful of 4.8 t shells.',
         alt: 'Alternate history: the Gustav never fired in the West (it served at Sevastopol in 1942).',
         ammo: 8,
-      },
-      {
-        id: 7, kind: 'bertha', name: '42 cm Big Bertha', callsign: 'Bertha', battery: 'kurze Marinekanone-Batterie (M-Gerät)',
-        pos: P(10000, -2600), zero: 268 * DEG, pieces: [{ kind: 'bertha', dx: 0, dz: 0 }],
-        role: 'The 1914 siege howitzer: 810 kg shells against the hardest targets in reach.',
-        alt: 'Alternate history: Big Bertha is a First World War weapon (1914 to 1918), here as a guest.',
       },
     ],
     // the Allied side: batteries in the British gun pits, the AOP strip, tanks, dumps, the HQ, traffic and the railhead
@@ -93,8 +91,8 @@ export const OPS = {
 
   // ------------------------------------------------------------------ the Gustav at Sevastopol
   sevastopol: {
-    id: 'sevastopol', title: 'Sevastopol, June 1942', short: 'Sevastopol 1942',
-    sub: 'Build the Gustav on its firing curve at Bakhchisaray, then spend its few shells on the fortress.',
+    id: 'sevastopol', title: 'The fortress siege', short: 'Gustav siege',
+    sub: 'Build the Gustav on its firing curve, then spend its few shells on the fortress.',
     blurb: 'The 80 cm Gustav arrives in pieces on five trains. Lay the curved double track, assemble it with the gantry cranes, bring up the ammunition train and the flak, then fire: each 4.8 t shell is precious. A 21 cm Mörser battery supports. Targets: the Maxim Gorky coastal battery, Fort Stalin, Fort Molotov, the White Cliff magazine.',
     history: 'Historical: the Gustav fired 48 rounds at Sevastopol from 5 to 17 June 1942 from a position near Bakhchisaray, about 25 km from its targets. Preparing the position took weeks and thousands of men; the game compresses it to minutes. The ground is the game\'s generic country, not the Crimea, and the targets are stylised.',
     kind: 'gustav', enemy: 'soviet', clockStart: 8,
@@ -123,8 +121,8 @@ export const OPS = {
 
   // ------------------------------------------------------------------ the Karl-Gerät at Brest-Litovsk
   karl: {
-    id: 'karl', title: 'Brest-Litovsk, 22 June 1941', short: 'Karl-Gerät, Brest 1941',
-    sub: 'Bring the 60 cm Karl "Thor" into action against the Brest Fortress.',
+    id: 'karl', title: 'The citadel', short: 'Karl-Gerät',
+    sub: 'Bring the 60 cm Karl "Thor" into action against the citadel.',
     blurb: 'Drive the 124 t Karl into its firing position, steer it onto the target (it traverses only 4 degrees each way), lower the hull onto the ground, and load 2.2 t shells from the Munitionsschlepper\'s crane. An sFH 18 battery supports. Targets: the citadel\'s ring barracks, the Terespol gate, the Eastern Fort.',
     history: 'Historical in outline: two Karl-Geräte of schwere Artillerie-Abteilung 833 fired on the Brest Fortress from 22 June 1941. The approach, the positions and the targets\' layout are the game\'s, on its generic country.',
     kind: 'karl', enemy: 'soviet', clockStart: 3.25,
@@ -157,25 +155,25 @@ export const OPS = {
 
   // ------------------------------------------------------------------ the strategic weapons
   v1: {
-    id: 'v1', title: 'V-1 launch site, autumn 1944', short: 'V-1 (Fi 103)',
-    sub: 'Flak-Regiment 155 (W): prepare and launch flying bombs at the port of Antwerp.',
-    blurb: 'At a launch site in the woods: bring the missile from the store, fit the wings, align its compass in the Richthaus, set the air log for the range, fuel it, charge the steam generator, clear the ramp and fire the catapult. Then follow it out: fighters and the anti-aircraft belt wait on its route. Allied bombers come for the site.',
+    id: 'v1', title: 'A V-1 launch site', short: 'V-1 (Fi 103)',
+    sub: 'Prepare flying bombs at a launch site in the woods and launch them at the enemy supply port.',
+    blurb: 'At a launch site in the woods. Start the drill and the crew works it: the missile from the store, the wings, the compass swung in the Richthaus, the air log, the sled, fuel, the steam generator, the fuzes. You dial the compass and the air log to the firing data (the wind on the route changes), decide the faults, take cover when the bombers come, and fire the catapult. Then follow each round out: fighters and the anti-aircraft belt wait on its route.',
     history: 'Historical in outline (the Walter steam catapult, the compass alignment, the air-log range setting, the Flak-Regiment 155 (W)). The V-1 was chiefly a weapon against cities: about 10,000 were fired at England and thousands at Antwerp, killing thousands of civilians. The game sets the target as the port of Antwerp, scores only the launch drill and whether the missile reached the target area, and never counts casualties.',
     kind: 'v1', enemy: 'british', clockStart: 7,
     units: [{
       id: 1, kind: 'v1', name: 'Walter catapult (V-1)', callsign: 'Kirschkern', battery: 'Flak-Regiment 155 (W), Feuerstellung',
       pos: P(-28000, 2000), zero: 265 * DEG, pieces: [{ kind: 'v1', dx: 0, dz: 0 }], special: 'v1', ammo: 5,
-      role: 'The launch crew: prepare each flying bomb by the drill and launch it. Mistakes crash it on the ramp or send it astray.',
+      role: 'The launch crew: you set each flying bomb and fire it, the crew works the drill. A low steam pressure crashes it off the ramp; a wrong setting sends it astray.',
     }],
     sites: [],
-    target: { name: 'Port of Antwerp', dist: 160000, bearing: 265 * DEG },
+    target: { name: 'the enemy supply port', dist: 160000, bearing: 265 * DEG },
     phases: [{ n: 1, t0: 0, title: 'Feuerstellung', sub: 'Prepare and launch. Watch the sky for bombers.' }],
     clock: [[0, 7], [2400, 17]],
   },
   v2: {
-    id: 'v2', title: 'V-2 mobile battery, autumn 1944', short: 'V-2 (A4)',
-    sub: 'A mobile A4 battery in the woods: erect, align, fuel and launch at the port of Antwerp.',
-    blurb: 'The convoy is in the clearing. Erect the rocket on the firing table with the Meillerwagen, turn the table onto the target, set the cut-off for the range, run the checks, fuel alcohol and then liquid oxygen (which boils off: launch soon), withdraw the Meillerwagen, then pre-stage and main stage. Fighter-bombers hunt the launch areas.',
+    id: 'v2', title: 'A V-2 mobile battery', short: 'V-2 (A4)',
+    sub: 'A mobile A4 battery in the woods: erect, align, fuel and launch at the enemy supply port.',
+    blurb: 'The convoy is in the clearing. Start the drill and the crew works it: erect the rocket with the Meillerwagen, turn the table, set the cut-off, the checks, alcohol, then liquid oxygen last (it boils off: launch soon or top it up), withdraw. You dial the table bearing and the Brennschluss, decide the faults, light the Vorstufe and give the Hauptstufe. Fighter-bombers hunt the launch areas.',
     history: 'Historical in outline (the Meillerwagen, the Brennstand, the fuelling order, the Vorstufe and Hauptstufe, Brennschluss range control). The V-2 was a weapon against cities, built with concentration-camp forced labour at Mittelwerk, where thousands of prisoners died. The game sets the target as the port of Antwerp, scores the launch drill and whether the rocket reached the target area, and never counts casualties.',
     kind: 'v2', enemy: 'british', clockStart: 9,
     units: [{
@@ -184,7 +182,7 @@ export const OPS = {
       role: 'The launch platoon: erect, align, fuel and fire the A4. The liquid oxygen will not wait.',
     }],
     sites: [],
-    target: { name: 'Port of Antwerp', dist: 180000, bearing: 262 * DEG },
+    target: { name: 'the enemy supply port', dist: 180000, bearing: 262 * DEG },
     phases: [{ n: 1, t0: 0, title: 'Feuerstellung', sub: 'Erect, align, fuel, fire. Fighter-bombers patrol.' }],
     clock: [[0, 9], [2400, 17]],
   },
@@ -195,10 +193,17 @@ export const OP_IDS = ['flanders', 'sevastopol', 'karl', 'v1', 'v2'];
 // Every WW2 position levels its ground (sector.js flatPads reads this): the gun platforms and the launch sites.
 export function ww2Pads() {
   const pads = [];
-  const size = { gustav: [16, 60], karl: [12, 16], v1: [14, 40], v2: [30, 30], bertha: [10, 13], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6] };
+  const size = { gustav: [55, 190], karl: [12, 16], v1: [14, 40], v2: [30, 30], bertha: [10, 13], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6] };
   for (const op of Object.values(OPS)) for (const u of op.units) {
     const big = size[u.kind] ?? [8, 8];
     for (const p of u.pieces) pads.push({ x: u.pos.x + p.dx, z: u.pos.z + p.dz, rx: big[0], rz: big[1], heading: -(p.bearing ?? u.zero), blend: 20 });
+    if (u.kind === 'gustav') {
+      // the straight behind the firing curve (the assembly section, the yard, the ammunition siding), level with the
+      // station: gustav_layout.js, turned as the site is
+      const L = gustavLayout({ arc: u.arc, yard: op.id === 'sevastopol' }), th = headingFor(u.zero), c = Math.cos(th), s = Math.sin(th);
+      const m = L.onStraight(L.RUN / 2, 2);
+      pads.push({ x: u.pos.x + m.x * c + m.z * s, z: u.pos.z - m.x * s + m.z * c, rx: 35, rz: L.RUN / 2 + 12, heading: th + L.A0, blend: 25, ref: { x: u.pos.x, z: u.pos.z } });
+    }
     for (const q of op.positions ?? []) pads.push({ x: q.pos.x, z: q.pos.z, rx: 12, rz: 16, heading: -u.zero, blend: 20 });
   }
   for (const op of Object.values(OPS)) if (op.id !== 'flanders') for (const s of op.sites) {

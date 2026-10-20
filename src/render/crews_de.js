@@ -65,7 +65,7 @@ const _a = { x: 0, z: 0 }, _b = { x: 0, z: 0 }, _q = { x: 0, z: 0 };
 function frame(crew, c) {
   const F = crew.nb ??= {
     c: null, rear: [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), rk: [new THREE.Vector3(), new THREE.Vector3()],
-    hand: { x: 0, z: 0 }, stack: { x: 0, z: 0 }, cover: null, ins: -1, insE: 0, loaded: 0,
+    hand: { x: 0, z: 0 }, stack: { x: 0, z: 0 }, stacks: [{ x: 0, z: 0 }, { x: 0, z: 0 }], cover: null, ins: -1, insE: 0, loaded: 0,
   };
   if (F.c === c) return F;
   F.c = c;
@@ -80,6 +80,16 @@ function frame(crew, c) {
   F.hand.x = crew.B.x - crew.bd.x * 0.95 + crew.rt.x * 0.8;
   F.hand.z = crew.B.z - crew.bd.z * 0.95 + crew.rt.z * 0.8;
   F.stack.x = crew.S.x - 0.55; F.stack.z = crew.S.z + 0.3;
+  if (!F.staged) {
+    // Both waiting marks are clear of the ammunition boxes and the handoff lane.
+    F.stacks.forEach((s, i) => {
+      crew.field.blk.length = 0;
+      crew.field.snap('work', crew.l0, crew.S.x - 0.85, crew.S.z + 0.3 + i * 0.9, 0.35, s, true);
+      const m = crew.byRole.get('rocket' + i);
+      if (m) { m.sx = s.x; m.sz = s.z; }
+    });
+    F.staged = true;
+  }
   F.cover = rig.anchors.cover ?? null;
   // cover: going (the 'cover' step), in it (loaded and waiting, the ripple), coming back (after the ripple)
   const p = c.p, g = GUNS[p.kind];
@@ -95,7 +105,7 @@ function frame(crew, c) {
   F.ins = -1; F.insE = 0;
   if (c.s === 'shell') for (let i = 0; i < 6; i++) {
     const u = (c.k - i * SLOT) / TRIP;
-    if (u >= 0.45 && u < IN) { F.ins = i; F.insE = smooth(u, 0.53, 0.7); }
+    if (u >= 0.44 && u < IN) { F.ins = i; F.insE = smooth(u, 0.54, 0.7); }
   }
   return F;
 }
@@ -154,23 +164,26 @@ function nbLayer(crew, m, c, h) {
 
 function nbLoader(crew, m, c, h) {
   m.noEars = true;
-  if (inCover(crew, m, c, h, 1, homeXZ(h, _q))) return;
+  if (inCover(crew, m, c, h, 2, homeXZ(h, _q))) return;
   const F = frame(crew, c), s = c.s, k = c.k;
-  m.put(h.x, h.y, h.z, headingOf(crew.B.x - h.x, crew.B.z - h.z), 'stand', crew.idleT + m.seed);
+  m.put(h.x, h.y, h.z, headingOf(crew.B.x - h.x, crew.B.z - h.z), s === 'shell' && F.ins >= 0 ? 'ramLoad' : 'stand', s === 'shell' && F.ins >= 0 ? F.insE : crew.idleT + m.seed);
   if (s === 'open') {
     const r = F.rear[Math.min(5, Math.floor(k * 6))];
-    m.hand('R', r.x, r.y + 0.06, r.z, smooth(k, 0, 0.15));
+    const phase = Math.min(0.999, k * 6 % 1);
+    m.hand('R', r.x, r.y + 0.06, r.z, smooth(phase, 0.05, 0.2) * (1 - smooth(phase, 0.72, 0.95)));
   } else if (s === 'prime') {
     // the igniter lead clipped to each tube in turn
     const j = Math.min(5, Math.floor(k * 6)), r = F.rear[j];
-    m.hand('R', r.x, r.y + 0.08, r.z + 0.02, smooth(k, 0, 0.08) * (1 - smooth(k, 0.92, 1)));
+    const phase = Math.min(0.999, k * 6 % 1);
+    m.hand('R', r.x, r.y + 0.08, r.z + 0.02, smooth(phase, 0.08, 0.25) * (1 - smooth(phase, 0.7, 0.95)));
   } else if (s === 'shell' && F.ins >= 0) {
     // both hands on the base of the rocket going in: push it home
     const r = F.rear[crew.rig.loadOrder ? 5 - F.ins : F.ins] ?? F.rear[0];
     const L = crew.slen, back = (L + 0.05) * (1 - F.insE) - 0.03;
     _v.copy(r).addScaledVector(crew.u, -back);
-    m.hand('R', _v.x + crew.rt.x * 0.06, _v.y, _v.z + crew.rt.z * 0.06, 1);
-    m.hand('L', _v.x - crew.rt.x * 0.06, _v.y, _v.z - crew.rt.z * 0.06, 1);
+    const grip = smooth((k - F.ins * SLOT) / TRIP, 0.46, 0.54);
+    m.hand('R', _v.x + crew.rt.x * 0.06, _v.y, _v.z + crew.rt.z * 0.06, grip);
+    m.hand('L', _v.x - crew.rt.x * 0.06, _v.y, _v.z - crew.rt.z * 0.06, grip);
   }
 }
 
@@ -179,34 +192,36 @@ function nbRocket(crew, m, c, h) {
   m.noEars = true;
   const F = frame(crew, c), ci = m.role === 'rocket1' ? 1 : 0, prop = ci ? crew.shellB : crew.shellA;
   prop.visible = false;
-  if (inCover(crew, m, c, h, 2 + ci, F.stack)) return;
+  const stack = F.stacks[ci];
+  if (inCover(crew, m, c, h, 3 + ci, stack)) return;
   const rig = crew.rig, s = c.s, k = c.k, L = crew.slen;
   let trip = -1, u = 0;
   if (s === 'shell') for (let i = ci; i < 6; i += 2) { const uu = (k - i * SLOT) / TRIP; if (uu >= 0 && uu < 1) { trip = i; u = uu; } }
-  const S = crew.S, faceStack = headingOf(S.x - F.stack.x, S.z - F.stack.z);
+  const S = crew.S, faceStack = headingOf(S.x - stack.x, S.z - stack.z);
   if (trip < 0) {
     // waiting at the crates (before the first trip, between and after the loading)
-    m.put(F.stack.x, 0, F.stack.z, s === 'shell' || s === 'open' ? faceStack : headingOf(crew.B.x - F.stack.x, crew.B.z - F.stack.z), 'stand', crew.idleT + m.seed);
+    m.put(stack.x, 0, stack.z, s === 'shell' || s === 'open' ? faceStack : headingOf(crew.B.x - stack.x, crew.B.z - stack.z), 'stand', crew.idleT + m.seed);
     return;
   }
-  const goP = crew.plan(m, 'nbgo', crew.l0, F.stack.x, F.stack.z, F.hand.x, F.hand.z, 0.45, true, false, 'work');
-  const backP = crew.plan(m, 'nbback', crew.l0, F.hand.x, F.hand.z, F.stack.x, F.stack.z, 0.3, true, false, 'work');
+  const goP = crew.plan(m, 'nbgo', crew.l0, stack.x, stack.z, F.hand.x - crew.rt.x * 0.65 - crew.bd.x * 0.6, F.hand.z - crew.rt.z * 0.65 - crew.bd.z * 0.6, 0.45, false, false, 'work', 0.28, { x: F.hand.x, z: F.hand.z });
+  const backP = crew.plan(m, 'nbback', crew.l0, F.hand.x, F.hand.z, stack.x, stack.z, 0.3, false, false, 'work', 0.28,
+    { x: F.hand.x + crew.rt.x * 1.05 - crew.bd.x * 0.45, z: F.hand.z + crew.rt.z * 1.05 - crew.bd.z * 0.45, head: true });
   const tube = F.rear[rig.loadOrder ? 5 - trip : trip] ?? F.rear[0];
   let have = true, pose = 'carry';
-  if (u < 0.12) { m.put(F.stack.x, 0, F.stack.z, faceStack, 'crouch', 0); pose = 'crouch'; }
-  else if (u < 0.45) m.follow(goP, (u - 0.12) / 0.33, 0, 'carryWalk');
-  else if (u < IN) m.put(F.hand.x, 0, F.hand.z, headingOf(tube.x - F.hand.x, tube.z - F.hand.z), u < 0.6 ? 'carry' : 'stand', 0);
-  else { m.follow(backP, (u - IN) / (1 - IN), 0, 'walk'); have = false; }
+  const faceTube = headingOf(tube.x - F.hand.x, tube.z - F.hand.z);
+  const lift = smooth(u, 0.025, 0.16);
+  if (u < 0.16) { m.put(stack.x, 0, stack.z, faceStack, 'lift', lift); pose = 'lift'; }
+  else if (u < 0.44) m.follow(goP, smooth(u, 0.16, 0.44), 0, 'carryWalk', faceStack, faceTube);
+  else if (u < 0.76) { m.put(F.hand.x, 0, F.hand.z, faceTube, u < 0.61 ? 'carry' : 'stand', 0); have = u < IN; }
+  else { m.follow(backP, smooth(u, 0.76, 1), 0, 'walk', faceTube, faceStack); have = false; }
   if (!have) return;
   // the rocket: from the crate into his arms, carried across the body, lined up behind the tube, pushed in
   const fx = -Math.sin(m.h), fz = -Math.cos(m.h);
-  let cx = m.x + fx * 0.42, cy = 1.0, cz = m.z + fz * 0.42, yaw = m.h - Math.PI / 2, pitch = 0;
-  if (pose === 'crouch') {
-    const e = smooth(u, 0.03, 0.12);
-    cx = lerp(S.x, m.x + fx * 0.45, e); cy = lerp(S.y + 0.32, 0.55, e); cz = lerp(S.z, m.z + fz * 0.45, e);
-    yaw = lerp(0, yaw, e);
-  } else if (u >= 0.45) {
-    const e1 = smooth(u, 0.45, 0.53), e2 = smooth(u, 0.53, 0.7);
+  let cx = m.x + fx * 0.42, cy = 1.07, cz = m.z + fz * 0.42, yaw = m.h - Math.PI / 2, pitch = 0;
+  if (pose === 'lift') {
+    cx = m.x + fx * lerp(0.48, 0.42, lift); cy = lerp(0.45, 1.07, lift); cz = m.z + fz * lerp(0.48, 0.42, lift);
+  } else if (u >= 0.44) {
+    const e1 = smooth(u, 0.44, 0.54), e2 = smooth(u, 0.54, 0.7);
     const back = (L / 2 + 0.05) - e2 * (L + 0.08);
     _w.copy(tube).addScaledVector(crew.u, -back);
     cx = lerp(cx, _w.x, e1); cy = lerp(cy, _w.y, e1); cz = lerp(cz, _w.z, e1);
@@ -215,9 +230,10 @@ function nbRocket(crew, m, c, h) {
   }
   _v.set(cx, cy, cz);
   crew.placeProp(prop, _v, yaw, pitch, true);
-  if (u < 0.6) {
-    const nx = -Math.sin(yaw), nz = -Math.cos(yaw);
-    for (const [side, sg] of [['L', -1], ['R', 1]]) m.hand(side, cx + nx * L * 0.28 * sg, cy - crew.srad * 0.9, cz + nz * L * 0.28 * sg, 0.9);
+  if (u < 0.62) {
+    const nx = -Math.sin(yaw) * Math.cos(pitch), ny = Math.sin(pitch), nz = -Math.cos(yaw) * Math.cos(pitch);
+    const grip = smooth(u, 0, 0.025) * (1 - smooth(u, 0.54, 0.62));
+    for (const [side, sg] of [['L', -1], ['R', 1]]) m.hand(side, cx + nx * L * 0.28 * sg, cy + ny * L * 0.28 * sg - crew.srad * 0.9, cz + nz * L * 0.28 * sg, grip);
   }
 }
 

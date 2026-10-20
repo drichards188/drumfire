@@ -67,7 +67,8 @@ class Steel {
     rig.root.updateMatrixWorld(true);
     rig.root.traverse((o) => {
       if (!o.isMesh || o.isSkinnedMesh || o.name === 'soil') return; // ground mounds are not steel
-      for (let p = o; p; p = p.parent) if (p.name && p.name.startsWith('shell-')) return;
+      // the model viewer's shells and anything else the gun keeps hidden (the leFH and sFH 18's `trayShell`) are not steel
+      for (let p = o; p; p = p.parent) if (!p.visible || (p.name && p.name.startsWith('shell-'))) return;
       this.items.push({ mesh: o, local: sampleMesh(o), world: null, m: new Float32Array(16), tg: triGrid(o), inv: new THREE.Matrix4() });
     });
     let total = 0;
@@ -400,7 +401,7 @@ function runGun(kind, scn, speed) {
       const nearStack = _c.copy(_a).add(_b).multiplyScalar(0.5).distanceTo(crew.S) < 1.2 || (crew.pick && _c.distanceTo(crew.pick) < 1.2); // picked up from the stack: contact is the point
       if (!nearTray && !nearStack) {
         const h = steel.hit(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, rad, -1e9);
-        if (h.d > 0) log(h.d, prop === crew.shellA ? 'shell' : 'shellB', { role: 'shell', x: _a.x, y: _a.y, z: _a.z }, 'steel', c);
+        if (h.d > 0) log(h.d, prop === crew.shellA ? 'shell' : 'shellB', { role: 'shell', x: _a.x, y: _a.y, z: _a.z }, 'steel', c, { own: steel.ownerOf(h.i), pt: [steel.world[h.i * 3], steel.world[h.i * 3 + 1], steel.world[h.i * 3 + 2]].map((v) => +v.toFixed(2)) });
       }
       for (let i = 0; i < crew.men.length; i++) {
         const cs = bodies[i];
@@ -445,7 +446,7 @@ function plan(kind, y0 = 0.2, y1 = 1.7, floor = null, cell = 0.1) {
 }
 
 async function main() {
-  await loadGuns();
+  await loadGuns([...new Set(['bl6', 'bl60', ...(q.get('gun') ?? '').split(','), q.get('field'), q.get('col'), q.get('map')].filter(Boolean))]);
   if (q.get('field')) {
     const k = q.get('field'), rig = buildGun(k), floors = [...new Set(rig.anchors.crew.map((c) => Math.round(c.y * 20) / 20).concat([0]))];
     const t0 = performance.now();

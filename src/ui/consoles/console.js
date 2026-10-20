@@ -14,8 +14,12 @@ import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
 import { slipCorr, corrText } from '../messages.js';
 import { SpecialCard } from './special.js';
+import { ParisCard } from './paris.js';
+import { mountLaunchConsole } from './launch.js';
 
 export function mountConsole(ctx) {
+  // a launch site (the V-1 ramp, the A4's firing table) has no fire orders: its own console (launch.js)
+  if (KINDS[ctx.kind]?.launcher) return mountLaunchConsole(ctx);
   const { id, send, memo, shared, mail, tracker } = ctx;
   let U = null, SIM = null;
   let toast = '', toastT = -1e9;
@@ -29,6 +33,8 @@ export function mountConsole(ctx) {
   const act = (name, arg, e) => {
     if (!U || U.alive === false) return;
     const cfg = cfgOf(U), o = U.order || {};
+    // the Paris Gun's corrections, charge and reports are its card's (paris.js): the order card's keys go there
+    if (special?.route?.(name, arg, e)) return;
     switch (name) {
       case 'charge': {
         const n = chargeCount(SIM, U, cfg), c = Math.max(0, Math.min(n - 1, (o.charge || 0) + arg));
@@ -73,6 +79,15 @@ export function mountConsole(ctx) {
         break; }
     }
   };
+  // the WW1 mode's 42 cm guns: relay the bed onto the ordered target's line (src/ww1/special.js 'rebed'; T)
+  const bed = () => {
+    const b = U?.special?.bed;
+    if (!b) return false;
+    if (b.state === 'moving') say('The bed is already being relaid.');
+    else if (!U.order?.target) say('Lay on a target first: the bed is relaid onto its line.');
+    else send('rebed', {});
+    return true;
+  };
   const take = (m) => {
     shared.cursor = m.id;
     if (SIM && U && U.missionId === m.id) { say('Already on that task.'); return; }
@@ -89,7 +104,11 @@ export function mountConsole(ctx) {
   const statEl = el('div', 'stat'), noteEl = el('div', 'snote2');
   hstat.append(statEl, noteEl);
   const mode = new Seg({
-    cls: 'mode', items: [{ v: 'auto', main: 'AUTO', sub: 'crew fires' }, { v: 'manual', main: 'MANUAL', sub: 'you fire' }, { v: 'hold', main: 'HOLD', sub: 'cease' }],
+    cls: 'mode', items: [
+      { v: 'auto', main: 'AUTO', sub: 'crew fires', tip: 'AUTO: the crew picks its own work and fires by itself (A)' },
+      { v: 'manual', main: 'MANUAL', sub: 'you fire', tip: 'MANUAL: you give the orders and fire; the crew only loads and lays (A)' },
+      { v: 'hold', main: 'HOLD', sub: 'cease', tip: 'HOLD: cease fire and stay quiet; the crew rests and repairs (MANUAL or A to go on)' },
+    ],
     onChange: (v) => act('mode', v),
   });
   const sosBox = el('div', 'sosbox');
@@ -106,7 +125,8 @@ export function mountConsole(ctx) {
 
   const board = new Board({
     memo,
-    onLay: (x, z) => { cmd('lay', { x, z }); },
+    // a special card may take the click itself (the Paris Gun: lay on the target clicked, 120 km off)
+    onLay: (x, z) => { if (special?.boardClick?.(x, z, board.view?.mpp ?? 1)) return; cmd('lay', { x, z }); },
     onTarget: (t) => {
       const m = (SIM.missions || []).find((q) => q.targetId === t.id && (q.state === 'open' || q.state === 'ranging' || q.state === 'ffe'));
       if (m) take(m); else cmd('lay', { x: t.pos.x, z: t.pos.z });
@@ -116,24 +136,29 @@ export function mountConsole(ctx) {
   const cfg0 = KINDS[ctx.kind] || KINDS.bl6;
   const order = new OrderCard({ send, act, cfg: cfg0 });
   const rtab = new RangeTable();
-  const guns = new GunsCard();
+  const guns = new GunsCard({ onBed: () => bed() });
   const missions = new MissionList({ shared, take });
   const pad = new MessagePad({ apply: (s) => act('apply', s), clear: () => mail.clear() });
 
   tut(rtab.el, 'rtab'); tut(guns.el, 'guns'); tut(missions.el, 'missions'); tut(pad.el, 'pad');
   const top = el('div', 'toprow');
   const right = el('div', 'rightcol');
-  // the WW2 special weapons: their procedure card takes the range table's place (Gustav, Karl), or the whole column
-  // (the launch sites, which have no fire order)
-  const SPECIAL = new Set(['gustav', 'karl', 'v1', 'v2']);
-  const special = SPECIAL.has(ctx.kind) ? new SpecialCard({ kind: ctx.kind, send: (n, a) => send(n, a) }) : null;
+  // the WW2 special weapons: their procedure card takes the range table's place (Gustav, Karl; the launch sites have
+  // a console of their own, launch.js)
+  const SPECIAL = new Set(['gustav', 'karl']);
+  // (and the WW1 mode's Paris Gun: its own card, paris.js)
+  const special = SPECIAL.has(ctx.kind) ? new SpecialCard({ kind: ctx.kind, send: (n, a) => send(n, a), focus: ctx.focus })
+    : ctx.kind === 'paris' ? new ParisCard({ send: (n, a) => send(n, a) }) : null;
   if (special) tut(special.el, 'special');
-  if (special && cfg0.launcher) right.append(special.el);
-  else if (special) right.append(order.el, special.el);
-  else right.append(order.el, rtab.el);
+  special?.tips?.(order);
+  // a card with `bottom` (the Paris Gun's: it takes no missions) stands in the missions list's place instead, its
+  // `aside` (the Paris Gun's targets) in the range table's, its `left` (the Paris Gun's drill) in the guns card's and
+  // its `top` (the Paris Gun's firing data) in the fire order card's
+  if (special && !special.bottom) right.append(order.el, special.el);
+  else right.append(special?.top ?? order.el, special?.aside ?? rtab.el);
   top.append(board.el, right);
   const bot = el('div', 'botrow');
-  bot.append(guns.el, missions.el, pad.el);
+  bot.append(special?.left ?? guns.el, special?.bottom ? special.el : missions.el, pad.el);
   root.append(hdr, top, bot);
   callEl.textContent = '';
 
@@ -152,24 +177,30 @@ export function mountConsole(ctx) {
     const loading = ps.filter((p) => p.state === 'loading').length;
     const laying = ps.filter((p) => p.state === 'laying').length;
     const m = unit.missionId != null ? (sim.missions || []).find((q) => q.id === unit.missionId) : null;
-    let st;
+    // what stops the order, if anything (sim/guns.js problem): the status line, the FIRE key, the guns card show it
+    const prob = !dead && o.target ? (sim.guns?.problem?.(unit, true) ?? '') : '';
+    let st, cannot = false;
     const alarmSet = board.alarm || new Set();
     if (dead) st = 'BATTERY SILENCED: every piece knocked out';
     else if (alarmSet.size) { const a = [...alarmSet][0]; st = `${TH.sos} ${a}, ${TH.sectors.find((s) => s.id === a)?.name ?? ''}! Press S: every gun to the ${TH.sos} line.`; }
     else if (now - toastT < 3200) st = toast;
     else if (unit.mode === 'hold') st = 'HOLDING: cease fire. Press A or MANUAL to go on.';
-    else if (cfg.launcher && unit.special) {
-      const sp = unit.special, s = sp.steps[sp.i];
-      st = sp.done ? 'NO ROUNDS LEFT: the site stands down.' : sp.fault ? `FAULT: ${sp.fault.text}. Fix (O), carry on or scrub.` : sp.cover ? 'IN COVER: work stopped (B to go back to work).' : `${sp.doing ? 'WORKING' : 'NEXT'}: ${s?.name ?? ''}${s?.set && sp.settings[s.set] == null ? ' (dial it first)' : sp.doing ? '' : '. Enter to start.'}`;
-    } else if (unit.gate) st = `NOT READY: ${unit.gate}. See the ${unit.kind === 'gustav' ? 'PREPARATION' : 'KARL'} card.`;
+    else if (unit.gate) {
+      const cardName = { gustav: 'PREPARATION', karl: 'KARL', paris: unit.special?.ready === false ? 'STELLUNGSBAU' : 'FEUERABLAUF' }[unit.kind] ?? (unit.special?.bed ? null : 'PROCEDURE');
+      st = `NOT READY: ${unit.gate}.${cardName ? ` See the ${cardName} card.` : ' See THE GUNS.'}`;
+    }
     else if (!o.target) st = 'AWAITING A TARGET. Click the board, or Tab and Enter for a mission.';
+    // an order the guns cannot carry out says why, for as long as it stands (sim/guns.js problem)
+    else if (prob) { st = `CANNOT FIRE: ${prob}.`; cannot = true; }
     else {
       const tail = m ? ` (${taskNo(m.id)} ${m.state === 'ffe' ? 'for effect' : m.state})` : '';
       if (ready) st = `${ready} of ${alive} READY. ${unit.mode === 'auto' ? 'Crew will fire' : 'SPACE to fire'}${tail}`;
       else st = `${loading ? loading + ' loading' : ''}${loading && laying ? ', ' : ''}${laying ? laying + ' laying' : ''}${!loading && !laying ? 'reloading' : ''}${tail}`;
     }
     setText(statEl, st);
-    setCls(statEl, 'bad', dead || alarmSet.size > 0 || (now - toastT < 3200));
+    const tip = cannot ? `${sim.guns?.problem?.(unit) ?? prob}.` : ''; // the whole reason on hover (the radio has it too)
+    if (statEl.title !== tip) statEl.title = tip;
+    setCls(statEl, 'bad', dead || alarmSet.size > 0 || (now - toastT < 3200) || cannot);
     setCls(statEl, 'go', !dead && ready > 0 && !!o.target);
     hid.title = cfg.note;
     // S.O.S. keys: lit and flashing in the alarmed sector, grey where the sector is lost
@@ -195,8 +226,9 @@ export function mountConsole(ctx) {
     const gkey = `${unit.id}|${m ? m.id + m.state + !!m.onTarget : ''}|${(o.rounds || 1) > 1}`;
     if (memo.gunsKey !== gkey || memo.guns == null) { memo.gunsKey = gkey; memo.guns = gunsDefault(m, o); }
     if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
-    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU() });
-    if (special) special.update(unit); else rtab.update({ sim, unit });
+    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU(), problem: prob });
+    if (special) special.update(unit, sim);
+    if (!special || (special.bottom && !special.aside)) rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
     pad.update({ mail, unit, sim });
@@ -208,7 +240,6 @@ export function mountConsole(ctx) {
     if (!U) return false;
     const c = e.code;
     if (special && down && special.key(e, U)) return true;
-    if (cfgOf(U).launcher && (c === 'Space' || c.startsWith('Arrow'))) return true;
     if (c === 'Space') { order.bFire.press(down); if (down) act('fire'); return true; }
     if (!down) return c.startsWith('Arrow');
     if (e.repeat && c.startsWith('Arrow')) return true;
@@ -229,6 +260,7 @@ export function mountConsole(ctx) {
       case 'KeyX': act('step'); return true;
       case 'Backspace': case 'Delete': act('cease'); return true;
       case 'Period': act('apply'); return true;
+      case 'KeyT': return bed();
     }
     return false;
   }

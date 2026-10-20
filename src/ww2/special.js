@@ -12,8 +12,12 @@
 //           pre-stage and main stage, the flight
 // The strategic flights leave the map; what became of them is rolled at launch from the drill's errors and game odds
 // (docs/WW2.md "Balancing assumptions") and reported when the flight time has passed.
+// A unit whose definition has `ready: true` (the sandbox) starts set up: the Karl hull down in its first position
+// with a shell in the breech, the V-1 and V-2 with a round on the ramp or the table, the firing data dialled in.
+// Its crew then reloads and lays by itself (the Karl turns its hull onto a line outside the 4 degrees, sends the
+// carrier for shells; the launch crews run the reload steps, fix faults, take cover) and the player only fires.
 import { DEG, bearingOf } from '../sector.js';
-import { G } from '../sim/tables.js';
+import { G, GUNS } from '../sim/tables.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const wrapDeg = (d) => ((d % 360) + 360) % 360;
@@ -23,12 +27,25 @@ const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
 export const GUSTAV_TASKS = [
   { id: 'survey', name: 'Survey the firing curve', de: 'Vermessung der Feuerstellung', work: 60, needs: [], max: 2 },
   { id: 'track', name: 'Lay the curved double track', de: 'Gleisbau: die Schießkurve', work: 260, needs: ['survey'], max: 3 },
-  { id: 'flak', name: 'Flak and smoke cover', de: 'Flak und Vernebelung', work: 90, needs: [], max: 2, optional: true },
+  { id: 'flak', name: 'Flak cover', de: 'Flakschutz', work: 90, needs: [], max: 2, optional: true },
   { id: 'cranes', name: 'Erect the two gantry cranes', de: 'Portalkräne aufstellen', work: 100, needs: ['track'], max: 2 },
   { id: 'assembly', name: 'Assemble the gun (5 trains of parts)', de: 'Montage des Geschützes', work: 300, needs: ['cranes'], max: 3 },
   { id: 'ammo', name: 'Ammunition train and shell hoist', de: 'Munitionszug und Aufzug', work: 120, needs: ['track'], max: 2 },
   { id: 'camo', name: 'Camouflage nets over the gun', de: 'Tarnung', work: 60, needs: ['assembly'], max: 2, optional: true },
 ];
+
+// The flak cover: two army flak battalions guarded the gun (the sources; four batteries stand for them, gustav_layout.js
+// FLAK), each counting from the moment it is dug in, in the order they come (light, heavy, light, heavy). The light 2 cm
+// quads are what brings the low ground-attack aircraft down; the heavy 8.8 cm mostly spoils their aim (enemy.js:
+// st.flak a raider's chance of being shot down, st.flakSpoil the wider scatter of its bombs). Both batteries of each
+// kind make the old full cover (flak 1) and spoil the bombing by 60 percent.
+const FLAK_ORDER = ['light', 'heavy', 'light', 'heavy'];
+function flakCover(st, k) {
+  let light = 0, heavy = 0;
+  FLAK_ORDER.forEach((kind, i) => { if (k >= (i + 1) / FLAK_ORDER.length - 1e-9) { if (kind === 'light') light++; else heavy++; } });
+  st.flak = 0.42 * light + 0.08 * heavy;
+  st.flakSpoil = 0.3 * heavy;
+}
 
 class GustavCtl {
   constructor(sim, u) {
@@ -45,8 +62,12 @@ class GustavCtl {
       stage: { survey: 0, track: 0, cranes: 0, ammo: 0, flak: 0, camo: 0 }, assembly: 0, cranesOut: 0,
       nextRaid: 150 + sim.rng() * 80, log: [],
     };
-    if (sim.attract || sim.scripted && sim.theatre.prepared) this.finishAll();
+    // Flanders lists Gustav as a playable battery. Start it assembled there so its
+    // raised crew stations have a platform; Sevastopol keeps the preparation drill.
+    if (sim.attract || sim.theatre.op.kind === 'battle' || sim.scripted && sim.theatre.prepared) this.finishAll();
     u.gate = st.ready ? null : 'railway preparation';
+    // the gun is put together at its loading elevation (the cradle level) and raised to its rest once it stands
+    for (const p of u.pieces) { p.fixed = st.assembly < 1; if (p.fixed) p.el = GUNS[p.kind].loadEl ?? 0; }
   }
 
   finishAll() {
@@ -56,7 +77,7 @@ class GustavCtl {
     st.assembly = 1;
     st.cranesOut = 1;
     Object.assign(st.stage, { survey: 1, track: 1, cranes: 0, ammo: 1, flak: 1, camo: 1 });
-    st.flak = 1;
+    flakCover(st, 1);
   }
 
   task(id) {
@@ -128,12 +149,13 @@ class GustavCtl {
         t.state = 'done';
         t.gangs = 0;
         sim.radio(`Gustav: ${t.name.toLowerCase()}, done.`, 'info');
-        if (t.id === 'flak') st.flak = 1;
       }
     }
     for (const k of ['survey', 'track', 'ammo', 'flak', 'camo']) st.stage[k] = this.task(k).done / this.task(k).work;
+    flakCover(st, st.stage.flak);
     const asm = this.task('assembly');
     st.assembly = asm.done / asm.work;
+    for (const p of u.pieces) p.fixed = st.assembly < 1; // a gun in pieces is not laid (guns.js slew)
     st.stage.cranes = this.task('cranes').done / this.task('cranes').work;
     // the cranes are taken down once the gun stands
     if (asm.state === 'done') st.cranesOut = Math.min(1, st.cranesOut + dt / 40);
@@ -150,7 +172,7 @@ class GustavCtl {
     // the enemy's air force looks for the site while it is being built
     if (!sim.attract && !sim.scripted && sim.time > st.nextRaid) {
       st.nextRaid = sim.time + 420 + sim.rng() * 240;
-      if (!st.ready || sim.rng() < 0.5) sim.enemyAI.raid?.({ x: u.pos.x, z: u.pos.z, flak: st.flak }, { n: 2 + (sim.rng() < 0.3 ? 1 : 0), weapon: 'bomb', warn: 50 });
+      if (!st.ready || sim.rng() < 0.5) sim.enemyAI.raid?.({ x: u.pos.x, z: u.pos.z, flak: st.flak, spoil: st.flakSpoil }, { n: 2 + (sim.rng() < 0.3 ? 1 : 0), weapon: 'bomb', warn: 50 });
     }
   }
 
@@ -184,12 +206,21 @@ class KarlCtl {
     const st = u.special = {
       kind: 'karl', stage: 'travel', lower: 0, drive: 0, posId: null, positions: op.positions ?? [], heading: u.zero,
       route: null, pivotTo: null, ready: false, reserve: u.ammo.he - carry, cover: 1,
-      schlepper: { state: 'alongside', t: 0, k: 0 }, log: [],
+      schlepper: { state: 'alongside', t: 0, k: 0 }, log: [], quick: !!u.def.ready, autoLay: false,
     };
     u.ammo.he = carry;
     u.ammoMax.he = carry;
     u.pieces[0].el = 0;
-    if (sim.attract || (sim.scripted && sim.theatre.prepared)) {
+    const q0 = st.positions[0];
+    if (st.quick && q0) {
+      // set up: in the first prepared position on the zero line, hull down, the barrel at rest and the breech empty,
+      // as every other battery starts: the first mission goes through the loading cycle like theirs
+      this.setPos(q0.pos.x, q0.pos.z);
+      this.setHeading(u.zero);
+      Object.assign(st, { stage: 'down', lower: 1, ready: true, posId: q0.id, cover: q0.cover ? 1 + q0.cover : 1 });
+      const p = u.pieces[0];
+      p.el = p.cmd.el = GUNS[p.kind].restEl;
+    } else if (sim.attract || (sim.scripted && sim.theatre.prepared)) {
       st.stage = 'down';
       st.lower = 1;
       st.ready = true;
@@ -245,6 +276,7 @@ class KarlCtl {
       case 'raise':
         if (st.lower <= 0) return false;
         st.stage = 'raising';
+        st.autoLay = false; // the crew turns and lowers again only after a raise of its own (auto() sets it)
         sim.guns.cease(u);
         break;
       case 'fetch':
@@ -272,6 +304,12 @@ class KarlCtl {
     else if (st.lower < 1) g = 'lower the hull before firing';
     else if (u.ammo.he <= 0 && !p.loaded) g = st.schlepper.state === 'alongside' ? (st.reserve > 0 ? 'no shells at the gun: send the carrier (M)' : 'no shells left') : 'no shells: the carrier is away';
     st.ready = !g;
+    // the gun is laid only from a hull that is down: rising, turning, lowering or on the road the barrel lies flat
+    // and a round waits at its lay step (sim/guns.js `stowed`). Set up (sandbox), the crew loads while the hull turns
+    // onto a new line, as the other guns load while they traverse; not on the road, where a cycle not yet at the ram
+    // is given up (the shell back on the carrier) and none is begun
+    u.stowed = st.stage !== 'down';
+    u.loadThrough = st.quick && st.stage !== 'travel' && st.stage !== 'driving';
     if (g !== u.gate) {
       u.gate = g;
       sim.guns.recompute(u);
@@ -281,9 +319,10 @@ class KarlCtl {
   update(dt) {
     const sim = this.sim, u = this.u, st = u.special, p = u.pieces[0];
     if (!u.alive) return;
-    if (u.mode === 'auto') this.auto();
-    // on the move the barrel lies flat (the guns' slew pulls it toward its order; this pulls harder)
-    if (st.stage !== 'down' && st.stage !== 'emplace' && p.state !== 'loading') p.el = Math.max(0, p.el - 2.5 * DEG * dt);
+    if (u.mode === 'auto' || st.quick) this.auto();
+    // the hull not down, the barrel comes down to lie flat (the guns' slew brings a stowed gun down at its elevating
+    // rate; this adds to it, so it is flat by the time the hull is up)
+    if (st.stage !== 'down') p.el = Math.max(0, p.el - 2.5 * DEG * dt);
     if (st.stage === 'driving' && st.route) {
       const dx = st.route.x - u.pos.x, dz = st.route.z - u.pos.z, d = Math.hypot(dx, dz);
       const want = bearingOf(dx, dz), turn = angDiff(want / DEG, st.heading / DEG) * DEG;
@@ -298,7 +337,8 @@ class KarlCtl {
         st.stage = 'emplace';
         const q = st.positions.find((x) => x.id === st.posId);
         st.cover = q?.cover ? 1 + q.cover : 1;
-        sim.radio(`Karl: in ${q?.name ?? 'position'}. Turn onto the target (T), then lower the hull (L).`, 'info');
+        st.autoLay = st.quick;
+        sim.radio(st.quick ? `Karl: in ${q?.name ?? 'position'}, emplacing.` : `Karl: in ${q?.name ?? 'position'}. Turn onto the target (T), then lower the hull (L).`, 'info');
         sim.guns.recompute(u);
       }
     } else if (st.stage === 'pivot') {
@@ -335,15 +375,24 @@ class KarlCtl {
     this.gate();
   }
 
-  // the auto crew: the first position, onto the target the crew took, hull down, fetch shells when out
+  // the auto crew: the first position, onto the target the crew took, hull down, fetch shells when out. A set-up
+  // (quick) Karl's crew does this in manual mode too, keeping the player's mode: a line outside the 4 degrees is
+  // raise, turn, lower (a shell may stay in the breech), and it emplaces after a drive but leaves a hull the player
+  // raised up (to drive on)
   auto() {
-    const u = this.u, st = u.special, o = u.order;
-    const cmd = (n, a = {}) => { this.command(n, a); u.mode = 'auto'; };
+    const u = this.u, st = u.special, o = u.order, mode = u.mode;
+    const cmd = (n, a = {}) => { this.command(n, a); u.mode = mode; };
     if (st.stage === 'travel' && st.positions.length) cmd('goto', { id: st.positions[0].id });
-    else if (st.stage === 'emplace' && o.target) {
-      if (o.why === 'out of arc') cmd('pivot');
-      else cmd('lower');
-    } else if (st.stage === 'down' && o.target && o.why === 'out of arc' && !u.pieces[0].loaded) cmd('raise');
+    else if (st.stage === 'emplace' && (st.quick ? st.autoLay : o.target)) {
+      if (o.target && o.why === 'out of arc') cmd('pivot');
+      else {
+        cmd('lower');
+        st.autoLay = false;
+      }
+    } else if (st.stage === 'down' && o.target && o.why === 'out of arc' && (st.quick || !u.pieces[0].loaded)) {
+      cmd('raise');
+      st.autoLay = st.quick;
+    }
     if (u.ammo.he <= 0 && !u.pieces[0].loaded && st.schlepper.state === 'alongside' && st.reserve > 0) this.command('fetch', {});
   }
 
@@ -353,41 +402,67 @@ class KarlCtl {
 }
 
 // ------------------------------------------------------------------------------------------------ V-1
+// The drill as data: `crew` is what the console says the crew is doing while the step runs. Durations are game
+// seconds (the whole V-1 drill about 3.5 minutes, the A4's about 5, both heavily compressed).
 export const V1_STEPS = [
-  { id: 'bring', name: 'Bring the missile from the store', de: 'Gerät aus dem Lager', dur: 35 },
-  { id: 'wings', name: 'Fit the wings', de: 'Tragflächen anbauen', dur: 30 },
-  { id: 'compass', name: 'Align the master compass in the Richthaus', de: 'Kompass im Richthaus einrichten', dur: 40, set: 'compass' },
-  { id: 'airlog', name: 'Set the air log for the range', de: 'Luftlog einstellen', dur: 15, set: 'range' },
-  { id: 'ramp', name: 'Mount it on the launch sled', de: 'Auf den Kolben setzen', dur: 40 },
-  { id: 'fuel', name: 'Fuel and compressed air', de: 'Betanken, Preßluft', dur: 45 },
-  { id: 'steam', name: 'Charge the steam generator (T-Stoff, Z-Stoff)', de: 'Dampferzeuger befüllen', dur: 45 },
-  { id: 'arm', name: 'Arm the warhead fuzes', de: 'Zünder scharf', dur: 15 },
-  { id: 'clear', name: 'Clear the ramp: crew to the bunker', de: 'Rampe räumen', dur: 15 },
-  { id: 'fire', name: 'Start the engine and fire the catapult', de: 'Triebwerk an, Abschuß', dur: 4 },
+  { id: 'bring', name: 'Bring the missile from the store', de: 'Gerät aus dem Lager', dur: 25, crew: 'The missile comes out of the store on its trolley' },
+  { id: 'wings', name: 'Fit the wings', de: 'Tragflächen anbauen', dur: 20, crew: 'Wings onto the spar tube, bolted home' },
+  { id: 'compass', name: 'Swing the master compass in the Richthaus', de: 'Kompass im Richthaus einrichten', dur: 30, set: 'compass', crew: 'Compass set to the course; the airframe knocked with mallets to settle its magnetism' },
+  { id: 'airlog', name: 'Set the air log for the range', de: 'Luftlog einstellen', dur: 12, set: 'range', crew: 'The counter on the nose propeller preset for the air distance' },
+  { id: 'ramp', name: 'Onto the launch sled', de: 'Auf den Kolben setzen', dur: 30, crew: 'Lifted onto the sled at the foot of the ramp' },
+  { id: 'fuel', name: 'Fuel and compressed air', de: 'Betanken, Preßluft', dur: 35, crew: 'Petrol into the tank, the air bottles charged' },
+  { id: 'steam', name: 'Charge the steam generator', de: 'Dampferzeuger befüllen', dur: 35, crew: 'T-Stoff and Z-Stoff into the generator trolley, then the pressure test' },
+  { id: 'arm', name: 'Arm the warhead fuzes', de: 'Zünder scharf', dur: 10, crew: 'The fuzes in and armed' },
+  { id: 'clear', name: 'Clear the ramp: crew to the bunker', de: 'Rampe räumen', dur: 12, crew: 'Everyone into the firing bunker' },
+  { id: 'fire', name: 'Start the engine and fire the catapult', de: 'Triebwerk an, Abschuß', dur: 4, crew: 'The pulse jet starts on compressed air and a spark; then the steam generator fires' },
 ];
 export const V2_STEPS = [
-  { id: 'erect', name: 'Erect the rocket on the firing table', de: 'Aufrichten (Meillerwagen)', dur: 60 },
-  { id: 'align', name: 'Turn the table onto the target', de: 'Richten des Brennstands', dur: 30, set: 'compass' },
-  { id: 'cutoff', name: 'Set the Brennschluss for the range', de: 'Brennschluß einstellen', dur: 20, set: 'range' },
-  { id: 'checks', name: 'Electrical checks: gyros and rudders', de: 'Elektrische Prüfung', dur: 80 },
-  { id: 'alcohol', name: 'Fuel: B-Stoff (alcohol)', de: 'B-Stoff tanken', dur: 60 },
-  { id: 'tstoff', name: 'Fuel: T-Stoff and Z-Stoff (turbopump)', de: 'T-Stoff, Z-Stoff', dur: 40 },
-  { id: 'lox', name: 'Fuel: A-Stoff (liquid oxygen)', de: 'A-Stoff tanken', dur: 70 },
-  { id: 'withdraw', name: 'Withdraw the Meillerwagen, crew to cover', de: 'Meillerwagen zurück', dur: 40 },
-  { id: 'prestage', name: 'Vorstufe: ignition, watch the flame', de: 'Vorstufe', dur: 6 },
-  { id: 'fire', name: 'Hauptstufe: lift-off', de: 'Hauptstufe', dur: 3 },
+  { id: 'erect', name: 'Erect the rocket on the firing table', de: 'Aufrichten (Meillerwagen)', dur: 45, crew: 'The Meillerwagen\'s hydraulic arm lifts the rocket upright onto the table' },
+  { id: 'align', name: 'Turn the table onto the target', de: 'Richten des Brennstands', dur: 25, set: 'compass', crew: 'The table turned until fin I lies on the line, checked by theodolite' },
+  { id: 'cutoff', name: 'Set the Brennschluss for the range', de: 'Brennschluß einstellen', dur: 15, set: 'range', crew: 'The I-Gerät preset to cut the engine at the speed for the range' },
+  { id: 'checks', name: 'Electrical checks: gyros and rudders', de: 'Elektrische Prüfung', dur: 50, crew: 'The gyros run up, the rudders swing; cables to the Feuerleitpanzer' },
+  { id: 'alcohol', name: 'Fuel: B-Stoff (alcohol)', de: 'B-Stoff tanken', dur: 45, crew: 'Alcohol and water from the tanker' },
+  { id: 'tstoff', name: 'Fuel: T-Stoff and Z-Stoff', de: 'T-Stoff, Z-Stoff', dur: 30, crew: 'Peroxide and permanganate for the turbopump\'s steam' },
+  { id: 'lox', name: 'Fuel: A-Stoff (liquid oxygen), last', de: 'A-Stoff tanken', dur: 50, crew: 'Liquid oxygen at minus 183 degrees: the tank frosts over and starts to boil off' },
+  { id: 'withdraw', name: 'Withdraw the Meillerwagen, crew to cover', de: 'Meillerwagen zurück', dur: 30, crew: 'The arm folds back; trailer and tankers pull away' },
+  { id: 'prestage', name: 'Vorstufe: ignition, watch the flame', de: 'Vorstufe', dur: 6, crew: 'Igniter lit, propellants flowing under gravity: about 8 t of thrust' },
+  { id: 'fire', name: 'Hauptstufe: lift-off', de: 'Hauptstufe', dur: 3, crew: 'The turbopump comes up: 25 t, the rocket rises off the table' },
 ];
 
 // game odds (docs/WW2.md "Balancing assumptions")
 const V1_ODDS = { rampCrash: 0.08, earlyFail: 0.12, shotDown: 0.45, area: 8000, sigma: 5500, steamFault: 0.12, leak: 0.06 };
 const V2_ODDS = { tableBlast: 0.03, flightFail: 0.12, area: 6000, sigma: 3500, checkFault: 0.15, preFail: 0.06 };
+// the settings count as matching the firing data within these (degrees, km): the console's MATCH and the hold
+const TOL = { compass: 0.25, range: 0.6 };
+// the V-1's steam generator: its test pressure (bar, a game figure) gives the speed off the ramp
+const STEAM_P = 60, STEAM_LOW = 34, RAMP_KMH = 390;
+// A set-up (quick) site's reload: the V-1s come to the ramp prepared (wings on, compass swung, air log set, fuelled,
+// fuzed by the preparation section), so a ramp reloads in bring, mount, steam, clear: 102 s and the 4 s shot, about
+// 12x compressed from the real best of one every 20 to 30 minutes. The A4 has no such short cut (each rocket is
+// erected, aligned, checked and fuelled on the table): 290 s and the 9 s firing, about 20x from the real 90 to 110
+// minutes. The firing key is the V-1's catapult or the A4's Vorstufe (the Hauptstufe follows by itself).
+export const QUICK = {
+  v1: { prep: new Set(['wings', 'compass', 'airlog', 'fuel', 'arm']), trigger: 'fire' },
+  v2: { prep: new Set(), trigger: 'prestage' },
+};
+const pc = (k) => `${Math.round(k * 100)}%`;
+const mmss = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.round(Math.max(0, s)) % 60).padStart(2, '0')}`;
 
+// The launch drill. In MANUAL the player starts the drill (the `step` command) and the crew then carries on from step
+// to step by itself (`run`), holding only where it needs the player: a setting not dialled to the firing data, a
+// fault (fix, carry on at a risk, or scrub), the firing key (and the A4's Hauptstufe), a damaged ramp; after a launch
+// the next round waits for the step command. `hold` names what the drill waits for, `refused` the last order the site
+// could not carry out (every refusal says why; the important ones go on the radio). AUTO: the crew does everything.
+// A fault is rolled when its step begins (`pend`) so the instruments show it coming before the crew reports it.
 class LaunchCtl {
   constructor(sim, u, kind) {
     this.sim = sim;
     this.u = u;
     this.kind = kind;
     this.STEPS = kind === 'v1' ? V1_STEPS : V2_STEPS;
+    this.O = kind === 'v1' ? V1_ODDS : V2_ODDS;
+    this.Q = QUICK[kind];
+    this.triggerI = this.STEPS.findIndex((s) => s.id === this.Q.trigger);
   }
 
   reset() {
@@ -395,47 +470,160 @@ class LaunchCtl {
     u.mode = u.def.mode ?? 'manual';
     u.gate = 'launch drill';
     const T = u.def.target ?? op.target;
-    // the solution the battery's firing data gives: the target's bearing and range, the air log or cut-off for the wind
-    const headwind = -Math.cos(sim.wind.bearing - T.bearing) * sim.wind.speed;
     const st = u.special = {
       kind: this.kind, target: { name: T.name, dist: T.dist, bearing: T.bearing },
-      solution: { compass: Math.round(wrapDeg(T.bearing / DEG) * 10) / 10, range: Math.round((T.dist / 1000) * (this.kind === 'v1' ? 1 + headwind / 180 : 1) * 10) / 10 },
-      wind: { from: Math.round(wrapDeg(sim.wind.bearing / DEG)), speed: Math.round(sim.wind.speed), headwind: Math.round(headwind * 10) / 10 },
+      solution: null, wind: null,
       settings: { compass: null, range: null }, i: 0, t: 0, doing: false, fault: null, cover: false, crewHurt: 0,
       steps: this.STEPS.map((s) => ({ ...s, state: 'todo' })), left: u.ammo.he, n: 0, flights: [], missile: false,
       lox: 0, loxOn: false, nextRaid: 260 + sim.rng() * 160, raidAt: null, ready: false, rampHp: 1, exposed: 0, done: false,
+      // the drill's flow (see the class comment) and what the console shows
+      run: false, hold: 'start', accept: {}, refused: null, pend: null, fixing: null, alarm: null, odds: null,
+      area: this.O.area, sigma: this.O.sigma, tol: TOL, gauges: {},
       // render hints
       wings: 0, generator: 0, erect: 0, meiller: 0, table: 0, fuelA: 0, fuelL: 0, onRamp: false, where: 'none', launchT: -1,
+      quick: !!u.def.ready, trigger: this.Q.trigger, jet: 0, steamP: 0, flame: 0,
     };
+    // the firing data: the target's bearing and range, the V-1's air log allowing for the wind along the route (at
+    // cruising height, stronger than on the ground)
+    this.met(Math.round(wrapDeg(sim.wind.bearing / DEG)), sim.wind.speed * (this.kind === 'v1' ? 1.8 : 1));
     if (sim.attract) st.settings = { ...st.solution };
+    if (st.quick) {
+      // set up: the battery's firing data dialled in, the drill done up to the firing key (the A4 fuelled)
+      st.settings = { ...st.solution };
+      st.steps.forEach((s, i) => { if (i < this.triggerI) s.state = 'done'; });
+      if (this.kind === 'v2') { st.loxOn = true; st.lox = 100; }
+      else st.steamP = STEAM_P;
+      st.i = this.triggerI;
+    }
+    this.pose(0);
+    this.holdFor();
+  }
+
+  // the wind along the route (from, degrees; m/s) and the firing data it gives: a headwind makes the air distance
+  // longer than the ground distance (the V-1's log counts air distance); the A4 flies above the weather
+  met(from, speed) {
+    const st = this.u.special, T = st.target, b = from * DEG;
+    const headwind = -Math.cos(b - T.bearing) * speed;
+    st.wind = { from: Math.round(wrapDeg(from)), speed: Math.round(speed), headwind: Math.round(headwind * 10) / 10 };
+    st.solution = {
+      compass: Math.round(wrapDeg(T.bearing / DEG) * 10) / 10,
+      range: Math.round((T.dist / 1000) * (this.kind === 'v1' ? 1 + headwind / 180 : 1) * 10) / 10,
+    };
   }
 
   step() {
     return this.u.special.steps[this.u.special.i];
   }
 
+  // the first step not yet done (in the full drill simply the next one; a quick site skips its prepared steps and
+  // comes back to a step it must do again)
+  nextStep() {
+    const st = this.u.special, i = st.steps.findIndex((s) => s.state !== 'done');
+    st.i = i < 0 ? st.steps.length : i;
+  }
+
+  // a setting the drill may go on with: dialled to the firing data, or accepted off it (the step key at the hold)
+  dialled(key) {
+    const st = this.u.special, v = st.settings[key];
+    return v != null && (st.accept[key] || Math.abs(key === 'compass' ? angDiff(v, st.solution.compass) : v - st.solution.range) <= TOL[key] + 1e-6);
+  }
+
+  // the firing has begun: the settings can no longer change
+  firing() {
+    const st = this.u.special;
+    return st.i >= this.triggerI && (st.doing || st.steps[this.triggerI]?.state === 'done');
+  }
+
+  // new firing data on a round already laid sends the crew back to the step that sets it (the V-1's compass or air
+  // log, the A4's table or cut-off), after the step in hand
+  relay(key) {
+    const st = this.u.special, s = st.steps.find((q) => q.set === key);
+    if (!s || s.state !== 'done' || this.firing()) return;
+    s.state = 'todo';
+    if (key === 'compass') st.tableFrom = st.table;
+    if (!st.doing) this.nextStep();
+    if (!st.quick) this.sim.radio(`New ${this.dialName(key)} setting: the crew goes back to "${s.name}".`, 'info');
+  }
+
+  dialName(key) {
+    return key === 'compass' ? (this.kind === 'v1' ? 'compass' : 'table bearing') : (this.kind === 'v1' ? 'air log' : 'Brennschluss');
+  }
+
+  // an order the site cannot carry out says why: in the console's status line, and on the radio when it matters
+  refuse(text, radio = true) {
+    const sim = this.sim, st = this.u.special;
+    st.refused = { text, t: sim.time };
+    if (radio && (st.lastRefusal !== text || sim.time - st.lastRefusalT > 6)) {
+      st.lastRefusal = text;
+      st.lastRefusalT = sim.time;
+      sim.radio(text, 'warn');
+    }
+    return false;
+  }
+
+  // why the step key cannot start the step in hand now, or null
+  cannot() {
+    const st = this.u.special, s = this.step(), what = this.kind === 'v1' ? 'ramp' : 'firing table';
+    if (st.done || !s) return { text: st.left <= 0 ? 'No rounds left: the site has spent its missiles.' : 'The site stands down.' };
+    if (st.fault) return { text: `${st.fault.text}: decide first. Fix it (O), carry on (I) or scrub the round (X).` };
+    if (st.cover) return { text: 'The crew is in cover: B sends them back to work.' };
+    if (st.repair != null) return { text: `The crew is repairing the ${what} (${mmss(st.repair)}).`, radio: false };
+    if (st.topup != null) return { text: `The crew is topping up the liquid oxygen (${mmss(st.topup)}).`, radio: false };
+    if (st.doing) return { text: `The crew is busy: ${s.name.toLowerCase()} (${mmss(s.dur - st.t)}).`, radio: false };
+    const key = s.id === this.Q.trigger || s.id === 'fire';
+    if (st.quick && !key) return { text: `The crew is reloading: ${s.name.toLowerCase()}.`, radio: false };
+    if (s.set && st.settings[s.set] == null) {
+      const v = s.set === 'compass' ? `${st.solution.compass.toFixed(1)} degrees` : `${st.solution.range.toFixed(1)} km`;
+      return { text: `Dial the ${this.dialName(s.set)} first (${s.set === 'compass' ? 'left and right arrows' : 'up and down arrows'}): the firing data says ${v}.` };
+    }
+    if (key && st.rampHp < 0.35) return { text: `The ${what} is damaged (${pc(1 - st.rampHp)}): repair it first (R).` };
+    return null;
+  }
+
   command(name, a) {
     const sim = this.sim, u = this.u, st = u.special;
     if (u.mode === 'auto' && name !== 'mode') u.mode = 'manual';
     switch (name) {
-      case 'set':
+      case 'set': {
+        if (this.firing()) return this.refuse('Too late to change the settings: the firing has begun.');
+        const was = { ...st.settings };
         if (a.compass != null) st.settings.compass = Math.round(wrapDeg(a.compass) * 10) / 10;
         if (a.range != null) st.settings.range = Math.max(0, Math.round(a.range * 10) / 10);
+        for (const k of ['compass', 'range']) if (st.settings[k] !== was[k]) { st.accept[k] = false; this.relay(k); }
         return true;
-      case 'step': return this.begin();
+      }
+      case 'step': {
+        // start (or go on with) the drill, accept a setting off the firing data, or fire
+        const no = this.cannot();
+        if (no) return this.refuse(no.text, no.radio !== false);
+        const s = this.step();
+        if (s.set && !this.dialled(s.set)) st.accept[s.set] = true;
+        if (!st.quick) st.run = true;
+        this.begin();
+        return true;
+      }
       case 'fix': return this.fix(a.how ?? 'fix');
       case 'cover':
         st.cover = !st.cover;
-        sim.radio(st.cover ? 'Volle Deckung: the crew takes cover.' : 'The crew is back at work.', 'info');
+        st.crewCover = false;
+        sim.radio(st.cover ? 'Volle Deckung: the crew takes cover; the drill waits.' : 'The crew is back at work.', 'info');
         return true;
-      case 'repair':
-        if (st.rampHp >= 0.99 || st.doing || st.fault) return false;
+      case 'repair': {
+        const what = this.kind === 'v1' ? 'ramp' : 'firing table';
+        if (st.rampHp >= 0.99) return this.refuse(`Nothing to repair: the ${what} is sound.`, false);
+        if (st.fault) return this.refuse(`${st.fault.text}: decide on the fault first.`, false);
+        if (st.doing) return this.refuse(`The crew is busy: ${this.step()?.name.toLowerCase() ?? 'working'}. Repair when the step is done.`, false);
         st.repair = 90;
         st.doing = true;
-        sim.radio(`Repairing the ${this.kind === 'v1' ? 'ramp' : 'firing table'}.`, 'info');
+        sim.radio(`Repairing the ${what} (1:30).`, 'info');
         return true;
+      }
       case 'topup':
-        if (this.kind !== 'v2' || !st.loxOn || st.doing) return false;
+        if (this.kind !== 'v2') return this.refuse('Only the A4 takes liquid oxygen.', false);
+        if (!st.loxOn) return this.refuse('No liquid oxygen in the rocket yet: it goes in last, after the alcohol.', false);
+        if (st.lox >= 99) return this.refuse('The oxygen tank is full.', false);
+        if (st.doing) return this.refuse(`The crew is busy: ${this.step()?.name.toLowerCase() ?? 'working'}. Top up when the step is done.`, false);
+        if (this.firing()) return this.refuse('Too late: the firing has begun.', false);
         st.topup = 30;
         st.doing = true;
         return true;
@@ -447,35 +635,33 @@ class LaunchCtl {
     const sim = this.sim, st = this.u.special, s = this.step();
     if (!s || st.doing || st.fault || st.cover || st.done) return false;
     if (st.left <= 0 && st.i === 0) return false;
-    if (s.set && st.settings[s.set] == null) {
-      sim.radio(`${s.name}: dial in the ${s.set === 'compass' ? 'bearing' : 'range'} first.`, 'warn');
-      return false;
-    }
-    if (s.id === 'fire' && st.rampHp < 0.35) {
-      if (!st.rampWarned) sim.radio(`The ${this.kind === 'v1' ? 'ramp' : 'firing table'} is damaged: repair it first.`, 'warn');
-      st.rampWarned = true;
-      return false;
-    }
+    if (s.set && st.settings[s.set] == null) return false;
+    if ((s.id === this.Q.trigger || s.id === 'fire') && st.rampHp < 0.35) return false;
     st.doing = true;
     st.t = 0;
     s.state = 'doing';
+    st.pend = this.faultFor(s);
     sim.events.special?.(this.u, 'step', s.id);
     return true;
   }
 
   fix(how) {
     const sim = this.sim, st = this.u.special, f = st.fault;
-    if (!f) return false;
+    if (!f) return this.refuse('There is no fault to fix.', false);
     if (how === 'fix') {
       st.fault = null;
+      st.lowSteam = false;
+      st.fixing = f.fixText;
       st.doing = true;
-      st.t = -f.cost; // the repair takes this long before the step goes on
+      st.t = -f.cost; // the repair takes this long, then the step is worked again
       sim.radio(`${f.fixText}.`, 'info');
-    } else if (how === 'ignore' && f.ignorable) {
+    } else if (how === 'ignore') {
+      if (!f.ignorable) return this.refuse(`${f.text}: that cannot be ignored. Fix it (O) or scrub the round (X).`);
       st.fault = null;
       st.risk = (st.risk ?? 0) + f.risk;
+      if (f.id === 'pre') st.ragged = true;
       this.complete();
-      sim.radio('Carry on regardless.', 'warn');
+      sim.radio(`Carry on regardless${f.risky ? `: ${f.risky}` : ''}.`, 'warn');
     } else if (how === 'scrub') {
       st.fault = null;
       this.scrub(f.scrubText ?? 'scrubbed');
@@ -486,7 +672,7 @@ class LaunchCtl {
   scrub(why) {
     const sim = this.sim, st = this.u.special;
     sim.radio(`Abbruch: ${why}. The round is lost.`, 'alert');
-    st.flights.push({ n: ++st.n, state: 'scrubbed', text: why, t0: sim.time });
+    st.flights.push({ n: ++st.n, state: 'scrubbed', text: why, t0: sim.time, at: 0 });
     this.nextRound();
   }
 
@@ -496,38 +682,79 @@ class LaunchCtl {
     this.u.ammo.he = st.left;
     st.i = 0;
     st.doing = false;
+    st.run = false;
     st.risk = 0;
     st.lox = 0;
     st.loxOn = false;
     st.missile = false;
+    st.pend = null;
+    st.fixing = null;
+    st.accept = {};
+    st.steamP = 0;
+    st.lowSteam = false;
+    st.ragged = false;
+    st.vorT = null;
     for (const s of st.steps) s.state = 'todo';
     Object.assign(st, { wings: 0, generator: 0, erect: 0, meiller: 0, fuelA: 0, fuelL: 0, onRamp: false, where: 'none' });
-    if (sim.attract) st.settings = { ...st.solution }; else st.settings = { compass: null, range: null };
+    if (st.quick) {
+      // the next round comes prepared; the settings stay as laid and the table stays turned
+      for (const s of st.steps) if (this.Q.prep.has(s.id)) s.state = 'done';
+      st.tableFrom = st.table;
+      st.steamP = 0;
+      this.nextStep();
+    } else if (sim.attract) st.settings = { ...st.solution };
+    else if (this.kind === 'v1' && st.left > 0 && !sim.scripted) {
+      // the dials stay where they were; a new met report may move the air log's firing data (the wind on the route)
+      const w = st.wind;
+      this.met(w.from + sim.gauss() * 30, clamp(w.speed + sim.gauss() * 3.5, 1, 18));
+      sim.radio(`Wetterbericht: wind on the route from ${st.wind.from} degrees at ${st.wind.speed} m/s. Air log for ${st.solution.range.toFixed(1)} km.`, 'phone');
+    }
     if (st.left <= 0) {
       st.done = true;
       this.u.gate = 'no rounds left';
     }
   }
 
-  // a fault on the step just finishing (rolled here so it is deterministic per seed)
+  // the fault a step will end in, rolled when it begins (deterministic per seed); the instruments show it coming
   faultFor(s) {
     const sim = this.sim, st = this.u.special;
     if (sim.attract || sim.scripted) return null; // the lessons teach the drill, not the faults
-    if (s.id === 'steam' && sim.rng() < V1_ODDS.steamFault) return { id: 'pressure', text: 'Steam generator: the pressure is low', fixText: 'Venting and recharging the generator', cost: 45, ignorable: true, risk: 0.45 };
-    if (s.id === 'fuel' && sim.rng() < V1_ODDS.leak) return { id: 'leak', text: 'A fuel leak at the tank', fixText: 'Draining and resealing the tank', cost: 30, ignorable: false };
-    if (s.id === 'checks' && sim.rng() < V2_ODDS.checkFault) return { id: 'gyro', text: 'Prüfung: a gyro will not run up to speed', fixText: 'Changing the gyro unit', cost: 60, ignorable: true, risk: 0.3 };
-    if (s.id === 'prestage' && sim.rng() < V2_ODDS.preFail) return { id: 'pre', text: 'Vorstufe: the flame is ragged', fixText: 'Shutting down, purging, a new igniter', cost: 120, ignorable: true, risk: 0.5, scrubText: 'pre-stage failure' };
+    const O = this.O, odds = (r) => {
+      const a = this.odds(st.risk ?? 0), b = this.odds((st.risk ?? 0) + r);
+      return this.kind === 'v1' ? `crash off the ramp ${pc(a.crash)} becomes ${pc(b.crash)}` : `failure ${pc(a.crash + a.fail)} becomes ${pc(b.crash + b.fail)}`;
+    };
+    if (s.id === 'steam' && sim.rng() < O.steamFault) return { id: 'pressure', text: 'Steam generator: the test pressure is low', fixText: 'Venting and recharging the generator', cost: 45, ignorable: true, risk: 0.45, risky: `a slow launch, ${odds(0.45)}` };
+    if (s.id === 'fuel' && sim.rng() < O.leak) return { id: 'leak', text: 'A fuel leak at the tank', fixText: 'Draining and resealing the tank', cost: 30, ignorable: false };
+    if (s.id === 'checks' && sim.rng() < O.checkFault) return { id: 'gyro', text: 'Prüfung: a gyro will not run up to speed', fixText: 'Changing the gyro unit', cost: 60, ignorable: true, risk: 0.3, risky: odds(0.3) };
+    if (s.id === 'prestage' && sim.rng() < O.preFail) return { id: 'pre', text: 'Vorstufe: the flame is ragged', fixText: 'Shutting down, purging, a new igniter', cost: 120, ignorable: true, risk: 0.5, risky: odds(0.5), scrubText: 'pre-stage failure' };
     return null;
+  }
+
+  // the round's odds with a given added risk, as launch() rolls them: crash (the V-1 off the ramp, the A4 on the
+  // table), fail (in flight), shot (down on the way, of those that fly)
+  odds(risk) {
+    const O = this.O;
+    if (this.kind === 'v1') {
+      const crash = Math.min(1, O.rampCrash + risk), fail = Math.min(1 - crash, O.earlyFail);
+      return { crash, fail, shot: O.shotDown };
+    }
+    const crash = Math.min(1, O.tableBlast + risk * 0.3), fail = Math.min(1 - crash, O.tableBlast + risk + O.flightFail - crash);
+    return { crash, fail, shot: 0 };
   }
 
   complete() {
     const sim = this.sim, st = this.u.special, s = this.step();
     s.state = 'done';
     st.doing = false;
+    st.t = 0;
+    st.pend = null;
+    st.fixing = null;
     sim.events.special?.(this.u, 'done', s.id);
     if (s.id === 'lox') { st.loxOn = true; st.lox = 100; }
+    if (s.id === 'steam') st.steamP = st.lowSteam ? STEAM_LOW : STEAM_P;
+    if (s.id === 'prestage') st.vorT = sim.time;
     if (s.id === 'fire') return this.launch();
-    st.i++;
+    this.nextStep();
   }
 
   update(dt) {
@@ -544,11 +771,14 @@ class LaunchCtl {
       u.gate = 'the day is over';
       sim.radio('The day is over: the site stands down.', 'info');
     }
-    if (u.mode === 'auto') this.auto();
+    st.alarm = this.alarm();
+    if (u.mode === 'auto') { st.run = true; this.auto(); }
+    else if (st.quick) this.auto(false);
+    else if (st.run && u.mode !== 'hold') this.carryOn();
     if (st.doing && !st.cover) {
       const s = this.step();
       const crew = clamp(u.pieces[0].crew / u.pieces[0].crewMax, 0.35, 1);
-      st.t += dt * crew * (sim.attract ? 2 : 1);
+      if (st.repair == null && st.topup == null) st.t += dt * crew * (sim.attract ? 2 : 1);
       if (st.repair != null) {
         st.repair -= dt * crew;
         if (st.repair <= 0) { st.repair = null; st.doing = false; st.rampHp = 1; st.rampWarned = false; sim.radio('Repaired.', 'info'); }
@@ -557,17 +787,28 @@ class LaunchCtl {
         st.topup -= dt * crew;
         if (st.topup <= 0) { st.topup = null; st.doing = false; }
       } else if (st.t >= s.dur) {
-        const f = this.faultFor(s);
+        const f = st.pend;
         if (f) {
+          st.pend = null;
           st.fault = f;
           st.doing = false;
-          sim.radio(`${f.text}.`, 'alert');
+          if (f.id === 'pressure') st.lowSteam = true;
+          sim.radio(`${f.text}. Fix it (O), ${f.ignorable ? 'carry on (I) ' : ''}or scrub the round (X).`, 'alert');
         } else this.complete();
       }
     }
-    // the liquid oxygen boils off once it is in
-    if (st.loxOn) st.lox = Math.max(0, st.lox - dt * 0.09);
+    // the Vorstufe burns only a little while: left too long without the Hauptstufe, the crew shuts it down
+    if (this.kind === 'v2' && st.vorT != null && !st.doing && !st.fault && this.step()?.id === 'fire' && sim.time - st.vorT > (sim.scripted ? 90 : 25)) {
+      st.vorT = null;
+      st.steps.find((q) => q.id === 'prestage').state = 'todo';
+      st.lox = Math.max(0, st.lox - 2);
+      this.nextStep();
+      this.refuse('The Vorstufe burned too long without the Hauptstufe: shut down. Light it again (Enter), then the Hauptstufe at once.');
+    }
+    // the liquid oxygen boils off once it is in (a quick site's tanker keeps it topped up from the firing key on)
+    if (st.loxOn && !(st.quick && st.i >= this.triggerI)) st.lox = Math.max(0, st.lox - dt * 0.09);
     this.pose(dt);
+    this.holdFor();
     // the enemy's air force: Crossbow over the V-1 sites, armed reconnaissance over the A4 launch areas
     if (!sim.attract && !sim.scripted && !st.done) {
       if (st.missile) st.exposed += dt;
@@ -580,15 +821,73 @@ class LaunchCtl {
     this.flights(dt);
   }
 
-  // what the site's model shows (read by the render layer)
+  // the manual drill: the crew goes on from step to step until it needs the player
+  carryOn() {
+    const st = this.u.special, s = this.step();
+    if (!s || st.doing || st.fault || st.cover || st.done) return;
+    if (s.id === this.Q.trigger || s.id === 'fire') return;
+    if (s.set && !this.dialled(s.set)) return;
+    this.begin();
+  }
+
+  // raiders on their way to this site: seconds until they are over it (0 while they are), or null
+  alarm() {
+    const sim = this.sim, u = this.u;
+    const near = (T) => Math.hypot(T.x - u.pos.x, T.z - u.pos.z) < 1500;
+    let best = null;
+    for (const r of sim.enemyAI.raids ?? []) if (!r.started && near(r.target)) best = Math.min(best ?? 1e9, r.at - sim.time + 60);
+    for (const p of sim.aircraft ?? []) if (p.alive && !p.fired && near(p.raid.target)) best = Math.min(best ?? 1e9, p.t < 0 ? 60 : Math.max(0, Math.hypot(p.pos.x - u.pos.x, p.pos.z - u.pos.z) - 700) / (p.sp || 150));
+    for (const s of sim.shells) if (!s.own && s.src === 'air' && s.alive && near(s.aim)) best = 0;
+    return best == null ? null : Math.max(0, best);
+  }
+
+  // what the drill waits for: 'start' (the step key starts or goes on), 'dial', 'fire', 'repair', 'fault', 'cover',
+  // 'done', or null while the crew works (or the auto crew runs it)
+  holdFor() {
+    const st = this.u.special, s = this.step();
+    let h = null;
+    if (st.done || !s) h = 'done';
+    else if (st.fault) h = 'fault';
+    else if (st.cover) h = 'cover';
+    else if (st.doing) h = null;
+    else if (this.u.mode === 'auto') h = null;
+    else if (s.id === this.Q.trigger || s.id === 'fire') h = st.rampHp < 0.35 ? 'repair' : 'fire';
+    else if (st.quick) h = null;
+    else if (s.set && st.settings[s.set] == null) h = 'dial';
+    else if (!st.run || this.u.mode === 'hold') h = 'start';
+    else if (s.set && !this.dialled(s.set)) h = 'dial';
+    st.hold = h;
+  }
+
+  // what the site's model shows (read by the render layer) and the console's instruments (`gauges`)
   pose(dt) {
-    const st = this.u.special, s = this.step(), id = s?.id, k = st.doing && s ? clamp(st.t / s.dur, 0, 1) : 0;
+    const st = this.u.special, s = this.step(), id = s?.id, busy = st.repair != null || st.topup != null;
+    // a step that ended in a fault stands as it was when the crew stopped (its gauges show the trouble)
+    const k = st.fault ? 1 : st.doing && s && !busy ? clamp(st.t / s.dur, 0, 1) : 0;
     const done = (x) => st.steps.find((q) => q.id === x)?.state === 'done';
+    const now = (x) => id === x && ((st.doing && !busy) || !!st.fault);
+    const pend = st.fault?.id ?? (st.doing ? st.pend?.id : null), g = st.gauges;
+    if (st.oddsRisk !== (st.risk ?? 0)) { st.oddsRisk = st.risk ?? 0; st.odds = this.odds(st.oddsRisk); }
     if (this.kind === 'v1') {
       st.where = done('ramp') ? 'ramp' : done('bring') || id === 'bring' ? 'trolley' : 'none';
       st.wings = done('wings') ? 1 : id === 'wings' ? k : 0;
       st.generator = done('steam') ? 1 : id === 'steam' ? Math.min(1, k * 3) : 0;
       st.missile = st.where !== 'none';
+      // petrol (litres) and the air bottles (bar) during the fuelling; a leak shows as the level falling back
+      const kf = now('fuel') ? k : done('fuel') ? 1 : 0;
+      g.fuel = 570 * (pend === 'leak' && kf > 0.65 ? 0.65 - (kf - 0.65) * 0.8 : kf);
+      g.air = 150 * clamp(kf * 1.6 - 0.6, 0, 1);
+      // the generator: its charge, then the test pressure (a low one stops short of the red line)
+      const ks = now('steam') ? k : done('steam') ? 1 : 0;
+      g.charge = clamp(ks * 1.5, 0, 1);
+      g.steam = done('steam') || this.firing() ? st.steamP : now('steam') ? (pend === 'pressure' ? STEAM_LOW : STEAM_P) * clamp(ks * 2.5 - 1.5, 0, 1) : 0;
+      g.steamMin = 50;
+      g.testing = now('steam') && !st.fault && g.steam > 0;
+      g.rampV = g.steam > 0 && !g.testing ? Math.round(RAMP_KMH * Math.sqrt(g.steam / STEAM_P)) : null;
+      // the pulse jet runs for the last seconds of the firing step
+      st.jet = now('fire') ? clamp(st.t / 1.2, 0, 1) : 0;
+      g.jet = st.jet;
+      g.speed = st.lastV ?? null;
     } else {
       st.erect = done('erect') ? 1 : id === 'erect' ? k : 0;
       st.meiller = done('withdraw') ? 1 : id === 'withdraw' ? k : 0;
@@ -597,31 +896,57 @@ class LaunchCtl {
       st.missile = st.steps[0].state !== 'todo' || st.erect > 0;
       const tb = this.u.zero;
       const want = st.settings.compass != null ? st.settings.compass * DEG : tb;
-      st.table = done('align') ? angDiff(want / DEG, tb / DEG) * DEG : id === 'align' ? angDiff(want / DEG, tb / DEG) * DEG * k : 0;
+      // from where the table stands (0, or the last lay on a quick site) to the new line
+      const to = angDiff(want / DEG, tb / DEG) * DEG, from = st.tableFrom ?? 0;
+      st.table = done('align') ? to : id === 'align' ? from + (to - from) * k : from;
+      g.alc = 3.8 * st.fuelA;
+      g.tz = done('tstoff') ? 1 : now('tstoff') ? k : 0;
+      g.lox = 4.9 * st.fuelL;
+      g.loxPct = st.loxOn ? st.lox : now('lox') ? k * 100 : 0;
+      g.loxShort = 92;
+      // the gyros spin up in the checks (a faulty one stalls at three quarters), and run on until the launch
+      const kc = now('checks') ? k : done('checks') ? 1 : 0;
+      g.gyro = pend === 'gyro' ? Math.min(0.72, kc * 1.6) + Math.sin(kc * 60) * 0.02 * (kc > 0.4) : clamp(kc * 1.6, 0, 1);
+      g.table = wrapDeg((tb + st.table) / DEG);
+      const r = st.settings.range;
+      g.cutoff = r ? Math.round(Math.sqrt(G * r * 1000)) : null;
+      // the flame: the Vorstufe's steady 8 t (ragged when it will fault), the Hauptstufe's 25 t
+      // the Vorstufe burns from its step until the Hauptstufe (ragged if the crew carried on with a ragged one)
+      const vor = done('prestage') && !done('fire');
+      g.flame = now('fire') ? 2 : now('prestage') && st.doing ? (pend === 'pre' && k > 0.3 ? 0.5 : 1) : vor && !st.fault ? (st.ragged ? 0.5 : 1) : 0;
+      st.flame = g.flame === 2 ? 2 : g.flame ? 1 : 0;
+      const tf = now('prestage') ? st.t : 6;
+      g.thrust = g.flame === 2 ? 25 * clamp(st.t / 1.5, 0.3, 1) : g.flame ? 8 * clamp(tf / 1.5, 0, 1) * (g.flame === 0.5 ? 0.75 + Math.sin(this.sim.time * 40) * 0.2 : 1) : 0;
     }
   }
 
-  auto() {
-    const st = this.u.special, s = this.step(), sim = this.sim;
+  // the auto crew works the whole drill and fires; on a quick site in manual mode (fire = false) the crew reloads,
+  // lays, fixes and takes cover by itself but waits for the player's firing key, and leaves a cover the player took
+  auto(fire = true) {
+    const st = this.u.special, s = this.step(), sim = this.sim, u = this.u, mode = u.mode;
     if (st.done) return;
-    // take cover when the raiders are close, back to work when they have gone (the step waits meanwhile)
-    const threat = sim.enemyAI.raids?.some((r) => r.at - sim.time < 15) || sim.aircraft?.some((p) => p.alive);
-    if (st.cover && !threat) st.cover = false;
-    else if (!st.cover && threat) { st.cover = true; return; }
+    // take cover when the raiders are close, back to work when they have gone (the step waits meanwhile); a quick
+    // site shares the map with the battle's raids, so only those on itself count
+    const near = (T) => !st.quick || Math.hypot(T.x - u.pos.x, T.z - u.pos.z) < 1500;
+    const threat = sim.enemyAI.raids?.some((r) => r.at - sim.time < 15 && near(r.target)) || sim.aircraft?.some((p) => p.alive && near(p.raid.target));
+    if (st.cover && !threat) { if (fire || st.crewCover) st.cover = st.crewCover = false; }
+    else if (!st.cover && threat) { st.cover = true; st.crewCover = true; return; }
     if (st.doing || st.cover) return;
     if (st.fault) return this.fix('fix');
-    if (s?.set && st.settings[s.set] == null) {
-      // the auto crew's settings: right within a little
+    if (s?.set && !this.dialled(s.set)) {
+      // the auto crew's settings: right within a little (and it goes on with what it set)
       const e = this.sim.gauss();
       st.settings[s.set] = s.set === 'compass' ? Math.round((st.solution.compass + e * 0.3) * 10) / 10 : Math.round((st.solution.range * (1 + e * 0.01)) * 10) / 10;
+      st.accept[s.set] = true;
     }
-    if (st.rampHp < 0.35) { this.command('repair', {}); this.u.mode = 'auto'; return; }
-    if (this.kind === 'v2' && st.loxOn && st.lox < 93 && s?.id !== 'fire') { this.command('topup', {}); this.u.mode = 'auto'; return; }
+    if (st.rampHp < 0.35) { this.command('repair', {}); u.mode = mode; return; }
+    if (this.kind === 'v2' && st.loxOn && st.lox < 93 && s?.id !== 'fire') { this.command('topup', {}); u.mode = mode; return; }
+    if (!fire && s?.id === this.Q.trigger) return;
     this.begin();
   }
 
   launch() {
-    const sim = this.sim, u = this.u, st = u.special, op = sim.theatre.op;
+    const sim = this.sim, u = this.u, st = u.special;
     const n = ++st.n;
     const T = st.target;
     // the errors of the drill: the compass or table against the true bearing, the range setting against the solution
@@ -629,7 +954,7 @@ class LaunchCtl {
     const rErr = (st.settings.range ?? st.solution.range) / st.solution.range - 1;
     const lox = this.kind === 'v2' ? st.lox : 100;
     const short = this.kind === 'v2' && lox < 92 ? (92 - lox) * 0.03 : 0;
-    const O = this.kind === 'v1' ? V1_ODDS : V2_ODDS;
+    const O = this.O;
     let fate = 'flying';
     const r = sim.scripted ? 1 : sim.rng();
     const risk = st.risk ?? 0;
@@ -644,20 +969,25 @@ class LaunchCtl {
     const shot = this.kind === 'v1' && fate === 'flying' && !sim.scripted && sim.rng() < O.shotDown;
     const speed = this.kind === 'v1' ? 175 : 1150;
     const eta = sim.time + (this.kind === 'v1' ? T.dist / speed * 0.25 : 300 * 0.5); // the strategic leg runs compressed
-    const f = { n, t0: sim.time, eta, fate, shot, miss, bErr, rErr, short, state: 'flying', text: '' };
+    // where on the way it ends: the target (1), the defences near the far end, a failure anywhere
+    const at = shot ? 0.62 + sim.rng() * 0.33 : fate === 'fail' ? 0.08 + sim.rng() * 0.7 : fate === 'flying' ? 1 : 0;
+    // the V-1 leaves the ramp at a speed set by the steam pressure (a low one is the slow launch that risks the crash)
+    const p0 = this.kind === 'v1' ? (st.steamP || STEAM_P) : 0;
+    const v0 = this.kind === 'v1' ? 108 * Math.sqrt(p0 / STEAM_P) : 2;
+    if (this.kind === 'v1') st.lastV = Math.round(RAMP_KMH * Math.sqrt(p0 / STEAM_P));
+    const f = { n, t0: sim.time, eta, at, fate, shot, miss, bErr, rErr, short, along: dist - T.dist, lat, lox, v: st.lastV ?? null, state: 'flying', text: '' };
     st.flights.push(f);
     // the flight object on the map
     const p = u.pieces[0], b = (u.zero + (st.settings.compass != null ? angDiff(st.settings.compass, u.zero / DEG) * DEG : 0));
     const top = this.kind === 'v1' ? 46 : 0;
     const x0 = p.pos.x + Math.sin(u.zero) * top, z0 = p.pos.z - Math.cos(u.zero) * top;
     const y0 = sim.heightAt(p.pos.x, p.pos.z) + (this.kind === 'v1' ? 5.5 : 14);
-    const v0 = this.kind === 'v1' ? 108 : 2;
     const el = this.kind === 'v1' ? 6 * DEG : 90 * DEG;
     const m = {
       id: sim.nextId('s'), own: true, guided: true, unitId: u.id, piece: 0, kind: this.kind, calibre: this.kind === 'v1' ? 22 : 26,
       pos: { x: x0, y: y0, z: z0 }, prev: { x: x0, y: y0, z: z0 },
       vel: { x: Math.sin(b) * Math.cos(el) * v0, y: Math.sin(el) * v0, z: -Math.cos(b) * Math.cos(el) * v0 },
-      fuze: 'instant', t: 0, t0: sim.time, tof: 0, aim: { x: x0, z: z0 }, alive: true, flight: f, bearing: b, engineOff: false,
+      fuze: 'instant', t: 0, t0: sim.time, tof: 0, aim: { x: x0, z: z0 }, alive: true, flight: f, bearing: b, engineOff: false, v0,
       fail: fate === 'crash' ? 3 + sim.rng() * 10 : fate === 'fail' ? 15 + sim.rng() * 40 : fate === 'blast' ? 0.5 : null,
     };
     sim.shells.push(m);
@@ -669,10 +999,10 @@ class LaunchCtl {
     sim.stats.rounds++;
     sim.events.fire?.(u, p, m);
     sim.events.special?.(u, 'launch', m);
-    sim.radio(this.kind === 'v1' ? `Abschuß! Flying bomb no. ${n} is off the ramp.` : `Hauptstufe! A4 no. ${n} lifts off.`, 'kill');
+    sim.radio(this.kind === 'v1' ? `Abschuß! Flying bomb no. ${n} is off the ramp at ${st.lastV} km/h.` : `Hauptstufe! A4 no. ${n} lifts off.`, 'kill');
     if (!sim.attract) sim.score.points += 40; // the drill done
+    st.lowSteam = false;
     this.nextRound();
-    void op;
   }
 
   // fly the missiles on the map, then settle their fates
@@ -690,7 +1020,7 @@ class LaunchCtl {
         m.failing = true;
       } else if (this.kind === 'v1') {
         const sp = Math.hypot(m.vel.x, m.vel.z);
-        const want = Math.min(178, 108 + m.t * 1.6);
+        const want = Math.min(178, (m.v0 ?? 108) + m.t * 1.6);
         const k = want / Math.max(1, sp);
         m.vel.x *= k; m.vel.z *= k;
         const alt = m.pos.y - gy;
@@ -709,6 +1039,7 @@ class LaunchCtl {
         m.pos.y = sim.heightAt(m.pos.x, m.pos.z);
         m.flight.state = m.flight.fate === 'blast' ? 'exploded on the table' : 'crashed near the site';
         m.flight.text = m.flight.fate === 'blast' ? 'The rocket exploded on the firing table.' : 'It crashed soon after launch.';
+        m.flight.endT = sim.time;
         sim.radio(`No. ${m.flight.n}: ${m.flight.text}`, 'alert');
         sim.burst(m, { x: m.pos.x, y: m.pos.y, z: m.pos.z }, false);
         if (m.flight.fate === 'blast') {
@@ -721,11 +1052,14 @@ class LaunchCtl {
       if (far > 30000 || m.pos.y > 60000 || Math.abs(m.pos.x) > sim.bounds || Math.abs(m.pos.z) > sim.bounds) m.alive = false; // off the map: the strategic leg
     }
     for (const f of st.flights) {
-      if (f.state !== 'flying' || sim.time < f.eta) continue;
-      const O = this.kind === 'v1' ? V1_ODDS : V2_ODDS;
+      // settled when it gets where it ends: the target area at the end of the flight, the defences or a failure on the way
+      if (f.state !== 'flying' || sim.time < f.t0 + (f.eta - f.t0) * (f.at ?? 1)) continue;
+      const O = this.O;
       if (f.fate === 'crash' || f.fate === 'blast') continue;
-      if (f.fate === 'fail') { f.state = 'failed in flight'; f.text = 'Lost in flight (a fault).'; }
-      else if (f.shot) { f.state = 'shot down'; f.text = 'Brought down by the anti-aircraft belt or fighters before the target.'; }
+      f.endT = sim.time;
+      const km = (f.eta - f.t0) > 0 ? Math.round(f.at * st.target.dist / 1000) : 0;
+      if (f.fate === 'fail') { f.state = 'failed in flight'; f.text = `Lost in flight after about ${km} km (a fault).`; }
+      else if (f.shot) { f.state = 'shot down'; f.text = `Brought down by the anti-aircraft belt or fighters ${Math.round(st.target.dist / 1000) - km} km short of the target.`; }
       else if (f.miss <= O.area) { f.state = 'target area'; f.text = `Reached the target area, ${(f.miss / 1000).toFixed(1)} km from the aiming point.`; if (!sim.attract) sim.score.points += 100; }
       else { f.state = 'missed'; f.text = `Fell ${(f.miss / 1000).toFixed(0)} km from the aiming point, outside the target area.`; }
       sim.radio(`Report on no. ${f.n}: ${f.text}`, f.state === 'target area' ? 'kill' : 'warn');
@@ -749,6 +1083,7 @@ class LaunchCtl {
     if (!st.cover && sim.rng() < (1 - d / 120) * 0.8) {
       const p = u.pieces[0];
       p.crew = Math.max(2, p.crew - 1);
+      st.crewHurt++;
       sim.events.casualty?.(u, p);
     }
     st.rampHp = Math.max(0, st.rampHp - (d < 40 ? 0.25 : 0.05));

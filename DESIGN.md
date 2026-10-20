@@ -107,7 +107,7 @@ which `worldview.js` and `main.js` import if it exists.
 
 Phase 2 (after the above): `src/render/*` (gun rigs posed from the sim, the loading choreography,
 shells, targets, infantry), the full wiring in `src/main.js`, the title-screen attract battle,
-`README.md`, `CLAUDE.md`, balance passes.
+`README.md`, balance passes.
 
 ## Module contracts
 
@@ -248,6 +248,8 @@ sim.alpha;                             // 0..1, how far the real time is into th
 **Piece** (one gun): `{ i, kind, pos: { x, y, z }, bearing (platform), az, el, cmd: { az, el },
 state: 'idle' | 'loading' | 'laying' | 'ready' | 'recoil' | 'dead', job: { step, t, dur } | null,
 recoil (0..1 of the stroke), breech (0..1 open), loaded, crew, crewMax, hp, maxHp, wear, firedAt }`.
+A controller may set `piece.fixed` (true: the piece is not laid, `guns.js` `slew` leaves `az` and `el` alone; the
+Gustav while it is still being assembled).
 `az` follows the model convention (rotation.y of the traverse pivot, + = left of the platform bearing).
 The loading cycle is a sequence of steps from `GUNS[kind].load` (for the heavies: `'depress'` to
 `rig.loadEl`, `'open'` breech, `'shell'` carried or craned onto the tray, `'ram'`, `'cartridge'` (bags),
@@ -384,8 +386,11 @@ the chase camera, audio and the panel; the frame loop steps the sim with `dt` sc
 `params.timeScale` and everything visual with `rawDt`. `params` is the single source of truth for
 settings (lil-gui behind the gear button); `QUALITY` presets (Low/Medium/High/Ultra) set pixel ratio,
 shadow map, AO, samples and the fx budget. `window.__drumfire` exposes every system, `frame(dt, draw)`
-and `fastForward(seconds, { unit, scale })`. URL params `?quality=`, `?play=1`, `?unit=N`. Title
-screen with the attract-mode battle behind it; "Take command" starts `sim.newGame`.
+and `fastForward(seconds, { unit, scale })`. URL params `?quality=`, `?play=1`, `?difficulty=`, `?unit=N`.
+The page boots through `src/boot.js`: `/` is the main menu (`src/ui/menu.js`, DOM only, entries from
+`src/menuItems.js`), a URL with `play`, `tutorial` or `sandbox` is a game page whose loading screen
+(`src/ui/loading.js`) stands while `init()` builds the world; then `start()` runs `sim.newGame` (or the lesson
+starts) at once.
 
 ## Simulation details (sim agent)
 
@@ -462,13 +467,13 @@ the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or mo
 
 ## Tutorial (phase 3)
 
-A playable tutorial, reached from the title screen ("Tutorials" next to "Take command"): a list of
+A playable tutorial, reached from the menu's Tutorials tab (each lesson a page, `?tutorial=<id>`): a list of
 lessons with completion ticks (localStorage `drumfire.tutorials`), each a list of steps run on a
 scripted range. The pattern is iads `src/tutorial.js` (read only): an instruction card over the 3D view
 (title, text, the objective line, Next/Skip/Exit, step counter), the console controls the step is
 about pulsing (`data-tut` names through `src/ui/highlight.js` `tut(el, name)` / `setHighlight(list)`),
 and a step completes when its `done(T)` reads true from the sim state; steps without `done` explain
-and advance with Next. Esc leaves the lesson (back to the title screen and the attract battle).
+and advance with Next. Esc or Exit leaves the lesson for the menu, with the lesson selected.
 
 **Ownership.** Sim scripting agent: `src/sim/*` (the scripted mode and `sim.script`, below; normal
 games must be unchanged, re-run `tools/simtest.mjs` to prove it). Tutorial agent: `src/tutorial.js`
@@ -530,7 +535,7 @@ unattended; it is how the lessons are tested (every lesson must complete under a
 ## Dicke Bertha mode (demo)
 
 A first-person demo on the German side, meant to become a mode of the main game if it works: `bertha.html`
-(a build input, reached from the title screen's "Dicke Bertha" button, `/bertha.html`). One 42 cm M-Gerät
+(a build input, reached from the menu's WW1 German battle "Big Bertha", `/bertha.html?play=1`; its back link returns there). One 42 cm M-Gerät
 at `sector.js` `BERTHA` (10000, -2600, reverse slope behind the ridge, base line 253 degrees) and its
 detachment; the player is one man at a time. It reuses the stage of the main game (atmosphere, terrain,
 world dressing, craters, fx, flares, weather, post, audio, the chase camera for the shell ride, `HUD`), the
@@ -590,13 +595,14 @@ cover their ears. The player's man is drawn with his head hidden and the first-p
 (`crew.eye()`), so the player's own arms show on the controls. `__bertha.camAt(x, y, z, lx, ly, lz, fov)` fixes the
 camera in the gun's frame for captures (no arguments releases it).
 
-URL params on `bertha.html`: `?quality=`, `?play=1`, `?tutorial=1`, `?lang=en|de`, `?station=cmd|trav|elev|load|fire`, `?assist=1`, `?hour=`,
+URL params on `bertha.html`: `?quality=`, `?play=1`, `?tutorial=1`, `?lang=en|de`, `?station=cmd|trav|elev|load|fire`, `?assist=1|0` (else the
+remembered choice), `?hour=`,
 `?weather=`. `window.__bertha`: `game`, `rig`, `station(id)`, `look(yaw, pitch)`, `instrument(on)`,
 `followShell()`, `fastForward(seconds, { scale })`, `frame(dt, draw)`, `start()`.
 
 ## WW2 mode (German side)
 
-A second mode of the main game, selectable on the title screen (`/?mode=ww2`): the player commands German
+A second mode of the main game, the menu's WW2 era (`/?mode=ww2`): the player commands German
 artillery in the Second World War. It reuses the stage (terrain, world, fx, flares, post, weather, the chase
 camera, audio, HUD), the sim's guns, shells, targets and integrator, the render layer and the console, through a
 **theatre**: a data object that says which units, sites, sectors, lines, words and units of measure a battle uses.
@@ -606,13 +612,13 @@ Operations (separate places and years, because the weapons never served together
 
 | id | Operation | Units | Notes |
 |---|---|---|---|
-| `flanders` | Flanders, autumn 1944 (fictional engagement on the game's Ypres map) | 1 leFH 18, 2 sFH 18, 3 K 18, 4 Mrs 18, 5 NbW 41, 6 Gustav (railway slot), 7 Big Bertha | the backbone: the British game's five phases with the sides turned round; Gustav and Bertha are labelled alternate-history guests |
+| `flanders` | Flanders, autumn 1944 (fictional engagement on the game's Ypres map) | 1 leFH 18, 2 sFH 18, 3 K 18, 4 Mrs 18, 5 NbW 41, 6 Gustav (railway slot); the sandbox adds 7 the set-up Karl | the backbone: the British game's five phases with the sides turned round; Gustav and Bertha are labelled alternate-history guests |
 | `sevastopol` | Sevastopol, June 1942 | Gustav (historical), a Mrs 18 battery | railway preparation, then scarce shots at forts, turrets, the cliff magazine |
 | `karl` | Brest-Litovsk, 22 June 1941 | Karl-Gerät "Thor", an sFH 18 battery | showcase: drive, emplace, lower, load by the ammunition carrier's crane, fire |
 | `v1` | V-1 launch site, autumn 1944 | one Walter ramp | strategic mission: prepare, launch, the flight |
 | `v2` | V-2 mobile battery, autumn 1944 | one firing table | strategic mission: erect, align, fuel, launch |
 
-URL: `/?mode=ww2` (title screen with the operations), `&op=flanders|sevastopol|karl|v1|v2`, `&play=1`, `&unit=N`,
+URL: `/?mode=ww2` (the menu on its WW2 era), `&op=flanders|sevastopol|karl|v1|v2&play=1`, `&unit=N`,
 `&tutorial=<id>`. Every operation is a page load (the theatre is fixed for the page).
 
 ### Kinds (shared registries)
@@ -653,8 +659,8 @@ Extras by kind:
   (R cos az - R, 0, -R sin az) turned by az). `hoist` pivot (the shell lift at the rear, position.y),
   `rig.setAssembly(k)` 0..1 (bogies, lower carriage, upper carriage, barrel and breech appear in turn).
   `buildGustavSite()` -> `{ root, setStage({ survey, track, cranes, ammo, flak, camo }) }` (each 0..1): survey stakes,
-  the curved double track laid progressively, the two gantry cranes, the ammunition train, the flak positions,
-  camouflage nets. Same frame as the gun's rig at az = 0.
+  the curved double track laid progressively, the two gantry cranes, the ammunition train, the flak batteries,
+  camouflage nets (see the changelog for `setWorks`). Same frame as the gun's rig at az = 0.
 - `karl`: `setTraverse` +-4 degrees on the hull; `rig.setLower(k)` 0 travelling, 1 hull down on the ground;
   `rig.setDrive(dist)` turns the running gear; the Munitionsschlepper (ammunition carrier on a Panzer IV chassis)
   parked alongside is part of the rig with `crane` (rotation.y) and `hoist` (hook height) pivots and
@@ -691,7 +697,7 @@ classes (`Targets`, `Observers`, `Enemy`, `Infantry`, `Crews`, `Director`, and `
 `src/ww2/theatre.js` `ww2Theatre(opId)` builds it (and pushes the operations' levelled pads into `sector.js`
 `PAD_EXTRA`, so it must run before the terrain is first sampled). Shared changes, all inert for the British units:
 `unit.def` (its definition), `unit.gate` (a reason string: no loading, no firing, `order.ok` false with that reason;
-`order.why` keeps the guns' own reason), `def.ammo` (a fixed stock) and `def.resupply` (special units get none),
+`order.why` keeps the guns' own reason), `unit.loadThrough` and `unit.stowed` (the Karl's hull, below), `def.ammo` (a fixed stock) and `def.resupply` (special units get none),
 `GUNS[kind].salvo` (a round is a ripple: `piece.ripple`, `piece.tubes`, `shell.tube`; the rockets are counted at the
 'shell' step, there is no rammer), `GUNS[kind].high` (falling-branch range tables and solver), `rowStep`,
 `shell.guided` (a missile flown by its controller, not the integrator) and unknown commands handed to
@@ -712,14 +718,18 @@ heavy gun's shells are spent), `special.js` (the controllers, below), `theatre.j
 
 Special controllers (`unit.special`, plain data; commands through `sim.command`):
 - Gustav: `tasks [{ id, name, de, work, done, gangs, max, needs, state }]`, `gangs` (3), `ready`, `stage { survey,
-  track, cranes, ammo, flak, camo }`, `assembly`; commands `gang { task, d }`, `hurry`. Auto mode assigns the gangs
-  along the critical path. Raids on the site set work back. Ready when survey, track, cranes, assembly and the
+  track, cranes, ammo, flak, camo }`, `assembly`, `flak` and `flakSpoil` (from the flak batteries in place: the raid's
+  kill chance and bomb scatter); commands `gang { task, d }`, `hurry`. Auto mode assigns the gangs along the critical
+  path. Raids on the site set work back. Ready when survey, track, cranes, assembly and the
   ammunition train are done; then the gun fires through the normal cycle, 8 (Flanders) or 10 (Sevastopol) shells, no
   resupply, barrel wear 0.35% a round.
 - Karl: `stage` travel | driving | emplace | pivot | lowering | down | raising, `positions`, `posId`, `lower` 0..1,
   `drive` (m, for the tracks), `heading`, `schlepper { state, t, k }`, `reserve` (shells at the dump); commands `goto
   { id }`, `pivot { bearing? }` (onto the laid line), `lower`, `raise`, `fetch` (150 s for four shells). The unit's
-  and piece's positions and bearings move with it.
+  and piece's positions and bearings move with it. The gun is laid only from a hull that is down: otherwise the
+  controller sets `unit.stowed` and `sim/guns.js` keeps the barrel flat (`loadEl`, the middle of the traverse), puts a
+  laid round back to wait at its `lay` step and, without `loadThrough`, gives up a cycle whose shell is not yet
+  rammed (the shell stays on the carrier; a rammed one is closed up and waits at its lay).
 - V-1 / V-2: `steps [{ id, name, de, dur, set?, state }]`, `i`, `doing`, `t`, `settings { compass, range }`,
   `solution` (the firing data), `wind`, `fault` ({ text, fixText, cost, ignorable, risk }), `cover`, `rampHp`, `lox`
   (V-2, boils off 0.09 %/s once in), `flights [{ n, fate, state, miss, text }]`, `left`; render hints `where wings
@@ -727,10 +737,272 @@ Special controllers (`unit.special`, plain data; commands through `sim.command`)
   fix | ignore | scrub }`, `cover`, `repair`, `topup`. The launch puts a guided `v1`/`v2` shell in `sim.shells`; it
   flies until it leaves the map, then its fate (rolled at launch from the drill's errors and the game odds) is
   reported after a compressed flight time. The mission ends (`sim.over`) when every round is spent and settled.
+- Set-up units (`def.ready: true`, the WW2 sandbox's Karl in `src/campaign.js` `sandboxTheatre`; the V-1 and V-2 honour it too): the
+  controller starts them ready to fire and its crew reloads and lays in any mode. Karl (`special.quick`): hull down in
+  `positions[0]` on the zero line, the breech empty and the barrel at rest like every other battery (piece `idle`), so
+  each round, the first too, goes through the normal loading cycle; a
+  line outside the 4 degrees is raise, turn, lower by the crew (`autoLay`) while the loading cycle runs (the controller
+  sets `unit.loadThrough` off the road: `sim/guns.js` `needLoad` then passes the gate and an out-of-arc line, and the
+  `lay` step holds the round at `loadEl` until the hull is down, as the other guns load while they traverse); the
+  carrier fetches by itself. V-1 / V-2
+  (`special.quick`, `special.trigger` 'fire' | 'prestage'): every step before the trigger done, `settings` the
+  solution, the A4 fuelled; after a launch the V-1's prepared steps (wings, compass, air log, fuel, fuzes) stay done
+  and the crew runs the rest (102 s), the A4's whole drill (290 s); a `set` that changes a value whose step is done
+  puts that step back (`relay`), the A4's table turning from where it stood (`tableFrom`); the crew fixes faults and
+  takes cover only from raids within 1.5 km of the site; the step key fires (the A4's Hauptstufe follows by itself).
 
 Events added (optional): `special(unit, what, x)` ('ready', 'drive', 'step', 'done', 'launch', 'result'),
 `raid(raid, 'warning' | 'attack', plane)`. `tools/ww2test.mjs [seeds] --op all --difficulty all` plays every
 operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 4, Normal 3, Hard 1 won).
+
+## WW1 German mode
+
+A third mode of the main game, the menu's "WW1 German" era (`/?mode=ww1`): the player commands the heavy artillery
+of a German Gruppe in Flanders, spring 1918, on the game's Ypres map with the sides turned round (our guns on the
+ridge in the east fire west at the British gun line, which stands in the British game's own gun pits). It is built as
+a **sandbox**: one open battle with the whole roster but the Paris Gun from the start, and the Paris Gun's own mission
+(as the WW2 mode's V-1 and V-2 have theirs); no campaign and no locks. It reuses the stage,
+the sim, the render layer and the console through a theatre, exactly as the WW2 mode does ("WW2 mode (German side)";
+its modules subclass the WW2 ones), and the British game and the WW2 mode are unchanged (simtest and ww2test give the
+same results with and without the WW1 tables). Research, sources and departures: `docs/WW1.md`.
+
+URL: `/?mode=ww1&op=ridge|paris&play=1` (`op` defaults to `ridge`; `&unit=1..6` in the battle, `&difficulty=`,
+`&quality=`, `&hour=`, `&weather=`). The theatre is `src/ww1/theatre.js` `ww1Theatre(opId)` (id `'ww1'`, `era: 'ww1'`,
+metric, side german; `sectors` only for the battle; every op's pads are levelled on the first call); main loads it (and every
+other WW1 file) only on a WW1 page, sets `GUN_ERA.ww1` (`models/guns.js`: Bertha in its 1917 colours) and
+`CREW_ERA.ww1` (`render/crews_ww1.js`: every German crew in the 1917 dress) before the rigs are built, and calls
+`loadGuns(GUN_KINDS_WW1)`.
+
+| id | kind | gun | pieces | position (x, z), zero | notes |
+|---|---|---|---|---|---|
+| 1 | `k17` | 10 cm K 17 | 2 (36 m apart) | (9300, -600), 272 | shrapnel |
+| 2 | `sfh13` | 15 cm sFH 13 | 4 | (7200, -2600), 270 | |
+| 3 | `m16` | 21 cm Mörser 16 | 2 (44 m apart) | (7600, 3800), 262 | |
+| 4 | `max38` | 38 cm SK L/45 "Langer Max" on its E. u. B. mounting, set down on a prepared bed | 1 | (12800, -1800), 268 | |
+| 5 | `bertha` | 42 cm M-Gerät "Dicke Bertha" (the WW2 row, shared) | 1 | (8400, -1650), 256.5 | `special: 'bertha'` (the bed), `resupply: 1`; nearer the front than the demo's bed so its 12 km and 11.5 degrees reach the British heavies |
+| 6 | `gamma` | 42 cm Gamma-Mörser on its bed | 1 | (11200, 1800), 265 | `special: 'gamma'` (the bed), `ready` |
+
+The units are ordered by calibre, smallest first (ties by shell weight): the ids, the keys 1 to 6 and the tab column
+follow it; the menu's roster (Your batteries) lists the battle's six and then the Paris Gun. Code finds a unit by its
+kind, never by its id.
+
+The Paris Gun's mission (op `paris`, kind `'paris'`, "Paris Gun" in the menu), built like the WW2 Gustav's and
+V-weapons' missions: one unit, id 1 `paris`, the Paris-Geschütz at (16000, -3500) facing 270 (`special: 'paris'`, 65
+shells; 30 degrees each way on its racer; not `ready`: it starts in pieces on its prepared bed), no sites, one phase
+(Feuerstellung), clock 06:00 to 18:00 over 2700 s (`timeLimit` 2700). First the Stellungsbau (work gangs the player
+sends to the tasks), then each round's Feuerablauf (gauge and charge, firing data, load and lay, the firing key);
+the Armee's orders (`op.paris`) come once the gun stands. No British gun reaches it, only Camel raids (enemy.js
+`HUNT`). The board draws the plain grid (no salient, no lines). The gun starts on manual (A hands it to the crew).
+Controller `src/ww1/paris.js` (below).
+
+The British side (`src/ww1/ops.js` sites, `src/ww1/targets.js`; models in `models/t/ww1/`):
+
+| kind | what | parts | model |
+|---|---|---|---|
+| `bgun15`, `bgun92`, `bgun6`, `bgun60`, `bgunrail` | the British game's five units, the real rigs (`buildGun`) in their own pits at the UNITS placements, three posed men a gun | 1, 2, 4, 2, 1 | `british.js` |
+| `bfield` | 18-pounder battery (`qf18.js` `buildQF18`, a full rig, limber and wagon) | 4 | `british.js` |
+| `bballoon` | Caquot kite balloon and its winch lorry; falls burning like the German one (built, but the battle has no balloon site: its missions were left out) | 2 | `british.js` |
+| `bdump` | ammunition dump with a 60 cm light-railway siding | 5 | `british.js` |
+| `btanks` | four Mark IVs (male, female, male, female) in a laager | 4 | `rear.js` |
+| `bconvoy` | AEC Y-type, GS wagon and four horses, Thornycroft J, GS wagon and pair; drives like `aconvoy` | 4 | `rear.js` |
+| `hq`, `railyard` | the shared kinds | 3, 9 | |
+
+Every British battery fires back with its own shell (`bl15 bl92 bl6 bl60 rail` rows of tables.js, `b18` and `b45` of
+tables_ww1.js). British aircraft in `sim.aircraft`: `re8` (an artillery spotter that circles the loudest unit; while
+it circles their counter-battery on that unit finds its mark faster) and `camel` (ground-attack raids with four
+`cooper` 20 lb bombs, the WW2 raid machinery); models `models/t/ww1/aircraft.js` `buildAircraft1918(kind)` (the WW2
+`buildAircraft` interface; `gear: null`; the Camel's `stores` are hidden as it drops them).
+
+### Kinds and registries
+
+Gun kinds `sfh13 m16 k17 max38 gamma paris` (`src/sim/tables_ww1.js` `GUNS_WW1`, every row `era: 'ww1'`, merged into
+tables.js; `FFE_WW1.bertha` is merged into the WW2 row key by key) and the shared `bertha`. Shells (`SHELLS_WW1` and
+`models/shells.js`): the six guns' own, `b18`, `b45` (British), `fk16` (the division's field guns, see below),
+`cooper` (the Camel's bomb). Targets: `TARGETS_WW1`, `models/targets.js` loads every `models/t/ww1/*.js` that exports
+`BUILD` (except `*preview*.js`, which are page scripts), `TARGET_KINDS_WW1`; part layouts in
+`models/t/ww1/layout_british.js` and `layout_rear.js` (Node-safe, read by `models/t/layout.js`).
+
+Rigs (the gun rig contract, "Models"; builders registered lazily in `models/guns.js` `GUN_KINDS_WW1`):
+`v/de/sfh13.js: buildSFH13`, `v/de/m16.js: buildM16` (a `loadTray` pivot like the K 18's; recoil cut by a table at
+high elevation), `v/de/k17.js: buildK17` (the top carriage turns 3 degrees, beyond that the trail swings with it),
+`v/de/max38.js: buildMax38` + `buildMax38Site(seed)` (the car on a turntable ring over an open well, the ring
+railway to the hoist; `rig.max38` gives the crew's places), `v/de/gamma.js: buildGamma` + `buildGammaSite(seed)`
+(`{ root, setCamo(k), camo }`; pivots `tray` and `lift`, `rig.setLift(k)` for the inclined shell lift, `rig.staffLen`
+5.5, no recoil drawn below 34 degrees), `v/de/paris.js: buildParis` + `buildParisSite(seed)` (the 34 m barrel with its king-post truss on a firing frame over
+a concrete turntable and a curved racer; pivots `traverse elevation recoil breech tray crane hoist`, anchor `post` the
+truss head; `recoilFade` keeps the stroke off the turntable at 55 degrees; the site's `setPortal(k)`, the portal crane
+for a barrel change, and `setCamo(k)`), `v/de/bertha.js:
+buildBerthaGun1917` (the 1917 finish; `buildGun('bertha')` uses it when `GUN_ERA.ww1`). The regular units' gun pits:
+`v/de/gun_sites_ww1.js` `buildGunSite1918(kind, seed)` for `sfh13 m16 k17 bertha` (built flat at y = 0: the theatre
+levels pads under them). Site builders take the gun's rig frame at zero traverse. Crews: one module per kind in
+`render/ww1/<kind>.js` (`ROLES`, optionally `LIGHT`, `WORLD`, `STAFF` and the hooks `state mechanisms act props`),
+merged by `render/crews_ww1.js`, called by `render/crews.js` before the heavy hooks. Dev pages beside the models:
+`v/de/ww1_field_preview.html`, `k17_preview.html`, `max38_preview.html`, `gamma_preview.html`, `gamma_clip.html`,
+`paris_preview.html`, `paris_clip.html`,
+`models/t/ww1/preview.html`, `aircraft_preview.html`; `/models.html?kind=<kind>` and `clipcheck` load the WW1
+builders too.
+
+Levelled ground: `src/ww1/ops.js` `ww1Pads()` pushes a pad per piece into `sector.js` `PAD_EXTRA` (`[rx, rz, back,
+right]`, the pad's middle moved behind and to the right of the gun where a site needs it).
+
+### Simulation (`src/ww1/`)
+
+`ops.js` (the battle `ridge`: units, sites, phases, clock keys from 05:30; the Paris Gun's mission `paris`: its unit,
+targets and orders), `theatre.js`,
+`director.js` (the WW2 Flanders day in 1918 terms: Einschießen, the Artilleriekampf, the British attack and the
+Sperrfeuer, night and Störungsfeuer, X-Zeit: a 180 s Feuervorbereitung (`PREP`) then the Feuerwalze; while the red
+flares are up the division's own 7.7 cm field guns fire a thin Sperrfeuer of `fk16` shells, `own: true` with
+`unitId: null`; at X-Zeit the auto crews of the batteries that fire the plan leave their other missions; win when `ZERO_NEED` of our
+assault reaches the British line: Easy 54 %, Normal 60 %, Hard 64 %; loss:
+two sectors or every gun; the Paris Gun's mission has no script, its controller ends it), `enemy.js` (British
+counter-battery by kind with its own rate and reach, harassing fire, the Trommelfeuer before their attacks, star
+shells, the RE8 and the Camels; in the Paris Gun's mission only `huntUpdate`: from 150 s, a raid of two or three
+Camels on the site every 240 to 420 s by day, times the site's `hide`, divided by the root of the difficulty's `cb`,
+with the site's `flak` and `spoil` (paris.js: before the camouflage task 0.05 and -0.4, a 42 m scatter; after it 0.3,
+0 and `hide` 1.5; `raid()` reads `target.spoil`)), `targets.js` (`TargetsWW1`; the British
+batteries are found by ranging and sound, a one-gun position is silenced only when its gun is gone), `infantry.js`
+(the WW2 turned-round battle; a lane of the Feuerwalze with too few bursts in the last 20 s costs our assault men),
+`observers.js` (VB, Flieger, Fesselballon; Schall- and Lichtmeßtrupp give no reports), `crews.js` (the super-heavies
+keep their shells for the heavy targets and never answer the Sperrfeuer; the K 17 takes the far targets and the
+traffic), `special.js`, `grid.js` (`ww1Ref`: "7037 b 13", a 1 km Planquadrat, its quarter a to d, a 100 m small
+square 1 to 25; the form is the game's own, docs/WW1.md 1.6), `ui.js` (the console's words), `render.js` (pictures).
+
+Special controllers (`unit.special`, plain data; the full field list is at the top of `src/ww1/special.js`):
+- Bertha and the Gamma (`BedCtl`): set up and ready; normal guns through the loading cycle (the Gamma laid on the
+  falling branch, `high`, from 43 to 75 degrees). Their handwheels give 11.5 and 23 degrees either way of the bed's
+  line (`u.arc`); a target beyond needs the bed relaid: command `rebed { bearing? }` (default the line to the ordered
+  target; the console's T and the guns card's BETTUNG UMLEGEN key), `REBED` 0 s for both for now (instant: the bed is
+  on the new line in the same step; it was 100 s, hours and a day in reality; to be restored), during which
+  `unit.gate` holds the gun and the gun, its pit or site and the camera root swing to the new line in the middle half
+  of the work (`unit.zero` and every `piece.bearing` move; the render layer follows `piece.bearing`). With a 0 s
+  `REBED` the radio, the guns card and `guns.problem` leave out the time out of action. `unit.special.bed = { state: 'set' | 'moving', t, dur, from, to }`. `guns.problem`
+  names the remedy for an out-of-arc order on a unit with a bed. The auto crews relay the bed only when nothing in the
+  arc wants them and a worthwhile target beyond leaves time for the move and a shoot (60 % of the time, checked every
+  30 s). Their pads (`ww1Pads`) are squares round the gun that hold the site at any bearing.
+- Paris Gun (its own mission, op `paris`; `ParisCtl` in `src/ww1/paris.js`, the full field list at its top).
+  **Stellungsbau**: the site starts empty but for the spur, the portal crane and its rails and the timber stacks;
+  `TASKS` (bed: concrete bed, turntable and racer, 110; bank: earth bank and screens, 90; frame: run in the firing
+  frame, 80, needs bed; barrel: lower in the barrel with the portal crane, 200, needs frame; truss: rig the truss, 70,
+  needs barrel; ammo: field railway, ammunition train and charge bunker, 110; met: weather station and Rechenstelle,
+  70; camo: camouflage nets and flak posts, 80, optional; work in gang-seconds, `max` gangs each; `tip` the console's
+  English), `GANGS` 3; commands `gang { task, d }` and `hurry` (ALL HANDS: the gangs kept on
+  the critical path; AUTO does the same); no work while the crew is in cover; a bomb within 90 m sets the work under
+  way back (25 at the centre). The weather station's end brings the first Wettermeldung; the gun stands when all
+  but camo are done (the auto gangs take about 250 s) (`ready`; the piece is `fixed` at 0 degrees until then); the camouflage gives the site `HIDDEN`
+  (flak 0.3, spoil 0, hide 1.5) for `EXPOSED` (0.05, -0.4, 1). `stage` (each task's progress) is the render hint.
+  **Feuerablauf**: `DRILL` (gauge: 20 s, then waits until the charge is within `CHARGE_TOL` 0.5 kg of the gauge;
+  data: 20 s, then waits until the firing data are laid since the latest Wettermeldung (`dataT`); each step's `tip`
+  is the console's English; load: the gun's
+  own loading cycle, done when the piece is loaded and laid; fire: the firing key). The player's `step` (the card's
+  big key, Enter) starts the round, goes on with a setting as set (`accept`), or fires; the next round waits for it
+  again. `hold` names what the drill waits for. `FAULTS` (seal 8 %: carry on and the round falls 1 to 2 km short;
+  droop 8 %: three times the spread) are rolled when the load begins and reported when it ends: `fix { how: 'fix' }`
+  (40 or 50 s) or `'ignore'`. `unit.gate` holds the gun except while its load is waiting to start and at the firing
+  key (so only the firing key fires, and a fault rolled for the load is always decided), and says why; between
+  rounds `unit.stowed` with `stowLaid` (guns.js) keeps the barrel down at its loading elevation on its line.
+  Fliegeralarm: while Camels run in on the gun (within `COVER_R` 2500 m) or their bombs fall, the crew is in cover
+  (`unit.special.cover`, `COVER_GATE`): the work and the drill wait, the gun cannot fire or start a load. The auto
+  crew (AUTO) assigns the gangs, takes `AUTO_PAUSE` 5 to 25 s over each decision and `AUTO_NEXT` 30 to 90 s before the
+  next round, sets the gauged charge (a round or two behind the wear 30 % of the time), lays the table and part of
+  each report with slips, fixes faults, changes a spent barrel before its next round, and lays on the open order due
+  soonest that a round can still answer (more than 200 s left), else on the junction.
+  Targets: military targets about 120 km west, off the map (`op.paris.targets`: Bahnknoten, the railway junction,
+  119.0 km on 262; Tankpark, the tank depot, 117.8 km on 274; Truppenlager, the reserve camp, 120.0 km on 252;
+  Flugplatz, the aerodrome, 118.4 km on 287), never a town and never named after a place; all lie in the gun's band
+  with room for the wind's correction and inside its 30 degrees either way. A target may carry an `effect`, what a
+  round in its area (`AREA` 400 m) does: 'supply', 'attack' and 'air' gain `FX` 0.15 (up to `FX_MAX` 0.45, wearing off
+  over `FX_T` 600 s), read through `sim.special.effectK(effect)`; 'tanks' gives every open laager mission `TANK_HOLD`
+  150 s more. In the mission only the aerodrome has one ('air': fewer Camel raids, one in that share stays on the
+  ground, `enemy.js raid()`); the battle's effects (their batteries' rate of fire through `enemy.js supply()`, the
+  size of their attacks through `director.js assault()`, the RE8 interval, the laager missions) stay in the code but
+  need a Paris Gun in the battle, which no op has now. The Armee's orders (`op.paris.orders`: [at, target, rounds,
+  minutes, why], five, at 30, 330, 660, 1020 and 1380 s after the gun stands; minutes times the difficulty's `time`)
+  ask for rounds in a target's area by a due time; a round fired before then counts when its report comes; done gives
+  100 points a round asked, too late nothing. The mission ends when the Armee has given every order and each is
+  settled, or at `timeLimit`: won with `WIN` (0.8, 4 of 5) of the orders carried out; `sim.over` gives the end card
+  ("Mission complete" or "Mission failed", the orders and the rounds in a target's area, or that the gun never
+  stood). The procedure behind the drill: the shells are numbered in the barrel's set and each is fatter (21.0 to
+  23.2 cm), the charge (kg) must rise with the bore's wear or the shot falls short, the line takes the Earth's turning
+  and the day's wind aloft (the Wettermeldung, every 600 s once the weather station stands), the agents' fall report
+  comes after part of the roughly 200 s flight (`REPORT_K`); the shot's random spread `SPREAD` 0.0015 in velocity
+  (about 360 m in range; times the root of the difficulty's `err`) is smaller than the barrel's own hidden error
+  (0.0025), which only the reports teach (`taught`: `table` lays the table plus it; a new barrel forgets it); after 65
+  rounds the barrel is changed (`BARREL_DUR` 420 s; the mission opens on barrel 3 with 55 to 59 rounds through it).
+  Other commands: `powder`, `pcorr`, `table`, `report` (the whole correction the newest fall wants, counted from the
+  data that round was fired with, `flight.corr`, so a report that comes in after a correction is not laid twice; what
+  the aim then carries beyond the table becomes `taught`), `aim { id? }` (another target: the corrections carry over,
+  the table's wind part is relaid for the new line), `barrel`, and the normal `fire` (only at the firing key). The
+  exported `nextFall(st, flight)` gives where the next round should fall on the data laid now (the flight's fall moved
+  by the corrections since) and `correction(st, q)` the correction that brings it on, in metres, Strich and words; the
+  shot's radio says when its report comes, the report's what to correct (or that the aim is good). The shell
+  is `guided: true, paris: true`, flown by the controller until it leaves the map (40 km out or 60 km up); each
+  flight records its `target` and `result` ('area', 'near', 'wide'); `sim.events.special(u, 'order', order)` when an
+  order is given or closed, `(u, 'step' | 'done', id)` for the drill, `(u, 'ready')` when the gun stands.
+
+### Console, pictures, sound
+
+`src/ww1/ui.js` sets the console's words (1918 German missions, observers and fuzes from docs/WW1.md "Words",
+metres and Strich, the Planquadrat reference, the Arko) and the KINDS rows; the board draws the salient and the
+lines only in the battle. `src/ui/consoles/paris.js` gives the Paris Gun four cards in place of the British ones,
+mounted by `console.js` (a special card's `left`, `top`, `bottom` and `aside`): the drill card (`left`, in the guns
+card's place: STELLUNGSBAU, a row a task with its progress and its gangs (− and +) and ALL HANDS (J), until the gun
+stands, then FEUERABLAUF: the big key for whatever the drill wants now (Enter: FIRST or NEXT ROUND, SET THE CHARGE,
+LAY THE DATA, FEUER; FIX THE FAULT with O fix and I carry on), what the crew is doing (in the load the gun's own step
+and its time), the four steps, a fault box, the crew, the gun, the shells and the site), the firing data card
+SCHUSSWERTE (`top`, in the fire order card's place, so no unused British aiming keys show: the target, the open order
+on it, the elevation and the flight time, LADUNG against the gauge, SEITE and ENTFERNUNG with the table's and the
+reports' parts (the rows' German labels with an English gloss: powder charge, aim left · right, aim short · further),
+the Wettermeldung (red until laid), TABLE (T), REPORT (.), LAY (L), and under the target line the aiming advice
+(`advice()`: how to aim before the gun stands, the report's correction and REPORT lit while it waits, a new
+Wettermeldung with TABLE lit, the round in flight and when its report comes, where the next round should fall), the gun's card
+PARIS-GESCHÜTZ (`bottom`, in the missions list's place: the barrel's wear, the next numbered shell and the shells
+left, BARREL (Y), the agents' reports on the last five rounds) and its targets card ZIELE (`aside`, in the range
+table's place: one row per target, its range and line, the open order with its rounds and time left; a click, or Tab
+and L, lays on it). Every label, row and key has an English `title` saying what it is and what to do (the task rows
+also what they wait for and how long is left; the big key what pressing it does now). Keys that mean nothing on this
+gun (R, Z, G, X, Backspace) say so. The status line names the card (STELLUNGSBAU or FEUERABLAUF) while the gate holds
+the gun. The map: `src/ui/consoles/parisMap.js` on the artillery board through the theatre (`src/ww1/ui.js` sets
+`TH.overlay`, `TH.hoverText`, `TH.mppMax` 450, `TH.boardHint`, `TH.fitTip`, `TH.aimTip` for the mission; shared
+changes in `board.js`: it calls `TH.overlay(board, g, sim, unit, T)` after the units and shows `TH.hoverText(board, x,
+z, sim, unit)` in the readout when it returns text, reads the hint and the FIT and AIM tips from TH, and its metric grid
+steps 10 km when a kilometre is under 6 px; `console.js` hands a board click to `special.boardClick(x, z, mpp)` first):
+the gun, the four targets 120 km west with their 400 m areas, names and the open order under each, the reach band (116
+to 123 km, 30 degrees either way), the line laid on, the falls of the settled rounds, the shell in flight on its way,
+and an inset (bottom right) with the target laid on magnified: the area, the 1 km ring, the line of fire and the last
+eight falls, numbered, and a blue ring where the next round should fall on the data laid now (`nextFall`: it moves as
+the player corrects). FIT takes in the gun and the targets; a click near a target lays on it. the order card's ADD/DROP/LEFT/RIGHT, the X step, rounds, fuze, charge
+and `.` keys are offered to it first (`route()`), so each acts on the Paris Gun's own corrections or says why it
+cannot. `ui/tracker.js` draws no fall of shot where a `paris` shell leaves the map. `src/ww1/render.js`
+`createWW1Render(...)` places the gun pits and the three sites, draws the Paris shot (`fx.parisBlast(p, dir, { night, base })`, `fx/ww1.js`: a 70 m flame jet, a plume
+up the line of fire, smoke and dust rings and a cloud that hangs for 35 to 55 s, from the existing pools),
+rides the camera up with its shell and back, poses the Paris site and gun during the Stellungsbau (`stage`: the
+rig's `bedGroup`, the concrete drum and the racer, rises with the bed; the traverse group, the frame with the barrel
+and the crane, rolls in from 34 m behind onto the turntable, and `rig.assembly` follows it: until the frame is on its
+bed the men work on the ground on the gun's left, between its run-in and the portal crane's rail (`render/ww1/paris.js`
+`act`, the Gustav's rule in `crews_heavy.js`), then take their posts on its galleries; the portal crane runs over it as the frame
+arrives and back as the truss is rigged; the barrel (the recoil group) comes down 7 m into the cradle; the site's own
+groups through `buildParisSite`'s `setStage({ bed, bank, ammo, met, camo })`: the apron spreads from the turntable,
+the earth bank and its screens rise, the field railway and the charge bunker go up and the ammunition train runs in
+along the spur from its front end, the measuring hut, the weather mast and the theodolite go up, the camouflage poles
+and the two anti-aircraft machine-gun posts rise; the net is spread when the camouflage is done) and during a barrel
+change, and flies the British aircraft. Audio: `new AudioEngine({ ww1: true })` / `enableWW1()` renders the Paris Gun's report (`parisGun(pos)`)
+only on WW1 pages. Menu: the era `ww1` (Battles: "Open battle", "Paris Gun" and the Big Bertha demo, each op's `tag`
+its line under the title; the Campaign and Tutorials tabs say there is none; Your batteries shows 7/7, `ROSTER_WW1`
+being every op's units). main shows a battle's toast and stand-to radio, or the mission's `sub` and the Armee's call
+to Wilhelm; its end card is the controller's `sim.over`.
+
+### Test and balance
+
+`node tools/ww1test.mjs [seeds] [--op ridge|paris|all] [--difficulty Easy|Normal|Hard|all] [--player] [--quiet]
+[--table] [--jobs N] [--log]` plays the open battle and the Paris Gun's mission (default both) with every crew on
+auto; `--player` puts a scripted competent player on the Paris Gun instead (ALL HANDS, each round at once, the charge
+to the gauge, the table and half of each report, faults fixed, the order due soonest, a spent barrel changed unless an
+order would run out). On seeds 1 to 72, the battle all-auto (without the Paris Gun, the bed relay instant): Easy 21,
+Normal 10, Hard 3 won (the British game: 39, 18, 2; 27, 16, 5 with the Paris Gun in it and the 100 s relay; 25, 10, 3
+with it and the instant relay). The Paris Gun's mission, all-auto: Easy 25, Normal 6, Hard 1 (3.1, 2.3 and 1.3 of the
+5 orders; about 7 shots, 5 in a target's area on Normal); the scripted player: 59, 49, 10 (4.0, 3.8, 2.2 orders;
+about 9 shots); the auto gangs stand the gun at 253 s; 4 to 7 raids a mission, none has destroyed the gun. Single games flip near the loss line: decide on 72 seeds. After touching `tables_ww1.js`, `src/ww1/*` or the shared sim, run it and `node
+tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are unchanged.
 
 ## Changelog
 
@@ -760,7 +1032,7 @@ operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 4, Normal
 - (render, crews) Follow-up: the cordite bag now rises to a point on the bore axis behind the breech (clear of the tray plate) and slides in along the axis (crews.js carryMan), which clears the mechanism clipcheck's cbag>recoil 27.5 cm and cbag>tray 4.7 cm on the 9.2-inch (clipcheck full runs of bl92 and bl60 are clean; `&fast=1` samples too sparsely to see it). Crew bodies re-checked against the new models with `crewcheck.html`: clean at zero traverse and plus or minus 0.3 rad apart from 4 to 6 cm shin contacts with low timber and a layer's upper arm at the sight.
 - (ui) Gun selection tabs show loading state: a pip per piece filling toward READY (time-weighted over `GUNS[kind].load` by `job.i`, `job.n`, `job.t / job.dur`; amber loading or laying, green ready, flashing recoil, red struck-through dead) and a summary such as "2/4 READY" or "LOAD 70%"; tabs are 60 px tall, the lamp moved to the tab corner; mock jobs carry `i` and `n`.
 - (rail18, models) `src/models/v/rail.js` is now the BL 18-inch railway howitzer on the "Boche-Buster" car (refs/rail18; kind id 'rail', export `buildRail`, the 12-inch is gone). **Rig frames (model space, front -Z, rail head y = 0, track along Z; all on `car` unless noted):** `car` (new pivot, position.z = 0 at rest, + = back along the track, `rig.carRoll` = 6.0 m full run; carries the whole car and everything on it; `rig.setCar(z)` sets it and turns the 15 wheelsets, `rig.wheelsets[i].rotation.x = z / 0.42`; the old `bogies` group still exists and now holds the wheelsets) > `traverse` at (0, 1.6, -0.8) (the upper mounting on a roller path in the dropped centre: turntable, cheeks, running boards and the loading stage turn together; arcade, the game traverses +-48 degrees, the real car 2; the stage sweeps a 8.1 m radius about this point, so it overhangs the car sides when slewed) > `elevation` at +2.45 (trunnion axis y = 4.05 m, z = -0.8; barrel z -13.07 to +3.4 on the elevation frame, 16.47 m) > `recoil` (position.z, `rig.recoilLength` 0.86 m = 34 in, `recoilFade` from `floorFade`, about 0.2 of it at 40 degrees) > `breech` (hinge at x +0.9, z +3.43 in the recoil frame, swings 1.65 rad about y). `tray` is the usual cross slide (`trayMount`, hinge frame at (0, -0.3, 3.5) on the elevation frame, `setTray(k)` slides it 1.4 m left, the second argument is ignored: there is **no `bridge` and no `trolley` pivot any more**). `crane` at (0.55, 0, 8.4) in the car frame (the lattice shell hoist's mast and jib: rotation.y 0 puts the hook at x -4.2 over the deck toward the tray end, PI at +4.2 over the shell stack) with `hoist` at (-4.2, 5.7, 0) in the crane frame (position.y = hook height above the rail head; `rig.hoistRange` { up 5.7, down 1.72 }; the shell hangs 1.18 below it; its chain follows in `rig.update`). Same contract as the 15-inch's `crane` and `hoist`, so crews.js' crane branch applies unchanged except for the numbers. `setShell(where)`: 'tray' | 'hoist' ('crane' is an alias of 'hoist'; there is no 'trolley'). **Numbers:** `loadEl` 3.5 degrees; shell 2.01 m long, radius 0.2286 (`rig.shell`); `anchors.tray` is the shell's middle on the bore axis 5.05 m behind the trunnion axis (nose 4.05, tail 6.06, breech face 3.4), 0.3 above the tray frame; `anchors.muzzle` (recoil frame, z -13.07), `anchors.breech` (recoil frame, z +3.4), `anchors.eye` (traverse frame, y +2.75, z +0.2), `anchors.shellStack` in the root frame at (4.75, 0.5, 8.4) (where the hook picks up with the jib at PI; ready shells lie on baulks 1.3 to 2.5 m behind it), the car is about 22 m over the buffers (z +-11.06 at rest, +-11.06 + 6 m behind after a shot), 3.0 m wide over the headstocks, the loading stage deck is 2.8 m above the rail head (x +-1.45, z 4.1 to 7.2 in the car frame = 4.9 to 8.0 behind the trunnion axis), the rear end deck and front winch deck 2.3 m, the running boards beside the cheeks 1.77 m. **Crew spots** (root frame with the car at rest; `car: true` on the spots that stand on the car and must be shifted by `car.position.z` during the roll-back, the others stand on the ground): sergeant (0.4, 2.3, -7.2) on the front lattice platform facing the muzzle (point, car); layer (-1.95, 1.77, 0.15) on the left running board facing +X (lay, car); traverser (1.95, 1.77, -1.7) on the right board facing -X (operate, car); lanyard (1.0, 2.84, 4.8) beside the breech (car); loader1 (-1.0, 2.84, 5.8) and loader2 (1.0, 2.84, 5.1) at the tray (carry, car); rammer1 to rammer4 (+-0.5, 2.84, 6.1 and 6.7) behind the shell's tail (ram, car); crane1 (0.55, 2.3, 9.55) at the hoist's winch on the rear deck (operate, car); crane2 (-0.45, 2.3, 8.05) signalling (car); ammo1 (3.65, 0, 10.1) and ammo2 (5.95, 0, 9.9) at the stack on the ground (stand, crouch). The stowed tray and the open block leave x -1.97 to -0.83 and +0.82 to +1.12 (z 3.7 to 5.0 behind the trunnion axis) occupied at men's height beside the breech, the left rail of the stage has a gap over the tray's parking place (z 6.8 on). **Posing (`render/guns.js`):** `carPose(g, piece, tf)` gives the roll-back 0..1 from the time since the shot (a decelerating run back over 1.9 s, held to 4.5 s, then a slow winch-in that ends at the start of the 'shell' step, forced to 0 from that step on), applied with `rig.setCar(carPose * rig.carRoll)`; `fired()` poses the muzzle with the car at rest; the rail special case in `loadPose` (bridge) is gone; the platform shudder for the rail is 0.4. `clipcheck.js` counts the `car` and `bogies` groups as `root` steel and uses 0.62 as the rail barrel radius. `shells.js` `rail` is 0.457 x 2.01 m (2,500 lb HE: buff body, red band, copper driving band, brass fuze nose) and its bag is 0.62 x 0.38. The name plate text is the exported `NAME_PLATE` ('H.M.G. BOCHE-BUSTER' as on the 1940 car). Clip check (`clipcheck.html?gun=rail`, full run, 262 poses): no rig-against-rig pair over 1 cm; with the crews as they stood before the re-plan it still shows the crew props cshell>tray 3.5 cm (shell lowered at 0.88 of 'shell', at the tray's left side rail) and cbag>breech 23 cm (3 poses, 'cartridge' step at az 43, the bag passing through the opened block that stands at x +0.82 to +1.12, z 3.7 to 5.0 behind the trunnion axis).
-- (rail18, integration) Unit 5 is now the British BL 18-inch railway howitzer on the ex-14-inch "Boche-Buster" car, callsign "Wolfe" (after HMS General Wolfe, the monitor whose 18-inch gun fired on the Belgian coast in 1918), replacing the 12-inch "Hilda". History: ordered 1918, proofed 1920 to 1921, never fired in the First World War; in this 1917 game it is a what-if gun (README says so). Sim (`tables.js`): `GUNS.rail` calibre 18, shell 1,134 kg (2,500 lb), charges 340 / 450 / 570 m/s (the handbook's 182 lb and 282 lb bags, 570 m/s on the top charge), game drag `cd` 0.32 so the top charge gives about 20.4 km (22,300 yd) at 40 degrees (the railhead R1 is about 14.8 km away), elevation 10 to 40 degrees (the real gun goes down to 0; 10 keeps the short charges out of the ranges that the other guns cover), traverse +-48 degrees at 1.2 degrees a second (arcade: the real gun has 2 degrees on the car and the rest by moving the car on its curved spur, the game folds both into one slew so every site in the sector is reachable), loading cycle 90 s (depress 7, open 6, shell 24, ram 13, cartridge 18, close 5, prime 4, lay 11; the step names are the 15-inch's, the shell hoist replaces the trolley), crew 14 (the men drawn at the car; the real crew was about 50), hp 170, 36 rounds, flash signature 0.10 (the largest). `SHELLS.rail`: calibre 18, crater 10 m, soft R 68 D 85, hard R 34 D 120, lethal 58, wire 44, piece 66: the biggest in the game. Balance: see Balance (rail18). `fx/artillery.js` calibre scale clamps raised from 1.15 to 1.25 (18 / 15 = 1.2) so an 18-inch blast and burst are the biggest; audio already classes anything above 12 inches as `huge`. Sector: the pad under the car is 14 by 60 m, the spur is straight for 170 m (80 m behind the car, 130 m ahead of it) so the car's 6 m roll-back and its winch-in stay on track. World: `world/rails.js` no longer leaves a gap in the track under the gun; near it the bed is sunk so the rail head is at ground level where the rig's wheels run (rising back to the ordinary bed over 18 m); `world/battery.js` puts the camp beside the spur (22 m to the right of the camp frame), no duckboard walk or spent cases on the track, the reserve shell stack (2,500 lb shells) behind the rig's own two at the foot of the hoist (x 4.75, z 14.6), a camouflage net shifted 14 m to the right over the crates and the shelter, and `pitSolids` follows. Console (`ui`): '18-in Rly', title '18-INCH RAILWAY GUN', the board shows deep guns to 18.5 km east. Crews (`render/crews.js`): the railway gun now uses the 15-inch drill (hoist crane1 and crane2, the rammer team of four, the traverser on the wheel) with 4.2 m staffs; men whose spot has `car: true` ride the car's roll-back (`rig.pivots.car.position.z` is added to their z in `Man.put`); the cordite is carried by the first loader (left side) from the left (the stage is 2.8 m up, there is no ground route to it); the home places keep 6 cm more clearance on this gun. `crewfield.js` resets the car in its sweeps and widens the plan limits to z -16 to 32. Tutorial: the 'heavy' lesson step is 'wolfe' (text: an 18-inch howitzer, 2,500 lb, a what-if gun; about a minute and a half to load). `main.js` KIND rail is calibre 18, `NET_CLEAR.rail` 32.
+- (rail18, integration) Unit 5 is now the British BL 18-inch railway howitzer on the ex-14-inch "Boche-Buster" car, callsign "Wolfe" (after HMS General Wolfe, the monitor whose 18-inch gun fired on the Belgian coast in 1918), replacing the 12-inch "Hilda". History: ordered 1918, proofed 1920 to 1921, never fired in the First World War; in this 1917 game it is a what-if gun (the README said so; now docs/HISTORY.md). Sim (`tables.js`): `GUNS.rail` calibre 18, shell 1,134 kg (2,500 lb), charges 340 / 450 / 570 m/s (the handbook's 182 lb and 282 lb bags, 570 m/s on the top charge), game drag `cd` 0.32 so the top charge gives about 20.4 km (22,300 yd) at 40 degrees (the railhead R1 is about 14.8 km away), elevation 10 to 40 degrees (the real gun goes down to 0; 10 keeps the short charges out of the ranges that the other guns cover), traverse +-48 degrees at 1.2 degrees a second (arcade: the real gun has 2 degrees on the car and the rest by moving the car on its curved spur, the game folds both into one slew so every site in the sector is reachable), loading cycle 90 s (depress 7, open 6, shell 24, ram 13, cartridge 18, close 5, prime 4, lay 11; the step names are the 15-inch's, the shell hoist replaces the trolley), crew 14 (the men drawn at the car; the real crew was about 50), hp 170, 36 rounds, flash signature 0.10 (the largest). `SHELLS.rail`: calibre 18, crater 10 m, soft R 68 D 85, hard R 34 D 120, lethal 58, wire 44, piece 66: the biggest in the game. Balance: see Balance (rail18). `fx/artillery.js` calibre scale clamps raised from 1.15 to 1.25 (18 / 15 = 1.2) so an 18-inch blast and burst are the biggest; audio already classes anything above 12 inches as `huge`. Sector: the pad under the car is 14 by 60 m, the spur is straight for 170 m (80 m behind the car, 130 m ahead of it) so the car's 6 m roll-back and its winch-in stay on track. World: `world/rails.js` no longer leaves a gap in the track under the gun; near it the bed is sunk so the rail head is at ground level where the rig's wheels run (rising back to the ordinary bed over 18 m); `world/battery.js` puts the camp beside the spur (22 m to the right of the camp frame), no duckboard walk or spent cases on the track, the reserve shell stack (2,500 lb shells) behind the rig's own two at the foot of the hoist (x 4.75, z 14.6), a camouflage net shifted 14 m to the right over the crates and the shelter, and `pitSolids` follows. Console (`ui`): '18-in Rly', title '18-INCH RAILWAY GUN', the board shows deep guns to 18.5 km east. Crews (`render/crews.js`): the railway gun now uses the 15-inch drill (hoist crane1 and crane2, the rammer team of four, the traverser on the wheel) with 4.2 m staffs; men whose spot has `car: true` ride the car's roll-back (`rig.pivots.car.position.z` is added to their z in `Man.put`); the cordite is carried by the first loader (left side) from the left (the stage is 2.8 m up, there is no ground route to it); the home places keep 6 cm more clearance on this gun. `crewfield.js` resets the car in its sweeps and widens the plan limits to z -16 to 32. Tutorial: the 'heavy' lesson step is 'wolfe' (text: an 18-inch howitzer, 2,500 lb, a what-if gun; about a minute and a half to load). `main.js` KIND rail is calibre 18, `NET_CLEAR.rail` 32.
 - (ui) Report slips say what they report on: the round number (the same number as the fall of shot on the board), the gun that fired it (`No. N gun`, units of several pieces) and the task (`M<id>` and its title). The pad shows only the selected unit's reports (plus the Group's tasks and warnings; `Mail` keeps 40 slips). The tracker records each own shell's piece and the `order.adj` and `order.target` it was fired with (`tracker.fired`); the pencilled correction is read against the lay of now (`messages.js` `slipCorr`: the report's correction less what has been corrected since the round left, "Corr. now" when it differs), a newer report on the same task supersedes the older ones and a re-lay onto another target strikes them off, so "apply" and `.` never take another unit's report or double a correction already made.
 - (framework) Resolution and upscale: the canvas now always has the display's pixel ratio (up to 2); the scene and the post chain render at the quality preset's ratio times the dynamic scale, and a final `post.upscale` pass (Catmull-Rom bicubic plus a contrast-adaptive sharpen, `params.upscaleSharpen`, gear menu "Upscale sharpening") fills the canvas when that is lower. `post.setSize(w, h, pr?)` takes the scene's pixel ratio (default the renderer's, so the dev viewers are unchanged) and keeps it in `post.pixelRatio`; code that wants scene pixels (the flares' pixel size) reads that, not `renderer.getPixelRatio()`. Dynamic resolution moved to `src/dynres.js` `DynamicResolution` (scale 0.67 to 1, GPU timer queries around `post.render` where `EXT_disjoint_timer_query_webgl2` exists, else frame times against the display's refresh, never aiming above 60 fps; a scale that fails right after a climb is retried after a growing back-off). The old rule could never climb back on a 60 Hz display. Terrain: the old craters' lip slope fades out once a pixel spans the lip, and the terrain's roughness is widened by the normal's screen-space variance (specular anti-aliasing), so crater rims and puddles no longer sparkle at a distance. F3 shows scene and canvas resolution, GPU time and refresh.
 - (bertha) The Dicke Bertha first-person demo mode (section "Dicke Bertha mode (demo)"): `bertha.html`, `src/bertha/`, `tools/berthatest.mjs`, a title-screen link. Shared changes: `sector.js` exports `BERTHA` and `flatPads()` levels its bed (terrain changes only around (10000, -2600), far from every main-game site); `models/shells.js` gains shells `m42`, `m42l` and cartridges `m42` (bag), `m42c` (brass case); `models/kit.js` gains the camouflage scheme `bunt`; `src/presets.js` now holds `QUALITY`, `sunAt`, `SUN` and `blastTrauma` (moved out of main.js unchanged, shared by both pages); `tools/shot.mjs` also finds Chromium under `$PLAYWRIGHT_BROWSERS_PATH`.
@@ -789,3 +1061,427 @@ operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 4, Normal
   for `nbw41` (`shell.burning`), `v1` (`shell.engineOff`), none for `v2`, the `'colossal'` class from 20 in,
   `burst(pos, 26, { fuze: 'v2' })`, `v1Launch`, `v2Launch(pos, k, obj?)`, `siren(on)`, `aircraft(obj)`,
   `ui('feldfernsprecher' | 'funk')`. Research and departures: `docs/WW2.md`. Test: `tools/ww2test.mjs`.
+- (ui) The unit tabs are a column at the far right edge of the screen, one row per unit (ten units in the WW2 Flanders sandbox read without squeezing): the clock, score and front chips on top, the selected card pulled out toward the console. `Panel` scales the console box (design 800 by 840, was 800 by 900 with the tab row) and the column (design width 160) by one factor; `#view` is 45 % of the width and `#panel` 55 % (was 50 / 50), `ui.html` matches. Tutorial wording: "the tabs at the right edge of the screen".
+- (ww2 sim) Sandbox set-up units: `def.ready` (above, "Special controllers"). `sandboxTheatre` marks its Karl, V-1 and
+  V-2 ready (the launch sites in manual mode, waiting for the firing key; A hands them to the crew) and levels the
+  Karl's two positions. The launch controllers now advance to the first step not done (identical for the full drill);
+  the procedure card's key reads FIRE / LAYING / RELOADING / FIRING on a set-up site. Operations and campaign
+  missions unchanged (ww2test seeds 1 to 8 all ops and difficulties, simtest and progressiontest identical).
+- (render) Detail by distance and GPU uploads (render only; the sim and its tests are untouched). `render/detail.js`
+  `DetailCull`: a mesh whose bounding sphere projects under about 0.8 px (at 1440 rows, scaled with the field of view)
+  gets `layers.mask = 0`, so neither the main nor the shadow camera draws it; its `visible` stays with the code that
+  poses it. `createRender` returns `detail` (every gun rig and target is in it; `detail.update(camera)` runs at the end
+  of `render.update`, a third of the meshes a frame, all of them after a camera cut); `GunViews(..., detail)` and
+  `TargetViews(..., detail)` take it as their last argument. `TargetViews.build` (every new game) now frees the old
+  models' geometries, materials and textures that nothing in the scene still uses (`render/dispose.js`
+  `disposeDetached(scene, roots)`); they were kept on the GPU before. WW2 scenery (`ww2/render.js`): one slot per
+  Gustav site, battery works and gun position, drawn within 4 km of the camera (the Gustav site 15 km, and in
+  `detail`); `w.reset(sim)` after `sim.newGame` (main's `newBattle`) frees the scenery of batteries not in a game (the
+  title's demonstration and the lessons keep everything) and builds missing slots again. `render/warmup.js`
+  `warmUp(renderer, scene, camera)` draws everything once into a 4 x 4 target at load (after `compileAsync`) and in
+  `newBattle`, so buffers and textures go up then, not in the frame that first sees them. Main: gear menu "Hide
+  sub-pixel detail" (`params.detailCull`), a `detail` line in the F3 overlay. Measured, same views: WW2 Flanders 1283
+  to 958 draw calls (leFH 18), 1200 to 611 (Bertha), 960 to 612 (K 18); British 642 to 499 (60-pounder); a frozen frame
+  with the culling on and off differs in under 10 pixels of the landscape. A default career's WW2 sandbox holds 265 MB
+  of geometry instead of 460 MB.
+- (models) Fewer draws in the Karl and the Gustav's site, same pictures and behaviour. `heavy_common.js`
+  `wheelSet(template, places, parent, name)` -> `{ meshes, turn(a) }`: identical wheels turning together about their
+  own x axes, one InstancedMesh per material. The Karl's 22 road wheels, 2 sprockets, 2 idlers and 12 return rollers
+  use it (`setDrive` calls `turn`; the hull's lowering, the track, the carrier, crane and hoist are unchanged): the rig
+  is 54 draws (was 153; as many again in the shadow pass). The Gustav site's 20 camouflage-net poles are one
+  instanced set per material in the order they go up (`setStage` sets the count; was 40 meshes, now 2). The Gustav
+  rig itself (45 draws, stages already merged and bogies instanced) is unchanged. Checked: the model viewer at fixed
+  poses (the Karl travelling, lowered, loading, close on the sprocket and idler; the site at camo 0.2 to 1 with the
+  gun at assembly 0.1 to 1) against captures from before, at most 48 pixels differing by rounding; the w-karl and
+  w-gustav lessons on autoplay finish every step. In game (WW2 Flanders): the Karl view 692 to 490 draw calls, the
+  Gustav view 525 to 446.
+- (ww2) The V-1 and V-2 are out of the WW2 sandbox (`sandboxTheatre` adds only the Karl, id 8, to the Flanders
+  roster): they fire in their own operations. `BATTERIES` marks them `sandbox: false`; the career list reads "Earned:
+  fires in its own operation" for them and a campaign win "now available in its own operation". `def.ready` still works
+  for the launch sites (special.js) should a theatre want them set up.
+- (ui) Dev mode is a switch: the career panel's footer button (`#dev-unlock`) reads "Dev mode ON / OFF" with a status
+  light and turns it either way (`Progression.setDev(on)`; `unlockAll()` stays as `setDev(true)`). Off, the career is
+  what was earned again (the completed missions are kept apart from the flag).
+- (ww2 sim) The sandbox Karl starts set up but unloaded (piece `idle`, empty, at `restEl`), as every other battery
+  starts; it showed READY with a shell in the breech, yet a mission off its 4 degrees still raised, turned and lowered
+  the hull and laid the barrel again before it fired. Now a mission on its line fires after the loading cycle (about
+  170 s), one off its line after the turn as well (about 195 s).
+- (models) The German guns' second reference pass, one per weapon from museum photographs, period handbooks and the
+  surviving examples (sheets in `refs/<group>/README.md`: lefh18, sfh18, k18_mrs18, nebelwerfer41, gustav, bertha,
+  karl, v1, v2; captures `shots/<kind>/compare.png`, photo / before / after). Pivots, setters and anchor names are kept;
+  draws over the ten rigs 354 to 337 with about three times the triangles. Per weapon:
+  - leFH 18 (`lefh18.js`): the 1944 leFH 18 (M) on the split-trail carriage (US Catalog of Enemy Ordnance, IWM B 7600):
+    L/28 barrel ahead of a one-piece shield with hump, cowl and sight window, two-port muzzle brake, recuperator above
+    and buffer below, the cradle's open tail, right-hand equilibrator, wooden 14-spoke wheels, riveted trails spread 60
+    degrees. `setTraverse` turns the top carriage 25 degrees each way and the new `carriage` group (wheels, trails)
+    beyond that (the crew shifting the trails); `recoilLength` 1.19 with variable recoil; 23 draws. Its gun position
+    (`gun_sites.js` `side`) is 4.7 so the spades clear the walls at 60 degrees.
+  - sFH 18 (`sfh18.js`, TM-E 30-451 fig. 37/38): L/29.5 barrel with the chase step, recuperator above a riveted buffer
+    trough, trunnions just ahead of the breech ring, two spring equilibrators that follow elevation, no shield, double
+    disc wheels with solid tyres, riveted trails with step plates; `recoilLength` 1.2, `rig.nest`, `shellStack` (1.25,
+    0.1, 3.3), crew spots moved (layers behind the wheels, the loading team between the trails); 23 draws.
+  - K 18 / Mrs 18 (`k18.js`): 8.53 m slim barrel against 6.51 m collared barrel with a bigger ring on one cradle (breech
+    1.75 m behind the trunnions, 2.2 m up), recoil cylinder on top, equilibrators to trunnion arms, the round firing
+    platform with roller pieces, raised disc wheels under mudguards, trail float and castor jack, grated walkways at 1.1
+    m. New `loadTray` pivot with `rig.setTray`; the recoil fade moved inside `setRecoil` (no `rig.recoilFade`); the
+    tray round is `shell-tray`; 25 draws each.
+  - Nebelwerfer 41 (`nbw41.js`): six touching tubes in a flat-topped hexagon with collar, rear plate, latches, contacts
+    and leads to the junction box on the upper right; the PaK 35/36 carriage with elevating arc, traversing sector,
+    sight box and V-strut foot. The six rockets are one instanced mesh per material and sit fully in their tubes; the
+    remote trench is left out of the rig's bounds; 26 draws. The Wurfgranate (`shells.js` `nbw41`) has the blunt nose
+    cap, the slightly proud venturi band with the 26 nozzle mouths in its rear face and the narrower 121 mm warhead.
+  - Gustav (`gustav.js`): fitted to 47.3 m overall, 7.1 m wide, 11.6 m above the rail head; girder halves with the low
+    row of openings and sloping noses over low front decks, span bolsters on the bogie pairs, galleries, a sleeve
+    cradle with four recoil cylinders, a two-part barrel with locking collar, lift towers with winding drums; anchors
+    and crew spots moved with the geometry (lift station z 18.8, hoist up 6.8); 49 draws.
+  - Bertha (`src/bertha/model.js`, adapter `bertha.js`): solid disc wheels with Radgürtel shoe chains, the arched
+    riveted shield, a four-cylinder cradle, muzzle swell, front jacks and crew platform, split box trail with spade
+    trough, gooseneck crane, steel wheel bed. `buildBertha({ finish })`: 'bunt' (the demo, default) or '1914' (plain
+    field grey, `CAMO.feldgrau14`, the WW2 guest); the WW2 rig's shell trolley runs on rails; berthatest unchanged.
+  - Karl (`karl.js`): it fires over its stern, as the sources agree: engine deck, driver, sprocket and loading ramp at
+    +Z, the 18-vane idler at -Z, eleven steel road wheels with the track as a tangent belt, a riveted box cradle,
+    ladders, lugs, side platforms, silencers; the carrier gets a raised lattice crane and grab. Trunnion 3.1 m
+    travelling, deck 1.95 m (crew at 1.6 m), `floorFade` limits the recoil at high elevation; 47 draws.
+  - V-1 site (`v1.js`, `missiles.js` V-1 part): the Walter ramp from the Duxford original (box girder, slotted tube in
+    clamp yokes, bolted trestles on paired blocks), a firing platform with the generator's rails and block blast walls,
+    the steam generator trolley (`setGenerator(0)` rolls it back to z 6.6), a timber Richthaus; the Fi 103 re-
+    proportioned (As 014, pylon, aerofoil wings) in a canvas atlas of the 1944 scheme; ramp foot 1.35 m; 33 draws.
+  - V-2 site (`v2.js`, `missiles.js` A4 part): screw-jack firing table with turning ring, fin pads and deflector (the
+    rocket's base 1.5 m up, `T` 1.5), cable mast and umbilical, the Meillerwagen's lattice chassis, outriggers, lifting
+    frame, clamps and rams, Opel Blitz alcohol and T-Stoff tankers, the LOX trailer, a Steyr power truck, the dug-in
+    Sd.Kfz. 7/3; the A4 re-profiled with jet and air vanes in a splinter-scheme atlas. `A4.lox` [4.3, 7.5]; new
+    `A4.joints`, `A4.plug`, `a4Radius`; `a4Pieces` defaults to roll PI/4; 45 draws.
+  Known gap, unchanged: the V-1 and V-2 sites have no crew figures in game (`render/crews.js` has no drill for them).
+- (ww2 sim) The sandbox Karl loads while its hull turns: `KarlCtl.gate` sets `unit.loadThrough` for a set-up Karl off
+  the road, `sim/guns.js` `needLoad` then passes the gate and an out-of-arc line, and the `lay` step holds the round at
+  `loadEl` until the gate clears (British units never set it: simtest identical). A line up to about 120 degrees off
+  now fires in the same 169 s as one on the line (was about 200 s at 25 degrees, 230 s at 46). The guns card shows a
+  controller's gate (raising the hull, turning the vehicle) instead of "idle".
+- (sim, ui) **An order the guns cannot carry out is always explained.** `sim/guns.js` `problem(u, short = false)`: the
+  reason in the player's words, '' when the order can be carried out or there is none: out of arc (degrees off the line
+  of fire against the traverse, with what to do: the Karl's hull drill, or another battery), out of range or inside the
+  minimum range (the distance against the limit, in yards or metres), a chosen charge that cannot reach where another
+  could (Q/E), holding, a controller's gate (not for the launch sites, whose console walks the drill), no shells, too
+  few men; `short` is the status line's form. `recompute` also keeps each piece's reason in `piece.cmd.why`.
+  `sim.command` calls `sim.tell(u, refused)` after `mission`, `lay`, `correct` and `charge`, and after a `fire` that was
+  refused or is held: a `radio(text, 'warn')` "<callsign>: cannot fire. <reason>." (the same words are not repeated
+  within 4 s; `u.told`). The console: status line `CANNOT FIRE: <short reason>` in red (the whole reason as its
+  tooltip), the FIRE key "cannot fire", the guns card per gun (out of arc, out of range, too close, too few men, no
+  shells), the roster tile OUT OF ARC / OUT OF RANGE / TOO CLOSE / NO SHELLS / NO CREW (`.tltxt.st-bad`). Before, an
+  out-of-arc order (Bertha's 11.5 degrees in the WW2 sandbox) left the gun idle with "reloading" on the status line.
+  Radio only, no sim state: simtest identical, ww2test unchanged, the British and WW2 lessons finish on autoplay.
+- (ui, text) The game makes no claims about real events or places; that material stays in the data and the docs. Not
+  shown any more: the title screen's "History." note and ALTERNATE HISTORY badges (`ops.js` `history` and the units'
+  `alt` are kept, unshown), the unit header's ALTERNATE HISTORY tag and the alt hint on selecting the unit, the console
+  title "(ALTERNATE HISTORY)" and Bertha's "1914 ... as a guest" note, the lessons' history asides (the Gustav's 48
+  rounds at Sevastopol, the V-1 and V-2 outros, "the guns are real", the British 18-inch "what-if" aside). The WW2
+  operations lose their place-and-date framing: titles The ridge battle / The fortress siege / The citadel / A V-1
+  launch site / A V-2 mobile battery, buttons Open battle / Gustav siege / Karl-Gerät / V-1 (Fi 103) / V-2 (A4); lesson
+  openings The ridge / The firing curve / Thor / The launch site; the V-weapons' target is "the enemy supply port".
+  The op ids, the in-game target names, the map's place names and the 1917 game's Ypres setting are unchanged.
+- (ww2, campaign) Big Bertha plays only in its own demo (`/bertha.html`): it is out of the WW2 Flanders roster
+  (`ops.js`, units 1 to 6), out of the WW2 campaign (`BATTERIES`: 12 missions, the Karl's mission now follows the
+  Mörser's) and the sandbox's set-up Karl is unit 7 (was 8). The title screen's Big Bertha button stands only in the
+  1917 section (removed in the WW2 mode and WW2 campaign missions). The `bertha` kind, its tables and the WW2 rig
+  adapter stay (model viewer). All-auto Flanders on seeds 1 to 3 now wins 2 of 3 (was 1 of 3 with Bertha).
+- (ui) Mission slips (`ui/consoles/missionList.js`): the map reference is replaced by the range from the battery in
+  the console (metres or yards), red with "(out of range)" or "(too close)" against the kind's reach from its range
+  tables (lowest charge's minimum, top charge's maximum; not for the launch sites). The priority stars were always
+  three (priority runs 1 to 10, the card clamped it to 3): now 3 for 9 and up (SOS, barrage, the biggest targets), 2
+  for 6 to 8 (counter-battery, harassing, tanks), 1 for the rest, with a tooltip. The order card and the board keep
+  the map reference.
+- (bertha) Demo pass for newcomers and engineers; the crew logic and the simulation are unchanged (berthatest
+  identical on seeds 1 to 16). A Next line under the prompt always names the next job of the drill (`game.js`
+  `next()`), the station for it is marked NEXT, and every refused key says why on a line under the prompt. The
+  player's wheels ease onto their mark and stop there (the ordered scale, the centred bubble, the post on the hair, the
+  2 degree loading angle: `wheel`, `latch`, event `mark`); press again to go past, Shift the fine wheel. Order card
+  filled in as it is read back, corrections in mils, a round-in-flight bar and the last fall of shot, a chamber diagram
+  for the loader, sight ring and drum readouts. Views (`index.js` `VIEW`): the layers on footboards with the camera a
+  little behind their eyes, the loader's station a fixed eye on a step behind the stage with a look assist toward the
+  work in hand. Model (`model.js`): variable recoil `recoilLength(el)` (1.25 m to about 30 degrees, 0.28 m at 65), a
+  deck opening the breech recoils through, the tray on a roller carriage that runs back `TRAY_BACK` 1.35 m when the
+  wedge shuts, the shell slung level under a spreader bar, dials over the handwheels (`setDials`). Fixes: the
+  panoramic sight view is taken from the sight head (it went black once the carriage swung); the end card no longer
+  throws (a frame clock `t` hid the string table). The tutorial jumps ahead when the player fires early.
+- (ui, ww2) Launch sites (`KINDS[kind].launcher`) get their own console (`ui/consoles/launch.js`, `launchPlot.js`,
+  `launchGauges.js`) in place of the board, the guns card and the missions card: FIRING DATA (target, bearing, ground
+  range, the air log or cut-off with the wind correction; two dials showing the data and MATCH or the miss in km; a
+  target-area plot with where the current settings send the round), the LAUNCH DRILL card (step N of 10, what the crew
+  is doing, one next-action key: START THE DRILL / DIAL ... / FIRE / VORSTUFE / HAUPTSTUFE / TAKE COVER / NEXT ROUND,
+  faults with FIX / CARRY ON / SCRUB and their cost or risk, a checklist), INSTRUMENTS (V-1: petrol, compressed air,
+  steam pressure with its red line and the ramp speed, pulse jet, compass, air log; A4: alcohol, LOX with boil-off and
+  the 92 % line, gyros, Vorstufe/Hauptstufe flame, table, Brennschluss counter) and ROUNDS (the flight profile, each
+  round to its result, this round's odds). The tab shows the drill state. Every other console is unchanged.
+- (ww2 sim) `LaunchCtl` MANUAL: the step command starts the drill and the crew carries on, holding (`special.hold`)
+  for a setting off the data, a fault, a damaged ramp, the firing key and the Hauptstufe; every refusal sets
+  `special.refused` and says why (status line, radio for the important ones). Faults are rolled when their step
+  begins (`pend`) so the gauges show them coming. Cause and effect: the steam test pressure sets the V-1's speed off
+  the ramp (`lastV`, shell `v0`; carrying on at low pressure risks a crash); a weather report between V-1 rounds moves
+  the air-log figure; a setting changed after its step sends the crew back; LOX under 92 % falls short (shown on the
+  plot); a Vorstufe left over 25 s is shut down. Steps shortened: the V-1 drill about 213 s, the A4 about 290 s. New
+  `unit.special` fields: `run hold accept refused pend fixing alarm odds oddsRisk area sigma tol steamP lowSteam lastV
+  ragged vorT gauges jet flame`, steps carry `crew` text, flights `at along lat lox v endT`. Lessons w-v1 and w-v2
+  rewritten for the new console. Keys: Enter/Space the big key, arrows the dials (Shift coarse), B cover, O/I/X fix /
+  carry on / scrub, R repair, T top up LOX, A auto.
+- (ui) `.mid` in panel.css (the mission slip's number) is scoped to `.mrow .mid`: a `Bar` at 30 to 60 % also carries
+  the class `mid` and was squeezed to 22 px wide (HP, wear, roster and sector bars).
+- (render, models, fx) The V-1 and V-2 sites in 3D: `render/crews_vweap.js` `VCrew(rig, kind)` is the launch crew
+  (V-1 10 men, V-2 12) driven like GunCrew from `unit.special` (a pure function of the step id, k = t / dur, cover and
+  the render hints, so fastForward is exact); `render/guns.js` uses it for v1 and v2 (they had no crew: GunCrew threw
+  on their cartridge kind). `poseVSite(rig, unit, sim)` poses the machinery every frame (ww2/render.js): the V-1's
+  trolley from a new store to the Richthaus turntable (compass swung with mallets), round an S-bend to the ramp, the
+  cradle jacked up and the missile slid onto the sled, fuel and air hoses, the steam generator rolled up and coupled,
+  the crew to the trenches, the pulse jet run up on the ramp before the catapult, piston and sled thrown off the top;
+  the A4's Meillerwagen backed in, outriggers jacked, rams erecting, collars opening (`setClamps`), the table turned on
+  its crank, men on the platforms, tanker hoses per fuel (`setHoses`), frost and LOX vapour, the Meillerwagen folded
+  and withdrawn, the Vorstufe and Hauptstufe on the table (fx `v2pre`, `v1run`, `vent`). Missiles are drawn from the
+  sled or table, closing on the sim's track (2.6 s V-1, 7 s A4). Camera (`vFraming`, ww2/render.js `framing`,
+  `reselect`, a guarded hook in main): each step reframes once (focus riding with the trolley), the player's orbit and
+  zoom are left alone in between, the camera keeps to the sun's side, and the sites' own trees are cut away along the
+  line of sight (`vweap_kit.js` `VCUT` linked to the CUTAWAY uniforms). V-1 rig: `setTrolley(x, z, heading, y)`,
+  `setLift`, `setSlide`, `setHoses`, `setSled`, `rig.v1`, `rig.layout`; store, paths, second trench, step and fuel cart
+  added, Richthaus doors 6 m. Draws with the crew: V-1 about 49, V-2 about 61. The set-up step list is the drill's own
+  (`special.js` `QUICK`, exported). Viewer: `vpreview.html?kind=v1|v2&drill=<step>&k=`. The catapult cloud and the
+  A4's lights and clouds are toned down (they whited out the screen).
+- (post) Facing a low sun in clear weather no longer whites out the frame. three's UnrealBloomPass bright pass sent
+  each texel over the threshold into the blur chain whole: the sun's disc (thousands of times the threshold after
+  exposure) and, in the darker 1917 scene where auto exposure lifts the picture, a wide band of sky just over it were
+  spread into a disc of white (worst at 07:00 to 08:00). post.js patches the bright pass: only the luminance above the
+  threshold goes in (`uKnee` 1; 0 is three's whole texel) and it is capped (`uCap`, the colour kept). main's params
+  `bloomCap` 8 and `bloomKnee` 1, both in the gear menu. Gun blasts, bursts and flares still bloom hard; midday views
+  are unchanged. Also fixed: the sandbox B key's fake blast handed the render layer a piece without az/el, posing the
+  rig with NaN (its muzzle and the queued sounds went non-finite and audio.update threw).
+- (models, render) The A4's control vanes move. `missiles.js` splits the four air vanes (a radial hinge at s 13.6,
+  the fins cut out for them with a 1 cm slot) and the four graphite jet vanes (a radial shaft at s 13.98) out of the
+  merged parts (`a4Pieces(roll, { split: true })` returns `{ lists, vanes }`; `a4VaneLists`, `a4Vanes` as two
+  InstancedMeshes; `A4_VANES`, `a4PitchProgram`). The V-2 site rig has `rig.setVanes(pitch, yaw, roll)` (radians of jet
+  vane, 15 degrees at most, the air vanes at two thirds to 10; I and III pitch, II and IV yaw, all four roll); +2
+  meshes, +4 draws with shadows. `crews_vweap.js` runs the electrical checks' vane test (three rounds of pitch, yaw
+  and roll throws over k 0.16 to 0.94, a pure function of k) and twitches them about 2 degrees in the Vorstufe and
+  Hauptstufe; the checks step's camera now frames the tail low on the sunlit side so the test is seen. The flying A4
+  carries a morph target weighted per instance by `render/shells.js` (`setMorphAt`): a steady 6 degree pitch-program
+  deflection of vanes I and III while burning, from 4 s to about 48 s.
+- (ui) The title screen gave way to a main menu and a loading screen. `/` is the menu (`src/ui/menu.js`,
+  `menu.css`): DOM only, nothing of the battlefield is built. It lists the entries of `src/menuItems.js` (pure
+  data: the 1917 battle and the Big Bertha demo, the WW2 operations, the campaign missions and the lessons of both
+  eras, with their locks and the game URL each opens) in the tabs Battles, Campaign, Tutorials and Your batteries;
+  one entry is selected at a time, its briefing on the left, and Play mission opens it. Era, tab and selection
+  change nothing but the DOM (remembered in localStorage `drumfire.menu`). A game page (`play`, `tutorial` or
+  `sandbox` in the URL, `src/boot.js`) shows its loading screen (`src/ui/loading.js`, the entry's operation order
+  with the load bar) before `main.js` is fetched, builds the world behind it and starts the battle or the lesson
+  when loaded. New URL param `?difficulty=Easy|Normal|Hard`; `?sel=<key>` selects a menu entry (the way back from a
+  game), `?op=` and `?campaign=` without `play` select theirs, `?lessons=1` opens the Tutorials tab. A locked
+  battle or mission URL goes back to the menu. Main menu, a lesson's Exit and Esc leave for the menu.
+  `ui/progression.js` keeps only the in-game objectives (`mountCampaignObjectives`).
+- (render) The Gustav's crew stands on the ground beside the track while the gun is still being assembled
+  (`rig.assembly < 1`, the railway preparation): a gang each side between the girders and the crane legs, back at
+  their stations on the galleries once it is built (`crews_heavy.js` `heavyAct`). They stood in the air before.
+- (render) Crew props follow the parts they rest on. They live in the rig's root, so a rig that hides a part left
+  them standing: `crews.js` now hides the next shell when `anchors.shellStack`'s part is hidden and the shell in
+  hand, the cartridges, the staff and the rope when `anchors.tray`'s is (the Gustav's waiting shell hung 2.3 m up
+  over its wagon before the wagon rolled in). The heavy drill's equipment (`crew-heavy-equipment`: the control
+  stations with their handwheels, the carts, the rammer drive, the slings) is hidden while the Gustav is unbuilt.
+- (models, sim) The Gustav's assembly hangs from the gantry cranes. `heavy_gustav_site.js` exports `CRANE` (the
+  cranes' stations, the bridges' underside, the hooks' rest, the sling) and `setHooks(rig.liftHooks)`, which
+  lowers each hook onto the part below it with a two-leg sling and stretches its ropes to the bridge; `gustav.js`
+  measures each part's top under the hooks at build time and lifts it no higher than the bridges allow (it was
+  15 m for every part, so the upper carriage and the cradle came down above the bridges); `ww2/render.js` passes
+  the hooks from the rig to the site each frame. In the sim the gun is put together flat: the controller holds the
+  piece at its loading elevation with `piece.fixed` until the assembly is done (it was laid at 40 degrees while in
+  pieces), then it lays as usual. Gustav siege, all-auto seeds 1 to 8: Easy 5, Normal 4, Hard 1 (6 / 4 / 2 before).
+- (models, render) The German guns' loading trays, gun by gun, through loading, firing and laying:
+  - leFH 18 / sFH 18 (no tray on the real guns): `anchors.tray` moved into the open breech (the round lay in the
+    air behind it). `crews.js` `carryMan` lifts a round laid in the breech to the bore's height, turns it into
+    line, brings it onto the bore behind the face and pushes it in (a straight path cut the cradle).
+  - K 18 / Mrs 18: `loadTray` is on the recoil pivot, hinged at its lip in the open block's slot, on only at the
+    loading elevation (it hung beside the breech with nothing holding it); `setBreech` also sets the tray; the
+    viewer's `shell-tray` is a child of the tray. `crews.js` `pairMan` lifts the round above the tray before
+    carrying it on (it rose through the tray's floor).
+  - Karl: the stowed tray went through the left cheek plate, the railing at full traverse and the cradle at 20 to
+    30 degrees; the cheek steps down to carry a visible cross slide, the tray is 2.45 m with a 0.85 m slide, the
+    ramp lines up with it, `staffLen` 2.6. `crews_heavy.js`: the rammer drive rides the tray floor, the Karl's
+    charge comes up the ramp on the bore line (no support cart).
+  - Bertha (main-game adapter): `setTray` drives the demo's carriage, so the tray runs back for the shot (the
+    recoil went through it); the crane swings behind the stage, `HANG` 1.0, crew spots clear of the run;
+    `crews_heavy.js` guides stand wider on its open stage. Demo model: rear axle, rails and stops moved.
+  - Gustav: checked, unchanged.
+  - `crewcheck.js` skips meshes hidden at build (the viewer's `trayShell` read as steel) and reports what a carried
+    shell touches.
+  Open: the K 18 / Mrs 18 recoiling barrel goes up to 0.29 m into the top carriage's rear box near 25 degrees and
+  0.16 m into the lower carriage's transom near 35 degrees (not the tray; it was there before).
+- (models, render, sim) The Gustav's setup follows the sources (refs/gustav; the gun came in pieces by rail and was
+  assembled on a straight three-track section under two 110 t gantry cranes on their own outer rails, the parts
+  lifted off wagons on the third track; the cranes were put up with four hand derricks; two diesel locomotives moved
+  the gun onto the firing curve). Nothing appears from nowhere any more:
+  - `src/ww2/gustav_layout.js` (pure): the firing curve and, behind it, the straight (360 m at the fortress siege, 80
+    elsewhere) with the two gun tracks, the delivery track (x 7.6), the cranes' rails (x -7.2, 12.2), a ladder of
+    three yard sidings 8 m apart and the ammunition siding (x -27); `pathAt`, `pathU`, `vehicleAt` place vehicles on
+    its polylines.
+  - `src/ww2/gustav_works.js` (pure): `createWorks(layout, rig.works).update(st)` gives every train car, the two D 311
+    diesels, the gun's eight bogies and two wagons, each part of the gun, the two cranes (along their rails, crab,
+    hook, sling) and the four derricks (slew, luff, hook) from `st.stage` and `st.assembly`. The assembly's acts: the
+    bogie units pushed in, the girder halves, the upper carriage (with the loading platform, the towers and the tray),
+    the cradle with the barrel's rear half and the breech, the barrel's front half, then the drive onto the curve;
+    each part rides its wagon from the yard, is lifted no higher than what it sweeps over needs, carried along and
+    across and set down. The cranes' erection (st.stage.cranes) puts their sides up in three sections each and hoists
+    their bridges; taking them down runs it backwards.
+  - `heavy_gustav_site.js` builds all of it (`setWorks(pose)`; `setStage` keeps survey, track (the curve only), flak and
+    camo; the straight, the yard and the sidings are there from the start); `gustav.js` splits the gun into those parts
+    (`rig.works` measures them, `rig.setWorks(pose)` places them, the bogies and the wagons; the barrel in two halves,
+    the trunnion bearings open above with their caps on the cradle); `ww2/render.js` runs it and stands the rig and
+    the camera's focus where the gun is until it reaches its station. `buildGustavSite({ arc, yard })`: yard at the
+    fortress siege only.
+  - `terrainHeight.js`: a pad may level to `ref`'s ground; `ops.js` adds the straight's pad, level with the station.
+  - The crew works on the ground along the gun's left side while it is built.
+- (models, render) The Gustav on firing: the barrel recoils 3 m (two sources; short at low elevation,
+  `rig.recoilFade`) and the whole carriage is shoved 0.8 m back along its rails and brought up again as it reloads
+  (`rig.setCar`, `rig.carRoll`, the railway gun's `carPose`); the men on it ride along (`crews.js` turns the run with
+  `rig.carYaw`). Inner guard rails brace the curve.
+- (sim, models, render) The Gustav's "Flak and smoke" task is now **Flak cover** (Flakschutz), as the sources have
+  it (two army flak battalions guarded the gun; the smoke and nets belong to the camouflage task). Four batteries
+  (`gustav_layout.js` `FLAK`: light 2 cm Flakvierling, heavy 8.8 cm, light, heavy) come in one by one as the task
+  runs: each waits in its field, is towed in by its Sd.Kfz. 7, unlimbered, turned and set down, the tractor draws
+  off, the barrel comes up and the pit's bank is dug around it (`works.update` `pose.flak`, site `setWorks`; the
+  batteries stand on the terrain, `buildGustavSite({ ground })`). Each counts as soon as it stands
+  (`special.js` `flakCover`): the light guns are the killers of low ground-attack aircraft (`st.flak` 0.42 a
+  battery), the heavy ones mostly spoil the raiders' aim (`st.flakSpoil` 0.3 a battery, which `enemy.js` turns into a
+  wider bomb scatter, `raid.spoil`). Sevastopol all-auto Normal, seeds 1 to 72: the preparation is unchanged (the gun
+  ready at 310 s on average, 5 bombs in the works in 72 games, under the old rule and the new); the wins move with the
+  random stream (seeds 1 to 144: 51 against 61, about one standard error).
+- (UI, render) Watching a task: a Gustav task clicked on the procedure card takes the camera to its work (the survey
+  and track fronts, the battery being dug in, the cranes, the ammunition train, the part on the hook, the
+  camouflage), clicked again back to the gun; a finished task holds it 3 s, then gives it back. Plumbing:
+  `SpecialCard({ focus })`, `mountConsole({ focus })`, `Panel` option `onFocus(unitId, task)`, main to
+  `ww2Render.focusTask(unitId, task)`; the render layer glides the unit's root (the chase camera's target) to
+  `works.focusOf(task, st)` and frames it once through `framing()` (the player's orbit and zoom stand after that).
+- (render, models) The Gustav's site deconflicted, checked by a voxel clash pass over every stage of the build (the
+  cranes going up, each act of the assembly, the cranes coming down, each flak battery's tow, the finished gun laid
+  to both ends of its arc; at the fortress siege and in the open battle). The two D 311s no longer stand at the
+  station once the gun is on its curve: they stay coupled behind its shell and charge wagons and go with it as it is
+  laid and as its carriage runs back on firing (they are what moves it along the curve; `works.update(st, az, car)`,
+  `rig.carZ`); before, a gun laid back ran into them. Each gantry crane is put up on its own ground (`DERRICK.z`:
+  the first crane's derricks on the curve's side, the second's on the yard's, their guys led away from the crane);
+  before, the guys ran through the stacked sections and the second crane's into the first crane's stacks. The
+  theodolite and plane table leave once the track is down (the camouflage's guys are pegged out there). What the
+  pass still finds is by design: slings and hooks on their loads, parts on their cribbing, coupled buffers.
+- (ww2 sim) The Karl no longer loads or lays on the move. Before, a loading cycle begun in one position ran on through
+  raising the hull and the drive to the next (the carrier's crane lifting, the round rammed, the barrel laid up to
+  60 degrees on the road). Now `KarlCtl.gate` sets `unit.stowed` whenever the hull is not down, and `sim/guns.js`
+  then keeps the barrel flat on the middle of its traverse, puts a laid round back to wait at its `lay` step (it lays
+  again once the hull is down at the new position) and, without `loadThrough`, gives the cycle up if the shell is
+  not yet rammed: the shell stays on the carrier, the breech closes over 6 s. The set-up (sandbox) Karl still loads
+  while its hull turns (`loadThrough`), not on the road. British units and the other WW2 units never set `stowed`:
+  simtest identical, Flanders, Sevastopol, V-1 and V-2 identical in ww2test; the Karl operation on seeds 1 to 32,
+  all-auto, old rule against new: Easy 27 / 26, Normal 27 / 28, Hard 12 / 15 (noise: its AI crew raising for a
+  new line now gives up an unrammed cycle).
+- (WW1 German mode) A third mode of the main game, a sandbox open battle (section "WW1 German mode"): `/?mode=ww1`,
+  seven German units (Bertha shared with the WW2 mode, the 21 cm Mörser 16, 15 cm sFH 13, 10 cm K 17, 38 cm Langer
+  Max, 42 cm Gamma and the Paris Gun) against the British side of 1918 with the British game's own five units as
+  targets in their pits. Shared changes, all inert for the British game and the WW2 mode (simtest and ww2test give the
+  same results with and without the WW1 tables): `tables.js` merges `tables_ww1.js` (FFE rows key by key);
+  `models/guns.js` `GUN_KINDS_WW1`, `GUN_ERA`, extra builders `buildBerthaGun1917`, `buildMax38Site`, `buildGammaSite`,
+  `buildParisSite`; `models/shells.js` shell and cartridge rows for `sfh13 m16 k17 max38 gamma paris b18 b45 fk16
+  cooper` (`CUSTOM.cooper`, `CUSTOM.paris`); `models/targets.js` loads `t/ww1/*.js` (not `*preview*.js`),
+  `TARGET_KINDS_WW1`; `models/t/layout.js` reads `t/ww1/layout_british.js` and `layout_rear.js`; `render/crews.js`
+  merges `render/crews_ww1.js` (roles, light kinds, world roles, staff lengths, the hooks, the 1917 dress for
+  `era: 'ww1'` kinds and, with `CREW_ERA.ww1`, every German kind); `render/targets.js` `BALLOONS` (the British
+  `bballoon` falls like the German one, from the site's `alt`), `bconvoy` in `MOVES` and `DRIVES`, `bdump` in `MOVES` and
+  `DUMPS`; `render/guns.js` `KICK` rows for the six new kinds; `fx.js` `parisBlast` (`fx/ww1.js`); `audio.js` the `ww1`
+  option, `enableWW1()`, `parisGun(pos)`; `ui/tracker.js` skips `paris` shells; `ui/consoles/console.js` mounts and
+  routes to `ui/consoles/paris.js`; the menu's third era (`menuItems.js`, `ui/menu.js`); `dev/modelviewer.js` and
+  `render/clipcheck.js` load the WW1 builders, the viewer dresses WW1 crews in 1917 dress. Research: `docs/WW1.md`.
+  Test: `tools/ww1test.mjs`.
+- (WW1 German mode) The roster is ordered by calibre (1 K 17, 2 sFH 13, 3 Mörser 16, 4 Paris Gun, 5 Langer Max, 6 Bertha,
+  7 Gamma). Bertha and the Gamma can relay their beds (`rebed`, `BedCtl` in `src/ww1/special.js`; section "WW1 German
+  mode"): shared changes `sim/guns.js` `problem()` names the remedy when `u.special.bed` exists, `ui/consoles/gunsCard.js`
+  shows the bed and its key (`new GunsCard({ onBed })`), `console.js` T and a status line without a card name for a bed
+  gun; both inert for the other modes. The British kite balloon has no site in the battle. At X-Zeit the director
+  releases the auto barrage batteries from other missions. `ZERO_NEED` Easy 54 %. Console layout for narrow cards and
+  wider fallback fonts (`panel.css`): card titles ellipsize instead of pushing their keys out, the message slips wrap
+  and the battery name in a slip shrinks; beside the Paris Gun's card (300 px) the guns card is 226 px (`style.css`).
+- (WW1 German mode) Relaying a bed takes 100 s for Bertha and the Gamma (was 360 and 720 s); the console and the radio
+  give the time in seconds under two minutes. All-auto on seeds 1 to 72: Easy 32, Normal 14, Hard 3 (was 32, 16, 4).
+- (WW1 German mode) The Paris Gun has four military targets off the map and the Armee's orders on them (section "WW1
+  German mode"): `op.paris` replaces `op.target`; `special.js` `effectK(effect)` (with `supplyK()` kept for
+  `enemy.js`), `director.js` `assault()` and `enemy.js` `raid()` and the RE8 interval read it; `ParisCtl` gains
+  `targets`, `orders`, `pickTarget()`, `aim { id }`; flights carry `target` and `result` (the card now marks IN THE
+  AREA from the sim's own 400 m, not 700). Shared change: `ui/consoles/console.js` mounts a special card's `aside` in
+  the range table's place (only the Paris card has one). `tools/ww1test.mjs` reports rounds by target and orders.
+  All-auto on seeds 1 to 72: Easy 27, Normal 16, Hard 5 (was 32, 14, 3).
+- (WW1 German mode) Bertha's and the Gamma's bed relay is instant for now (`REBED` 0 for both, was 100 s; to be
+  restored): `BedCtl.rebed` relays in the same step when the duration is 0, and the radio, `ui/consoles/gunsCard.js`
+  and `sim/guns.js` `problem()` leave out the time out of action when it is 0 (shared change, inert for the other
+  modes). All-auto with the Paris Gun still in the battle: Easy 25, Normal 10, Hard 3 (was 27, 16, 5).
+- (WW1 German mode) The Paris Gun leaves the open battle for its own mission (op `paris`, kind `'paris'`, "Paris Gun"
+  in the menu, `/?mode=ww1&op=paris&play=1`), as the WW2 V-1 and V-2 have theirs; section "WW1 German mode". The
+  battle's roster is renumbered 1 to 6 (`max38` 4, `bertha` 5, `gamma` 6). `ops.js`: `OP_IDS ['ridge', 'paris']`, each
+  op's `tag` (the menu's line), `op.paris` moves to the mission with six new orders and only the aerodrome keeping an
+  `effect`; `theatre.js` `ww1Theatre(opId)` (sectors only for the battle); `director.js` no script outside the battle;
+  `enemy.js` `HUNT` and `huntUpdate()` (Camel raids on the gun, `raid()` reads `target.spoil`); `special.js` `WIN`,
+  `missionEnd()`, `cover()` (`COVER_R`, `COVER_GATE`, `unit.special.cover`), manual at the start of the mission, the
+  barrel opening at 55 to 59 rounds; `ui.js` draws the salient and lines only in the battle. Shared changes: `main.js`
+  reads `?op=` for WW1 and gives the mission its toast, stand-to and end texts; `menuItems.js` an entry per WW1 op
+  (`query` now carries `op`) and `ROSTER_WW1` of every op's units; `ui/menu.js` the WW1 Battles help line.
+  `tools/ww1test.mjs` `--op ridge|paris|all`. All-auto on seeds 1 to 72: the battle Easy 21, Normal 10, Hard 3; the
+  mission Easy 42, Normal 29, Hard 10.
+- (WW1 German mode) The Paris Gun's mission plays like the WW2 Gustav and V-weapon missions: a Stellungsbau, then a
+  Feuerablauf for each round (section "WW1 German mode", Paris Gun). The controller moves to `src/ww1/paris.js`
+  (`TASKS`, `GANGS`, `DRILL`, `FAULTS`, `CHARGE_TOL`, `SPREAD`, `AUTO_PAUSE`, `AUTO_NEXT`, `WIN` 0.8; commands `gang`,
+  `hurry`, `step`, `fix`; `table` now lays the table plus what the reports taught (`taught`) and no longer sets the
+  charge); `special.js` imports it. The op's unit is no longer `ready`, its orders (five) count from the moment the gun
+  stands. `enemy.js` `huntUpdate` hunts the site from the start and reads its `flak`, `spoil` and `hide`. Shared
+  changes: `sim/guns.js` `u.stowLaid` (a stowed gun keeps its line), `ui/consoles/console.js` a special card's `left`
+  in the guns card's place and the status line's card name for the Paris Gun; `ui/consoles/paris.js` the drill card
+  (`ParisDrill`) and the keys Enter, O, I, J, Tab and L; `style.css` its layout; `ww1/render.js` the Stellungsbau's
+  picture. `tools/ww1test.mjs` `--player` and the mission's histogram. On seeds 1 to 72 the mission all-auto Easy 28,
+  Normal 7, Hard 0, the scripted player 60, 42, 11; the battle, the British game and the WW2 mode unchanged.
+- (WW1 German mode) The Paris Gun's mission builds its position in sight and shows its targets: `TASKS` gains `bank`
+  (earth bank and screens) and every task matches what goes up on the site (`buildParisSite` builds into groups and
+  gains `setStage`, a weather mast and theodolite and two anti-aircraft machine-gun posts; `buildParis` puts its bed
+  in `rig.bedGroup`; `ww1/render.js` poses them from `stage`). The map: `ui/consoles/parisMap.js` (the targets, the reach
+  band, the line laid on, the falls, a magnified inset) through new theatre hooks on the board (`TH.overlay`,
+  `TH.hoverText`, `TH.boardHint`, `TH.fitTip`, `TH.aimTip`; the metric grid's 10 km step) and `special.boardClick`
+  in `console.js`. The console: the firing data card SCHUSSWERTE takes the fire order card's place (`special.top`), so
+  the unused British aiming keys are gone; the gun's card keeps the barrel, the shells and five reports; English hover
+  text on every label, row and key of the four cards, and on the AUTO, MANUAL and HOLD keys of every console. On seeds
+  1 to 72 the mission all-auto Easy 25, Normal 6, Hard 1, the scripted player 59, 49, 10; the battle, the British
+  game and the WW2 mode unchanged.
+- (post, main) The '1917' grade no longer draws old film: the gate flicker, the coarse grain, the dust specks, the
+  scratches, the lifted blacks and the heavier vignette are gone from `GradeShader` (`uFilm` and the grade's `film`
+  removed); '1917' is a colour grade like the others and stays the British and WW1 default. The fine grain is off by
+  default too (`params.grain` 0; the gear menu's slider still sets it). The Bertha demo keeps its own settings.
+- (WW1 German mode) The Paris Gun's crew no longer floats over the empty site during the Stellungsbau: `poseParisSetup`
+  sets `rig.assembly` from the frame's run-in, and the Paris crew module's `act` hook puts the men on the ground beside
+  the gun until the frame is on its bed, as the Gustav's do during its assembly.
+- (WW1 German mode) The Paris Gun says how to aim and what to correct: the firing data card SCHUSSWERTE has an
+  advice box under the target line (in the last report line's place) that walks through aiming (pick the target, fire,
+  the report, REPORT or the arrow keys) and, when a report is in, gives the correction (`ENTFERNUNG −390 m (shorter),
+  SEITE +0.6 Strich (right)`) and lights REPORT (TABLE after a new Wettermeldung); the row labels carry English glosses;
+  the map's inset draws a blue ring where the next round should fall, which moves as the corrections change; the drill
+  card says when the report on the round in flight comes; the shot's radio says when its report comes and the report's
+  what to correct. `ParisCtl`: `flight.corr` (the corrections the round went with), the exports `nextFall` and
+  `correction`, and the player's `report` now corrects from the data the round was fired with (the auto crew and the
+  scripted test player keep `useReport`). On seeds 1 to 72 unchanged: all-auto 25, 6, 1, the scripted player 59, 49, 10.
+- (Bertha demo) Crew assists can be switched in the battle: C, or the last button of the station bar (`#assist-btn`,
+  `BerthaHud.setAssist(on, allowed)`), since the main menu opens `bertha.html?play=1` and skips the title screen with
+  its checkbox. `game.assist` flips live (the crew's waits reset); not in the tutorial's range game. The choice is
+  remembered in localStorage `drumfire.bertha.assist` (the title screen's box follows it); `?assist=1|0` overrides.
+- (menu, UI) Work in progress is marked: `menuItems.js` `WIP_KINDS` (`paris`, `gustav`) and the Big Bertha demo. An
+  entry whose gun is one of them (the Gustav siege, the campaign mission that earns the Gustav, its lesson, the Paris
+  Gun's mission) or the demo carries `wip: true` and leads its lines with `WIP_LINE`; the menu badges its row and title
+  (`.wip-badge`, style.css), the loading screen its title, the roster tab the gun's row; `hud.setUnit(name, call, wip)`
+  badges the unit's name in the game, and the Bertha page badges the gun's name and its title screen. README marks the
+  same three.
+- (menu) The Big Bertha demo is listed in the WW1 German era only: the 1917 British era's entry (`bertha`) is gone, and
+  the demo's back link opens the menu on the WW1 German era with the demo selected (`/?mode=ww1&sel=bertha:ww1`).
+- (menu) The main menu's background is the selected entry's still from the game: `public/menu/<id>.jpg`, a gun of each
+  kind firing, captured by `tools/menushots.mjs` (the game page in a private headless Chromium with dev mode on, the
+  console and the overlay hidden and the view the full width, the gun put on auto, the battle fast-forwarded, frames
+  until it fires, the camera orbiting the piece about to fire; `node tools/menushots.mjs [id ...] [--size WxH]
+  [--quality Q]` re-takes them, so the WIP guns' pictures can follow their models). `menuItems.js`: an entry's `still`
+  (an operation's gun, the battery a campaign mission earns, a WW2 lesson's weapon; the 1917 battle the 15-inch, the
+  WW1 battle Langer Max, the WW2 open battle the Nebelwerfer) or its era's `ERA_STILLS` in turn (the 1917 lessons),
+  `stillsOf(item)`, `stillUrl(id)`, `STILLS`. `menu.js` `backdrop()`: two layers that crossfade once the next picture
+  has loaded, a rotation every 10 s, the next one fetched ahead; `menu.css`: each layer drifts slowly its own way under
+  a shade darkest behind the briefing; no drift or rotation with `prefers-reduced-motion`. The folio lets the picture
+  through a little (a blur behind it).

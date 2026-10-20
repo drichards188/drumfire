@@ -129,6 +129,8 @@ export class OrderCard {
       go = r > 0;
       this.guns.set(sel);
     }
+    // an order the guns cannot carry out (x.problem, the reason on the status line): the key says so
+    if (x.problem) { sub = 'cannot fire'; go = false; }
     this.bFire.set(go && !!t);
     this.bFire.text(main, sub);
     setCls(this.bFire.el, 'long', main.length > 6);

@@ -3,6 +3,7 @@ import { UNITS, piecePlacements, headingFor } from '../sector.js';
 import { GUNS, STEP } from '../sim/tables.js';
 import { buildGun } from '../models/guns.js';
 import { GunCrew } from './crews.js';
+import { VCrew, VKINDS } from './crews_vweap.js';
 import { smooth } from './anim.js';
 
 // Gun rigs posed from the sim every frame: traverse and elevation from piece.az and piece.el, the
@@ -12,7 +13,8 @@ import { smooth } from './anim.js';
 // shot and is winched forward before the round goes in), and the loading crew (crews.js). Rigs are the ones main built
 // (`rigs`, keyed `${unitId}:${pieceIndex}`) or built here when main has none.
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
-const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4, lefh18: 0.25, sfh18: 0.3, k18: 0.5, mrs18: 0.5, nbw41: 0.05, gustav: 0.6, bertha: 0.8, karl: 0.9, v1: 0, v2: 0 };
+const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4, lefh18: 0.25, sfh18: 0.3, k18: 0.5, mrs18: 0.5, nbw41: 0.05, gustav: 0.6, bertha: 0.8, karl: 0.9, v1: 0, v2: 0,
+  sfh13: 0.3, m16: 0.5, k17: 0.3, max38: 0.6, gamma: 0.9, paris: 0.7 };
 
 // How far back along the rails the railway car stands `tf` s after the shot (0..1 of rig.carRoll): a fast run
 // back against the brakes (decelerating over 1.9 s), a pause, then the slow winch-in that ends as the round
@@ -57,8 +59,9 @@ function quickLoad(j, alpha) {
 }
 
 export class GunViews {
-  constructor(scene, sim, terrain, rigs, fx, onlyRigs = false) {
+  constructor(scene, sim, terrain, rigs, fx, onlyRigs = false, detail = null) {
     this.onlyRigs = onlyRigs;
+    this.detail = detail; // DetailCull: a far battery's small parts are not drawn
     this.scene = scene;
     this.terrain = terrain;
     this.rigs = rigs;
@@ -92,7 +95,9 @@ export class GunViews {
         rig.root.rotation.order = 'YXZ';
         let v = this.rigs._views?.get(key);
         v = { unit: u, piece: p, rig, key, crew: null, baseY: rig.root.position.y, wrecked: false, dist: 0 };
-        try { v.crew = new GunCrew(rig, p.kind); } catch (e) { console.warn('crew', p.kind, e.message); }
+        // the V-weapon sites have a launch crew of their own (crews_vweap.js), driven by the drill's state
+        try { v.crew = VKINDS.has(p.kind) ? new VCrew(rig, p.kind) : new GunCrew(rig, p.kind); } catch (e) { console.warn('crew', p.kind, e.message); }
+        this.detail?.add(`gun:${key}`, rig.root);
         this.views.push(v);
         this.byKey.set(key, v);
       }

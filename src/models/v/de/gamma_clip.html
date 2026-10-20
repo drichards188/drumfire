@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gamma clip check</title>
+<style>html, body { margin: 0; background: #181a1c; color: #cfd6dc; font: 12px monospace; } pre { margin: 8px; white-space: pre-wrap; }</style>
+</head>
+<body>
+<!-- render/clipcheck.js for the WW1 pieces: it only loads the British field guns' builders itself, so this page
+     loads the WW1 builders first (?gun=gamma, the same parameters as /src/render/clipcheck.html, and &el=min,max in degrees) -->
+<pre id="out">running...</pre>
+<script type="module">
+  import { loadGuns, GUN_KINDS_WW1 } from '/src/models/guns.js';
+  import { GUNS } from '/src/sim/tables.js';
+  await loadGuns(GUN_KINDS_WW1);
+  // &el=43,75: test the gamma at other elevation limits than the table's (degrees; this page's copy only)
+  const el = new URLSearchParams(location.search).get('el');
+  if (el) { const [a, b] = el.split(',').map((d) => Number(d) * Math.PI / 180); GUNS.gamma.elMin = a; GUNS.gamma.elMax = b; }
+  await import('/src/render/clipcheck.js');
+</script>
+</body>
+</html>

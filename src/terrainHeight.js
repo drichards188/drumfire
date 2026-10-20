@@ -175,9 +175,10 @@ function pads() {
   if (PADS) return PADS;
   PADS = flatPads().map((p) => ({
     x: p.x, z: p.z, rx: p.rx, rz: p.rz, c: Math.cos(p.heading), s: Math.sin(p.heading), blend: p.blend,
-    reach: Math.hypot(p.rx, p.rz) + p.blend, h: 0, small: p.rx <= 22,
+    reach: Math.hypot(p.rx, p.rz) + p.blend, h: 0, small: p.rx <= 22, ref: p.ref,
   }));
-  for (const p of PADS) p.h = ground0(p.x, p.z, true);
+  // a pad levels to the ground at its centre, or at `ref` (a site's further pads level to its own height)
+  for (const p of PADS) p.h = ground0(p.ref?.x ?? p.x, p.ref?.z ?? p.z, true);
   return PADS;
 }
 

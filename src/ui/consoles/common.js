@@ -45,7 +45,11 @@ export const FUZE = {
   delay: { main: 'DELAY', sub: 'penetrate' },
   shrapnel: { main: 'SHRAPNEL', sub: 'time fuze' },
 };
-export const KIND_SHORT = { bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly', lefh18: 'leFH', sfh18: 'sFH', k18: 'K 18', mrs18: 'Mrs 18', nbw41: 'NbW', gustav: 'Gustav', bertha: 'Bertha', karl: 'Karl', v1: 'V-1', v2: 'V-2' };
+export const KIND_SHORT = {
+  bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly',
+  lefh18: '10.5 cm', sfh18: '15 cm sFH', k18: '17 cm', mrs18: '21 cm', nbw41: '15 cm NbW',
+  gustav: '80 cm', bertha: '42 cm', karl: '60 cm', v1: 'V-1', v2: 'V-2',
+};
 
 // Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns
 // the unit has (more than one: the guns selector on the order card).
@@ -62,7 +66,7 @@ export const KINDS = {
   mrs18: { pieces: 2, title: '21 CM MÖRSER 18', note: 'Two heavy mortars, 113 kg shells plunging onto strongpoints and dugouts', rounds: [1, 2, 3, 4], fuzes: ['instant', 'delay'], charges: 4 },
   nbw41: { pieces: 3, title: '15 CM NEBELWERFER 41', note: 'Three six-tube launchers: a round is a ripple of six rockets. Short range, slow reload, the smoke gives you away', rounds: [1, 2, 3], fuzes: ['instant'], charges: 1 },
   gustav: { pieces: 1, title: '80 CM SCHWERER GUSTAV', note: 'Railway gun on its firing curve: 4.8 t shells to 47 km, a handful of rounds. Every shot counts', rounds: [1], fuzes: ['instant', 'delay'], charges: 3, deep: true },
-  bertha: { pieces: 1, title: '42 CM BIG BERTHA (ALTERNATE HISTORY)', note: 'The 1914 M-Gerät as a guest: 810 kg shells to 12 km against the hardest targets', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
+  bertha: { pieces: 1, title: '42 CM BIG BERTHA', note: 'The giant siege howitzer: 810 kg shells to 12 km against the hardest targets', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
   karl: { pieces: 1, title: '60 CM KARL-GERÄT', note: 'Siege mortar: 2.2 t shells at 3 to 6.5 km, 4 degrees of traverse: turn the whole vehicle', rounds: [1], fuzes: ['instant', 'delay'], charges: 3 },
   v1: { pieces: 1, title: 'V-1 LAUNCH SITE', note: 'Walter catapult: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },
   v2: { pieces: 1, title: 'V-2 FIRING TABLE', note: 'A4 mobile battery: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },

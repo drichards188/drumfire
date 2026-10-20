@@ -1,77 +1,8 @@
-/* A bounded command folio over the full battlefield view. */
-body.title #view { flex-basis: 100%; width: 100%; }
-body.title #panel { display: none; }
-body.title #view::after { background: radial-gradient(ellipse at 50% 45%, #171b16aa, #080b09ed 85%); }
-body.title #title-screen {
-  inset: 0; margin: auto; width: min(1120px, calc(100% - 80px)); max-width: none;
-  height: fit-content; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
-  gap: 64px; align-items: center;
-}
-.menu-overview { min-width: 0; }
-body.title .brand h1 { font-size: clamp(42px, 4.7vw, 66px); letter-spacing: .055em; }
-body.title .brand h1::after { height: 2px; width: 56px; margin: 24px 0; box-shadow: none; }
-body.title .brand .sub { margin-left: 0; font-size: 10px; letter-spacing: .2em; line-height: 1.7; }
-body.title .brand .blurb { margin-left: 0; font-size: 14px; line-height: 1.7; color: #bdb9a9; }
-body.title #modes, body.title #options, body.title #ops, body.title #op-note { margin-left: 0; }
-body.title .actions { gap: 10px; }
-body.title .actions > button, body.title .actions > a { padding: 12px 16px; font-size: 10px; letter-spacing: .15em; }
-body.title #play { width: 100%; background: #bca16a; color: #171b16; border-color: #d2b77d; }
-body.title #play:hover { background: #d2b77d; letter-spacing: .15em; }
-body.title .keys { font-size: 10px; margin-top: 24px; opacity: .65; }
-#career { min-width: 0; padding: 24px; border: 1px solid #9b906343; background: linear-gradient(145deg, #242922f5, #151b17f5); box-shadow: 0 20px 70px #0006; }
-.career-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 20px; }
-.career-heading small { font: 9px var(--mono); letter-spacing: .24em; color: #aaa88b; }
-.career-heading h2 { font: normal 27px var(--serif); margin-top: 7px; color: #e4dcc5; }
-#career-total { font: 10px var(--mono); color: #b4b29e; white-space: nowrap; }
-.career-tabs { display: flex; border-bottom: 1px solid #9b906343; gap: 24px; }
-.career-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 0 0 12px; background: none; color: #969d8d; cursor: pointer; font: 11px var(--mono); }
-.career-tabs button[aria-pressed="true"] { color: #e0c78e; border-bottom-color: #c2a464; }
-#career-count { font-size: 9px; margin-left: 5px; opacity: .7; }
-.career-page { min-height: 390px; padding: 16px 0; }
-.career-page[hidden] { display: none; }
-#career p { margin: 0 0 12px; font-size: 12px; line-height: 1.5; color: #acb09e; }
-#campaign-list { display: grid; gap: 3px; }
-#campaign-list button { display: flex; align-items: center; gap: 14px; text-align: left; padding: 7px 10px; background: #c2bc9310; border: 1px solid transparent; color: #ddd8c5; cursor: pointer; }
-#campaign-list button:hover:not(:disabled) { background: #c2bc9324; border-color: #a99d6755; }
-#campaign-list button.on { border-color: #b9a36a; background: #b7a3631c; }
-#campaign-list button:disabled { opacity: .45; cursor: default; }
-.mission-number { font: 11px var(--mono); color: #bda975; }
-.mission-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; }
-.mission-label b { font: normal 12px var(--serif); }
-.mission-label small { font: 9px var(--mono); color: #9da48e; text-align: right; }
-#career-roster { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-#career-roster li { padding: 12px; border: 1px solid #a49b6933; color: #aaa998; }
-#career-roster b, #career-roster small { display: block; }
-#career-roster b { font-size: 12px; font-weight: normal; margin-bottom: 5px; }
-#career-roster small { font-size: 10px; line-height: 1.5; opacity: .7; }
-#career-roster li.available { border-color: #a49b6977; color: #e0d3aa; }
-.career-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #9b906343; padding-top: 14px; }
-#career-save { color: #828d7b; font: 9px var(--mono); }
-#dev-unlock { border: 0; background: none; color: #a5a48c; padding: 4px 0; font: 9px var(--mono); cursor: pointer; }
-#dev-unlock:hover { color: #e0c78e; }
-#dev-unlock:disabled { opacity: .5; cursor: default; }
-#career button:focus-visible { outline: 2px solid #e0c78e; outline-offset: 3px; }
-@media (max-height: 800px) and (min-width: 1000px) {
-  body.title #title-screen { gap: 48px; }
-  #career { padding: 20px; }
-  .career-page { min-height: 360px; }
-  body.title .brand .blurb { font-size: 13px; }
-}
-@media (max-width: 999px), (max-height: 620px) {
-  body.title #title-screen { width: 100%; height: 100%; padding: 28px; grid-template-columns: 1fr 1.2fr; gap: 28px; overflow-y: auto; align-items: start; }
-  .mission-label { display: block; }
-  .mission-label small { display: block; margin-top: 3px; text-align: left; }
-  #career { padding: 16px; }
-}
-@media (max-width: 700px) {
-  body.title #title-screen { grid-template-columns: 1fr; }
-}
+/* in the game: the console's tabs of units a campaign mission does not use, its objectives and the way back to the
+   menu (the menu itself is ui/menu.css) */
 .tab.locked { opacity: .5; }
 .tab.locked .tkey { font-size: 9px; }
 #campaign-objectives { position: absolute; top: 110px; left: 16px; max-width: min(360px, 85%); max-height: 40%; overflow-y: auto; z-index: 9; white-space: pre-line; font-size: 12px; line-height: 1.6; padding: 10px 14px; background: #151811df; border: 1px solid #8c795250; color: #e4d6b4; pointer-events: none; }
 #campaign-objectives[hidden] { display: none; }
 #return-menu { position: absolute; right: 60px; bottom: 12px; z-index: 15; padding: 8px 12px; background: #24251ddd; color: #e4d6b4; border: 1px solid #8c7952; cursor: pointer; }
-body.title #return-menu { display: none; }
-#campaign-briefing { white-space: pre-line; font-size: 12px; line-height: 1.5; color: #e4d6b4; }
 #campaign-objectives { top: auto; bottom: 64px; max-height: 30%; }
-#career-sandbox { padding: 14px 24px; background: #24251ddd; color: #e4d6b4; border: 1px solid #8c7952; font: inherit; letter-spacing: .15em; text-transform: uppercase; cursor: pointer; }

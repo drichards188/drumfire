@@ -2,6 +2,7 @@ import { Infantry } from '../models/infantry.js';
 import { GunViews } from './guns.js';
 import { ShellViews } from './shells.js';
 import { TargetViews } from './targets.js';
+import { DetailCull } from './detail.js';
 
 // The render layer: gun rigs posed from the sim with their loading crews, shells in flight, German
 // targets, the infantry. main.js calls createRender(...) once, update() every frame, reset(sim) on a new
@@ -17,10 +18,12 @@ import { TargetViews } from './targets.js';
 //   render.eye(unitId, out)                      // Vector3: a point to aim the camera at for the unit's first piece
 //   render.newestShell(unitId)                   // sim shell for the F key
 //   render.select(unitId)                        // the unit with the full-detail crews
+//   render.detail                                // DetailCull over the gun rigs and targets (src/render/detail.js)
 export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onlyRigs = false }) {
-  const guns = new GunViews(scene, sim, terrain, rigs ?? new Map(), fx, onlyRigs);
+  const detail = new DetailCull();
+  const guns = new GunViews(scene, sim, terrain, rigs ?? new Map(), fx, onlyRigs, detail);
   const shells = new ShellViews(scene);
-  const targets = new TargetViews(scene, sim, terrain, fx);
+  const targets = new TargetViews(scene, sim, terrain, fx, detail);
   let inf = null;
   try {
     inf = new Infantry(scene, { max: 1500 });
@@ -30,7 +33,7 @@ export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onl
   guns.camera = camera;
 
   const render = {
-    guns, shells, targets, inf, camera,
+    guns, shells, targets, inf, camera, detail,
     update(dt, rawDt, s = sim, f = fx, cam = render.camera) {
       render.camera = cam;
       guns.camera = cam;
@@ -38,6 +41,7 @@ export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onl
       shells.update(s, cam);
       targets.update(rawDt, s, cam);
       inf?.update(dt, s.infantry, terrain.heightAt, cam);
+      detail.update(cam);
     },
     reset(s = sim) {
       guns.reset(s);

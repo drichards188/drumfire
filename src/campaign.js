@@ -22,7 +22,7 @@ export function campaignTheatre(mission) {
     // Each battery faces its own objective along a parallel lane. Ranges are authored per weapon.
     return { ...source, id: i + 1, pos: { x: -6000, z: -6500 + i * 1400 }, zero: 90 * DEG,
       target: kind === 'v1' || kind === 'v2' ? { name: 'Offshore instrumented target area', dist: profile(kind).range, bearing: 90 * DEG } : undefined,
-      mode: kind === mission.reward ? 'manual' : 'auto', ammo: ['gustav', 'karl', 'bertha', 'rail'].includes(kind) ? 18 : source.ammo };
+      mode: kind === mission.reward ? 'manual' : 'auto', ammo: ['gustav', 'karl', 'rail'].includes(kind) ? 18 : source.ammo };
   });
   const sites = units.filter(u => profile(u.kind).target).map(u => {
     const b = profile(u.kind);
@@ -159,7 +159,7 @@ function campaignDirector(Base) {
           sim.radio(`${b.name}: assignment complete.`, 'kill');
         }
       }
-      if (sim.campaignObjectives.every(o => o.done)) this.resolve(true, `${profile(sim.theatre.campaign.reward).name} is now available in sandbox. All supporting assignments completed.`);
+      if (sim.campaignObjectives.every(o => o.done)) this.resolve(true, `${profile(sim.theatre.campaign.reward).name} is now available ${profile(sim.theatre.campaign.reward).sandbox === false ? 'in its own operation' : 'in sandbox'}. All supporting assignments completed.`);
       else if (sim.time >= sim.theatre.campaign.timeLimit * sim.difficulty.time) this.resolve(false, 'The operation window closed before every battery completed its assignment.');
     }
   };
@@ -199,17 +199,19 @@ function campaignEnemy(Base) {
 export function sandboxTheatre(opId = 'flanders') {
   const th = ww2Theatre(opId);
   if (opId !== 'flanders') return th;
+  // `ready`: set up and ready to fire, no emplacement drill (src/ww2/special.js); the crew reloads and lays. The V-1
+  // and V-2 are not here: they fire in their own operations (BATTERIES `sandbox: false`).
   const extras = [
-    { ...OPS.karl.units[0], id: 8, pos: { x: 6000, z: 1800 }, zero: 270 * DEG, mode: 'auto' },
-    { ...OPS.v1.units[0], id: 9, pos: { x: 11000, z: 9000 }, zero: 270 * DEG, mode: 'auto' },
-    { ...OPS.v2.units[0], id: 10, pos: { x: 12000, z: 10500 }, zero: 270 * DEG, mode: 'auto' },
+    { ...OPS.karl.units[0], id: 7, pos: { x: 6000, z: 1800 }, zero: 270 * DEG, mode: 'auto', ready: true },
   ];
   const units = [...th.units, ...extras];
   const positions = [
     { id: 'a', name: 'Stellung A — northern approach', pos: { x: 5700, z: 1800 }, cover: .7 },
     { id: 'b', name: 'Stellung B — central approach', pos: { x: 4500, z: -1300 }, cover: .8 },
   ];
-  const op = { ...th.op, units, positions, target: { name: 'Port of Antwerp', dist: 160000, bearing: 270 * DEG } };
+  const op = { ...th.op, units, positions, target: { name: 'the enemy supply port', dist: 160000, bearing: 270 * DEG } };
   for (const u of extras) PAD_EXTRA.push({ x: u.pos.x, z: u.pos.z, rx: 40, rz: 50, heading: -u.zero, blend: 25 });
+  // the Karl stands in its prepared positions (as ww2Pads levels the Brest ones)
+  for (const q of positions) PAD_EXTRA.push({ x: q.pos.x, z: q.pos.z, rx: 12, rz: 16, heading: -extras[0].zero, blend: 20 });
   return { ...th, op, units };
 }

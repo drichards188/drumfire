@@ -18,6 +18,10 @@ import { buildRail } from './v/rail.js';
 export const GUN_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail'];
 // The WW2 mode's German pieces and launch sites (src/models/v/de/, DESIGN.md "WW2 mode"), loaded the same lazy way.
 export const GUN_KINDS_WW2 = ['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'bertha', 'karl', 'v1', 'v2'];
+// The WW1 German mode's pieces (src/models/v/de/, DESIGN.md "WW1 German mode"); the 42 cm M-Gerät is the shared
+// `bertha`, built in its 1917 colours on a WW1 page (GUN_ERA.ww1, set by main before the rigs are built).
+export const GUN_KINDS_WW1 = ['sfh13', 'm16', 'k17', 'bertha', 'max38', 'gamma', 'paris'];
+export const GUN_ERA = { ww1: false };
 
 const EXT = {
   bl6: { glob: import.meta.glob('./v/bl6.js') },
@@ -32,14 +36,25 @@ const EXT = {
   karl: { glob: import.meta.glob('./v/de/karl.js') },
   v1: { glob: import.meta.glob('./v/de/v1.js') },
   v2: { glob: import.meta.glob('./v/de/v2.js') },
+  sfh13: { glob: import.meta.glob('./v/de/sfh13.js') },
+  m16: { glob: import.meta.glob('./v/de/m16.js') },
+  k17: { glob: import.meta.glob('./v/de/k17.js') },
+  max38: { glob: import.meta.glob('./v/de/max38.js') },
+  gamma: { glob: import.meta.glob('./v/de/gamma.js') },
+  paris: { glob: import.meta.glob('./v/de/paris.js') },
 };
 const NAMES = {
   bl6: 'buildBL6', bl60: 'buildBL60', lefh18: 'buildLeFH18', sfh18: 'buildSFH18', k18: 'buildK18', mrs18: 'buildMrs18',
   nbw41: 'buildNbW41', gustav: 'buildGustav', bertha: 'buildBerthaGun', karl: 'buildKarl', v1: 'buildV1Site', v2: 'buildV2Site',
+  sfh13: 'buildSFH13', m16: 'buildM16', k17: 'buildK17', max38: 'buildMax38', gamma: 'buildGamma', paris: 'buildParis',
 };
 // extra builders a module may export beside its gun (the Gustav's firing position): loadGuns() collects them here
 export const EXTRAS = {};
-const EXTRA_NAMES = { gustav: ['buildGustavSite'] };
+const EXTRA_NAMES = {
+  gustav: ['buildGustavSite'],
+  // the WW1 German mode: the 42 cm in its 1917 colours, and the firing positions of the railway and fixed guns
+  bertha: ['buildBerthaGun1917'], max38: ['buildMax38Site'], gamma: ['buildGammaSite'], paris: ['buildParisSite'],
+};
 const loaded = {};
 const pending = {};
 
@@ -67,6 +82,8 @@ const STANDIN = {
   lefh18: { len: 2.9, r: 0.08, y: 1.1 }, sfh18: { len: 4.4, r: 0.11, y: 1.4 }, k18: { len: 8.5, r: 0.13, y: 2.2 },
   mrs18: { len: 6.5, r: 0.15, y: 2.2 }, nbw41: { len: 1.3, r: 0.25, y: 0.9 }, gustav: { len: 32, r: 0.7, y: 7 },
   bertha: { len: 5, r: 0.35, y: 2.4 }, karl: { len: 5, r: 0.45, y: 2.4 }, v1: { len: 45, r: 0.3, y: 1 }, v2: { len: 7, r: 0.8, y: 7 },
+  sfh13: { len: 2.6, r: 0.1, y: 1.1 }, m16: { len: 3.2, r: 0.14, y: 1.6 }, k17: { len: 4.7, r: 0.07, y: 1.2 },
+  max38: { len: 17, r: 0.32, y: 3.4 }, gamma: { len: 6.7, r: 0.4, y: 2.6 }, paris: { len: 34, r: 0.3, y: 4 },
 };
 function buildStandIn(kind) {
   const s = STANDIN[kind], rig = newGunRig(kind, 'drab'), P = rig.P, root = rig.root;
@@ -103,6 +120,9 @@ const BUILDERS = { bl15: buildBL15, bl92: buildBL92, rail: buildRail };
 
 export function buildGun(kind) {
   if (BUILDERS[kind]) return BUILDERS[kind]();
+  if (GUN_ERA.ww1 && kind === 'bertha' && EXTRAS.buildBerthaGun1917) {
+    try { return EXTRAS.buildBerthaGun1917(); } catch (e) { console.warn('guns: bertha (1917) builder threw:', e.message); }
+  }
   if (loaded[kind]) {
     try { return loaded[kind](); } catch (e) { console.warn(`guns: ${kind} builder threw:`, e.message); }
   }

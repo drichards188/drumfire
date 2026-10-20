@@ -34,6 +34,38 @@ export function setInstance(list, i, m) {
   for (const im of list) { im.setMatrixAt(i, m); im.instanceMatrix.needsUpdate = true; }
 }
 
+// A set of identical wheels at `places` (Vector3s in parent's frame), all turning together about their own x
+// axes: one InstancedMesh per material of the template instead of a group of meshes per wheel (the Karl's 22
+// road wheels were 88 draw calls, and as many again in the shadow pass). set.turn(a) poses every wheel at
+// rotation.x = a, which is what a Group per wheel at that place with that rotation drew.
+const _wm = new THREE.Matrix4(), _wq = new THREE.Quaternion(), _ws = new THREE.Vector3(1, 1, 1), _wx = new THREE.Vector3(1, 0, 0);
+export function wheelSet(template, places, parent, name) {
+  const meshes = [];
+  for (const m of template.children) {
+    if (!m.isMesh) continue;
+    const im = new THREE.InstancedMesh(m.geometry, m.material, places.length);
+    im.name = name;
+    im.castShadow = im.receiveShadow = true;
+    parent.add(im);
+    meshes.push(im);
+  }
+  let last = NaN;
+  const turn = (a) => {
+    if (a === last) return;
+    last = a;
+    _wq.setFromAxisAngle(_wx, a);
+    for (let i = 0; i < places.length; i++) {
+      _wm.compose(places[i], _wq, _ws);
+      for (const im of meshes) im.setMatrixAt(i, _wm);
+    }
+    for (const im of meshes) im.instanceMatrix.needsUpdate = true;
+  };
+  turn(0);
+  // turning in place leaves the bounds where they are: frustum culling stays correct
+  for (const im of meshes) im.computeBoundingSphere();
+  return { meshes, turn };
+}
+
 // The ground-level x of a track of lateral offset xt (in the gun's frame at its own station) at a point z
 // along the gun: the track lies on a circle of radius R + xt about (-R, 0, 0). Its heading there (rotation.y)
 // keeps a bogie tangent to the curve.

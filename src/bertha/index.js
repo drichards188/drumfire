@@ -24,7 +24,7 @@ import { GUN } from './ballistics.js';
 import { buildBertha } from './model.js';
 import { buildPosition } from './position.js';
 import { BerthaCrew } from './crew.js';
-import { BerthaHud, targetName } from './hud.js';
+import { BerthaHud, targetName, shellName, fuzeName } from './hud.js';
 import { BerthaTutorial } from './tutorial.js';
 import { t, tt, getLang, setLang, onLang, applyStatic } from './i18n.js';
 
@@ -34,12 +34,28 @@ import { t, tt, getLang, setLang, onLang, applyStatic } from './i18n.js';
 // ./position.js, the men ./crew.js, the overlay ./hud.js. Behind the title screen the crew works the gun on
 // its own (assist, nobody's station) as a demonstration.
 //
-// Camera: at a station the eye sits on the station's anchor (rig.anchors['eye-*'] or the position's
-// anchors) and the mouse looks around it (pointer lock on click, or drag); V puts the eye to the station's
-// instrument (the panoramic sight: a narrow field along its line of sight to the aiming posts). F rides the
-// newest shell with the chase camera and comes back after the burst.
+// Camera: at a station the eye sits at the eyes of the man whose place the player has taken (a little behind
+// them at the handwheels, so his hands and the work fill the lower half of the view), or on the station's
+// anchor (the loader's station watches the whole stage from its back edge); the mouse looks around (pointer lock
+// on click, or drag). While a loading step runs the view turns by itself to the work (the hook, the tray, the
+// wedge) unless the mouse has moved in the last few seconds. V puts the eye to the station's instrument (the
+// panoramic sight: a narrow field along its line of sight to the aiming posts). F rides the newest shell with
+// the chase camera and comes back after the burst.
+//
+// Every key that cannot act where the player stands says why, and where it belongs, on the line under the prompt.
 const query = new URLSearchParams(location.search);
 const TIME_SCALES = [0.25, 0.5, 1, 2, 4, 8];
+// each station's default look (offsets from its eye's heading), and for the men at the handwheels how far the
+// camera sits behind (back) and above (up) the man's eyes
+const VIEW = {
+  cmd: { yaw: 0, pitch: -0.06 },
+  trav: { yaw: 0.3, pitch: -0.3, back: 0.45, up: 0.2 },
+  elev: { yaw: -0.3, pitch: -0.28, back: 0.45, up: 0.2 },
+  load: { yaw: 0, pitch: -0.3 },
+  fire: { yaw: 0, pitch: -0.06 },
+  none: { yaw: 0, pitch: -0.06 },
+};
+const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const CAL = GUN.calibre;
 const hud = new HUD();
 const step = async (p, msg) => {
@@ -232,6 +248,7 @@ async function init() {
   const view2 = { instrument: false, fovRad: 0.17, height: vh, looked: false, rode: false, scale: 1 };
   let following = false;
   let trauma = 0, shakeT = 0;
+  let lastLook = -1e9; // performance.now() of the last mouse look (the look assist waits after it)
   const shake = (k) => (trauma = Math.min(1, trauma + k));
   const setStation = (id) => {
     if (!eyes[id]) return;
@@ -239,8 +256,9 @@ async function init() {
       trans.t = 0;
       trans.from.copy(camera.position);
       trans.fromQ.copy(camera.quaternion);
-      look.yaw = 0;
-      look.pitch = id === 'load' ? -0.42 : id === 'elev' || id === 'trav' ? -0.3 : -0.06;
+      look.yaw = VIEW[id].yaw;
+      look.pitch = VIEW[id].pitch;
+      lastLook = -1e9;
       view2.instrument = false;
       audio.ui?.('click');
     }
@@ -271,18 +289,51 @@ async function init() {
   };
   bh.stationsEl.addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (b && state === 'playing') setStation(b.dataset.st);
+    if (!b || state !== 'playing') return;
+    if (b.id === 'assist-btn') toggleAssist();
+    else setStation(b.dataset.st);
   });
+  // Crew assists (C, the station bar's last button, the title screen's box): the stations the player is not at work
+  // the drill themselves. It can be switched at any time in the battle (the main menu starts the game without the
+  // title screen), never in the tutorial; the choice is remembered (localStorage 'drumfire.bertha.assist').
+  const ASSIST_KEY = 'drumfire.bertha.assist';
+  const toggleAssist = () => {
+    if (game.range) return bh.flash(t('assistTut'), 2200, 'warn');
+    game.assist = !game.assist;
+    game.crewT = {};
+    assistBox.checked = game.assist;
+    try { localStorage.setItem(ASSIST_KEY, game.assist ? '1' : '0'); } catch {}
+    bh.setAssist(game.assist);
+    audio.ui?.('click');
+    bh.flash(t(game.assist ? 'assistNowOn' : 'assistNowOff'), 2200, 'info');
+  };
 
   // the sight's line of sight in the rig's root frame: through the first aiming post when the deflection
   // set equals the carriage's swing (parallax free: from where the sight stands at zero swing)
-  const sightOrigin = new THREE.Vector3(-1.08, rig.bed + 2.1, rig.sightZ);
-  const post0 = position.posts[0];
-  const sightYaw0 = Math.atan2(-(post0.x - sightOrigin.x), -(post0.z - sightOrigin.z));
-  const sightPitch = Math.atan2(1.4 - sightOrigin.y, Math.hypot(post0.x - sightOrigin.x, post0.z - sightOrigin.z));
+  // the first aiming post's sighting mark (1.4 m up the post) in the world
+  rig.root.updateMatrixWorld(true);
+  const postW = rig.root.localToWorld(position.posts[0].clone().setY(1.4));
   const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _d = new THREE.Vector3(), _e = new THREE.Euler(0, 0, 0, 'YXZ');
   const goalPos = new THREE.Vector3(), goalQ = new THREE.Quaternion();
   const titleOrbit = { a: 0.9 };
+  // the point the loader's view turns to by itself: the slung shell while the crane works, the tray while ramming
+  // and charging, the wedge's crank while it is worked, the breech as the gun fires
+  const pointOfWork = (out) => {
+    if (game.station !== 'load' || view2.instrument) return null;
+    const id = phase.load.id, P = rig.props;
+    if (id === 'hoist') {
+      // the cart while the jib swings out and the shell is slung, the tray while it swings over (it passes
+      // over the back of the stage), the shell as it comes down into the tray
+      const k = phase.load.k;
+      if (k < 0.5) return position.cartShell[game.selShell].getWorldPosition(out);
+      if (k < 0.82) return rig.anchors.tray.getWorldPosition(out);
+      return P.hook[game.selShell].getWorldPosition(out);
+    }
+    if (id === 'ram' || id === 'bag' || id === 'case') return rig.anchors.tray.getWorldPosition(out);
+    if (id === 'open' || id === 'close' || id === 'unload') return rig.wheels.wedge.node.getWorldPosition(out);
+    if (phase.fire >= 0 || (game.time - game.gun.firedAt >= 0 && game.time - game.gun.firedAt < 2.5)) return rig.anchors.lanyard.getWorldPosition(out);
+    return null;
+  };
   let camAt = null;
   const placeCamera = (rawDt) => {
     let fov = params.fov;
@@ -309,21 +360,39 @@ async function init() {
       return;
     }
     if (game.station === 'trav' && view2.instrument) {
-      const yaw = rig.root.rotation.y + sightYaw0 + (game.gun.tr - game.gun.sight);
-      rig.root.localToWorld(goalPos.copy(sightOrigin));
-      _e.set(sightPitch, yaw, 0);
+      // from the sight's head, which rides the carriage, along its line to the first aiming post turned by the
+      // swing the setting does not yet match: the post is on the hair exactly when the carriage's swing equals
+      // the deflection set (no parallax: the line is taken from where the head stands now)
+      rig.anchors.sight.updateWorldMatrix(true, false);
+      rig.anchors.sight.getWorldPosition(goalPos);
+      _d.subVectors(postW, goalPos);
+      const yaw = Math.atan2(-_d.x, -_d.z) + (game.gun.tr - game.gun.sight);
+      _e.set(Math.atan2(_d.y, Math.hypot(_d.x, _d.z)), yaw, 0);
       goalQ.setFromEuler(_e);
       fov = 9;
       trans.t = 1;
     } else {
       // at the eyes of the man whose place the player has taken (crew.js), or a station's fixed eye
       let base = crew.eye(goalPos);
+      const vw = VIEW[game.station] ?? VIEW.none;
       if (base == null) {
         const a = eyes[game.station];
         a.updateWorldMatrix(true, false);
         a.getWorldPosition(goalPos);
         a.getWorldDirection(_d); // +Z of the anchor: the look is its -Z
         base = Math.atan2(_d.x, _d.z);
+      } else if (vw.back) {
+        goalPos.x += Math.sin(base) * vw.back;
+        goalPos.z += Math.cos(base) * vw.back;
+        goalPos.y += vw.up;
+      }
+      // the look assist: toward the work in hand, unless the player has just looked somewhere himself
+      const poi = state === 'playing' ? pointOfWork(_p) : null;
+      if (poi && performance.now() - lastLook > 2600) {
+        _d.subVectors(poi, goalPos);
+        const k = 1 - Math.exp(-rawDt * 2.4);
+        look.yaw += wrapA(Math.atan2(-_d.x, -_d.z) - base - look.yaw) * k;
+        look.pitch += (Math.max(-1.2, Math.min(1.1, Math.atan2(_d.y, Math.hypot(_d.x, _d.z)))) - look.pitch) * k;
       }
       _e.set(look.pitch, base + look.yaw, 0);
       goalQ.setFromEuler(_e);
@@ -370,7 +439,10 @@ async function init() {
     const k = 0.0022 * params.sensitivity * (params.fov / 70);
     look.yaw = Math.max(-2.6, Math.min(2.6, look.yaw - dx * k));
     look.pitch = Math.max(-1.3, Math.min(1.2, look.pitch - dy * k));
-    if (Math.abs(dx) + Math.abs(dy) > 2) view2.looked = true;
+    if (Math.abs(dx) + Math.abs(dy) > 2) {
+      view2.looked = true;
+      lastLook = performance.now();
+    }
   };
   addEventListener('pointermove', (e) => {
     if (document.pointerLockElement === canvas) turn(e.movementX, e.movementY);
@@ -402,16 +474,39 @@ async function init() {
     if (state !== 'playing') return;
     if (/^Digit[1-5]$/.test(e.code)) setStation(order[Number(e.code.slice(5)) - 1]);
     else if (e.code === 'Tab') setStation(order[(order.indexOf(game.station) + (e.shiftKey ? order.length - 1 : 1)) % order.length]);
-    else if (e.code === 'KeyV' && (game.station === 'trav' || game.station === 'elev')) view2.instrument = !view2.instrument;
     else if (e.code === 'KeyF') following ? leaveShell() : followShell();
-    else if (e.code === 'KeyQ' && game.station === 'load' && !game.gun.tray && !game.gun.rammed) {
-      game.selShell = game.selShell === 'schwer' ? 'leicht' : 'schwer';
-      audio.ui?.('click');
-    } else if (e.code === 'KeyZ' && game.station === 'load' && !game.gun.tray && !game.gun.rammed) {
-      game.selFuze = game.selFuze === 'oV' ? 'mV' : 'oV';
-      audio.ui?.('click');
+    else if (e.code === 'KeyC') toggleAssist();
+    else if (following) return;
+    else if (e.code === 'KeyV') {
+      if (game.station === 'trav' || game.station === 'elev') view2.instrument = !view2.instrument;
+      else bh.flash(t('vWhere'));
+    } else if (e.code === 'KeyQ' || e.code === 'KeyZ') pick(e.code === 'KeyQ');
+    // a key that does nothing where the player stands says where it belongs
+    else if ((e.code === 'KeyW' || e.code === 'KeyS') && game.station !== 'elev') bh.flash(t('wsWhere'));
+    else if ((e.code === 'KeyW' || e.code === 'KeyS') && game.gun.breechOpen) bh.flash(t('elevOpenLock'));
+    else if ((e.code === 'KeyA' || e.code === 'KeyD') && game.station !== 'trav') bh.flash(t('adWhere'));
+    else if ((e.code === 'ArrowUp' || e.code === 'ArrowDown') && game.station !== 'elev') bh.flash(t('udWhere'));
+    else if ((e.code === 'ArrowLeft' || e.code === 'ArrowRight') && game.station !== 'trav') bh.flash(t('lrWhere'));
+    else if ((e.code === 'KeyE' || e.code === 'KeyR') && !game.actions(game.station).list.some((a) => a.key === e.code.slice(3))) {
+      // nothing to hold here: the reason under the prompt lights up
+      const el = document.getElementById('prompt-why');
+      el.classList.remove('flash');
+      void el.offsetWidth;
+      el.classList.add('flash');
     }
   });
+  // Q and Z: the shell and the fuze the crane will lift (the loader's choice, while nothing is up yet)
+  const pick = (isShell) => {
+    const g = game.gun, o = game.order;
+    if (game.station !== 'load') return bh.flash(t('qzWhere'));
+    if (g.loaded) return bh.flash(t('qzLoaded'));
+    if (g.tray || g.rammed) return bh.flash(t('qzLate'));
+    if (isShell) game.selShell = game.selShell === 'schwer' ? 'leicht' : 'schwer';
+    else game.selFuze = game.selFuze === 'oV' ? 'mV' : 'oV';
+    audio.ui?.('click');
+    const good = !o?.acked || (isShell ? game.selShell === o.shell : game.selFuze === o.fuze);
+    bh.flash(t('picked', isShell ? `${t('loadShell')}: ${shellName(game.selShell)}` : `${t('loadFuze')}: ${fuzeName(game.selFuze)}`, good), 1800, good ? 'info' : 'warn');
+  };
   addEventListener('keyup', (e) => held.delete(e.code));
   addEventListener('blur', () => held.clear());
   document.getElementById('help-close').addEventListener('click', () => help.classList.remove('show'));
@@ -508,6 +603,12 @@ async function init() {
       message(m) {
         if (!quiet()) bh.message(m);
       },
+      // a wheel the player turns has come onto its mark (game.crank): a click and a word
+      mark(axis) {
+        if (quiet()) return;
+        audio.ui?.('click');
+        bh.flash(t(axis === 'elev' && !game.gun.loaded ? 'markLoad' : `mark_${axis}`), 1600, 'info');
+      },
       state(s) {
         if ((s === 'victory' || s === 'defeat') && !quiet() && !tutorial.active) endGame(s);
       },
@@ -525,6 +626,8 @@ async function init() {
     })
   );
   const assistBox = document.getElementById('assist');
+  try { assistBox.checked = localStorage.getItem(ASSIST_KEY) === '1'; } catch {}
+  assistBox.addEventListener('change', () => { try { localStorage.setItem(ASSIST_KEY, assistBox.checked ? '1' : '0'); } catch {} });
   const resetBritish = () => {
     for (const [key, r] of brit) {
       const [uid, i] = key.split(':').map(Number);
@@ -542,9 +645,11 @@ async function init() {
     flares.clear();
     fx.clearLitter?.();
     resetBritish();
-    game = new BerthaGame({ seed: (Math.random() * 1e9) | 0, difficulty: params.difficulty, assist: !range && (assistBox.checked || query.get('assist') === '1'), range });
+    const asked = query.get('assist');
+    game = new BerthaGame({ seed: (Math.random() * 1e9) | 0, difficulty: params.difficulty, assist: !range && (asked != null ? asked === '1' : assistBox.checked), range });
     crew.game = game;
     wire(game);
+    bh.setAssist(game.assist, !range);
     state = 'playing';
     hud.showTitle(false);
     hud.hideEnd();
@@ -669,7 +774,8 @@ async function init() {
 
   const timer = new THREE.Timer();
   const sunColorN = new THREE.Color(), ambient = new THREE.Color();
-  let t = 0, sunTimer = 0, crankT = 0, frameAvg = 16, hudTimer = 0;
+  // (the clock is clockT: `t` is the page's string table, i18n.js)
+  let clockT = 0, sunTimer = 0, crankT = 0, frameAvg = 16, hudTimer = 0;
   const focus = new THREE.Vector3();
   const recoilK = (tf) => (tf < 0 ? 0 : tf < 0.07 ? tf / 0.07 : tf < 0.5 ? 1 : tf < 3.2 ? 1 - ((tf - 0.5) / 2.7) ** 0.8 : 0);
 
@@ -685,6 +791,7 @@ async function init() {
     P.rammer.visible = false;
   };
   let spentShown = false, prevSpent = false;
+  let trayK = 1, winchT = 0, prevFire = -1, stopShown = false; // the tray's run (0 forward, 1 back), the winch pawl, the whistle, a stop's flash
   // the loading step in hand and the firing in progress, for the props here and the crew (crew.js)
   const phase = { load: { id: null, k: 0 }, fire: -1 };
   const poseLoading = () => {
@@ -755,8 +862,8 @@ async function init() {
     const rawDt = forcedDt ?? THREE.MathUtils.clamp(timer.getDelta(), 0, 0.1);
     frameAvg += (rawDt * 1000 - frameAvg) * 0.05;
     const dt = rawDt * params.timeScale;
-    t += dt;
-    globalUniforms.uTime.value = t;
+    clockT += dt;
+    globalUniforms.uTime.value = clockT;
     if (state === 'playing') readInput();
     game.update(dt);
     // a crank ratchet while a wheel turns
@@ -787,10 +894,37 @@ async function init() {
     rig.setElevation(g.el);
     rig.setWedge(g.breech);
     rig.setRecoil(recoilK(game.time - g.firedAt));
+    rig.setDials(g.el, g.tr);
     const tf = game.time - g.firedAt;
     rig.root.position.y = gy + (tf >= 0 && tf < 1.4 ? Math.exp(-tf * 4.5) * Math.sin(tf * 38) * 0.05 : 0);
     poseLoading();
-    crew.update(dt, game, t, state === 'playing' && !following ? game.station : null, phase);
+    // the tray runs up to the breech while the wedge is open, and back clear of the recoil once it is shut
+    const trayWant = g.breech > 0.02 || g.tray || (g.rammed && !g.loaded) ? 0 : 1;
+    trayK += Math.sign(trayWant - trayK) * Math.min(Math.abs(trayWant - trayK), dt * 0.85);
+    rig.setTray(trayK * trayK * (3 - 2 * trayK));
+    // the wedge's crank is on its shaft only while the block is worked
+    const wid = phase.load.id;
+    rig.wheels.wedge.node.visible = g.breech > 0.003 || wid === 'open' || wid === 'close' || wid === 'unload';
+    if (state === 'playing') {
+      // the crane's winch pawl while the hook is wound up or let down, the whistle as the firer takes the strain
+      const hk = phase.load.id === 'hoist' ? phase.load.k : -1;
+      winchT -= rawDt;
+      if (((hk > 0.15 && hk < 0.55) || hk > 0.8) && winchT <= 0) {
+        winchT = 0.19;
+        audio.ui?.('click');
+      }
+      if (phase.fire >= 0 && prevFire < 0) audio.ui?.('whistle');
+      // a crank against its stop says so (once per push)
+      const atEl = game.station === 'elev' && inp.elev && !g.breechOpen && (inp.elev > 0 ? g.el >= GUN.elMax - 1e-4 : g.el <= GUN.elMin + 1e-4);
+      const atTr = game.station === 'trav' && inp.trav && Math.abs(g.tr) >= GUN.trMax - 1e-4 && Math.sign(inp.trav) === Math.sign(g.tr);
+      if ((atEl || atTr) && !stopShown) {
+        stopShown = true;
+        bh.flash(atEl ? t('elStop', Math.round((inp.elev > 0 ? GUN.elMax : GUN.elMin) / (Math.PI / 180))) : t('trStopHit'));
+      }
+      if (!inp.elev && !inp.trav) stopShown = false;
+    }
+    prevFire = phase.fire;
+    crew.update(dt, game, clockT, state === 'playing' && !following ? game.station : null, phase);
     position.lanyard(crew.by.fire.fig.anchors.handR);
 
     // shells in flight
@@ -827,7 +961,7 @@ async function init() {
     if (CUTAWAY) CUTAWAY.r.value = 0;
     terrain.update(camera);
     focus.copy(following ? chase.focus : camera.position);
-    atmosphere.update(focus, t, camera);
+    atmosphere.update(focus, clockT, camera);
     const light = atmosphere.sun;
     light.intensity = (atmosphere.sunBase ?? light.intensity) * params.sunGain;
     sunColorN.copy(light.color).multiplyScalar(light.intensity / 6.5);
@@ -841,7 +975,7 @@ async function init() {
     fx.update(dt, camera, { ...lightEnv, night: atmosphere.night });
     flares.wind.copy(fx.wind);
     flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * renderer.getPixelRatio()));
-    weather.update(dt, t, camera, atmosphere);
+    weather.update(dt, clockT, camera, atmosphere);
     scene.fog.density = params.fogDensity * weather.state.fog;
     globalUniforms.fogSunColor.value.copy(atmosphere.fogSunBase || globalUniforms.fogSunColor.value).multiplyScalar(1 - 0.9 * weather.state.storm);
     globalUniforms.fogHeightFalloff.value = params.fogFalloff;
@@ -861,7 +995,7 @@ async function init() {
     gu.uGrain.value = params.grain * (1 - 0.5 * nightK);
     gu.uNight.value = nightK;
     post.dof.enabled = false;
-    post.update(t, rawDt, atmosphere.sunDir, sunColorN, sun.elevation);
+    post.update(clockT, rawDt, atmosphere.sunDir, sunColorN, sun.elevation);
     lu.uRays.value *= params.godRays * (1 - weather.state.storm);
     renderer.info.reset();
     renderer.shadowMap.needsUpdate = true;
@@ -895,6 +1029,7 @@ async function init() {
     get state() {
       return state;
     },
+    tutorial, VIEW,
     station: (id) => setStation(id),
     look: (yaw, pitch) => Object.assign(look, { yaw, pitch }),
     instrument: (on) => (view2.instrument = on),

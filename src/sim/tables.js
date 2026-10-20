@@ -2,6 +2,7 @@
 // Angles in radians, lengths in metres, times in seconds, masses in kg (calibres in inches for display).
 import { DEG } from '../sector.js';
 import { GUNS_WW2, SHELLS_WW2, TARGETS_WW2, FFE_WW2 } from './tables_ww2.js';
+import { GUNS_WW1, SHELLS_WW1, TARGETS_WW1, FFE_WW1 } from './tables_ww1.js';
 
 export const G = 9.81;
 export const STEP = 0.05;
@@ -153,3 +154,8 @@ Object.assign(GUNS, GUNS_WW2);
 Object.assign(SHELLS, SHELLS_WW2);
 Object.assign(TARGETS, TARGETS_WW2);
 Object.assign(FFE, FFE_WW2);
+// and those of the WW1 German mode (tables_ww1.js); the shared 42 cm row gains the WW1 targets beside its WW2 ones
+Object.assign(GUNS, GUNS_WW1);
+Object.assign(SHELLS, SHELLS_WW1);
+Object.assign(TARGETS, TARGETS_WW1);
+for (const [k, row] of Object.entries(FFE_WW1)) FFE[k] = { ...(FFE[k] ?? {}), ...row };

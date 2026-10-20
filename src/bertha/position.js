@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { V, box, rbox, yTube, zTube, xTube, rod, Parts, vehicleMats } from '../models/kit.js';
 import { buildShell, buildCartridge } from '../models/shells.js';
 import { mulberry32 } from '../noise.js';
+import { CART_TOP } from './model.js';
 
 // The gun position around the Bertha (rig root frame: y = 0 the levelled ground, front -Z): the shell cart
 // on the carriage's right (it turns with the carriage so the crane always reaches it), the shell stack and the
@@ -52,7 +53,7 @@ export function buildPosition(rig) {
     T.build(rig.pivots.traverse, { y0: rig.bed });
     for (const k of ['schwer', 'leicht']) {
       const g = props(buildShell(k === 'schwer' ? 'm42' : 'm42l'), rig.pivots.traverse);
-      g.position.set(cx, 0.62, cz);
+      g.position.set(cx, CART_TOP, cz);
       g.visible = false;
       out.cartShell[k] = g;
     }

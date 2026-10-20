@@ -6,10 +6,14 @@
 
 import { layoutWest } from './ww2/layout_west.js';
 import { layoutEast } from './ww2/layout_east.js';
+import { layoutBritish } from './ww1/layout_british.js';
+import { layoutRear } from './ww1/layout_rear.js';
 
 export function partLayout(kind, { alt = 900 } = {}) {
   const ww2 = layoutWest(kind) ?? layoutEast(kind);
   if (ww2) return ww2;
+  const ww1 = layoutBritish(kind, { alt }) ?? layoutRear(kind);
+  if (ww1) return ww1;
   switch (kind) {
     case 'battery': // four howitzers staggered along the battery front, each in its own pit
       return [{ x: -27, z: -6, y: 0 }, { x: -9, z: 6, y: 0 }, { x: 9, z: -5, y: 0 }, { x: 27, z: 7, y: 0 }];

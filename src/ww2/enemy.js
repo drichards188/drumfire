@@ -129,7 +129,7 @@ export class EnemyWW2 extends Enemy {
     const sim = this.sim, op = sim.theatre.op;
     kind ??= op.enemy === 'soviet' ? 'il2' : 'typhoon';
     const from = (op.raidFrom ?? op.units[0].zero + Math.PI) + (sim.rng() - 0.5) * 0.8;
-    const r = { id: sim.nextId('r'), target: { x: target.x, z: target.z }, at: sim.time + warn, n, kind, weapon, planes: [], from, flak: target.flak ?? 0 };
+    const r = { id: sim.nextId('r'), target: { x: target.x, z: target.z }, at: sim.time + warn, n, kind, weapon, planes: [], from, flak: target.flak ?? 0, spoil: target.spoil ?? 0 };
     this.raids.push(r);
     sim.events.raid?.(r, 'warning');
     sim.radio(`Fliegeralarm! ${n} ${kind === 'il2' ? 'Il-2 ground-attack aircraft' : 'Jabos'} inbound${warn > 20 ? `, about ${Math.round(warn)} s` : ''}.`, 'alert');
@@ -145,7 +145,7 @@ export class EnemyWW2 extends Enemy {
         this.raidT = (260 + sim.rng() * 160) / sim.difficulty.cb;
         let best = null, bs = 0.45;
         for (const u of sim.units) if (u.alive && u.signature > bs) { bs = u.signature; best = u; }
-        if (best) this.raid({ x: best.pos.x, z: best.pos.z, flak: best.special?.flak ?? 0 }, { n: 2 });
+        if (best) this.raid({ x: best.pos.x, z: best.pos.z, flak: best.special?.flak ?? 0, spoil: best.special?.flakSpoil ?? 0 }, { n: 2 });
       }
     }
     const list = sim.aircraft;
@@ -211,7 +211,9 @@ export class EnemyWW2 extends Enemy {
     p.firedAt = sim.time;
     const n = p.raid.weapon === 'bomb' ? 2 : 4;
     for (let k = 0; k < n; k++) {
-      const ax = T.x + sim.gauss() * 70 / (1 + p.raid.flak * 0) + (p.i - 0.5) * 30, az = T.z + sim.gauss() * 70;
+      // heavy flak round the target spoils the bombers' aim (raid.spoil: how much wider they scatter)
+      const sc = 70 * (1 + (p.raid.spoil ?? 0));
+      const ax = T.x + sim.gauss() * sc + (p.i - 0.5) * 30, az = T.z + sim.gauss() * sc;
       this.raidQ.push({ t: sim.time + 0.2 * k, x: ax, z: az, kind: p.raid.weapon, from: { x: p.pos.x, y: p.pos.y, z: p.pos.z } });
     }
     sim.events.raid?.(p.raid, 'attack', p);

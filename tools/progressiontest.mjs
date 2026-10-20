@@ -89,7 +89,7 @@ for (const def of CAMPAIGN) {
   s.director.update(0);
   assert.equal(s.state,'victory',`${def.id}: all qualified objectives must win`);
 }
-console.log('All 13 mission victory paths passed using the real damage tables and launch qualification checks.');
+console.log(`All ${CAMPAIGN.length} mission victory paths passed using the real damage tables and launch qualification checks.`);
 
 // Assembly remains exclusive to the dedicated operation, including after restarting it.
 for (const op of ['sevastopol', 'flanders']) {

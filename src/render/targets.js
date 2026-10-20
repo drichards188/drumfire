@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildTarget } from '../models/targets.js';
 import { headingFor } from '../sector.js';
 import { smooth } from './anim.js';
+import { disposeDetached } from './dispose.js';
 
 // German targets drawn from sim.targets: every site's model sits on the terrain at the site's bearing,
 // each destroyable part follows the sim part's damage (setDamage), battery guns recoil and flash when the
@@ -11,15 +12,18 @@ import { smooth } from './anim.js';
 // Parts are wrapped in a Group so a model part can be moved to where the sim has its part (batteries and
 // dumps place their parts by the sim's spacing, the convoy drives): damage code moves the part itself.
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
-const MOVES = new Set(['battery', 'dump', 'crossroads', 'abattery', 'amedium', 'adump', 'aconvoy']);
-// WW2 road traffic: the vehicles face -Z in the model and are turned to their direction of travel
-const DRIVES = new Set(['aconvoy']);
-const DUMPS = new Set(['dump', 'adump']);
+const MOVES = new Set(['battery', 'dump', 'crossroads', 'abattery', 'amedium', 'adump', 'aconvoy', 'bdump', 'bconvoy']);
+// road traffic (WW2 aconvoy, WW1 bconvoy): the vehicles face -Z in the model and are turned to their direction of travel
+const DRIVES = new Set(['aconvoy', 'bconvoy']);
+const DUMPS = new Set(['dump', 'adump', 'bdump']);
 const FALL = 14; // s a shot-down balloon takes to come down
+// kite balloons: the German Drachen of the British game and the British Caquot of the WW1 German mode
+const BALLOONS = new Set(['balloon', 'bballoon']);
 
 export class TargetViews {
-  constructor(scene, sim, terrain, fx) {
+  constructor(scene, sim, terrain, fx, detail = null) {
     this.scene = scene;
+    this.detail = detail; // DetailCull: a target kilometres away keeps only the parts that still show
     this.terrain = terrain;
     this.fx = fx;
     this.views = new Map();
@@ -29,12 +33,18 @@ export class TargetViews {
   }
 
   build(sim) {
-    for (const v of this.views.values()) this.scene.remove(v.group);
+    // a new game builds new models: the old ones go, and so does what they held on the GPU
+    const old = [];
+    for (const [id, v] of this.views) {
+      this.scene.remove(v.group);
+      this.detail?.remove(`target:${id}`);
+      old.push(v.group);
+    }
     this.views.clear();
     for (const t of sim.targets) {
       let model;
       try {
-        model = buildTarget(t.kind, t.kind === 'balloon' ? { alt: t.site?.alt ?? t.pos.y } : {});
+        model = buildTarget(t.kind, BALLOONS.has(t.kind) ? { alt: t.site?.alt ?? t.pos.y } : {});
       } catch (e) {
         console.warn('buildTarget', t.kind, e.message);
         continue;
@@ -46,6 +56,7 @@ export class TargetViews {
       group.rotation.y = headingFor(t.bearing);
       group.add(model.root);
       this.scene.add(group);
+      this.detail?.add(`target:${t.id}`, group);
       const wraps = model.parts.map((p) => {
         const w = new THREE.Group();
         p.parent.add(w);
@@ -61,6 +72,7 @@ export class TargetViews {
         gy, burn: 0,
       });
     }
+    if (old.length) disposeDetached(this.scene, old);
   }
 
   reset(sim) {
@@ -104,7 +116,7 @@ export class TargetViews {
         model.parts[i].visible = true;
         const sp = parts[Math.min(i, parts.length - 1)];
         let goal = !sp.alive ? 1 : partMax > 0 ? Math.min(1, Math.max(0, 1 - sp.hp / partMax)) : 0;
-        if (v.kind === 'balloon') {
+        if (BALLOONS.has(v.kind)) {
           // the winch lorry (part 1) goes with the balloon; the balloon itself falls over FALL s
           if (i === 1) goal = t.alive ? 0 : 0.8;
           else if (!sp.alive) {
@@ -117,7 +129,7 @@ export class TargetViews {
             goal = v.k[i];
           }
         }
-        if (v.kind !== 'balloon' || i === 1) v.k[i] += (goal - v.k[i]) * Math.min(1, dt * 2.5);
+        if (!BALLOONS.has(v.kind) || i === 1) v.k[i] += (goal - v.k[i]) * Math.min(1, dt * 2.5);
         const k = v.k[i];
         const q = Math.round(k * 25);
         if (q !== v.shown[i]) {
@@ -146,7 +158,7 @@ export class TargetViews {
           } else w.position.set(dx * c + dz * s - h.x, 0, -dx * s + dz * c - h.z);
         }
         // a part newly destroyed burns
-        if (!sp.alive && !v.dead[i] && v.kind !== 'balloon') {
+        if (!sp.alive && !v.dead[i] && !BALLOONS.has(v.kind)) {
           v.dead[i] = true;
           if (fx && model.anchors?.burn?.[i]) {
             model.anchors.burn[i].getWorldPosition(_v);
@@ -158,10 +170,12 @@ export class TargetViews {
             fx.burnSite?.(_v, 1.3, 120);
           }
         } else if (sp.alive && v.dead[i]) v.dead[i] = false;
-        if (v.kind === 'balloon' && i === 0 && !sp.alive) {
+        if (BALLOONS.has(v.kind) && i === 0 && !sp.alive) {
           // the envelope falls, burning
           const f = Math.min(1, (this.time - v.deadAt) / FALL);
-          v.wraps[0].position.y = -(t.pos.y * 0.55) * f * f;
+          // (the WW1 mode's sim keeps a bballoon's pos.y on the ground: its height is the site's alt)
+          const alt = v.kind === 'bballoon' ? (t.site?.alt ?? t.pos.y) : t.pos.y;
+          v.wraps[0].position.y = -(alt * 0.55) * f * f;
           if (f < 1 && fx && model.anchors?.burn?.[0]) {
             model.anchors.burn[0].getWorldPosition(_v);
             fx.fire?.(_v, 3, 1);
@@ -170,7 +184,7 @@ export class TargetViews {
             model.anchors?.burn?.[0]?.getWorldPosition(_v);
             fx?.burnSite?.(_v, 2.5, 70);
           }
-        } else if (v.kind === 'balloon' && i === 0) {
+        } else if (BALLOONS.has(v.kind) && i === 0) {
           v.wraps[0].position.y = 0;
           v.landed = false;
         }

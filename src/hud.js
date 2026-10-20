@@ -52,9 +52,16 @@ export class HUD {
     document.body.classList.toggle('tutorial', on);
   }
 
-  /** The unit the camera is on. */
-  setUnit(name, callsign = '') {
+  /** The unit the camera is on; wip: a gun still being built (the badge says so). */
+  setUnit(name, callsign = '', wip = '') {
     $('unit-name').textContent = name;
+    if (wip) {
+      const b = document.createElement('span');
+      b.className = 'wip-badge';
+      b.textContent = 'WIP';
+      b.title = wip;
+      $('unit-name').append(b);
+    }
     $('unit-call').textContent = callsign;
     const el = $('unit');
     el.classList.remove('flash');

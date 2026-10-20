@@ -7,6 +7,7 @@ import { makeAtlasData } from './fx/atlas.js';
 import { Emitters } from './fx/emitters.js';
 import * as art from './fx/artillery.js';
 import * as rk from './fx/rockets.js';
+import * as w1 from './fx/ww1.js';
 
 export { SMOKE, seedFx };
 const tmpV = new THREE.Vector3();
@@ -542,6 +543,9 @@ export class FX {
 
   /** The A4 lighting on its table: p the nozzle, k 0 the pre-stage, 1 the main stage (then call trail(.., 'v2', dt) every frame). */
   v2Ignition(p, k = 1) { this.curGy = this.ground(p.x, p.z); rk.v2Ignition(this, p, k); this.curGy = null; }
+
+  /** The Paris Gun firing (WW1 German mode): p the muzzle, dir its unit direction (fx/ww1.js). */
+  parisBlast(p, dir, opts = {}) { this.curGy = this.ground(p.x, p.z); w1.parisBlast(this, p, dir, opts); this.curGy = null; }
 
   _pop(x, y, z, s) { art.pop(this, x, y, z, 0.6 + s * 3); }
 

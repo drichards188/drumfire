@@ -8,6 +8,7 @@ import { buildShell, SHELL_KINDS } from '../models/shells.js';
 const CAP = 80;
 const _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _d = new THREE.Vector3(), _n = new THREE.Vector3(0, 0, -1), _c = new THREE.Vector3();
+const _w = { morphTargetInfluences: [0] }; // a part's morph weight for one round (InstancedMesh.setMorphAt reads this)
 
 export class ShellViews {
   constructor(scene, { minPx = 7, maxScale = 24 } = {}) {
@@ -23,13 +24,16 @@ export class ShellViews {
       try { b = buildShell(kind, 12); } catch (e) { console.warn('buildShell', kind, e.message); continue; }
       const meshes = b.parts.map((part) => {
         const m = new THREE.InstancedMesh(part.geometry, part.material, CAP);
+        if (part.morph) m.setMorphAt(0, _w); // sizes its morph texture for CAP rounds (count is still CAP here)
         m.count = 0;
         m.frustumCulled = false;
         m.castShadow = false;
         this.group.add(m);
         return m;
       });
-      this.kinds.set(kind, { meshes, length: b.length, n: 0 });
+      // parts with a morph target (the A4's vanes in its pitch program, missiles.js) weighted per round by part.morph
+      const morphs = b.parts.flatMap((part, j) => (part.morph ? [{ m: meshes[j], f: part.morph }] : []));
+      this.kinds.set(kind, { meshes, morphs, length: b.length, n: 0 });
     }
   }
 
@@ -53,12 +57,14 @@ export class ShellViews {
       }
       _m.compose(_p, _q, _s.set(s, s, s));
       for (const m of k.meshes) m.setMatrixAt(k.n, _m);
+      for (const q of k.morphs) { _w.morphTargetInfluences[0] = q.f(sh); q.m.setMorphAt(k.n, _w); }
       k.n++;
     }
     for (const k of this.kinds.values()) {
       for (const m of k.meshes) {
         m.count = k.n;
         m.instanceMatrix.needsUpdate = true;
+        if (m.morphTexture && k.n > 0) m.morphTexture.needsUpdate = true;
         m.visible = k.n > 0;
       }
     }

@@ -36,5 +36,7 @@ export class Progression {
       this.saved = true;
     } catch { this.saved = false; }
   }
-  unlockAll() { this.dev = true; this.save(); }
+  // dev mode: every battery and mission open, for testing (saved in this browser like the rest)
+  setDev(on) { this.dev = !!on; this.save(); }
+  unlockAll() { this.setDev(true); }
 }

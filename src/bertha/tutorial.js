@@ -71,6 +71,7 @@ export const STEPS = [
     todo: (g, v) => [
       { en: 'Click the 3D view once, then move the mouse to look around ({Esc} gives the mouse back)', de: 'Einmal in die 3D-Ansicht klicken, dann mit der Maus umsehen ({Esc} gibt die Maus frei)', done: v.looked },
       { en: 'The five jobs are the buttons at the bottom; keys {1} to {5} or {Tab} move you between them', de: 'Die fünf Posten sind die Knöpfe unten; {1} bis {5} oder {Tab} wechseln', done: v.looked },
+      { en: 'The line under the prompt in the middle always says what comes next, and the button marked "Next" is where', de: 'Die Zeile unter der Anzeige in der Mitte sagt immer, was als Nächstes kommt, und der mit "Weiter" markierte Knopf, wo', done: false, note: true },
       { en: 'Click {Next} on this card', de: '{Weiter} auf dieser Karte anklicken', done: false },
     ],
   },
@@ -108,14 +109,14 @@ export const STEPS = [
     why: both('The shell can only be loaded with the barrel almost level, at 2°.', 'Geladen wird nur bei fast waagerechtem Rohr, bei 2°.'),
     todo: (g) => [
       goTo('elev')(g),
-      { en: `Hold {S} to crank the barrel down. Barrel now ${deg(g.gun.el)}°, load at ${deg(GUN.loadEl)}°`, de: `{S} halten und das Rohr herunterkurbeln. Rohr jetzt ${deg(g.gun.el)}°, Ladewinkel ${deg(GUN.loadEl)}°`, done: C.down(g) },
+      { en: `Hold {S}: the barrel comes down and stops at the loading angle. Now ${deg(g.gun.el)}°, load at ${deg(GUN.loadEl)}°`, de: `{S} halten: das Rohr kommt herunter und hält im Ladewinkel. Jetzt ${deg(g.gun.el)}°, Ladewinkel ${deg(GUN.loadEl)}°`, done: C.down(g) },
     ],
     done: (g) => C.down(g),
   },
   {
     station: 'load',
     title: both('3 · Open the breech', '3 · Den Verschluss öffnen'),
-    why: both('You are now on the loading platform behind the gun. The breech is closed by a sliding steel block.', 'Sie stehen jetzt auf der Ladebühne hinter dem Geschütz. Der Verschluss ist ein seitlich gleitender Stahlkeil.'),
+    why: both('You now stand at the back of the loading platform and direct the loading detachment: they work the breech, the crane and the rammer while you hold the key. The breech is closed by a sliding steel block, the wedge.', 'Sie stehen jetzt hinten auf der Ladebühne und leiten die Ladebedienung: sie arbeitet an Verschluss, Kran und Ansetzer, solange Sie die Taste halten. Der Verschluss ist ein seitlich gleitender Stahlkeil.'),
     todo: (g) => [goTo('load')(g), { en: 'Hold {E} until the bar fills: the block slides out to the right', de: '{E} halten, bis der Balken voll ist: der Keil gleitet nach rechts heraus', done: C.open(g) }],
     done: (g) => C.open(g),
   },
@@ -128,7 +129,7 @@ export const STEPS = [
       goTo('load')(g),
       { en: `Press {Q} until the shell reads "${shellName(o_(g).shell)}" (now: ${shellName(g.selShell)})`, de: `{Q} drücken, bis "${shellName(o_(g).shell)}" dasteht (jetzt: ${shellName(g.selShell)})`, done: C.shellOk(g) || C.onTray(g) },
       { en: `Press {Z} until the fuze reads "${fuzeName(o_(g).fuze)}" (now: ${fuzeName(g.selFuze)})`, de: `{Z} drücken, bis Zünder "${fuzeName(o_(g).fuze)}" dasteht (jetzt: ${fuzeName(g.selFuze)})`, done: C.fuzeOk(g) || C.onTray(g) },
-      { en: 'Hold {E} (about 7 s): the crane lifts the shell off the cart onto the tray', de: '{E} halten (etwa 7 s): der Kran hebt die Granate vom Wagen in die Ladeschale', done: C.onTray(g) },
+      { en: 'Hold {E} (about 7 s): the crane swings out to the cart, lifts the 810 kg shell in its sling and sets it down in the tray', de: '{E} halten (etwa 7 s): der Kran schwenkt zum Wagen, hebt die 810-kg-Granate in der Schlinge und setzt sie in die Ladeschale', done: C.onTray(g) },
     ],
     done: (g) => C.onTray(g),
   },
@@ -163,7 +164,7 @@ export const STEPS = [
   {
     station: 'load',
     title: both('7 · Close the breech', '7 · Den Verschluss schließen'),
-    why: both('With the block closed the gun is loaded.', 'Mit geschlossenem Keil ist das Geschütz geladen.'),
+    why: both('With the block closed the gun is loaded. The tray then runs back on its rails, clear of the breech when it recoils.', 'Mit geschlossenem Keil ist das Geschütz geladen. Die Ladeschale läuft dann auf ihren Schienen zurück, aus dem Weg des zurücklaufenden Rohrs.'),
     todo: (g) => [goTo('load')(g), { en: 'Hold {E} until the bar fills', de: '{E} halten, bis der Balken voll ist', done: C.closed(g) }],
     done: (g) => C.closed(g),
   },
@@ -171,15 +172,15 @@ export const STEPS = [
     station: 'elev',
     title: both('8 · Lay for elevation', '8 · Die Höhe richten'),
     why: both(
-      'The elevation layer uses a clinometer: a spirit level on a scale (the dial on the right). First set the scale to the order, then raise the barrel until the bubble sits between the two marks.',
-      'Der Höhenrichtkanonier arbeitet mit dem Libellenquadranten: eine Wasserwaage auf einer Teilung (die Scheibe rechts). Erst die Teilung auf den Befehl stellen, dann das Rohr heben, bis die Blase zwischen den Marken steht.'
+      'The elevation layer uses a clinometer: a spirit level on a scale (the round dial on the screen). First set the scale to the order, then raise the barrel until the bubble sits between the two marks. The dial over the handwheel shows the barrel\'s angle in degrees.',
+      'Der Höhenrichtkanonier arbeitet mit dem Libellenquadranten: eine Wasserwaage auf einer Teilung (die runde Scheibe auf dem Bildschirm). Erst die Teilung auf den Befehl stellen, dann das Rohr heben, bis die Blase zwischen den Marken steht. Die Scheibe über dem Handrad zeigt den Rohrwinkel in Grad.'
     ),
     todo: (g) => {
       const o = o_(g);
       return [
         goTo('elev')(g),
-        { en: `Hold {${dirQuad(g)}} to set the scale to ${mils(o.el)}. Now ${mils(g.gun.quad)} (add {Shift} for single steps)`, de: `{${dirQuad(g)}} halten und die Teilung auf ${mils(o.el)} stellen. Jetzt ${mils(g.gun.quad)} (mit {Shift} in Einzelschritten)`, done: C.quad(g) },
-        { en: `Hold {${dirElev(g, o.el)}} to move the barrel. Barrel now ${deg(g.gun.el)}°, wanted ${deg(o.el)}°. Let go near the end and finish with {Shift}+{${dirElev(g, o.el)}}`, de: `{${dirElev(g, o.el)}} halten und das Rohr bewegen. Rohr jetzt ${deg(g.gun.el)}°, gewollt ${deg(o.el)}°. Kurz davor loslassen, mit {Shift}+{${dirElev(g, o.el)}} fertig richten`, done: C.elev(g) },
+        { en: `Hold {${dirQuad(g)}}: the scale runs and stops at the ordered ${mils(o.el)}. Now ${mils(g.gun.quad)}`, de: `{${dirQuad(g)}} halten: die Teilung läuft und hält beim befohlenen Wert ${mils(o.el)}. Jetzt ${mils(g.gun.quad)}`, done: C.quad(g) },
+        { en: `Hold {${dirElev(g, o.el)}}: the barrel moves, slows as the bubble comes in and stops when it centres. Barrel now ${deg(g.gun.el)}°, wanted ${deg(o.el)}°`, de: `{${dirElev(g, o.el)}} halten: das Rohr bewegt sich, wird langsamer, wenn die Blase kommt, und hält, wenn sie einspielt. Rohr jetzt ${deg(g.gun.el)}°, gewollt ${deg(o.el)}°`, done: C.elev(g) },
       ];
     },
     done: (g) => C.quad(g) && C.elev(g),
@@ -188,17 +189,17 @@ export const STEPS = [
     station: 'trav',
     title: both('9 · Lay for line', '9 · Die Seite richten'),
     why: both(
-      'The line layer aims with a periscope sight at a red and white post planted out in front, to the left of the gun. Set the ordered number on the sight, then swing the whole gun until the post sits on the vertical line in the sight.',
-      'Der Seitenrichtkanonier richtet mit dem Rundblickfernrohr auf eine rot-weiße Latte, die links vor dem Geschütz steht. Die befohlene Zahl am Fernrohr stellen, dann das ganze Geschütz schwenken, bis die Latte am senkrechten Faden steht.'
+      'The line layer aims with a periscope sight at a red and white post planted out in front, to the left of the gun. Set the ordered number on the sight, then swing the whole gun until the post sits on the vertical line in the sight. The dial over the handwheel reads the carriage\'s swing in mils.',
+      'Der Seitenrichtkanonier richtet mit dem Rundblickfernrohr auf eine rot-weiße Latte, die links vor dem Geschütz steht. Die befohlene Zahl am Fernrohr stellen, dann das ganze Geschütz schwenken, bis die Latte am senkrechten Faden steht. Die Scheibe über dem Handrad zeigt den Schwenk der Lafette in Strich.'
     ),
     todo: (g, v) => {
       const o = o_(g), off = postOff(g);
       const where = off === 0 ? both('on the line', 'am Faden') : both(`${Math.abs(off)} mils ${off > 0 ? 'right' : 'left'} of the line`, `${Math.abs(off)} Strich ${off > 0 ? 'rechts' : 'links'} vom Faden`);
       return [
         goTo('trav')(g),
-        { en: `Hold {${dirSight(g)}} to set the sight to ${defl(o.defl)}. Now ${defl(g.gun.sight)} (add {Shift} for single steps)`, de: `{${dirSight(g)}} halten und das Fernrohr auf ${defl(o.defl)} stellen. Jetzt ${defl(g.gun.sight)} (mit {Shift} in Einzelschritten)`, done: C.sight(g) },
+        { en: `Hold {${dirSight(g)}}: the sight's scale runs and stops at the ordered ${defl(o.defl)}. Now ${defl(g.gun.sight)}`, de: `{${dirSight(g)}} halten: die Teilung des Fernrohrs läuft und hält beim befohlenen Wert ${defl(o.defl)}. Jetzt ${defl(g.gun.sight)}`, done: C.sight(g) },
         { en: 'Press {V} to look through the sight', de: '{V} drücken, um ins Fernrohr zu schauen', done: v.instrument || C.line(g) },
-        { en: `Hold {${dirLine(g)}} to swing the gun. The post is ${where.en}. The gun is heavy: let go early, finish with {Shift}+{${dirLine(g)}}`, de: `{${dirLine(g)}} halten und das Geschütz schwenken. Die Latte steht ${where.de}. Das Geschütz ist schwer: früh loslassen, mit {Shift}+{${dirLine(g)}} fertig`, done: C.line(g) },
+        { en: `Hold {${dirLine(g)}} to swing the gun: it stops when the post is on the hair. The post is ${where.en}`, de: `{${dirLine(g)}} halten und das Geschütz schwenken: es hält, wenn die Latte am Faden steht. Die Latte steht ${where.de}`, done: C.line(g) },
       ];
     },
     done: (g) => C.sight(g) && C.line(g),
@@ -214,6 +215,7 @@ export const STEPS = [
     done: (g) => g.roundsFired >= 1,
   },
   {
+    watch: true,
     title: both('11 · Watch the shell', '11 · Der Granate nachsehen'),
     why: (g) => both(
       `The shell is in the air for about ${Math.round(o_(g).tof ?? 40)} seconds. An observer will report where it lands.`,
@@ -230,11 +232,12 @@ export const STEPS = [
     done: (g) => (g.order?.n ?? 1) >= 2 || g.state !== 'playing',
   },
   {
+    roundTwo: true,
     hi: ['order'],
     title: both('12 · Round two, on your own', '12 · Zweiter Schuss, selbstständig'),
     why: both(
-      'The observer saw how far off it fell (bottom right), and the next order corrects line and elevation. Do the whole drill again. The checklist below follows you, and the lit buttons at the bottom show which jobs still have work.',
-      'Der Beobachter hat gemeldet, wie weit daneben (unten rechts), und der neue Befehl verbessert Seite und Höhe. Die ganze Arbeit noch einmal. Die Liste folgt Ihnen, und die leuchtenden Knöpfe unten zeigen, wo noch Arbeit ist.'
+      'The observer saw how far off it fell (on the order card and bottom right), and the next order corrects line and elevation: the card shows by how many mils. Do the whole drill again. The checklist below follows you, and the line under the prompt says what comes next.',
+      'Der Beobachter hat gemeldet, wie weit daneben (auf der Befehlskarte und unten rechts), und der neue Befehl verbessert Seite und Höhe: die Karte zeigt, um wie viele Strich. Die ganze Arbeit noch einmal. Die Liste folgt Ihnen, und die Zeile unter der Anzeige sagt, was als Nächstes kommt.'
     ),
     todo: (g) => {
       const o = o_(g);
@@ -255,8 +258,8 @@ export const STEPS = [
     finish: true,
     title: both('You know the drill', 'Die Bedienung sitzt'),
     why: both(
-      'Order, load, lay, fire, correct: that is the whole job. Keep firing here if you like (two shells close to the target bring "fire for effect"), or go to the battle. There the British find you after your second shot and fire back, so be quick. Tick "Crew assists" on the title screen to let the crew do the jobs you are not at. F1 shows this drill at any time.',
-      'Befehl, laden, richten, feuern, verbessern: das ist die ganze Arbeit. Hier gern weiterschießen (zwei Schuss nahe am Ziel bringen das Wirkungsschießen), oder in die Schlacht. Dort findet Sie der Engländer nach dem zweiten Schuss und schießt zurück, also schnell sein. "Bedienung hilft" auf dem Titelbild lässt die Bedienung die Posten besetzen, an denen Sie nicht stehen. F1 zeigt diese Arbeit jederzeit.'
+      'Order, load, lay, fire, correct: that is the whole job. Keep firing here if you like (two shells close to the target bring "fire for effect"), or go to the battle. There the British find you after your second shot and fire back, so be quick: while a round is in the air, lower the barrel and open the wedge for the next one. In the battle, C (or "Crew assists" at the end of the station bar) lets the crew do the jobs you are not at. F1 shows this drill at any time.',
+      'Befehl, laden, richten, feuern, verbessern: das ist die ganze Arbeit. Hier gern weiterschießen (zwei Schuss nahe am Ziel bringen das Wirkungsschießen), oder in die Schlacht. Dort findet Sie der Engländer nach dem zweiten Schuss und schießt zurück, also schnell sein: solange eine Granate fliegt, das Rohr senken und den Keil für den nächsten Schuss öffnen. In der Schlacht lässt C (oder "Bedienung hilft" am Ende der Postenleiste) die Bedienung die Posten besetzen, an denen Sie nicht stehen. F1 zeigt diese Arbeit jederzeit.'
     ),
   },
 ];
@@ -345,7 +348,13 @@ export class BerthaTutorial {
 
   update(rawDt) {
     if (!this.active) return;
-    const s = STEPS[this.i], g = this.host.game(), v = this.host.view();
+    const g0 = this.host.game();
+    // the player has run ahead of the card (fired before ticking every step): follow him to the shell's flight,
+    // or past round two to the end, so the card never sits on a step the drill has left behind
+    const watch = STEPS.findIndex((x) => x.watch), two = STEPS.findIndex((x) => x.roundTwo);
+    if (g0.roundsFired >= 2 && this.i < two + 1) return this.go(two + 1);
+    if (g0.roundsFired >= 1 && this.i < watch) return this.go(watch);
+    const s = STEPS[this.i], g = g0, v = this.host.view();
     if (s.done?.(g, v)) {
       // the list ticks, then the next step after a moment
       this.okT += rawDt;

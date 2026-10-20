@@ -110,6 +110,7 @@ export class BerthaGame {
     this.selShell = 'schwer';
     this.selFuze = 'oV';
     this.input = { trav: 0, elev: 0, sight: 0, quad: 0, fine: false, hold: null };
+    this.latch = { trav: 0, sight: 0, elev: 0, quad: 0 }; // a wheel stopped on its mark with the key still held (crank)
     this.action = null; // { id, t, dur, station } the action being held
     this.crewT = {}; // per station: seconds the crew has been waiting before it acts (assist)
     this.anim = { step: null, t: 0, dur: 1, at: 0 }; // the last loading step, for the render layer
@@ -134,6 +135,7 @@ export class BerthaGame {
     this.est = null; // the Feuerleitung's idea of where to aim
     this.nextOrderAt = 4; // the first call comes a few seconds in
     this.pendingReports = [];
+    this.lastReport = null;
     this.cb = { next: Infinity, err: 380 * this.diff.cbErr, salvos: 0 };
     this.say('Feuerleitung: Batterie besetzt. Warten Sie auf den ersten Schießbefehl.', 'Fire direction: gun manned. Stand by for the first fire order.', 'info');
     this.emit('state', this.state);
@@ -212,6 +214,8 @@ export class BerthaGame {
       n: this.orderN, kind, target: t.id, name: t.name, en: t.en, grid: gridRef(this.est.x, this.est.z),
       shell: pick.shell, fuze: t.fuze, charge: pick.charge, defl, el, range: D, tof: sol.tof,
       rounds, fired: 0, acked: false, at: this.time,
+      // the last order's figures on the same target, so the console can show the correction
+      prev: prev ? { defl: prev.defl, el: prev.el, charge: prev.charge, shell: prev.shell } : null,
     };
     const o = this.order;
     const what = kind === 'ranging' ? 'Einschießen' : kind === 'ffe' ? `Wirkungsschießen, ${rounds} Schuss` : 'Verbesserung';
@@ -228,20 +232,29 @@ export class BerthaGame {
     const t = this.targets.find((x) => x.id === r.target);
     if (!t) return;
     const who = t.unit ? 'Fliegerbeobachter' : 'Ballonbeobachter';
+    let de, en;
     if (r.lost) {
+      de = 'Schuss nicht beobachtet, weit vom Ziel';
+      en = 'round not seen, far off the target';
       this.say(`${who}: Schuss nicht beobachtet. Weit vom Ziel. Ladung und Geschoss prüfen!`, 'Observer: round not seen, far off the target. Check the charge and the shell!', 'warn');
     } else if (r.dist < 15) {
+      de = 'Volltreffer';
+      en = 'direct hit';
       this.say(`${who}: Volltreffer!`, 'Observer: direct hit!', 'report');
     } else {
       const a = Math.round(r.along / 10) * 10, c = Math.round(r.across / 10) * 10;
       const parts = [];
       if (Math.abs(a) >= 10) parts.push(`${Math.abs(a)} m ${a > 0 ? 'zu weit' : 'zu kurz'}`);
       if (Math.abs(c) >= 10) parts.push(`${Math.abs(c)} m ${c > 0 ? 'rechts' : 'links'}`);
-      const en = [];
-      if (Math.abs(a) >= 10) en.push(`${Math.abs(a)} m ${a > 0 ? 'over' : 'short'}`);
-      if (Math.abs(c) >= 10) en.push(`${Math.abs(c)} m ${c > 0 ? 'right' : 'left'}`);
-      this.say(`${who}: ${parts.join(', ') || 'im Ziel'}.`, `Observer: ${en.join(', ') || 'on the target'}.`, 'report');
+      const ens = [];
+      if (Math.abs(a) >= 10) ens.push(`${Math.abs(a)} m ${a > 0 ? 'over' : 'short'}`);
+      if (Math.abs(c) >= 10) ens.push(`${Math.abs(c)} m ${c > 0 ? 'right' : 'left'}`);
+      de = parts.join(', ') || 'im Ziel';
+      en = ens.join(', ') || 'on the target';
+      this.say(`${who}: ${de}.`, `Observer: ${en}.`, 'report');
     }
+    // the fall of the last round, for the order card
+    this.lastReport = { order: r.order, target: r.target, de, en, at: this.time, dist: r.dist, lost: r.lost };
     if (t !== this.target || !t.alive || this.state !== 'playing') return;
     // correct the aim by what was seen (the observer's eye is not perfect)
     if (!r.lost && r.order === this.order?.n) {
@@ -274,11 +287,15 @@ export class BerthaGame {
         if (g.el > GUN.loadEl + 0.6 * DEG) why = W('Rohr zum Laden senken (Höhenrichtkanonier, 3)', 'Lower the barrel to load (elevation layer, 3)');
         else out.push({ key: 'E', id: 'open', label: g.spent ? 'Verschluss öffnen, Hülse auswerfen' : 'Verschluss öffnen', en: 'open the wedge', dur: DUR.open });
       } else if (!g.tray && !g.rammed && !(o?.acked && o.fired < o.rounds)) why = W('Warten auf den Befehl: welches Geschoss? (Batterieführer, 1)', 'Wait for the order: which shell? (gun commander, 1)');
-      else if (!g.tray && !g.rammed) out.push({ key: 'E', id: 'hoist', label: `${SHELLS[this.selShell].name} (${FUZES[this.selFuze].short}) aufkranen`, en: `hoist the ${SHELLS[this.selShell].en}`, dur: DUR.hoist });
+      else if (!g.tray && !g.rammed) {
+        const wrong = !!o && (this.selShell !== o.shell || this.selFuze !== o.fuze);
+        out.push({ key: 'E', id: 'hoist', label: `${SHELLS[this.selShell].name} (${FUZES[this.selFuze].short}) aufkranen`, en: `hoist the ${SHELLS[this.selShell].en} (${FUZES[this.selFuze].enShort} fuze)`, dur: DUR.hoist, warn: wrong });
+      }
       else if (g.tray) out.push({ key: 'E', id: 'ram', label: 'Geschoss ansetzen', en: 'ram the shell', dur: DUR.ram });
       else if (!g.caseIn) {
-        if (g.bags < MAX_BAGS) out.push({ key: 'E', id: 'bag', label: `Vorkartusche ${g.bags + 1} einführen`, en: 'add a charge bag', dur: DUR.bag });
-        out.push({ key: 'R', id: 'case', label: `Hauptkartusche (Ladung ${g.bags})`, en: `brass case, charge ${g.bags}`, dur: DUR.case });
+        const n = o?.acked ? o.charge : null;
+        if (g.bags < MAX_BAGS) out.push({ key: 'E', id: 'bag', label: `Vorkartusche ${g.bags + 1}${n != null ? ` von ${n}` : ''} einführen`, en: `add charge bag ${g.bags + 1}${n != null ? ` of ${n}` : ''}`, dur: DUR.bag, warn: n != null && g.bags >= n });
+        out.push({ key: 'R', id: 'case', label: `Hauptkartusche (Ladung ${g.bags})`, en: `brass case: charge ${g.bags}`, dur: DUR.case, warn: n != null && g.bags !== n });
       } else out.push({ key: 'E', id: 'close', label: 'Verschluss schließen', en: 'close the wedge', dur: DUR.close });
     } else if (station === 'fire') {
       if (!g.loaded) why = W('Nicht geladen.', 'Not loaded.');
@@ -290,6 +307,44 @@ export class BerthaGame {
       why = null;
     }
     return { list: out, why };
+  }
+
+  // The next job of the drill for one man working every station in turn (the console's "Next" line and the lit
+  // station): { st, key, de, en, wait } or null. `wait` marks dead time (no order yet, a round in the air).
+  // The order follows the tutorial: read back, barrel down, load, elevation, line, fire.
+  next() {
+    const g = this.gun, o = this.order;
+    if (this.state !== 'playing') return null;
+    const J = (st, key, de, en, wait = false) => ({ st, key, de, en, wait });
+    if (!o) return J('cmd', null, 'Warten auf den nächsten Schießbefehl', 'waiting for the next fire order', true);
+    if (!o.acked) return J('cmd', 'E', 'Befehl am Fernsprecher wiederholen', 'read back the order on the telephone');
+    if (this.mismatch()) return J('load', 'R', 'falsche Ladung entladen', 'unload the wrong round');
+    if (o.fired >= o.rounds) {
+      // while the round is in the air: make ready for the next one (barrel down, wedge open, the case out)
+      if (!g.loaded && !g.breechOpen && g.el > GUN.loadEl + 0.6 * DEG) return J('elev', 'S', 'Rohr für den nächsten Schuss auf 2° senken', 'lower the barrel to 2° for the next round');
+      if (!g.loaded && !g.breechOpen) return J('load', 'E', 'Verschluss öffnen, die leere Hülse auswerfen', 'open the wedge and throw out the empty case');
+      const sh = this.shells.find((s) => s.own && s.alive && s.order === o.n);
+      if (sh) return J('cmd', null, `Granate in der Luft, Einschlag in ${Math.max(0, Math.round(o.tof - sh.t))} s`, `round in the air, ${Math.max(0, Math.round(o.tof - sh.t))} s to the burst`, true);
+      return J('cmd', null, 'Warten auf die Meldung des Beobachters', 'waiting for the observer\'s report', true);
+    }
+    const laid = this.laid(o);
+    if (!g.loaded) {
+      if (!g.breechOpen && !g.tray && !g.rammed && g.el > GUN.loadEl + 0.6 * DEG) return J('elev', 'S', 'Rohr auf den Ladewinkel 2° senken', 'lower the barrel to the loading angle, 2°');
+      const acts = this.actions('load');
+      let a = acts.list[0];
+      if (!a) return J('load', null, acts.why?.de ?? '', acts.why?.en ?? '');
+      if (a.id === 'bag' && g.bags >= o.charge) a = acts.list.find((x) => x.id === 'case') ?? a;
+      if (a.id === 'hoist' && (this.selShell !== o.shell || this.selFuze !== o.fuze)) {
+        const k = this.selShell !== o.shell ? 'Q' : 'Z';
+        return J('load', k, k === 'Q' ? `Geschoss wählen: ${SHELLS[o.shell].name}` : `Zünder wählen: ${FUZES[o.fuze].short}`, k === 'Q' ? `pick the ${SHELLS[o.shell].en}` : `pick the ${FUZES[o.fuze].enShort} fuze`);
+      }
+      return J('load', a.key, a.label, a.en);
+    }
+    if (!laid.quad) return J('elev', g.quad < o.el ? '↑' : '↓', `Libellenquadrant auf ${toStrich(o.el)} stellen`, `set the clinometer to ${toStrich(o.el)}`);
+    if (!laid.elev) return J('elev', g.el < o.el ? 'W' : 'S', 'Rohr kurbeln, bis die Libelle einspielt', 'crank the barrel until the bubble centres');
+    if (!laid.sight) return J('trav', g.sight < o.defl ? '←' : '→', `Seite ${fmtDefl(o.defl)} am Rundblickfernrohr stellen`, `set ${fmtDefl(o.defl, 'en')} on the panoramic sight`);
+    if (!laid.line) return J('trav', g.tr < o.defl ? 'A' : 'D', 'Lafette schwenken, bis die Richtlatte am Faden steht', 'swing the carriage until the aiming post is on the hair');
+    return J('fire', 'E', 'Abziehen!', 'pull the lanyard');
   }
 
   // the held keys: { trav, elev, sight, quad: -1..1, fine, hold: 'E' | 'R' | null }
@@ -451,20 +506,45 @@ export class BerthaGame {
     }
   }
 
+  // The player's handwheels and instrument knobs. Each is turned toward its mark (the ordered figure on the sight
+  // and the clinometer, the post on the hair for the carriage, the centred bubble or the loading angle for the
+  // barrel): the man eases off over the last 8 mils and stops on the mark, and the key must be let go and pressed
+  // again to go past it (this.latch). Shift is the fine wheel. Only the player's station; the crew lays by itself.
   crank(dt, inp, station) {
-    const g = this.gun;
+    const g = this.gun, o = this.order?.acked ? this.order : null;
     const k = inp.fine ? GUN.fine : 1;
+    for (const a of ['trav', 'sight', 'elev', 'quad']) if (this.latch[a] && this.latch[a] !== Math.sign(inp[a] || 0)) this.latch[a] = 0;
     if (station === 'trav') {
-      if (inp.trav) g.tr = Math.max(-GUN.trMax, Math.min(GUN.trMax, g.tr + inp.trav * GUN.trRate * k * dt));
-      if (inp.sight) g.sight = Math.max(-GUN.trMax, Math.min(GUN.trMax, g.sight + inp.sight * (inp.fine ? 2 : 40) * STRICH * dt));
+      if (inp.trav) g.tr = this.wheel('trav', g.tr, inp.trav, GUN.trRate * k * dt, -GUN.trMax, GUN.trMax, o ? [g.sight] : []);
+      if (inp.sight) g.sight = this.wheel('sight', g.sight, inp.sight, (inp.fine ? 2 : 40) * STRICH * dt, -GUN.trMax, GUN.trMax, o ? [o.defl] : []);
       // the scale clicks onto the ordered figure when let go within a mil of it
       else if (this.order && Math.abs(g.sight - this.order.defl) <= STRICH) g.sight = this.order.defl;
     } else if (station === 'elev') {
       // the barrel cannot be moved with the wedge open (the tray is behind it)
-      if (inp.elev && !g.breechOpen) g.el = Math.max(GUN.elMin, Math.min(GUN.elMax, g.el + inp.elev * GUN.elRate * k * dt));
-      if (inp.quad) g.quad = Math.max(0, Math.min(GUN.elMax, g.quad + inp.quad * (inp.fine ? 2 : 60) * STRICH * dt));
+      if (inp.elev && !g.breechOpen) g.el = this.wheel('elev', g.el, inp.elev, GUN.elRate * k * dt, GUN.elMin, GUN.elMax, g.loaded ? [g.quad] : [GUN.loadEl]);
+      if (inp.quad) g.quad = this.wheel('quad', g.quad, inp.quad, (inp.fine ? 2 : 60) * STRICH * dt, 0, GUN.elMax, o ? [o.el] : []);
       else if (this.order && Math.abs(g.quad - this.order.el) <= STRICH) g.quad = this.order.el;
     }
+  }
+
+  // one step of a wheel from cur in direction dir (+-1) by up to `step`, easing onto and stopping at the first
+  // mark ahead; returns the new value (this.latch[axis] = dir while it sits on a mark with the key held)
+  wheel(axis, cur, dir, step, lo, hi, marks) {
+    const clamp = (v) => Math.max(lo, Math.min(hi, v));
+    if (this.latch[axis] === dir) return cur;
+    let next = cur + dir * step;
+    for (const m of marks) {
+      const d = m - cur;
+      if (Math.abs(d) < 1e-9 || Math.sign(d) !== dir) continue;
+      const near = Math.abs(d) / (8 * STRICH);
+      if (near < 1) next = cur + dir * step * Math.max(0.15, near);
+      if (Math.abs(next - cur) >= Math.abs(d)) {
+        this.latch[axis] = dir;
+        this.emit('mark', axis);
+        return clamp(m);
+      }
+    }
+    return clamp(next);
   }
 
   // the rest of the detachment, when assist is on: every station but the player's works the drill

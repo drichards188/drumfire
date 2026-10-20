@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>10 cm K 17 viewer</title>
+<style>
+html, body { margin: 0; height: 100%; overflow: hidden; background: #181a1c; color: #cfd6dc; font: 12px monospace; }
+pre { margin: 8px; white-space: pre-wrap; }
+.label { position: absolute; top: 6px; left: 8px; color: #222; font: 12px monospace; pointer-events: none; }
+</style>
+</head>
+<body>
+<pre id="out"></pre>
+<div id="info"></div>
+<!-- Page-local viewer for the K 17 (the k17 agent's): loads the WW1 builder before the shared dev pages run.
+     ?page=viewer (default): /models.html with its parameters (&kind=k17&ortho=right&crew=1&pose=...)
+     ?page=clip: the mechanism clip check (src/render/clipcheck.js) with &gun=k17 -->
+<script type="module">
+  import { loadGuns } from '/src/models/guns.js';
+  const q = new URLSearchParams(location.search);
+  await loadGuns(['k17']);
+  const page = q.get('page') ?? 'viewer';
+  if (page === 'clip') await import('/src/render/clipcheck.js');
+  else { document.getElementById('out').remove(); await import('/src/dev/modelviewer.js'); }
+</script>
+</body>
+</html>

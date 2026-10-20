@@ -22,17 +22,23 @@ const MEN = [
   { id: 'cmd', frame: 'root', outfit: 'german-cap', home: [-7.2, 0, 0.4, -Math.PI / 2 - 0.2] },
   { id: 'trav', frame: 'trav', outfit: 'german', home: [-1.66, 0, 1.42, -Math.PI / 2], cover: [-3.4, 0, 3.0, -Math.PI / 2 - 0.6] },
   { id: 'elev', frame: 'trav', outfit: 'german', home: [1.69, 0, 1.32, Math.PI / 2], cover: [3.0, 0, 5.8, Math.PI / 2 + 0.6] },
-  { id: 'load', frame: 'trav', outfit: 'german-drill', home: [0.72, LP, 2.5, 0], cover: [0.9, LP, 4.75, 0.3] },
-  { id: 'ram2', frame: 'trav', outfit: 'german-drill', home: [-0.72, LP, 2.75, 0], cover: [-0.9, LP, 4.75, -0.3] },
-  { id: 'crane', frame: 'trav', outfit: 'german-drill', home: [1.33, LP, 3.38, -0.98], cover: [1.15, LP, 4.45, 0.2] },
+  { id: 'load', frame: 'trav', outfit: 'german-drill', home: [1.02, LP, 2.55, 0], cover: [1.1, LP, 4.6, 0.3] },
+  { id: 'ram2', frame: 'trav', outfit: 'german-drill', home: [-1.02, LP, 2.75, 0], cover: [-1.08, LP, 4.3, -0.3] },
+  { id: 'crane', frame: 'trav', outfit: 'german-drill', home: [1.33, LP, 3.38, -0.98], cover: [1.18, LP, 3.95, 0.2] },
   { id: 'cart', frame: 'trav', outfit: 'german-drill', home: [2.72, 0, 3.0, -Math.PI / 2], cover: [4.7, 0, 6.4, 0.5] },
   { id: 'fire', frame: 'root', outfit: 'german', home: [-15.2, 0, 7.4, -Math.PI / 2 + 0.45] },
   { id: 'store', frame: 'root', outfit: 'german-cap', home: [-5.4, 0, 5.4, 0.4] },
 ];
-// stations the player can take, and the man each one is
-const PLAYER_MAN = { cmd: 'cmd', trav: 'trav', elev: 'elev', load: 'load', fire: 'fire' };
+// stations the player can take, and the man each one is (the loader's station is an eye at the back of the stage that
+// watches the whole loading detachment, index.js: no man of it is the player)
+const PLAYER_MAN = { cmd: 'cmd', trav: 'trav', elev: 'elev', load: null, fire: 'fire' };
 const WALK = 1.35, TURN = 5; // m/s, rad/s
 const RACK = [-1.05, 4.6]; // the charge bags waiting at the back of the stage (x, z)
+// the layers' footboards beside the carriage (trav frame, x0 x1 z0 z1, the board's top over the bed): they stand on
+// them at the handwheels, with the dials and the sight at eye height, and step down to go to cover
+export const BOARDS = [[-2.05, -1.25, 1.02, 1.95], [1.25, 2.05, 0.95, 1.9]];
+export const BOARD_Y = 0.3;
+const onBoard = (x, z) => BOARDS.some(([x0, x1, z0, z1]) => x > x0 && x < x1 && z > z0 && z < z1);
 const STORE_RUN = [[-5.4, 5.4], [-2.4, 5.6]]; // the store man's walk: the charge store to the foot of the ladder
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _g = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3();
@@ -63,7 +69,7 @@ export class BerthaCrew {
       const fig = buildCrewman({ outfit: d.outfit, skin: [0, 1, 2, 0, 3, 1, 2, 0, 1][i], height: 1.7 + ((i * 7) % 5) * 0.022 });
       const parent = d.frame === 'trav' ? rig.pivots.traverse : rig.root;
       parent.add(fig.root);
-      const y = d.home[1] === LP ? this.lp : d.home[1];
+      const y = d.home[1] === LP ? this.lp : d.frame === 'trav' && onBoard(d.home[0], d.home[2]) ? BOARD_Y : d.home[1];
       const m = { d, fig, x: d.home[0], y, z: d.home[2], h: d.home[3], pose: 'stand', t: i * 0.37, walkT: 0, hands: null };
       fig.root.position.set(m.x, m.y, m.z);
       fig.root.rotation.y = m.h;
@@ -140,10 +146,10 @@ export class BerthaCrew {
     W.wedge.node.rotation.x = -g.breech * 9;
     if (phase.load.id === 'hoist') this.craneSpin = phase.load.k * 40;
     W.crane.node.rotation.x = this.craneSpin;
-    // the player's man: drawn, head hidden (the camera is his eyes)
+    // the player's man: drawn, head and neck hidden (the camera is at his eyes, a little behind them)
     const pm = PLAYER_MAN[player] ?? null;
     if (pm !== this.player) {
-      for (const m of this.men) m.fig.bones.head.scale.setScalar(m.d.id === pm ? 0.001 : 1);
+      for (const m of this.men) m.fig.bones.neck.scale.setScalar(m.d.id === pm ? 0.001 : 1);
       this.player = pm;
     }
     // the shot: from the whistle (the start of the pull) to a while after the round has gone
@@ -208,6 +214,11 @@ export class BerthaCrew {
             ({ pose, moving } = this.storeRun(m, dt, clear));
             break;
         }
+      }
+      // the layers step up onto their footboards and down off them
+      if (m.d.frame === 'trav' && m.d.home[1] !== LP) {
+        const want = onBoard(m.x, m.z) ? BOARD_Y : 0;
+        m.y += Math.max(-dt * 1.6, Math.min(dt * 1.6, want - m.y));
       }
       // pose, cross-faded; the walk cycle runs with the distance covered
       if (pose === 'walk' || pose === 'carryWalk') pt = m.walkT;
@@ -281,7 +292,7 @@ export class BerthaCrew {
       case 'close':
       case 'unload':
         if (id === 'load') {
-          go(0.72 + 0.5 * g.breech, 2.42, -0.15);
+          go(1.0 + 0.3 * g.breech, 2.42, -0.2);
           pose = moving ? 'walk' : 'operate';
           if (!moving) hands = 'wheel:wedge';
         } else this.at(m, homeSpot, dt) || (moving = true);
@@ -300,19 +311,19 @@ export class BerthaCrew {
           }
         } else if (id === 'load' || id === 'ram2') {
           // the two loaders take the shell as it comes over the tray and guide it down
-          const x = id === 'load' ? 0.62 : -0.62;
-          go(x, 2.95, id === 'load' ? 0.25 : -0.25);
+          const x = id === 'load' ? 1.02 : -1.02;
+          go(x, 2.95, id === 'load' ? 0.45 : -0.45);
           if (!moving && swing > 0.6 && k > 0.6) { pose = 'reachUp'; hands = 'shell'; }
         }
         break;
       }
       case 'ram': {
-        // both loaders on the staff, walking it up the bore until the stage edge stops them
+        // both loaders on the staff behind the tray, walking it up the bore until the tray's end stops them
         if (id === 'load' || id === 'ram2') {
-          const st = this.rig.props.rammer;
-          const head = st.visible ? st.position.z : this.rig.trayZ.z1 + 0.8;
-          const z = Math.max(2.35, head + (id === 'load' ? 0.75 : 1.35));
-          go(id === 'load' ? 0.3 : -0.3, Math.min(z, 4.75), 0);
+          const st = this.rig.props.rammer, z1 = this.rig.trayZ.z1;
+          const head = st.visible ? st.position.z : z1 + 0.8;
+          const z = Math.max(z1 + (id === 'load' ? 0.3 : 0.9), head + (id === 'load' ? 0.75 : 1.35));
+          go(0.32, Math.min(z, 4.85), 0); // both in file on the right of the staff, clear of the loader's step
           pose = 'ram';
           hands = 'staff';
         } else this.at(m, homeSpot, dt) || (moving = true);
@@ -325,11 +336,11 @@ export class BerthaCrew {
           if (k < 0.35) {
             const there = k > 0.18;
             if (!there) go(RACK[0], RACK[1], Math.PI);
-            else go(-0.42, 2.7, 0.15);
+            else go(-1.02, 2.75, -0.7);
             m.carrying = L.id;
             pose = moving ? 'carryWalk' : 'carry';
           } else {
-            go(-0.42, 2.7, 0.15);
+            go(-1.02, 2.75, -0.7);
             pose = 'push';
             m.trayProp = L.id === 'bag' ? this.rig.props.bags[0] : this.rig.props.case;
             hands = 'tray';
@@ -364,11 +375,12 @@ export class BerthaCrew {
   eye(out) {
     const m = this.by[this.player];
     if (!m) return null;
-    m.fig.bones.head.getWorldPosition(out);
+    // from the (hidden) neck: the head bone sits 0.105 above it, the eyes 0.075 above that
+    m.fig.bones.neck.getWorldPosition(out);
     m.fig.root.getWorldQuaternion(_q);
     _f.set(0, 0, -1).applyQuaternion(_q);
     out.addScaledVector(_f, 0.07);
-    out.y += 0.075 * m.fig.root.scale.y;
+    out.y += 0.18 * m.fig.root.scale.y;
     return Math.atan2(-_f.x, -_f.z);
   }
 }

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Paris clip check</title>
+<style>body { background: #1b1e22; color: #cfd6dc; font: 12px monospace; } pre { white-space: pre-wrap; }</style></head>
+<body>
+<pre id="out">loading</pre>
+<script type="module">
+// Runs render/clipcheck.js against the Paris Gun: that page loads only the British field guns' builders, so this
+// one loads the WW1 builder first (loadGuns caches it) and then hands over: /src/models/v/de/paris_clip.html?gun=paris
+import { loadGuns } from '../../guns.js';
+await loadGuns(['paris']);
+await import('../../../render/clipcheck.js');
+</script>
+</body>
+</html>

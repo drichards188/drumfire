@@ -5,7 +5,6 @@ import { LESSON_KIT } from '../tutorial.js';
 
 const { shots, targetDown, takeStep, rangeStep, reportStep, bracketDemo, effectStep, killStep, idle } = LESSON_KIT;
 const sp = (T) => T.u?.special;
-const stepIs = (T, id) => sp(T)?.steps?.[sp(T).i]?.id === id;
 const stepDone = (T, id) => sp(T)?.steps?.find((s) => s.id === id)?.state === 'done';
 
 // a correction step: apply the observer's pencilled correction (the . key)
@@ -29,44 +28,53 @@ const bracketStep = (o = {}) => ({
   limit: 900,
 });
 
-// a launch-drill step: start the next steps with Enter until `until` is the current step
-const drillTo = (id, until, o) => ({
-  id, title: o.title, text: o.text, goal: o.goal ?? 'Press Enter (NEXT STEP) to start each step; wait while the crew works it',
-  hi: ['special'],
-  done: (T) => stepIs(T, until) || stepDone(T, until),
-  demo: (T) => { if (!sp(T).doing) T.act('step'); },
-  limit: 900,
+// the launch drill (src/ww2/special.js LaunchCtl): Enter starts it and the crew carries on by itself; it holds for
+// the settings, a fault and the firing key (`hold`)
+const startStep = (title, text) => ({
+  id: 'start', title, text, goal: 'Press Enter (START THE DRILL)', hi: ['next'],
+  done: (T) => !!sp(T).run || sp(T).steps[0].state !== 'todo',
+  demo: (T) => T.once('go', () => T.act('step')),
 });
 const dialStep = (id, key, o) => ({
-  id, title: o.title, text: o.text, goal: o.goal,
-  hi: ['special'],
-  done: (T) => { const s = sp(T); return s.settings[key] != null && Math.abs(s.settings[key] - s.solution[key]) <= (key === 'compass' ? 0.25 : 0.6); },
+  id, title: o.title, text: o.text, goal: o.goal, hi: o.hi ?? ['dials'],
+  done: (T) => { const s = sp(T); return s.settings[key] != null && Math.abs(key === 'compass' ? ((s.settings[key] - s.solution[key] + 540) % 360) - 180 : s.settings[key] - s.solution[key]) <= (s.tol?.[key] ?? (key === 'compass' ? 0.25 : 0.6)) + 1e-6; },
   demo: (T) => T.once('dial', () => T.act('set', { [key]: sp(T).solution[key] })),
 });
+const waitFire = (title, text, goal) => ({
+  id: 'work', title, text, goal, hi: ['gauges', 'timescale'],
+  done: (T) => sp(T).hold === 'fire',
+  limit: 900,
+});
 const followStep = {
-  id: 'follow', title: 'Ride it', text: 'Press F to follow the round in flight (F again comes back). On the way out it leaves the map: what became of it arrives as a report.',
-  goal: 'Press F', hi: [],
+  id: 'follow', title: 'Ride it', text: 'Press F to follow the round in flight (F again comes back). On the way out it leaves the map; the ROUNDS card follows it, and what became of it arrives as a report.',
+  goal: 'Press F', hi: ['rounds'],
   done: (T) => T.host.following() || T.sim.time - T.mem.t0 > 20,
   demo: (T) => T.once('f', () => T.host.follow()),
 };
+const resultStep = (wait) => ({
+  id: 'result', title: 'The report', text: (T) => sp(T).flights[0]?.state === 'flying' ? wait : `No. 1: ${sp(T).flights[0]?.text ?? ''} The plot shows where it fell.`,
+  goal: 'Wait for the report', hi: ['rounds', 'plot'],
+  done: (T) => sp(T).flights[0] && sp(T).flights[0].state !== 'flying',
+  limit: 900,
+});
 
 export const WW2_TUTORIALS = [
   {
-    id: 'w-basics', op: 'flanders', name: 'Die Grundlagen (leFH 18)', unit: 1, units: [1, 2, 3, 4, 5, 6, 7],
-    blurb: 'The German side: seven units, a console in metres and Strich, the VB\'s reports. Range the field howitzers onto an Allied dump.',
-    outro: 'Metres and Strich, weiter and kürzer: the same loop as 1917, from the other side of the wire. The other lessons cover the special weapons.',
+    id: 'w-basics', op: 'flanders', name: 'Die Grundlagen (leFH 18)', unit: 1, units: [1, 2, 3, 4, 5, 6],
+    blurb: 'The German side: six units, a console in metres and Strich, the VB\'s reports. Range the field howitzers onto an Allied dump.',
+    outro: 'Metres and Strich, weiter and kürzer: the same loop, from the other side of the wire. The other lessons cover the special weapons.',
     setup: (T) => T.ensure('main', 'D1', { observer: 'foo', title: 'Supply dump, Potijze', firstError: { over: 160, right: -70 } }),
     keep: (T) => T.ensure('main', 'D1', { observer: 'foo', title: 'Supply dump, Potijze', firstError: { over: 160, right: -70 } }),
     steps: [
-      { id: 'welcome', title: 'Flanders, autumn 1944', text: 'You command a German artillery group on the old Ypres ridge, facing the British and Canadians across the 1917 battlefield. The battle is fictional; the guns are real, except two guests labelled alternate history: the Gustav railway gun and Big Bertha.', hi: ['header'] },
+      { id: 'welcome', title: 'The ridge', text: 'You command a German artillery group on the ridge, facing the British and Canadians across the old battlefield: field and heavy howitzers, the long 17 cm gun, the mortars, the Nebelwerfer, and a giant, the Gustav railway gun.', hi: ['header'] },
       {
-        id: 'units', title: 'Seven units', text: 'Keys 1 to 7 select a unit: 1 the 10.5 cm leFH 18, 2 the 15 cm sFH 18, 3 the 17 cm K 18, 4 the 21 cm Mörser 18, 5 the Nebelwerfer, 6 the Gustav, 7 Big Bertha.',
+        id: 'units', title: 'Six units', text: 'Keys 1 to 6 select a unit: 1 the 10.5 cm leFH 18, 2 the 15 cm sFH 18, 3 the 17 cm K 18, 4 the 21 cm Mörser 18, 5 the Nebelwerfer, 6 the Gustav.',
         goal: 'Press 5 to visit the Nebelwerfer, then 1 to come back', hi: ['tabs'],
         tick: (T) => { if (T.host.selectedId() === 5) T.mem.left = true; },
         done: (T) => !!T.mem.left && T.host.selectedId() === 1,
         demo: (T) => { if (!T.mem.left) T.once('go', () => T.host.select(5)); else if (T.sim.time - T.mem.t0 > 2) T.once('back', () => T.host.select(1)); },
       },
-      { id: 'metric', title: 'Metres and Strich', text: 'The board is the same map with our lines in blue and theirs in red. Ranges are in metres, the line and the elevation in Strich (6400 to the circle: 48-00 is due west). References are the German grid in kilometres: r (Rechtswert, east) and h (Hochwert, north).', hi: ['board', 'order'] },
+      { id: 'metric', title: 'Metres and Strich', text: 'The board is the same map with our lines in blue and theirs in red. Ranges are in metres, the line and the elevation in Strich (6400 to the circle: 48-00 is due west). Each mission slip gives the target\'s range from the unit you have selected (red when it cannot reach); the fire order\'s reference is the map grid in kilometres, r east and h north.', hi: ['board', 'order'] },
       takeStep({ text: 'A VB (forward observer) has called fire on a supply dump. Take the task.' }),
       rangeStep({ text: 'Range with one gun: GUNS on 1 GUN, ROUNDS 1, Space.' }),
       reportStep({ text: 'The VB watches the burst and telephones the fall of shot in metres.' }),
@@ -101,9 +109,9 @@ export const WW2_TUTORIALS = [
   {
     id: 'w-gustav', op: 'sevastopol', name: 'Gustav: railway preparation', unit: 1, units: [1, 2],
     blurb: 'Build the 80 cm Gustav on its firing curve with the work gangs and the gantry cranes, then fire a 4.8 t shell at Fort Stalin.',
-    outro: 'At Sevastopol the Gustav fired 48 shells in twelve days; here a handful. Spend each one on the hardest target in reach, with the delay fuze.',
+    outro: 'The Gustav has only a handful of shells. Spend each one on the hardest target in reach, with the delay fuze.',
     steps: [
-      { id: 'welcome', title: 'Bakhchisaray, June 1942', text: 'The Gustav arrives in pieces. Before it can fire, the position must be surveyed, the curved double track laid, the gantry cranes raised, the gun assembled and the ammunition train brought up. The PREPARATION card lists the tasks; the + and - put work gangs on them.', hi: ['special'] },
+      { id: 'welcome', title: 'The firing curve', text: 'The Gustav arrives in pieces. Before it can fire, the position must be surveyed, the curved double track laid, the gantry cranes raised, the gun assembled and the ammunition train brought up. The PREPARATION card lists the tasks; the + and - put work gangs on them.', hi: ['special'] },
       {
         id: 'gang', title: 'Put the gangs to work', text: 'Three work gangs. A task that waits for another is greyed out. Start with the survey.', goal: 'Put a gang on the survey (+)', hi: ['special'],
         done: (T) => sp(T).tasks.find((t) => t.id === 'survey').gangs > 0 || stepDone(T, 'survey'),
@@ -138,7 +146,7 @@ export const WW2_TUTORIALS = [
     blurb: 'Drive the 124 t mortar into a firing position, turn the whole vehicle onto the target, lower the hull and fire a 2.2 t shell at the Terespol gate.',
     outro: 'The Karl must be emplaced, turned and lowered for every new line, and its carrier brings four shells a trip. Displace when the fortress guns find you.',
     steps: [
-      { id: 'welcome', title: 'Brest-Litovsk, 22 June 1941', text: 'The 60 cm Karl "Thor" stands on the approach road. It has only 4 degrees of traverse each way, so the whole vehicle is the coarse laying; it must lower its hull onto the ground before it fires. The KARL card has the positions, TURN (T), LOWER and RAISE (L) and the ammunition carrier (Y).', hi: ['special'] },
+      { id: 'welcome', title: 'Thor', text: 'The 60 cm Karl "Thor" stands on the approach road. It has only 4 degrees of traverse each way, so the whole vehicle is the coarse laying; it must lower its hull onto the ground before it fires. The KARL card has the positions, TURN (T), LOWER and RAISE (L) and the ammunition carrier (Y).', hi: ['special'] },
       {
         id: 'drive', title: 'Into position', text: 'Pick a firing position: A is covered, B is open but reaches the gate, C reaches the Eastern Fort.', goal: 'Click STELLUNG A or B and wait for the Karl to arrive', hi: ['special'],
         done: (T) => !!sp(T).posId,
@@ -174,41 +182,45 @@ export const WW2_TUTORIALS = [
   },
   {
     id: 'w-v1', op: 'v1', name: 'V-1: the launch drill', unit: 1, units: [1],
-    blurb: 'Prepare a flying bomb at its Walter ramp: compass, air log, fuel, steam generator, and the catapult.',
-    outro: 'The game scores the drill and whether the missile reached the target area. The V-1 was chiefly a weapon against cities; thousands of civilians were killed by it. docs/WW2.md has the history.',
+    blurb: 'Prepare a flying bomb at its Walter ramp: compass, air log, fuel, the steam generator, and the catapult.',
+    outro: 'The crew works the drill; you set it, decide its faults, take cover from the bombers and fire. The game scores the drill and whether the missile reached the target area.',
     steps: [
-      { id: 'welcome', title: 'Flak-Regiment 155 (W)', text: 'A launch site in the woods, autumn 1944. The DRILL card has the firing data (the target\'s bearing and range, the wind), two settings to dial, and the checklist. Enter starts the next step; the crew works it. Faults and air raids are switched off on this range.', hi: ['special'] },
-      drillTo('prepare', 'compass', { title: 'From the store', text: 'Bring the missile out and fit its wings.' }),
-      dialStep('compass', 'compass', { title: 'The compass', text: 'In the Richthaus the master compass is set to the launch bearing. Dial the COMPASS to the firing data\'s bearing (left and right arrows, Shift for whole degrees). A degree off is almost 3 km off at the target.', goal: 'Dial the compass to the firing data (within 0.2 degrees)' }),
-      dialStep('airlog', 'range', { title: 'The air log', text: 'The propeller on the nose counts the air distance flown, then puts the missile into its dive. Dial the range from the firing data (it allows for the wind; up and down arrows).', goal: 'Dial the air log range to the firing data' }),
-      drillTo('ready', 'fire', { title: 'Ready the round', text: 'Compass, air log, onto the sled, fuel and air, the steam generator, the fuzes, then everyone into the bunker.' }),
+      { id: 'welcome', title: 'The launch site', text: 'A launch site in the woods. The LAUNCH DRILL card shows the step in hand and what the crew is doing. The big key always says what to do next; Enter (or Space) presses it. Faults and air raids are switched off on this range.', hi: ['drill', 'next'] },
+      startStep('From the store', 'Press Enter: the crew brings the missile out of the store and fits its wings, then carries on step by step by itself. It stops only where it needs you.'),
+      dialStep('compass', 'compass', { title: 'The compass', text: 'The drill stops at the Richthaus, where the master compass is set to the course. FIRING DATA gives the bearing: dial COMPASS with the left and right arrows (Shift: whole degrees) until it says MATCH. The cross on the plot shows where the setting sends the round: a degree off is almost 3 km off at the target.', goal: 'Dial the compass to the firing data (MATCH)', hi: ['dials', 'plot'] }),
+      dialStep('airlog', 'range', { title: 'The air log', text: 'A small propeller on the nose counts the air distance flown, then puts the missile into its dive. A tailwind carries it further over the ground, so the log is set short of the ground range; a headwind, long. FIRING DATA has the figure: dial AIR LOG with the up and down arrows (Shift: 10 km).', goal: 'Dial the air log to the firing data (MATCH)', hi: ['dials', 'data'] }),
+      waitFire('The crew at work', 'Onto the sled, petrol and compressed air, the steam generator, the fuzes, then everyone into the bunker. Watch the INSTRUMENTS: the steam generator\'s test pressure must stand above the red line, or the catapult throws the missile off too slowly. ] speeds time up.', 'Wait until the big key says FIRE'),
       {
-        id: 'launch', title: 'Abschuß', text: 'The pulse jet starts; the steam catapult throws the missile off the ramp at about 400 km/h.', goal: 'Press Enter: FIRE', hi: ['special'],
+        id: 'launch', title: 'Abschuß', text: 'The pulse jet starts on compressed air and a spark and runs up to full power; then the steam generator fires and the piston throws the missile up the ramp at about 400 km/h.', goal: 'Press Enter: FIRE', hi: ['next'],
         done: (T) => sp(T).flights.length >= 1,
-        demo: (T) => { if (!sp(T).doing) T.act('step'); },
+        demo: (T) => { if (!sp(T).doing) T.once('fire', () => T.act('step')); },
       },
       followStep,
-      { id: 'result', title: 'The report', text: (T) => sp(T).flights[0]?.state === 'flying' ? 'Waiting for the report on the flight...' : `No. 1: ${sp(T).flights[0]?.text ?? ''}`, goal: 'Wait for the report', hi: ['special'], done: (T) => sp(T).flights[0] && sp(T).flights[0].state !== 'flying', limit: 900 },
+      resultStep('Waiting for the report on the flight...'),
     ],
   },
   {
     id: 'w-v2', op: 'v2', name: 'V-2: the A4 drill', unit: 1, units: [1],
     blurb: 'Erect the A4 on its firing table, align it, set the cut-off, fuel it (the liquid oxygen boils away) and launch.',
-    outro: 'Nothing could stop the A4 in flight; its makers could only make it hit. It was built by concentration-camp prisoners at Mittelwerk, thousands of whom died. The game scores the drill only.',
+    outro: 'Nothing can stop the A4 in flight; all the crew can do is make it hit. Mind the oxygen: below 92% the rocket falls short.',
     steps: [
-      { id: 'welcome', title: 'A mobile battery', text: 'A clearing in the woods, autumn 1944. The Meillerwagen brings the rocket; the firing table takes it upright. The DRILL card has the firing data, two settings and the checklist. Faults and raids are off on this range.', hi: ['special'] },
-      drillTo('erect', 'align', { title: 'Erect', text: 'The Meillerwagen\'s hydraulic arm raises the 14 m rocket onto the firing table.' }),
-      dialStep('align', 'compass', { title: 'Align the table', text: 'The table turns so the rocket\'s fin I faces the target. Dial the TABLE BEARING to the firing data.', goal: 'Dial the bearing to the firing data (within 0.2 degrees)' }),
-      dialStep('cutoff', 'range', { title: 'Brennschluß', text: 'The engine is cut off at the speed that carries the rocket to the target\'s range. Dial the range.', goal: 'Dial the cut-off range to the firing data' }),
-      drillTo('fuel', 'withdraw', { title: 'Checks and fuel', text: 'Electrical checks, alcohol, T-Stoff and Z-Stoff, then the liquid oxygen last: from then on it boils off, so launch soon or top up.' }),
-      drillTo('clear', 'fire', { title: 'Clear the table', text: 'The Meillerwagen withdraws, the crew goes to the Feuerleitpanzer. Then the Vorstufe: the pre-stage flame, watched for a steady burn.' }),
+      { id: 'welcome', title: 'A mobile battery', text: 'A clearing in the woods. The Meillerwagen brings the rocket; the firing table takes it upright. The LAUNCH DRILL card shows the step in hand; the big key says what to do next, and Enter presses it. Faults and raids are off on this range.', hi: ['drill', 'next'] },
+      startStep('Erect', 'Press Enter: the Meillerwagen\'s hydraulic arm raises the 14 m rocket onto the firing table, and the crew carries on until it needs you.'),
+      dialStep('align', 'compass', { title: 'Align the table', text: 'The table turns so the rocket\'s fin I lies on the line of fire. Dial TABLE BEARING to the firing data with the left and right arrows (Shift: whole degrees); the TABLE BEARING instrument follows the table as it turns.', goal: 'Dial the table bearing to the firing data (MATCH)', hi: ['dials', 'gauges'] }),
+      dialStep('cutoff', 'range', { title: 'Brennschluss', text: 'The I-Gerät cuts the engine when the rocket reaches the speed that carries it to the range: the BRENNSCHLUSS counter shows that speed in m/s. Dial the range with the up and down arrows.', goal: 'Dial the Brennschluss range to the firing data (MATCH)', hi: ['dials', 'gauges'] }),
+      waitFire('Checks and fuel', 'The gyros run up in the checks; then alcohol, T-Stoff and Z-Stoff, and the liquid oxygen last: from then on it boils off (the A-STOFF gauge). Below 92% the rocket falls short; T tops it up. ] speeds time up.', 'Wait until the big key says VORSTUFE'),
       {
-        id: 'launch', title: 'Hauptstufe', text: 'The turbopump comes up to speed: 25 tonnes of thrust, the rocket rises off the table, turns toward the target and is gone.', goal: 'Press Enter: HAUPTSTUFE', hi: ['special'],
+        id: 'vorstufe', title: 'Vorstufe', text: 'Press Enter: the igniter lights and the propellants flow under gravity, a flame of about 8 t that cannot lift the rocket. The crew watches it (the VORSTUFE lamp): a ragged flame means trouble.', goal: 'Press Enter: VORSTUFE', hi: ['next', 'gauges'],
+        done: (T) => stepDone(T, 'prestage') || sp(T).flights.length > 0,
+        demo: (T) => { if (!sp(T).doing) T.once('vor', () => T.act('step')); },
+      },
+      {
+        id: 'launch', title: 'Hauptstufe', text: 'The flame is steady. Press Enter: the turbopump comes up, 25 t of thrust, and the rocket rises off the table, then turns toward the target.', goal: 'Press Enter: HAUPTSTUFE', hi: ['next'],
         done: (T) => sp(T).flights.length >= 1,
-        demo: (T) => { if (!sp(T).doing) T.act('step'); },
+        demo: (T) => { if (!sp(T).doing) T.once('main', () => T.act('step')); },
       },
       followStep,
-      { id: 'result', title: 'The report', text: (T) => sp(T).flights[0]?.state === 'flying' ? 'Five minutes of flight, eighty kilometres up...' : `No. 1: ${sp(T).flights[0]?.text ?? ''}`, goal: 'Wait for the report', hi: ['special'], done: (T) => sp(T).flights[0] && sp(T).flights[0].state !== 'flying', limit: 900 },
+      resultStep('Five minutes of flight, eighty kilometres up...'),
     ],
   },
 ];

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WW1 field guns preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #202428; overflow: hidden; font: 12px monospace; color: #cfd6dc; }
+  canvas { display: block; }
+  #info { position: fixed; left: 8px; top: 6px; pointer-events: none; text-shadow: 0 0 3px #000; white-space: pre; }
+  .label { position: fixed; transform: translate(-50%, 0); pointer-events: none; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+  pre { margin: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="info"></div>
+<pre id="out"></pre>
+<!-- The WW1 field guns (sfh13, m16) and their gun pits through the shared dev tools, whose own loaders only know the
+     British and WW2 kinds: the WW1 builders are loaded first into the shared guns.js registry.
+       ?kind=sfh13&...        the model viewer (/models.html's parameters)
+       ?clip=1&gun=sfh13,m16  the mechanism clip check (src/render/clipcheck.js)
+       ?site=sfh13|m16|k17|bertha&cam=az,el,dist  the gun position with the gun in it -->
+<script type="module">
+  import { loadGuns, GUN_KINDS_WW1 } from '../../guns.js';
+  const q = new URLSearchParams(location.search);
+  await loadGuns(GUN_KINDS_WW1);
+  if (q.get('site')) await import('./ww1_site_preview.js');
+  else if (q.get('clip')) await import('../../../render/clipcheck.js');
+  else { document.getElementById('out').remove(); await import('../../../dev/modelviewer.js'); }
+</script>
+</body>
+</html>

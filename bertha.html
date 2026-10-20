@@ -28,7 +28,7 @@
       </div>
 
       <div id="hud">
-        <div id="unit"><b id="unit-name" data-i18n="gunName"></b><span id="unit-call" data-i18n="gunCall"></span></div>
+        <div id="unit"><b><span id="unit-name" data-i18n="gunName"></span><span class="wip-badge" data-i18n="wipTag" data-i18n-title="wipLine">WIP</span></b><span id="unit-call" data-i18n="gunCall"></span></div>
         <div id="compass"><div id="compass-strip"></div><div class="compass-center"></div><div id="heading">000</div></div>
         <div id="score-box"><span data-i18n="score"></span><b id="score">0</b></div>
         <div id="clock" title="Time of day"><span data-i18n="clock"></span><b id="clock-val">06:00</b></div>
@@ -37,7 +37,7 @@
         <div id="order"></div>
         <div id="radio"></div>
         <div id="crosshair"></div>
-        <div id="prompt"><div class="p-keys" id="prompt-keys"></div><div class="p-why" id="prompt-why"></div><div class="p-bar"><i></i></div></div>
+        <div id="prompt"><div class="p-keys" id="prompt-keys"></div><div class="p-why" id="prompt-why"></div><div class="p-bar"><i></i></div><div class="p-flash" id="prompt-flash"></div><div class="p-next" id="prompt-next"></div></div>
         <div id="readout"></div>
         <div id="stations"></div>
         <div id="toast"><div id="toast-main"></div><div id="toast-sub"></div></div>
@@ -58,6 +58,7 @@
       <div id="title-screen">
         <div class="brand">
           <h1 data-i18n="title">BIG BERTHA</h1>
+          <p class="wip-note"><span class="wip-badge" data-i18n="wipTag" data-i18n-title="wipLine">WIP</span> <span data-i18n="wipLine"></span></p>
           <p class="sub" data-i18n="sub"></p>
           <p class="blurb" data-i18n="blurb"></p>
         </div>
@@ -77,8 +78,9 @@
         <div class="actions">
           <button id="play" disabled data-i18n="play"></button>
           <button id="tutorial-btn" disabled data-i18n="tutorial"></button>
-          <a id="back-link" href="/" data-i18n="back"></a>
+          <a id="back-link" href="/?mode=ww1&amp;sel=bertha:ww1" data-i18n="back"></a>
         </div>
+        <p id="title-hint" data-i18n="titleHint"></p>
         <ul class="keys" data-i18n="keys"></ul>
       </div>
 

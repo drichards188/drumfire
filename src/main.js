@@ -17,17 +17,21 @@ import { Progression } from './progression.js';
 import { BATTERIES, missionById } from './campaign-data.js';
 import { setUiTheatre } from './ui/theatre.js';
 import { campaignTheatre, sandboxTheatre } from './campaign.js';
-import { mountProgression, mountCampaignObjectives } from './ui/progression.js';
+import { mountCampaignObjectives } from './ui/progression.js';
+import { hideLoading } from './ui/loading.js';
+import { menuHref, DIFFICULTIES, WIP_KINDS, WIP_LINE } from './menuItems.js';
 import { Tutorials } from './tutorial.js';
 import { ChaseCamera } from './camera.js';
 import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
-import { ww2Theatre, OPS, OP_IDS } from './ww2/theatre.js';
+import { ww2Theatre, OPS } from './ww2/theatre.js';
 import { QUALITY, sunAt, blastTrauma } from './presets.js';
+import { warmUp } from './render/warmup.js';
 
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
 // always boots (import.meta.glob also bundles whichever exist).
-const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js']);
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js',
+  './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js']);
 const optional = async (path) => {
   try {
     return (await OPTIONAL[path]?.()) ?? null;
@@ -50,13 +54,23 @@ const SANDBOX = !!query.get('sandbox');
 // The mode: the British game of 1917 (default) or the WW2 German mode (?mode=ww2&op=...). The WW2 theatre must exist
 // before the terrain is first sampled: it adds its positions' levelled pads (src/ww2/theatre.js).
 const WW2 = query.get('mode') === 'ww2';
+// The WW1 German mode (?mode=ww1&op=ridge|paris): a sandbox battle with the German heavy roster of 1918, or the Paris
+// Gun's own mission (src/ww1/). Its files are loaded only on a WW1 page, so the British game and the WW2 mode never
+// depend on them; its theatre also levels its positions' pads, so it is built here, before the terrain is first sampled.
+const WW1 = query.get('mode') === 'ww1';
+const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge') ?? null : null;
+if (WW1 && !WW1_TH) console.warn('WW1 theatre missing: the British game stands in');
 let careerStorage;
 try { careerStorage = window.localStorage; } catch { /* Session-only career. */ }
 const career = new Progression(careerStorage);
 const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
-const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : null;
+const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
+// back to the menu (src/ui/menu.js), with this page's entry selected
+const MENU = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
+// a battle or mission the career has not opened yet goes back to the menu, which says how to earn it (lessons are open)
+const LOCKED = !query.get('tutorial') && !SANDBOX && (requestedMission ? !CAMPAIGN_MISSION : WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind));
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -78,9 +92,17 @@ const KIND = {
   karl: { eye: 4, dist: 42, calibre: 23.6 },
   v1: { eye: 3, dist: 90, calibre: 22 },
   v2: { eye: 8, dist: 120, calibre: 26 },
+  // the WW1 German mode's pieces (bertha above serves both German modes)
+  sfh13: { eye: 2.2, dist: 95, calibre: 5.87 },
+  m16: { eye: 3, dist: 70, calibre: 8.3 },
+  k17: { eye: 2.2, dist: 62, calibre: 4.13 },
+  max38: { eye: 4.5, dist: 85, calibre: 15 },
+  gamma: { eye: 4, dist: 50, calibre: 16.5 },
+  paris: { eye: 5, dist: 135, calibre: 8.3 },
 };
 // how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
-const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sfh18: 10, k18: 14, mrs18: 14, nbw41: 6, gustav: 40, bertha: 14, karl: 16, v1: 30, v2: 20 };
+const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sfh18: 10, k18: 14, mrs18: 14, nbw41: 6, gustav: 40, bertha: 14, karl: 16, v1: 30, v2: 20,
+  sfh13: 10, m16: 13, k17: 10, max38: 34, gamma: 16, paris: 45 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 
@@ -135,15 +157,23 @@ async function init() {
     ww2render: WW2 ? await optional('./ww2/render.js') : null,
     ww2ui: WW2 ? await optional('./ww2/ui.js') : null,
     ww2tut: WW2 ? await optional('./ww2/tutorial.js') : null,
+    ww1render: WW1 ? await optional('./ww1/render.js') : null,
+    ww1ui: WW1 ? await optional('./ww1/ui.js') : null,
+    ww1tut: WW1 ? await optional('./ww1/tutorial.js') : null,
+    ww1crews: WW1 ? await optional('./render/crews_ww1.js') : null,
   };
+  // a WW1 page: the 1917 dress and the Bertha's 1917 colours, set before any rig or crew is built
+  if (WW1 && mods.guns?.GUN_ERA) mods.guns.GUN_ERA.ww1 = true;
+  if (WW1 && mods.ww1crews?.CREW_ERA) mods.ww1crews.CREW_ERA.ww1 = true;
   await mods.guns?.loadGuns?.();
   if (WW2) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW2);
+  if (WW1) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW1);
 
   // ---------------------------------------------------------------- the world and the gun line
   await step(0.45, 'Digging the trenches');
   let world = null;
   try {
-    world = mods.world?.buildWorld?.(scene, terrain) ?? null;
+    world = mods.world?.buildWorld?.(scene, terrain, { ww2: WW2 }) ?? null;
   } catch (e) {
     console.warn('buildWorld failed:', e.message);
   }
@@ -170,6 +200,7 @@ async function init() {
     for (const p of places) {
       try {
         const rig = mods.guns.buildGun(p.kind);
+        if (!rig?.root) throw new Error('no rig');
         rig.root.position.set(p.x, terrain.heightAt(p.x, p.z), p.z);
         rig.root.rotation.y = headingFor(p.bearing);
         rig.setElevation?.(0.5);
@@ -211,6 +242,15 @@ async function init() {
   } catch (e) {
     console.warn('WW2 render failed:', e.message);
   }
+  // the WW1 mode's (src/ww1/render.js): the German gun positions, the Langer Max, Gamma and Paris Gun sites, the Paris
+  // Gun's shot, the British aircraft. `modeR` is whichever German mode's layer this page has.
+  let ww1r = null;
+  try {
+    if (WW1 && sim && mods.ww1render?.createWW1Render) ww1r = mods.ww1render.createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns });
+  } catch (e) {
+    console.warn('WW1 render failed:', e.message);
+  }
+  const modeR = ww2r ?? ww1r;
 
   patchSceneFog(scene);
 
@@ -223,9 +263,10 @@ async function init() {
   const chase = new ChaseCamera(camera, canvas, { ground: terrain.heightAt });
   let audio = null;
   try {
-    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : undefined) : null;
+    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : WW1 ? { ww1: true } : undefined) : null;
     if (WW2) audio?.enableWW2?.();
-    if (ww2r) ww2r.audio = audio;
+    if (WW1) audio?.enableWW1?.();
+    if (modeR) modeR.audio = audio;
   } catch (e) {
     console.warn('AudioEngine failed:', e.message);
   }
@@ -250,7 +291,8 @@ async function init() {
   }
   const panelEl = document.getElementById('panel');
   let panel = null;
-  if (TH) mods.ww2ui?.ww2Ui?.(TH);
+  if (TH && WW1) mods.ww1ui?.ww1Ui?.(TH);
+  else if (TH) mods.ww2ui?.ww2Ui?.(TH);
   if (CAMPAIGN_MISSION) setUiTheatre({ salient: false, sectors: [], mppMax: 120,
     fit: (s) => {
       const points = [...s.units.map(u => u.pos), ...s.targets.map(t => t.pos)];
@@ -265,6 +307,7 @@ async function init() {
         audio,
         onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
         onCommand: (id, name, args) => canCommand(id) && sim?.command(id, name, args),
+        onFocus: (id, task) => modeR?.focusTask?.(id, task), // a Gustav task clicked on the procedure card
         isUnlocked: (u) => canCommand(u.id),
         keyFor: (id) => (UNITS.findIndex(u => u.id === id) + 1) % 10,
       });
@@ -278,9 +321,10 @@ async function init() {
   const params = {
     quality: startQuality,
     dynamicRes: !navigator.webdriver,
+    detailCull: true,
     upscaleSharpen: 0.25,
     timeScale: 1,
-    difficulty: 'Normal',
+    difficulty: DIFFICULTIES.includes(query.get('difficulty')) ? query.get('difficulty') : 'Normal',
     fov: 50,
     hour: Number(query.get('hour') ?? 8.5),
     lockHour: query.get('hour') != null, // a fixed time of day (URL or the slider), not the sim's clock
@@ -292,21 +336,23 @@ async function init() {
     autoExposure: true,
     exposureKey: 0.17,
     toneMapping: 'ACES Filmic',
-    grade: GRADES.Flanders ? 'Flanders' : 'Natural',
+    grade: !WW2 && GRADES['1917'] ? '1917' : GRADES.Flanders ? 'Flanders' : 'Natural', // WW1 too: the salient in 1918
     ao: true,
     aoIntensity: 1.0,
     bloom: true,
     bloomStrength: 0.3,
     bloomRadius: 0.55,
     bloomThreshold: 3.0,
+    bloomCap: 8, // the brightest a texel may enter the bloom (post.js): a low sun's disc no longer whites out the frame
+    bloomKnee: 1, // 1: only the light above the threshold blooms (a bright sky stays clear); 0: three's whole texel
     godRays: 0.35,
     lensFlare: 0.4,
     chromatic: 0.003,
     vignette: 0.38,
-    grain: 0.03,
+    grain: 0, // off: a grain over the whole frame reads as dirt on the screen
     sharpen: 0.35,
     shake: true,
-    fogDensity: 0.00009,
+    fogDensity: WW2 ? 0.00009 : 0.00014,
     fogFalloff: 0.0007,
     turbidity: 3.6,
     rayleigh: 1.5,
@@ -360,6 +406,8 @@ async function init() {
     resScale = 1;
     applyPixelRatio();
   });
+  // far batteries' and targets' sub-pixel parts are not drawn (src/render/detail.js); off to compare
+  gui.add(params, 'detailCull').name('Hide sub-pixel detail').onChange((v) => { if (renderLayer?.detail) renderLayer.detail.enabled = v; });
   gui.add(params, 'upscaleSharpen', 0, 1, 0.05).name('Upscale sharpening').onChange((v) => { post.upscale.uniforms.uSharp.value = v; });
   const fPlay = gui.addFolder('Game');
   fPlay.add(params, 'difficulty', ['Easy', 'Normal', 'Hard']).name('Difficulty (next game)').listen();
@@ -392,6 +440,8 @@ async function init() {
   fPost.add(params, 'bloomStrength', 0, 2, 0.01).name('Bloom strength');
   fPost.add(params, 'bloomRadius', 0, 1, 0.01).name('Bloom radius');
   fPost.add(params, 'bloomThreshold', 0, 10, 0.01).name('Bloom threshold');
+  fPost.add(params, 'bloomCap', 3, 200, 1).name('Bloom cap (sun glare)');
+  fPost.add(params, 'bloomKnee', 0, 1, 0.01).name('Bloom: above threshold only');
   fPost.add(params, 'godRays', 0, 3, 0.01).name('God rays');
   fPost.add(params, 'lensFlare', 0, 3, 0.01).name('Lens flare');
   fPost.add(params, 'chromatic', 0, 0.05, 0.001).name('Chromatic aberration');
@@ -416,7 +466,8 @@ async function init() {
   view.appendChild(stats.dom);
 
   // ---------------------------------------------------------------- units and camera
-  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || career.unlocked(UNITS.find(u => u.id === id)?.kind);
+  // the WW1 mode is a sandbox: every unit is the player's (its kinds are not in the campaign's roster)
+  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind);
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
@@ -434,9 +485,9 @@ async function init() {
     // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
     chase.goalYaw += 0.75;
     chase.goalPitch = 0.17;
-    hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}${u.alt ? '  \u00b7  ALTERNATE HISTORY' : ''}`);
-    if (u.alt && state === 'playing') hud.hint(u.alt, 4200);
+    hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}`, WIP_KINDS.has(u.kind) ? WIP_LINE : '');
     renderLayer?.select?.(u.id);
+    modeR?.reselect?.(); // a V-weapon site frames its step again
     drumfire.events.select?.(u.id, i);
   };
   // F: ride the selected unit's newest shell in flight to its burst; back to the unit when it ends
@@ -451,10 +502,18 @@ async function init() {
     chase.followShell(shell, { onBurst: backToUnit });
     hud.hint('Riding the shell (F: back to the gun)', 2200);
   };
+  // the Paris Gun's shot (ww1/render.js): the camera rides the shell up out of the battle, then comes back to the gun
+  if (ww1r) Object.assign(ww1r, {
+    canRide: (unitId) => state !== 'title' && !freeCam && !following && UNITS[selected]?.id === unitId,
+    ride: (shell) => followShell(shell),
+    riding: (shell) => following && chase.shell?.obj === shell,
+    leave: (text) => { chase.releaseShot(); backToUnit(); if (text) hud.hint(text, 2600); },
+  });
   const newestShell = (unitId) => {
     let best = null;
     const list = sim?.shells ?? fakeShells;
-    for (const s of list) if (s.alive && s.own !== false && (s.unitId === unitId || s.unitId == null) && (!best || (s.id ?? 0) > (best.id ?? 0))) best = s;
+    // (a sandbox's fake shells carry no unit; the sim's own shells without one are the WW1 division's field guns)
+    for (const s of list) if (s.alive && s.own !== false && (s.unitId === unitId || (list === fakeShells && s.unitId == null)) && (!best || (s.id ?? 0) > (best.id ?? 0))) best = s;
     return best;
   };
   const setTimeScale = (k) => {
@@ -468,15 +527,6 @@ async function init() {
   document.getElementById('ts-down').addEventListener('click', () => stepTime(-1));
   document.getElementById('ts-val').addEventListener('click', () => setTimeScale(1));
 
-  const playBtn = document.getElementById('play');
-  const diffBtns = [...document.querySelectorAll('#difficulty button')];
-  diffBtns.forEach((b) =>
-    b.addEventListener('click', () => {
-      params.difficulty = b.dataset.d;
-      diffBtns.forEach((o) => o.classList.toggle('on', o === b));
-    })
-  );
-
   // a new battle (the real one, a lesson's range or the demonstration): the sim, then everything that remembers the last
   const newBattle = (opts) => {
     if (!sim) return;
@@ -484,8 +534,11 @@ async function init() {
     fx.clearLitter?.();
     sim.newGame(opts);
     renderLayer?.reset?.(sim);
+    modeR?.reset?.(sim);
     panel?.reset?.();
     patchSceneFog(scene);
+    // the new game's target models (and any scenery built again) go to the GPU now, not when first seen
+    warmUp(renderer, scene, camera);
   };
   // a unit key or tab: a lesson keeps the player on the units it is about
   const unitKey = (i) => {
@@ -498,7 +551,6 @@ async function init() {
 
   const start = () => {
     if (!UNITS.some(u => canCommand(u.id))) return;
-    if (!CAMPAIGN_MISSION && WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind)) return;
     state = 'playing';
     if (!canCommand(UNITS[selected].id)) selected = UNITS.findIndex(u => canCommand(u.id));
     hud.hideEnd();
@@ -507,13 +559,14 @@ async function init() {
     chase.cine(false);
     following = false;
     newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
-      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
+      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : WW1 ? null : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
     }
     selectUnit(selected);
-    if (TH) hud.toast(TH.op.title, TH.op.sub, 4200);
+    if (WW1 && TH) hud.toast(TH.op?.short ?? 'Open battle', TH.op?.kind === 'battle' ? 'German heavy artillery, Flanders, 1918' : TH.op.sub, 4200);
+    else if (TH) hud.toast(TH.op.title, TH.op.sub, 4200);
     else hud.toast('Drumfire', 'Heavy artillery, Ypres salient, 1917', 3200);
     hud.setScore(0);
     try {
@@ -521,78 +574,24 @@ async function init() {
     } catch (e) {
       console.warn('audio.start failed:', e.message);
     }
-    hud.radio(WW2 ? `Arko: ${TH.op.short}. All units, stand to.` : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
+    hud.radio(WW2 ? `Arko: ${TH.op.short}. All units, stand to.` : WW1 && TH ? (TH.op?.kind === 'battle' ? 'Arko: all batteries of the Gruppe, stand to. Feuerbereitschaft melden; the observers report at first light.' : 'Armee to Wilhelm: Feuerbereitschaft melden. The orders follow through the day.') : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
     drumfire.events.start?.(params.difficulty);
   };
-  playBtn.addEventListener('click', start);
 
-  // the mode switch on the title screen; in the WW2 mode the operations, each with its history note
-  for (const el of document.querySelectorAll('#modes a')) el.classList.toggle('on', el.dataset.m === (WW2 ? 'ww2' : '1917'));
-  if (WW2 && !CAMPAIGN_MISSION) {
-    const op = TH.op;
-    document.title = `Drumfire WW2: ${op.short}`;
-    document.querySelector('.brand .sub').textContent = `German artillery, ${op.title}`;
-    document.querySelector('.brand .blurb').textContent = op.blurb;
-    const opsEl = document.getElementById('ops'), note = document.getElementById('op-note');
-    opsEl.hidden = false;
-    note.hidden = false;
-    for (const id of OP_IDS) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = OPS[id].short;
-      b.title = OPS[id].sub;
-      b.classList.toggle('on', id === TH.opId);
-      b.addEventListener('click', () => {
-        if (id !== TH.opId) location.href = `/?mode=ww2&op=${id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
-      });
-      opsEl.append(b);
-    }
-    const alts = op.units.filter((u) => u.alt).map((u) => u.alt);
-    note.replaceChildren();
-    const h = document.createElement('b');
-    h.textContent = 'History. ';
-    note.append(h, op.history, ...alts.map((t) => Object.assign(document.createElement('span'), { className: 'alt-badge', textContent: t.split(':')[0], title: t })));
-    playBtn.textContent = op.kind === 'v1' || op.kind === 'v2' ? 'Begin the mission' : 'Take command';
-    const k = document.querySelector('.keys li');
-    if (k) k.innerHTML = `<kbd>1</kbd>-<kbd>${UNITS.length}</kbd> select unit`;
-  }
-
-  const navigate = (mission = null) => {
-    const url = new URL(location.href);
-    for (const key of ['campaign', 'op', 'play', 'sandbox', 'tutorial', 'unit']) url.searchParams.delete(key);
-    if (mission) url.searchParams.set('campaign', mission.id);
-    location.href = url.href;
-  };
-  if (CAMPAIGN_MISSION) {
-    document.querySelector('.brand .sub').textContent = `Campaign · ${CAMPAIGN_MISSION.title}`;
-    document.querySelector('.brand .blurb').textContent = CAMPAIGN_MISSION.briefing;
-    const briefing = document.createElement('p');
-    briefing.id = 'campaign-briefing';
-    briefing.textContent = `Loaned battery: ${BATTERIES.find(b => b.kind === CAMPAIGN_MISSION.reward).name}. Win to keep it.\n` +
-      CAMPAIGN_MISSION.roster.map(k => { const b = BATTERIES.find(b => b.kind === k); return `${b.name}: ${b.role}${b.fuze ? ` (${b.fuze} fuze, ${Math.round(b.damage * 100)}% effective target damage, ${b.rounds}+ ${b.rounds === 1 ? 'round' : 'rounds'})` : ' (bearing ±1°, range ±1%, no oxygen shortfall)'}.`; }).join('\n');
-    document.getElementById('options').before(briefing);
-    const sandbox = document.createElement('button');
-    sandbox.id = 'career-sandbox'; sandbox.type = 'button'; sandbox.textContent = 'Sandbox';
-    sandbox.addEventListener('click', () => navigate());
-    document.querySelector('.actions').append(sandbox);
-  }
+  // the way back to the menu (src/ui/menu.js): the game page is left, the menu builds nothing of the battlefield
+  const toMenu = () => { location.href = MENU; };
   const returnMenu = document.createElement('button');
   returnMenu.id = 'return-menu'; returnMenu.type = 'button'; returnMenu.textContent = 'Main menu';
-  returnMenu.addEventListener('click', () => navigate());
+  returnMenu.addEventListener('click', toMenu);
   document.getElementById('view').append(returnMenu);
-  const refreshCareer = mountProgression(career, WW2 ? 'ww2' : '1917', CAMPAIGN_MISSION, navigate, () => {
-    const locked = !CAMPAIGN_MISSION && WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind);
-    playBtn.disabled = !!locked || !document.body.classList.contains('ready');
-    playBtn.textContent = locked ? 'Earn this battery in campaign' : CAMPAIGN_MISSION ? 'Begin campaign mission' : 'Play sandbox';
-  });
   const updateCampaignObjectives = mountCampaignObjectives();
-  document.querySelector('.keys li').textContent = UNITS.length === 10 ? '1–9, 0 select battery' : `1–${UNITS.length} select battery`;
 
   // ---------------------------------------------------------------- tutorials (src/tutorial.js)
   // A lesson runs the sim in scripted mode and ALWAYS in daylight: the sun follows the sim clock (held at 10:00),
   // ignoring ?hour= and the slider, and the weather is Clear or Overcast; the player's settings come back on leaving.
   const DAY_WEATHER = ['Clear', 'Overcast'];
   let saved = null;
+  let lesson = query.get('tutorial'); // the lesson running (the next one may follow on this page)
   const setWeather = (w, now = false) => {
     params.weather = w;
     weather.set(w, now);
@@ -601,7 +600,7 @@ async function init() {
     ? new Tutorials({
         sim,
         hud,
-        defs: WW2 ? mods.ww2tut?.WW2_TUTORIALS ?? [] : undefined,
+        defs: WW2 ? mods.ww2tut?.WW2_TUTORIALS ?? [] : WW1 ? mods.ww1tut?.WW1_TUTORIALS ?? [] : undefined,
         host: {
           // a WW2 lesson on another operation: load the page there (the theatre is fixed per page)
           redirect(def) {
@@ -610,6 +609,7 @@ async function init() {
             return true;
           },
           enter(def) {
+            lesson = def.id;
             state = 'tutorial';
             hud.showTitle(false);
             hud.hideEnd();
@@ -635,13 +635,8 @@ async function init() {
             setTimeScale(1);
             if (saved) setWeather(saved.weather, true);
             saved = null;
-            newBattle({ attract: true, seed: (Math.random() * 1e9) | 0 });
-            state = 'title';
-            hud.showTitle(true);
-            cineClock = 0;
-            chase.cine(true);
-            selectUnit(selected);
-            applySun(clockHour(), true);
+            // a lesson is left for the menu, with the last lesson selected
+            location.href = menuHref(query, `tutorial:${lesson}`);
           },
           select: (id) => selectUnit(UNITS.findIndex((u) => u.id === id)),
           selectedId: () => UNITS[selected].id,
@@ -663,10 +658,6 @@ async function init() {
         },
       })
     : null;
-  document.getElementById('tutorials').addEventListener('click', () => {
-    if (CAMPAIGN_MISSION) { const url = new URL(location.href); url.searchParams.delete('campaign'); url.searchParams.set('lessons', '1'); location.href = url.href; }
-    else tutorial?.openMenu();
-  });
 
   // ---------------------------------------------------------------- sandbox
   // ?sandbox=1: no title, straight to the gun line. B fires a fake 15-inch blast at the selected
@@ -685,7 +676,9 @@ async function init() {
     if (rig) rig.root.updateMatrixWorld(true);
     const muzzle = rig?.anchors?.muzzle ? rig.anchors.muzzle.getWorldPosition(_m) : _m.copy(unitRoot[u.id].position).addScaledVector(dir, 6);
     const aim = _b.copy(dir).multiplyScalar(0.8).setY(0.6).normalize();
-    handlers.fire({ id: u.id, kind: u.kind }, { i: 0, kind: u.kind, pos: muzzle }, { calibre: cal, vel: { x: aim.x * 300, y: aim.y * 300, z: aim.z * 300 } });
+    // the fake piece carries the real one's lay: the render layer poses the rig from it (undefined angles made NaN)
+    const sp = sim?.unitById?.(u.id)?.pieces?.[0];
+    handlers.fire({ id: u.id, kind: u.kind }, { i: 0, kind: u.kind, pos: muzzle, az: sp?.az ?? 0, el: sp?.el ?? 0.3 }, { calibre: cal, vel: { x: aim.x * 300, y: aim.y * 300, z: aim.z * 300 } });
     // a shell on an arc to a point 300 m ahead, 2.6 s of flight
     const from = muzzle.clone();
     const to = muzzle.clone().addScaledVector(dir, 300);
@@ -736,7 +729,7 @@ async function init() {
   const handlers = {
     // a gun fired: muzzle blast, light, recoil, sound, shake
     fire(unit, piece, shell) {
-      if (ww2r?.fire?.(unit, piece, shell, atmosphere.night)) return;
+      if (modeR?.fire?.(unit, piece, shell, atmosphere.night)) return;
       const cal = shell?.calibre ?? KIND[piece?.kind ?? unit?.kind]?.calibre ?? 6;
       const rig = rigs.get(`${unit.id}:${piece?.i ?? 0}`);
       const night = atmosphere.night;
@@ -898,14 +891,13 @@ async function init() {
     const sc = sim.score;
     if (CAMPAIGN_MISSION && s === 'victory' && !sim.attract && !sim.scripted) {
       career.complete(CAMPAIGN_MISSION.id);
-      refreshCareer();
     }
     state = 'ended';
     const win = s === 'victory';
     hud.showEnd(
       {
-        title: sim.over?.title ?? (TH ? (win ? 'Operation successful' : 'Operation failed') : win ? 'Objectives taken' : 'The line is lost'),
-        sub: sim.over?.sub ?? (TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
+        title: sim.over?.title ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The attack goes through' : 'The line is lost') : TH ? (win ? 'Operation successful' : 'Operation failed') : win ? 'Objectives taken' : 'The line is lost'),
+        sub: sim.over?.sub ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The Feuerwalze carried our infantry onto their objectives. The Gruppe has done its work.' : 'The British are through our front. Stellungswechsel: the Gruppe falls back.') : TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
         victory: win,
         stats: [
           ...(CAMPAIGN_MISSION ? [['Battery reward', s === 'victory' ? BATTERIES.find(b => b.kind === CAMPAIGN_MISSION.reward).name : 'Not yet earned']] : []),
@@ -986,13 +978,13 @@ async function init() {
   chase.update(1);
   terrain.update(camera, true);
   await renderer.compileAsync(scene, camera);
+  await step(0.92, 'Uploading the scene');
+  warmUp(renderer, scene, camera);
   atmosphere.update(chase.focus, 0, camera);
   renderer.shadowMap.needsUpdate = true;
   post.render(0.016);
   hud.setLoading(1, '');
   hud.ready();
-  refreshCareer();
-  document.getElementById('tutorials').disabled = !tutorial;
   hud.setTimeScale(1);
 
   const timer = new THREE.Timer();
@@ -1046,7 +1038,17 @@ async function init() {
       }
     }
     if (sim) renderLayer?.update?.(dt, rawDt, sim, fx, camera);
-    if (sim) ww2r?.update?.(dt, rawDt, sim, camera);
+    if (sim) modeR?.update?.(dt, rawDt, sim, camera);
+    // a V-weapon site frames each new step of its drill and its launch (ww2/render.js), only while the camera
+    // orbits that unit and the player is not dragging it; the player's own orbit and zoom stand in between
+    if (modeR?.framing && sim && state !== 'title' && chase.mode === 'unit' && !freeCam && !chase.dragging) {
+      const f = modeR.framing(UNITS[selected]?.id);
+      if (f) {
+        if (f.yaw != null) chase.goalYaw = chase.yaw + (((f.yaw - chase.yaw) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+        chase.goalPitch = f.pitch;
+        chase.goalDist = f.dist;
+      }
+    }
     world?.update?.(dt, camera);
     craters?.update?.(dt, camera);
     if (sim) {
@@ -1127,6 +1129,8 @@ async function init() {
     post.bloom.strength = params.bloomStrength * (1 - 0.3 * nightK);
     post.bloom.radius = params.bloomRadius;
     post.bloom.threshold = params.bloomThreshold;
+    post.bloom.materialHighPassFilter.uniforms.uCap.value = params.bloomCap;
+    post.bloom.materialHighPassFilter.uniforms.uKnee.value = params.bloomKnee;
     const lu = post.lens.uniforms;
     lu.uFlare.value = params.lensFlare * (1 - weather.state.storm);
     lu.uCA.value = params.chromatic;
@@ -1201,6 +1205,7 @@ async function init() {
           `draw calls ${i.render.calls}\n` +
           `triangles  ${(i.render.triangles / 1e6).toFixed(2)}M\n` +
           `resolution ${Math.round(vw * post.pixelRatio)}x${Math.round(vh * post.pixelRatio)} (${Math.round(resScale * 100)}%) on ${Math.round(vw * renderer.getPixelRatio())}x${Math.round(vh * renderer.getPixelRatio())}${post.upscale.enabled ? ' upscaled' : ''}  gpu ${dynRes.gpuTimed ? `${dynRes.gpuMs.toFixed(1)} ms` : 'untimed'}  refresh ${(1000 / dynRes.refreshMs).toFixed(0)} Hz\n` +
+          `detail     ${renderLayer?.detail ? `${renderLayer.detail.hidden} of ${renderLayer.detail.items.length} far meshes not drawn${renderLayer.detail.enabled ? '' : ' (off)'}` : 'none'}\n` +
           `particles  ${c.smoke ?? 0} smoke, ${c.glow ?? 0} glow, ${c.debris ?? 0} debris  lights ${globalUniforms.uFlareCount.value} (${flares.items.length} flares, ${flares.flashes.length} flashes)\n` +
           `battle     ${sim ? `${sim.state} phase ${sim.phase} shells ${sim.shells.length}` : 'no sim'}\n` +
           `camera     ${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)}  dist ${chase.dist.toFixed(0)}  trauma ${chase.trauma.toFixed(2)}\n` +
@@ -1210,20 +1215,21 @@ async function init() {
   };
   renderer.setAnimationLoop(() => frame());
 
+  // the page is a game (src/boot.js): straight into the battle or the lesson, then the loading screen goes
   if (SANDBOX) {
     start();
-  } else if (query.get('tutorial') && tutorial) {
-    tutorial.start(query.get('tutorial'));
-  } else if (query.get('lessons')) {
-    tutorial?.openMenu();
-  } else if (query.get('play')) {
+  } else if (query.get('tutorial')) {
+    if (tutorial?.defs.some((d) => d.id === query.get('tutorial'))) tutorial.start(query.get('tutorial'));
+    else toMenu();
+  } else {
     selectUnit(selected);
     start();
   }
+  hideLoading();
 
   Object.assign(drumfire, {
     renderer, scene, camera, terrain, atmosphere, post, fx, flares, hud, chase, params, frame, clouds, weather, world, craters,
-    sim, tutorial, audio, panel, rigs, unitRoot, units: UNITS, handlers, renderLayer, sun, fakeShells,
+    sim, tutorial, audio, panel, rigs, unitRoot, units: UNITS, handlers, renderLayer, ww2render: ww2r, ww1render: ww1r, sun, fakeShells,
     select: selectUnit, start, setTimeScale, followShell, newestShell, sandboxBlast, sandboxBurst,
     fastForward(seconds, { unit = null, scale = 8, settle = 6 } = {}) {
       renderer.setAnimationLoop(null);
@@ -1242,7 +1248,8 @@ async function init() {
   Object.defineProperty(drumfire, 'state', { get: () => state, configurable: true });
 }
 
-init().catch((e) => {
+if (LOCKED) location.replace(MENU);
+else init().catch((e) => {
   console.error(e);
   document.getElementById('status').textContent = `Failed to start: ${e.message}`;
 });

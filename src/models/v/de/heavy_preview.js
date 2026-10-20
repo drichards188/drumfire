@@ -13,6 +13,7 @@ import { GUNS, STEP } from '../../../sim/tables.js';
 import { GunCrew } from '../../../render/crews.js';
 import { loadPose } from '../../../render/guns.js';
 import { smooth } from '../../../render/anim.js';
+import { buildGermanGunSite } from './gun_sites.js';
 
 const q = new URLSearchParams(location.search);
 const kind = q.get('kind') || 'gustav';
@@ -52,6 +53,10 @@ let lift = 0;
 if (kind === 'gustav' && q.get('site') === '1' && EXTRAS.buildGustavSite) {
   const site = EXTRAS.buildGustavSite();
   site.root.position.y = lift;
+  scene.add(site.root);
+  window.__site = site;
+} else if (q.get('site') === '1') {
+  const site = buildGermanGunSite(kind);
   scene.add(site.root);
   window.__site = site;
 }

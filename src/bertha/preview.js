@@ -1,4 +1,4 @@
-// Dev viewer for the Bertha model: /src/bertha/preview.html?cam=az,el,dist&el=deg&tr=deg&wedge=0..1&recoil=0..1&crane=swing,drop&props=1&crew=1
+// Dev viewer for the Bertha model: /src/bertha/preview.html?cam=az,el,dist&el=deg&tr=deg&wedge=0..1&recoil=0..1&tray=0..1&crane=swing,drop&props=1&crew=1&tgt=x,y,z
 import * as THREE from 'three';
 import { buildBertha } from './model.js';
 import { BerthaCrew } from './crew.js';
@@ -28,12 +28,14 @@ rig.setElevation(num('el', 40) * Math.PI / 180);
 rig.setTraverse(num('tr', 0) * Math.PI / 180);
 rig.setWedge(num('wedge', 0));
 rig.setRecoil(num('recoil', 0));
+rig.setTray(num('tray', 0));
+rig.setDials(num('el', 40) * Math.PI / 180, num('tr', 0) * Math.PI / 180);
 const [sw, dr] = (q.get('crane') ?? '1,0').split(',').map(Number);
 rig.setCrane(sw, dr);
 if (q.get('props')) {
   rig.props.tray.schwer.visible = true;
   rig.props.tray.schwer.position.set(0, 0, rig.trayZ.z0 + 0.95);
-  rig.props.hook.leicht.visible = true;
+  rig.props.hook.schwer.visible = true;
   rig.props.spent.visible = true;
   rig.props.spent.position.set(0.8, rig.loadStage + 0.2, 3.5);
 }
@@ -41,7 +43,7 @@ let crew = null;
 if (q.get('crew')) crew = new BerthaCrew(rig, null);
 const [az, elv, dist] = (q.get('cam') ?? '35,18,16').split(',').map(Number);
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 500);
-const tgt = new THREE.Vector3(0, 2, 1.5);
+const tgt = new THREE.Vector3(...(q.get('tgt') ?? '0,2,1.5').split(',').map(Number));
 const a = (az * Math.PI) / 180, e = (elv * Math.PI) / 180;
 camera.position.set(tgt.x + Math.sin(a) * Math.cos(e) * dist, tgt.y + Math.sin(e) * dist, tgt.z - Math.cos(a) * Math.cos(e) * dist);
 camera.lookAt(tgt);
@@ -51,4 +53,5 @@ renderer.setAnimationLoop(() => {
   crew?.update(1 / 60, null, t);
   renderer.render(scene, camera);
 });
+window.__rig = rig;
 window.__ready = true;

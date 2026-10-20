@@ -56,6 +56,10 @@ const CLS = {
   // WW2 only (Karl 23.6 in, Gustav 31.5 in, the V-1 and V-2 warheads): the slam you feel in the floor, an echo
   // rolling round the horizon for ten seconds; rendered only when the WW2 banks are asked for (enableWW2)
   colossal: { cal: 28, T: 0.06, crack: 0.5, crackF: 1000, boom: [36, 11, 0.3, 0.95], bodyF: 160, len: 10.5, roll: [22, 9, 0.4, 260], ref: 1400, level: 1.4, near: 3500, mid: 12000, deaf: 260, slap: 700 },
+  // WW1 only, the Paris Gun (8.3 in through a 34 m barrel, a shell leaving at about 1,600 m/s): not the deepest
+  // slam but the sharpest and loudest report on the field, a whip-crack of the muzzle blast with the shell's own bow
+  // wave close behind it, then a long roll; rendered only when the WW1 banks are asked for (enableWW1)
+  paris: { cal: 8.3, T: 0.022, crack: 1.5, crackF: 2600, boom: [44, 14, 0.24, 0.8], bodyF: 230, len: 10, roll: [22, 9, 0.42, 300], ref: 1700, level: 1.5, near: 3500, mid: 14000, deaf: 240, slap: 650 },
 };
 const ORDER = ['light', 'field', 'med', 'heavy', 'huge']; // the British game's classes (colossal is apart)
 export const classOf = (cal) => (cal < 4 ? 'light' : cal < 5.5 ? 'field' : cal < 7.5 ? 'med' : cal < 12 ? 'heavy' : cal < 20 ? 'huge' : 'colossal');
@@ -416,7 +420,7 @@ function rainLoop(sr, r) {
  * (the sub-bass slam of a heavy piece), the propellant roar, and the long echo off the landscape.
  */
 function gunRecipe(sr, r, cls) {
-  const c = CLS[cls], colossal = cls === 'colossal', big = cls === 'huge' || colossal, heavy = cls === 'heavy' || big;
+  const c = CLS[cls], colossal = cls === 'colossal', paris = cls === 'paris', big = cls === 'huge' || colossal || paris, heavy = cls === 'heavy' || big;
   const x = new Float32Array(Math.ceil(c.len * sr));
   blast(x, sr, 0, 1, c.T * (0.9 + 0.2 * r()), 1.3, big ? 0.0006 : heavy ? 0.0003 : 0.0001);
   // the snap of the muzzle blast
@@ -441,6 +445,17 @@ function gunRecipe(sr, r, cls) {
     mixInto(x, layer(sr, r, { dur: c.len * 0.7, attack: 0.05, decay: 1.6, f: 45 }), 0.03, 0.7, sr);
     mixInto(x, layer(sr, r, { dur: c.len * 0.6, attack: 0.03, decay: 1.1, f: 120 }), 0.01, 0.6, sr);
     for (const [d, g] of [[0.55, 0.3], [1.1, 0.24], [1.9, 0.2]]) mixInto(x, onePole(onePole(Float32Array.from(x.subarray(0, Math.round(1.2 * sr))), sr, 300), sr, 260), d, g, sr);
+  }
+  if (paris) {
+    // the whip-crack: a hard, bright snap on top of the blast, the shell's bow wave a few hundredths of a second
+    // behind it, and the charge's long roar down the barrel's mouth
+    blast(x, sr, 0, 0.9, 0.0016, 1.6, 0.00003);
+    mixInto(x, layer(sr, r, { dur: 0.05, attack: 0.0001, decay: 0.004, type: 'hp', f: 2400 }), 0, 1.1, sr);
+    blast(x, sr, 0.028, 0.65, 0.0012, 1.7, 0.00002);
+    mixInto(x, layer(sr, r, { dur: 0.04, attack: 0.0001, decay: 0.003, type: 'hp', f: 3200 }), 0.028, 0.8, sr);
+    thump(x, sr, 0.002, 30, 12, 0.3, 0.8, 0.9, 0.004);
+    mixInto(x, layer(sr, r, { dur: c.len * 0.6, attack: 0.03, decay: 1.2, f: 110 }), 0.01, 0.55, sr);
+    for (const [d, g] of [[0.6, 0.28], [1.3, 0.22], [2.2, 0.18]]) mixInto(x, onePole(Float32Array.from(x.subarray(0, Math.round(0.8 * sr))), sr, 420), d, g, sr);
   }
   const [count, t1, gain, f] = c.roll;
   roll(x, x.slice(0, Math.round(0.6 * sr)), sr, r, { count, t0: 0.12, t1, gain, f });
@@ -1044,8 +1059,9 @@ function funkRecipe(sr, r) {
  * essentials at once and spread the rest over a few frames. `make(channels, sampleRate)`
  * turns sample arrays into an AudioBuffer. Distances: 'near' / 'mid' / 'far'. `ww2`: false (the
  * British game's banks only, as before), true (those, then the WW2 banks), 'only' (just the WW2 banks).
+ * `ww1: 'only'` gives just the WW1 German mode's banks (the Paris Gun's report), with seeds of their own.
  */
-export function bankTasks(SR, make, { ww2 = false } = {}) {
+export function bankTasks(SR, make, { ww2 = false, ww1 = false } = {}) {
   const midSR = Math.min(SR, 32000), farSR = 16000, loopSR = Math.min(SR, 24000);
   const set = (n, seed, fn) => () => Array.from({ length: n }, (_, i) => fn(mulberry(seed + i * 7919)));
   const mono = (sr) => (x) => make([tail(normalize(x, 0.95), sr)], sr);
@@ -1070,6 +1086,10 @@ export function bankTasks(SR, make, { ww2 = false } = {}) {
       [g, 'far', set(2, seed + 9, far(farSR, (r) => burstRecipe(farSR, r, cls, kind), n + 2.6, { ...rl, t1: rl.t1 + 1.5 }))]
     );
   };
+  if (ww1 === 'only') {
+    gun('paris', 701);
+    return tasks;
+  }
   if (ww2 === 'only') {
     ww2Banks();
     return tasks;
@@ -1208,8 +1228,10 @@ function retarded(tr, L, now, out) {
 }
 
 export class AudioEngine {
-  constructor({ context = null, ww2 = false } = {}) {
+  constructor({ context = null, ww2 = false, ww1 = false } = {}) {
     this.ctx = null;
+    this.wantWW1 = ww1; // render the WW1 banks (the Paris Gun) at start (else on its first shot, or enableWW1())
+    this.ww1 = false;
     this.wantWW2 = ww2; // render the WW2 banks at start (else on the first WW2 call, or enableWW2())
     this.ww2 = false;
     this.movers = []; // aircraft and climbing rockets: looping voices heard at their retarded position
@@ -1338,6 +1360,10 @@ export class AudioEngine {
     const split = tasks.indexOf(null);
     for (const t of tasks.slice(0, split)) this.runTask(t);
     this.pending = tasks.slice(split + 1);
+    if (this.wantWW1) {
+      this.ww1 = true;
+      this.pending.push(...bankTasks(ctx.sampleRate, make, { ww1: 'only' }));
+    }
     if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
     else {
       this.pump();
@@ -1376,6 +1402,19 @@ export class AudioEngine {
     }
     this.ww2 = true;
     for (const t of bankTasks(this.ctx.sampleRate, this.make, { ww2: 'only' })) if (t) this.pending.push(t);
+    if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
+    else if (!this.pumping) this.pump();
+  }
+
+  /** Render the WW1 German mode's banks (the Paris Gun's report) over the next frames, as enableWW2 does. */
+  enableWW1() {
+    if (this.ww1) return;
+    if (!this.ctx) {
+      this.wantWW1 = true;
+      return;
+    }
+    this.ww1 = true;
+    for (const t of bankTasks(this.ctx.sampleRate, this.make, { ww1: 'only' })) if (t) this.pending.push(t);
     if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
     else if (!this.pumping) this.pump();
   }
@@ -1831,6 +1870,24 @@ export class AudioEngine {
     });
     // heavy pieces also come through the ground, ahead of the air
     if (c.cal >= 9) this.tremor(pos, c, c.cal >= 20 ? 1.3 : c.cal >= 15 ? 1 : 0.6);
+  }
+
+  /**
+   * The Paris Gun firing at `pos` (WW1 German mode): its own class, the sharpest and loudest report of the field,
+   * through the ground ahead of the air like the heaviest pieces. Until its bank is rendered, the 15-inch's stands in.
+   */
+  parisGun(pos) {
+    if (!this.ctx) return;
+    this.enableWW1();
+    const c = CLS.paris;
+    this.enqueue('gun', pos, c.ref, c.level, (p) => {
+      const r = this.route(p, { ref: c.ref, level: c.level, reverb: 0.4, bus: this.blastBus });
+      if (!r) return;
+      this.playBuf(r, this.variant(this.bank.gun_paris ?? this.classBank('gun_', 'huge'), r.d, c.near, c.mid), { rate: 0.97 + Math.random() * 0.06 });
+      this.finish(r);
+      this.shock(r.d, c, p);
+    });
+    this.tremor(pos, CLS.huge, 1.2);
   }
 
   tremor(pos, c, k) {

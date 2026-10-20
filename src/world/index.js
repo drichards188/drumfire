@@ -7,6 +7,7 @@ import battery from './battery.js';
 import rails from './rails.js';
 import roads from './roads.js';
 import ruins from './ruins.js';
+import scars from './scars.js';
 
 // The world dressing: everything built on the ground that is not a gun, a target or a person.
 //   const world = buildWorld(scene, terrain);  world.update(dt, camera);
@@ -18,7 +19,8 @@ export { CUTAWAY } from './mats.js';
 export const TILE = 256;
 const MODULES = [trench, wire, battery, rails, roads, ruins];
 
-export function buildWorld(scene, terrain) {
+export function buildWorld(scene, terrain, { ww2 = false } = {}) {
+  const modules = ww2 ? MODULES : [...MODULES, scars];
   const ctx = { h: (x, z) => terrain.heightAt(x, z), mats: worldMats(), terrain, scene };
   const root = new THREE.Group();
   root.name = 'world';
@@ -27,7 +29,7 @@ export function buildWorld(scene, terrain) {
   groups.far.name = 'world-far';
   groups.tiles.name = 'world-tiles';
   root.add(groups.far, groups.tiles);
-  for (const m of MODULES) {
+  for (const m of modules) {
     m.init(ctx);
     const f = m.far?.(ctx);
     if (f) groups.far.add(f);
@@ -47,7 +49,7 @@ export function buildWorld(scene, terrain) {
 
   function plan(camera) {
     const cx = camera.position.x, cz = camera.position.z, cy = Math.max(0, camera.position.y - terrain.heightAt(cx, cz));
-    const R = Math.max(...MODULES.map((m) => m.range[1])) * 1.2;
+    const R = Math.max(...modules.map((m) => m.range[1])) * 1.2;
     const i0 = Math.floor((cx - R) / TILE), i1 = Math.floor((cx + R) / TILE), j0 = Math.floor((cz - R) / TILE), j1 = Math.floor((cz + R) / TILE);
     const q = [];
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
@@ -55,7 +57,7 @@ export function buildWorld(scene, terrain) {
       const d = Math.hypot(bx, bz, cy * 0.8);
       const k = i + ',' + j;
       let t = tiles.get(k);
-      for (const m of MODULES) {
+      for (const m of modules) {
         const items = m.items(i, j);
         if (!items) continue;
         const cur = t?.parts.get(m.name)?.lod ?? -1;
@@ -66,7 +68,7 @@ export function buildWorld(scene, terrain) {
     // tiles that drifted out of the planning window go too
     for (const [k, t] of tiles) {
       if (t.i >= i0 && t.i <= i1 && t.j >= j0 && t.j <= j1) continue;
-      for (const [name, p] of t.parts) { disposeGroup(p.group); MODULES.find((m) => m.name === name).onTile?.(t.i, t.j, -1); tris -= p.tris; }
+      for (const [name, p] of t.parts) { disposeGroup(p.group); modules.find((m) => m.name === name).onTile?.(t.i, t.j, -1); tris -= p.tris; }
       tiles.delete(k);
     }
     q.sort((a, b) => a.d - b.d);
@@ -111,7 +113,7 @@ export function buildWorld(scene, terrain) {
     invalidate(x, z, r = 20) {
       for (const [k, t] of tiles) {
         if (x + r < t.i * TILE || x - r > (t.i + 1) * TILE || z + r < t.j * TILE || z - r > (t.j + 1) * TILE) continue;
-        for (const [name, p] of t.parts) { disposeGroup(p.group); tris -= p.tris; MODULES.find((m) => m.name === name).onTile?.(t.i, t.j, -1); built--; }
+        for (const [name, p] of t.parts) { disposeGroup(p.group); tris -= p.tris; modules.find((m) => m.name === name).onTile?.(t.i, t.j, -1); built--; }
         tiles.delete(k);
       }
       planT = 0;

@@ -210,7 +210,7 @@ Dora was sent towards Stalingrad in August 1942 and withdrawn without firing (st
 | Calibre, barrel | 800 mm, barrel 32.48 m (L/40.6) | W; S (oldmachinepress.com) | 800 mm |
 | Weight | about 1,350 t | W (Wikidata); S | not modelled |
 | Size | about 47.3 m long, 7.1 m wide, 11.6 m high | W | rig |
-| Running gear | 80 wheels in four bogie groups on two parallel standard-gauge double tracks (four rails) | W; S | rig |
+| Running gear | 80 wheels on 40 axles in eight five-axle bogies, riding two parallel standard-gauge tracks (four rails) | W; S | rig |
 | HE shell | 4,800 kg, MV 820 m/s, max range about 47 to 48 km | W; S (ww2db, Military Factory) | 4,800 kg, 820 m/s, 47 km |
 | Concrete-piercing shell (Betongranate) | 7,100 kg, MV 720 m/s, max range about 38 km; quoted as able to go through about 7 m of reinforced concrete or 30 m of earth (std.) | W (the 7,100 kg figure is the commonly quoted one; one search summary wrongly doubted it) | not modelled as a separate shell: the game's 720 m/s is a "Volle Ladung" of the HE shell |
 | Propellant | two bagged charges and a cased main charge; total figures in secondary sources range from about 1,200 to about 2,000 kg (they disagree) | S | 3 charges |
@@ -273,7 +273,9 @@ Book: Robert Forczyk, "Sevastopol 1942: Von Manstein's Triumph", Osprey Campaign
 
 **Game verdict:** HE ballistics correct. Departures: the concrete-piercing shell is folded into a charge (see A),
 the cycle is about ten times faster than real, and the detachment drawn is 24 figures for a real Abteilung of
-about 1,400.
+about 1,400. The two flak Abteilungen are four batteries (two light 2 cm Flakvierling, two 8.8 cm) that are towed
+in and dug in one by one during the preparation; in the game the light guns do the killing of the low attackers
+and the heavy guns mostly spoil their bombing, and smoke is left to the camouflage task.
 
 ---
 
@@ -627,7 +629,7 @@ The Brest Hero-Fortress memorial complex is the institutional source to consult 
   Karl works; jams could be a scripted event if wanted.
 - **V-1 and V-2 missions** end at the launch and the flight; the strategic outcome (where it fell, what it did) is
   abstracted into a score with no casualty count.
-- **Time scale.** The game clock runs a time lapse (CLAUDE.md: about 40 minutes of game time for a day and a night);
+- **Time scale.** The game clock runs a time lapse (DESIGN.md: about 40 minutes of game time for a day and a night);
   loading cycles are compressed independently (below).
 
 ## B. Balancing assumptions
@@ -664,8 +666,9 @@ The tables above compare the first draft of `src/sim/tables_ww2.js` with the rec
   the game's airburst rule (`FUZE.shrapnel`), which is the same model.
 - **Traverse**: the leFH 18 and sFH 18 slew +-60 degrees and the Nebelwerfer +-50 (real totals about 56, 64 and 24 to 30
   degrees). As in the British game, the game folds shifting the trails into one slew so every battery can reach the
-  Sperrfeuer lanes; the K 18 and Mrs 18 keep +-60 for their firing platforms. Gustav (+-10 along its curve) and Karl
-  (+-4, the rest by turning the vehicle) are as listed.
+  Sperrfeuer lanes; the K 18 and Mrs 18 keep +-60 for their firing platforms. Gustav uses +-10 along its curve at
+  Sevastopol; the fictional Flanders position uses a longer +-18 degree curve so its gun can be laid on every fixed
+  target. Karl uses +-4, with the rest by turning the vehicle.
 - **Karl ammunition**: 12 heavy shells, 4 on the Munitionsschlepper and 8 at the dump; a trip takes 150 s of game time.
   The light 1,250 kg shell is still a charge of the heavy one (smaller burst not modelled).
 - **V-1 odds** (`special.js` `V1_ODDS`): ramp crash 0.08 plus early failure 0.12 (about 0.2 at launch), interception
@@ -674,13 +677,78 @@ The tables above compare the first draft of `src/sim/tables_ww2.js` with the rec
   within 6 km, scatter 3.5 km, a gyro fault in the checks 0.15, a ragged pre-stage 0.06. The liquid oxygen boils off at
   0.09 % a second once in; below 92 % the rocket falls short. Faults, raids and losses are off on the tutorial range.
 - **Flights are compressed**: a V-1's report arrives after a quarter of its real flight time, a V-2's after 150 s.
+- **Sandbox cadences** (the open Flanders battle's set-up Karl, `def.ready`; the V-1 and V-2 figures apply to a set-up
+  site, though the sandbox no longer has them): the Karl keeps its gun
+  cycle (120 s of steps, about 180 s with the slew down to 0 degrees to load and back up; real about 10 minutes) and
+  its 150 s carrier trips; a line outside its 4 degrees is about 36 s of hull raising and lowering plus the turn at
+  1.6 degrees a second, worked while the crew loads (as the other guns traverse while they load), so a turn of up to
+  about 120 degrees costs nothing over the cycle. A V-1 ramp reloads in 102 s and fires in 4 s (real best one every 20 to 30 minutes, about
+  15x): the preparation section's work (wings, compass, air log, fuel, fuzes) is done off the ramp. An A4 table
+  reloads in 290 s (the drill's own step times) and fires in 9 s (real 90 to 110 minutes from erecting, about 20x).
+  Faults and raids on the site still cost their time.
 - **The sieges** end when every work is broken, the heavy gun's shells are spent, or the day (2,400 s) is over; a work
   counts as broken when it is destroyed or half its parts are. Victory needs 60 % of the works.
-- **The Flanders battle's balance** (all-auto crews, seeds 1 to 8): Easy 4, Normal 3, Hard 1 won. The Allied attacks
+- **The Flanders battle's balance** (all-auto crews, seeds 1 to 8): Easy 8, Normal 3, Hard 2 won. The Allied attacks
   are smaller than the British game's German assaults (0.5 to 0.6 of its size factor), our front-line machine guns take
   a toll of the attackers (0.05 men a second a group, more when pinned), a group must reach our trench with 45 % of
   its men to break in, and the counter-attack needs 15 points less of its men on the objective than the British Zero
   hour (it is shorter and has no wire). All game values, tuned so the player's own fire decides.
+
+### Gun model reference review
+
+The visual pass compared the gun rigs with period identification material and surviving examples. The
+[U.S. War Department German equipment handbook, figures 35–43](https://www.ibiblio.org/hyperwar/Germany/HB/HB-7.html)
+guided the leFH 18, sFH 18, K 18 and Mrs 18 carriage and recoil details. The updated rigs have recessed bores,
+open brakes where fitted, exposed recoil hardware, wheel and bearing details, and the K 18/Mrs 18 road wheels
+raised on the firing platform. A [surviving sFH 18](https://commons.wikimedia.org/wiki/File:15_cm_sFH_18%2C_Sinsheim.jpg)
+and [surviving Mrs 18](https://commons.wikimedia.org/wiki/File:21cmM%C3%B6rser18FortSillFront2005.jpg)
+were used for visible fittings.
+
+The [wartime Nebelwerfer identification account](https://ww2.lonesentry.com/articles/nebelwerfer/index.html)
+and [Smithsonian 15 cm rocket](https://airandspace.si.edu/collection-objects/rocket-surface-surface-nebelwerfer-15cm-wgr-41-spr/nasm_A19890604000)
+guided the six-tube cluster, bore size, firing leads and projectile ends. The
+[Polish Army Museum Karl-Gerät account](https://muzeumwp.pl/mwpedia/mozdzierz-samobiezny-karl-gerat-040/)
+guided Karl's short barrel and open cradle. Gustav's 80 wheels are now arranged as 40 axles in eight bogies on
+two tracks, matching its running-gear specification above; its emplacement and gun rig use the same rail spacing.
+The [Imperial War Museums Krupp film record](https://film.iwmcollections.org.uk/record/19281) is a moving-image
+reference for the siege gun. [Period Big Bertha photographs](https://commons.wikimedia.org/wiki/Category:Big_Bertha)
+guided fittings on the WWI guest weapon.
+
+These are game-scale visual reconstructions. Unmeasured fittings, heavy-carriage platforms and some support
+proportions remain approximations. The Flanders Gustav and Big Bertha placements are alternate history, as noted
+above.
+
+A second reference pass rebuilt every German weapon from photographs of the surviving examples and period
+handbooks; the sheets are `refs/<group>/README.md` (dimensions with sources, feature checklists, photo licences).
+The leFH 18 is the 1944 leFH 18 (M) with the muzzle brake on the wooden-wheeled split-trail carriage (US Catalog of
+Enemy Ordnance, IWM B 7600); the sFH 18 follows TM-E 30-451 figures 37 and 38 (no shield); the K 18 and Mrs 18 share
+one cradle and breech place with their sourced barrel lengths; the Nebelwerfer 41's six tubes touch in a flat-topped
+hexagon and its rocket has the narrower 121 mm warhead behind the venturi band; the Gustav is fitted to 47.3 m over
+all, 7.1 m wide and 11.6 m high; Big Bertha has the production guns' solid wheels with Radgürtel and the arched shield;
+the Karl fires over its stern (de.wikipedia: the driving direction was opposite to the firing direction; the Polish
+Army Museum: it reversed into position), with the engine, driver and sprocket at the breech end; the V-1 ramp follows
+the IWM Duxford original and the V-2 site the Backfire procedure and the Dayton, Cosford and Canberra Meillerwagen.
+Unmeasured details (wheel sizes, trail sections, the Karl's later chassis spacing, the V-1 steam trolley, the
+Meillerwagen's rams) are scaled from photographs.
+
+### Firing positions and concealment
+
+The field howitzers, K 18, Mrs 18 and Bertha stand inside low earth and timber revetments with open muzzle lanes,
+rear ammunition bays, covered crew trenches and patchy nets over the rear stores. Each battery has a connected,
+terrain-following zigzag communication trench behind its pieces, a covered command bunker with field telephone
+and aerial, a crew shelter, a revetted reserve ammunition bay, a screened observation post, flank foxholes and a
+disguised supply route with a parked truck. The Nebelwerfer positions have shallow cover and brush screening,
+with open tops and clear launcher exhaust space. Karl's three selectable positions have screened hardstandings and
+their own rear works; the vehicle can drive between them. Gustav retains its staged railway works, flak and large
+camouflage net, now with separate perimeter posts and a command and ammunition area outside the rail corridor.
+The V-weapon launch sites retain their own cover.
+
+The placement follows contemporary descriptions of German artillery camouflage and crew/ammunition shelter in
+the [U.S. Army Intelligence Bulletin on German artillery tactics](https://www.ibiblio.org/hyperwar/NHC/NewPDFs/USArmy/USArmy%20MID%20Intelligence%20Bulletins/USArmy%20MID%20Intelligence%20Bulletin%20Vol.%201%20No.%2009%201943-05-00.pdf)
+and the [Handbook on German Military Forces, chapter 4](https://www.ibiblio.org/hyperwar/Germany/HB/HB-4.html)
+and [chapter 5](https://www.ibiblio.org/hyperwar/Germany/HB/HB-5.html).
+The site shapes and exact layouts are stylised to suit the game terrain and gun crew animations. These works are
+scenery; battle damage and protection remain governed by the existing simulation rules.
 
 ### Moral context
 
@@ -705,3 +773,79 @@ Sources: [Mittelbau-Dora Memorial: "Lebendig begraben"](https://www.dora.de/en/g
 [University of Alabama in Huntsville: Dora and the V-2](https://dora.uah.edu/history.html) (I, academic);
 [Memorial Museums: Denkmal-Landschaft Peenemünde](https://www.memorialmuseums.org/eng/denkmaeler/view/1400/Denkmal-Landschaft-Peenemünde) (I);
 [Wikipedia: Mittelbau-Dora](https://en.wikipedia.org/wiki/Mittelbau-Dora_concentration_camp).
+
+---
+
+## D. Planned improvements (not built yet)
+
+Ideas for making the V-1 and V-2 operations more of a game (D1, D2), and fixes noted for later (D3), chosen in
+October 2026. Nothing here is in the code yet. The rules of the mode still apply: no claims about real events or
+places in the game's text, and every order the site cannot carry out is explained to the player.
+
+### D1. Short skill moments at the key steps
+
+A few of the big key's Enter presses become a 3 to 10 second moment where timing or reading an instrument decides
+the outcome, so part of the dice becomes the player's skill. Each moment is one key (Enter or Space), only in
+MANUAL (the auto crew always does it right).
+
+- **V-1 catapult** (`V1_STEPS` `fire`): the pulse jet starts and its buzz rises to the full note over a few seconds;
+  fire the catapult on the note. Too early: not enough thrust, the bomb falls off the ramp (this takes over part of
+  `V1_ODDS.rampCrash`). Too late: the crew shuts the engine down and starts it again, as the A4's Vorstufe does after
+  25 s.
+- **A4 Vorstufe to Hauptstufe** (`prestage`, `fire`, `st.vorT`): watch the Vorstufe flame and give the Hauptstufe
+  when it burns steady. A ragged flame (today the `preFail` fault popup) is for the player to read and abort with X;
+  giving the Hauptstufe on it carries the risk it carries now. Left too long, the crew shuts it down (the existing
+  25 s rule).
+- **Optional, later:** swing the compass in the Richthaus with the arrows (the needle lags and settles), and turn the
+  A4 table under the theodolite crosshair until fin I sits on the line.
+
+**They must be clear to the player.** Each moment:
+
+- **Announced:** the big key changes to the moment's own words before it starts ("WAIT FOR THE NOTE, THEN FIRE",
+  "FLAME STEADY? HAUPTSTUFE"), with a one-line cue on the status line.
+- **Shown:** an instrument with a marked window (the jet's gauge with a green band, a steady-flame lamp); the big key
+  lights when the window is open.
+- **Heard:** the buzz climbs in pitch to the note; a steady roar against a sputter.
+- **Taught:** a step in the w-v1 and w-v2 lessons, with a demo that hits the window so autoplay still finishes.
+- **Explained after a miss:** the radio and the status line say what happened and why ("Fired before the jet reached
+  full thrust: it fell off the ramp"), as the invalid-order rule requires.
+- **Forgiving:** a wide window on Easy, a hint the first time, never a failure without a cue first.
+
+Code hooks: the gauges already have the jet (`g.jet`) and the flame (`g.flame`) in `LaunchCtl.pose()`; the big key's
+words come from `primary()` in `ui/consoles/launch.js`; the instruments are `launchGauges.js` `SPEC`.
+
+### D2. Shoot and scoot for the A4
+
+The V-2 operation becomes hide and seek with the fighter-bombers instead of one fixed site.
+
+- **Several firing points** in the woods on a small map (`op.positions`, as the Karl operation has; `ww2Pads()`
+  already levels them).
+- **A launch gives its position away:** the vapour trail burns that clearing, and later raids go for burned ones
+  (builds on `st.exposed` and `enemyAI.raid()`).
+- **The recce warning:** a reconnaissance aircraft over the area means a strike in about 3 minutes. Pack up, or race
+  the launch.
+- **Where to set up next:** a clearing near the road is quick to reach and set up but exposed; one deep in the woods
+  is slow but hidden. The liquid oxygen tanker's arrival is part of the choice.
+- **The convoy drives:** Meillerwagen, tankers and the armoured firing vehicle pull out and move (reuse the Karl's
+  `travel` and `driving` stages in `KarlCtl`).
+- **The payoff:** the fighter-bombers strafe the empty clearing the battery has just left.
+- **Clear to the player:** the map marks each position's state (hidden, seen, burned) and its travel and set-up
+  time, and the console names the decision when it comes ("Recce overhead: strike in 3:00. Pack up or launch?").
+
+### D3. The Karl's crew on the move
+
+Since the Karl stopped loading and laying on the move (DESIGN.md changelog, `unit.stowed`), one oddity is left on
+the drive between Stellungen: the men standing on the ground at their loading stations, beside the Karl and its
+Munitionsschlepper, slide along with the vehicle in their standing pose, because the crew has no riding or walking
+pose (`render/crews.js`, `render/crews_heavy.js` place them relative to the rig's root). Seen in
+`shots/karl_drive2.png`, the Karl operation, a drive from Stellung A to B.
+
+- **Choose first:** put them aboard for the move (on the Karl's rear platform and the carrier's deck), have them
+  walk alongside (the drive is about 10 km/h, a jog), or a mix (most aboard, a few on foot guiding the driver).
+  Check the sources for how the crew moved between positions before choosing.
+- **When:** whenever the hull is not down and the vehicle is driving (`special.stage` 'driving'); back to their
+  stations when it stops in a position. Raising, turning and lowering may keep the stations (the vehicle barely
+  moves).
+- **Smooth:** they climb down or fall in when the drive starts and take their stations again on arrival, not a jump
+  between poses. The crew picture must stay a pure function of the sim state so time compression and `fastForward`
+  stay exact.

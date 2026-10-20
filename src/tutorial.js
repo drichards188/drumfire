@@ -193,7 +193,7 @@ export const TUTORIALS = [
       {
         id: 'units',
         title: 'Five units',
-        text: 'Keys 1 to 5 select a unit, and so do the tabs above the console: the 15-inch, the 9.2s, the 6-inch battery, the 60-pounders and the railway gun. Units you are not at go on fighting under their own crews, in whatever mode you left them.',
+        text: 'Keys 1 to 5 select a unit, and so do the tabs at the right edge of the screen: the 15-inch, the 9.2s, the 6-inch battery, the 60-pounders and the railway gun. Units you are not at go on fighting under their own crews, in whatever mode you left them.',
         goal: 'Press 3 to visit the 6-inch battery, then 1 to come back',
         hi: ['tabs'],
         tick: (T) => {
@@ -485,7 +485,7 @@ export const TUTORIALS = [
       {
         id: 'wolfe',
         title: 'Wolfe',
-        text: 'Number 5 is Wolfe, an 18-inch howitzer on a railway car, firing from a curved spur: a shell of 2,500 pounds. (A what-if gun: the real one was not proved until after the war.) She reaches deeper than any other gun in the Group. Press 5 to go to her.',
+        text: 'Number 5 is Wolfe, an 18-inch howitzer on a railway car, firing from a curved spur: a shell of 2,500 pounds. She reaches deeper than any other gun in the Group. Press 5 to go to her.',
         goal: 'Press 5',
         hi: ['tabs'],
         enter: (T) => {
@@ -596,7 +596,7 @@ export const TUTORIALS = [
       takeStep({
         key: 'cb',
         title: 'The sound rangers\' reference',
-        text: 'The sound rangers have fixed the German battery from the time its report reached their microphones. Their task is on the card as COUNTER-BATTERY with a map reference, and no one is watching the fall of shot. Tab, Enter.',
+        text: 'The sound rangers have fixed the German battery from the time its report reached their microphones. Their task is on the card as COUNTER-BATTERY, and no one is watching the fall of shot. Tab, Enter.',
       }),
       {
         id: 'fire',

@@ -48,10 +48,47 @@ export function siteMats() {
     hose: std(0x1e1e1c, 0.7, 0.05), // rubber fuel hoses
     line: std(0xe8e4d0, 0.8, 0.0), // the painted alignment line
     lagging: fin(std(0x8f9286, 0.7, 0.3), 'lagging', 0.5, 0.4), // the oxygen trailer's insulated tank, aluminium paint
-    foliage: std(0x34442a, 0.95, 0.0), // the needles of the wood's conifers
-    bark: std(0x6a5a4a, 1, 0.0),
+    foliage: cutaway(std(0x34442a, 0.95, 0.0), 'vw-foliage'), // the needles of the wood's conifers
+    bark: cutaway(std(0x6a5a4a, 1, 0.0), 'vw-bark'),
   };
   return shared;
+}
+
+// The wood round a site is cut away between the camera and the unit it orbits, as the world's camouflage nets are:
+// a wedge on the ground from the camera (a) to the focus (b), radius r (0 off), never past the focus. VCUT's uniforms are off
+// until the game links them to the world's CUTAWAY (src/ww2/render.js; main sets those every frame), so the
+// model viewers need no shader library. The patch chains under whatever the scene's fog patch sets later.
+export const VCUT = { a: { value: new THREE.Vector3() }, b: { value: new THREE.Vector3() }, r: { value: 0 } };
+function cutaway(mat, key) {
+  let outer = null, outerKey = null;
+  const patch = (shader) => {
+    shader.uniforms.uCutA = VCUT.a;
+    shader.uniforms.uCutB = VCUT.b;
+    shader.uniforms.uCutR = VCUT.r;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCutW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvCutW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uCutA;\nuniform vec3 uCutB;\nuniform float uCutR;\nvarying vec3 vCutW;')
+      .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+      if ( uCutR > 0.0 ) {
+        // on the ground plane, so a tree goes whole (no crown left floating over a cut trunk)
+        vec2 ab = uCutB.xz - uCutA.xz, ap = vCutW.xz - uCutA.xz;
+        float h = dot( ap, ab ) / max( dot( ab, ab ), 1e-3 );
+        if ( h > 0.0 && h < 0.97 && length( ap - ab * h ) < uCutR * ( 0.45 + 0.9 * h ) ) discard;
+      }`);
+  };
+  Object.defineProperty(mat, 'onBeforeCompile', {
+    configurable: true,
+    get: () => (shader, renderer) => { if (outer) outer(shader, renderer); patch(shader); },
+    set: (f) => { outer = f; },
+  });
+  Object.defineProperty(mat, 'customProgramCacheKey', {
+    configurable: true,
+    get: () => () => (outerKey ? outerKey() : '') + '|' + key,
+    set: (f) => { outerKey = f; },
+  });
+  return mat;
 }
 
 // Material keys that take metric box-projected UVs from addP (tile metres per key).
@@ -71,6 +108,15 @@ export function addP(P, key, g, o) {
 export function withSiteMats(rig) {
   rig.mats = { ...rig.mats, ...siteMats() };
   return rig.mats;
+}
+
+// The attributes Parts gives its merged meshes (white vertex colour; aH, the height for the surface finish's mud
+// line), for the few meshes built outside it (hoses, rams, cables).
+export function paintable(g, h = 2) {
+  const n = g.attributes.position.count;
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  g.setAttribute('aH', new THREE.BufferAttribute(new Float32Array(n).fill(h), 1));
+  return g;
 }
 
 // Meshes for a missile's piece lists (from missiles.js) under `parent`, one per material.
@@ -95,12 +141,12 @@ export function sandbagWall(P, x0, z0, x1, z1, layers = 4, y = 0, seed = 5) {
 }
 
 // A plain conifer (spruce or pine of the wood round a firing point): trunk and stacked cones.
-export function conifer(P, x, z, h, rnd) {
-  P.add('bark', yTube(0, h * 0.5, 0.26 * h / 18, 0.14 * h / 18, 7, x, z), { tint: 0x9a8a7a });
+export function conifer(P, x, z, h, rnd, ground = 0) {
+  P.add('bark', yTube(ground, ground + h * 0.5, 0.26 * h / 18, 0.14 * h / 18, 7, x, z), { tint: 0x9a8a7a });
   const n = 4;
   for (let i = 0; i < n; i++) {
     const y0 = h * (0.32 + i * 0.16), r = h * 0.2 * (1 - i / (n + 0.5)) * (0.9 + rnd() * 0.2);
-    P.add('foliage', yTube(y0, y0 + h * 0.3, r, 0.02, 7, x, z), { tint: rnd() < 0.5 ? 0xffffff : 0xd0dcc8 });
+    P.add('foliage', yTube(ground + y0, ground + y0 + h * 0.3, r, 0.02, 7, x, z), { tint: rnd() < 0.5 ? 0xffffff : 0xd0dcc8 });
   }
 }
 

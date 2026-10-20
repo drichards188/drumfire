@@ -3,7 +3,7 @@
 // sometimes read a correction the wrong way round, waste rounds, give up early and keep firing under
 // counter-battery fire for too long.
 import { bearingOf, YARD } from '../sector.js';
-import { GUNS, FFE } from './tables.js';
+import { FFE } from './tables.js';
 import { autoCharge } from './shells.js';
 import { wrapPi } from './guns.js';
 
@@ -36,9 +36,9 @@ export class Crews {
     if (!this.suits(u, m)) return false;
     const D = Math.hypot(m.x - u.pos.x, m.z - u.pos.z);
     if (autoCharge(u.kind, D) < 0) return false;
-    const g = GUNS[u.kind], p = u.pieces.find((q) => q.state !== 'dead');
+    const p = u.pieces.find((q) => q.state !== 'dead');
     if (!p) return false;
-    return Math.abs(wrapPi(p.bearing - bearingOf(m.x - u.pos.x, m.z - u.pos.z))) <= g.traverse;
+    return Math.abs(wrapPi(p.bearing - bearingOf(m.x - u.pos.x, m.z - u.pos.z))) <= u.arc;
   }
 
   score(u, m) {

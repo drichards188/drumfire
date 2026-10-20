@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { buildGun, GUN_KINDS, GUN_KINDS_WW2, loadGuns } from '../models/guns.js';
+import { buildGun, GUN_KINDS, GUN_KINDS_WW2, GUN_KINDS_WW1, loadGuns } from '../models/guns.js';
+import { GUNS } from '../sim/tables.js';
+import { crewForRoleWW1 } from '../render/crews_ww1.js';
 import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole } from '../models/v/crew.js';
 
 // Standalone model viewer for the guns, the crews, and (when the field models agent's files exist) the
@@ -58,7 +60,7 @@ controls.enableDamping = false;
 // the field models agent's registries, when they exist
 const optional = async (g) => { try { const f = Object.values(g)[0]; return f ? await f() : null; } catch (e) { console.warn('optional module failed', e.message); return null; } };
 const [shellsMod, targetsMod] = await Promise.all([optional(import.meta.glob('../models/shells.js')), optional(import.meta.glob('../models/targets.js'))]);
-await loadGuns([...GUN_KINDS, ...GUN_KINDS_WW2]);
+await loadGuns([...GUN_KINDS, ...GUN_KINDS_WW2, ...GUN_KINDS_WW1]);
 // the WW2 Allied models and aircraft (models/t/ww2), when they exist
 const alliedMod = {};
 if (q.get('aircraft') || q.get('allied')) {
@@ -179,7 +181,7 @@ function addItem(kind, x) {
     if (q.get('load')) rig.setShell?.(q.get('load'), true);
     if (q.get('crew') === '1' && rig.anchors.crew) {
       rig.crewFigs = rig.anchors.crew.map((c, i) => {
-        const fig = buildCrewman(crewForRole(c.role, i));
+        const fig = buildCrewman(GUNS[kind]?.era === 'ww1' ? crewForRoleWW1(c.role, i) : crewForRole(c.role, i)); // the WW1 German pieces' crews in 1917 dress
         fig.root.position.set(c.x, c.y, c.z);
         fig.root.rotation.y = c.heading;
         fig.pose(c.pose || 'stand', i * 0.13, 1);

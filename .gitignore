@@ -3,3 +3,5 @@ dist
 .playwright-mcp
 shots
 refs
+CLAUDE.md
+.claude

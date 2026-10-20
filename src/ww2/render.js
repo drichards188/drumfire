@@ -4,10 +4,25 @@
 // launch, the smoke and flame behind rockets and missiles in flight, and the enemy's aircraft on their raids.
 //   const w = createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns });
 //   w.update(dt, rawDt, sim, camera)        every frame after the render layer
+//   w.reset(sim)                            after sim.newGame: frees the scenery of batteries not in the game
 //   w.fire(unit, piece, shell, night)       from main's fire handler: true when it drew the shot itself
+//   w.framing(unitId)                        a V-weapon site's camera framing when its drill moves on to a new step
+//                                            (null otherwise; main applies it while it orbits that unit)
 //   w.audio = audio                          (set once the engine exists)
 import * as THREE from 'three';
 import { headingFor } from '../sector.js';
+import { buildGermanGunSite } from '../models/v/de/gun_sites.js';
+import { buildGermanBatteryWorks } from '../models/v/de/battery_works.js';
+import { disposeDetached } from '../render/dispose.js';
+import { poseVSite, vFraming } from '../render/crews_vweap.js';
+import { VCUT } from '../models/v/de/vweap_kit.js';
+import { CUTAWAY } from '../world/mats.js';
+import { RUN as V1_RUN } from '../models/v/de/v1.js';
+import { gustavLayout } from './gustav_layout.js';
+import { createWorks } from './gustav_works.js';
+
+// the V-weapon sites' woods are cut away along the camera's line like the world's nets (the same uniforms)
+VCUT.a = CUTAWAY.a; VCUT.b = CUTAWAY.b; VCUT.r = CUTAWAY.r;
 
 const AIR = import.meta.glob('../models/t/ww2/aircraft.js', { eager: true });
 const buildAircraft = Object.values(AIR)[0]?.buildAircraft ?? null;
@@ -16,13 +31,22 @@ const _tv = { x: 0, y: 0, z: 0 }, _tw = { x: 0, y: 0, z: 0 };
 
 export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns }) {
   const sites = new Map(); // unit id -> Gustav firing position
+  const gunPositions = new Map(); // piece key -> static fieldworks and masking
+  const batteryWorks = new Map(); // battery id -> connecting trenches and rear services
   const planes = new Map(); // aircraft id -> { root, prop }
+  const live = new Set(); // this frame's living aircraft (kept, not made anew every frame)
   let sirenOff = 0;
   const w = {
     audio: null,
     sites,
+    gunPositions,
+    batteryWorks,
     update,
     fire,
+    reset,
+    framing,
+    reselect: () => { askedFor = null; },
+    focusTask,
   };
 
   // the raiders, built now (before main patches the scene's fog into every material) and reused: three a raid
@@ -43,27 +67,102 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     }
   }
 
-  // the Gustav's firing position: the curved track, the cranes, the ammunition train, flak, nets
+  // The batteries' scenery, one slot each: the Gustav's firing position (the curved track, the cranes, the
+  // ammunition train, flak, nets); each battery's works (communication trenches, shelters, command post, reserve
+  // ammunition, a screened supply approach; the Karl one at each selectable stop); each gun's field position (in
+  // world space so the gun and crew animate on their own; the Karl's prepared stops are hardstandings it drives
+  // between). The title's demonstration shows every battery; a game keeps only its own and frees the rest
+  // (reset). Scenery is drawn only within `far` of the camera: past that its largest features (nets, shelters,
+  // vehicles; the site's cranes and train) are under a couple of pixels, and every merged mesh is still a draw.
+  const slots = [];
+  const place = (root, x, z, bearing) => {
+    root.position.set(x, terrain.heightAt(x, z), z);
+    root.rotation.y = headingFor(bearing);
+  };
+  const slot = (key, unitId, map, far, make) => slots.push({ key, unitId, map, far, make, obj: null, c: new THREE.Vector3(), r: 0, near: true });
   const buildSite = guns?.EXTRAS?.buildGustavSite;
+  // the Gustav is put together on the spot only at the fortress siege: there its site has the assembly section's
+  // works (the yard, the delivery track, the cranes and their derricks); elsewhere it came ready and stands on its curve
+  const yard = sim.theatre?.op?.id === 'sevastopol';
+  const woodland = sim.theatre?.op?.id !== 'sevastopol';
+  const stops = sim.theatre?.op?.positions ?? [];
   for (const u of sim.units) {
-    if (u.kind !== 'gustav' || !buildSite) continue;
-    try {
-      const site = buildSite();
-      const p = u.pieces[0];
-      site.root.position.set(p.pos.x, terrain.heightAt(p.pos.x, p.pos.z), p.pos.z);
-      site.root.rotation.y = headingFor(p.bearing);
-      scene.add(site.root);
-      sites.set(u.id, site);
-    } catch (e) {
-      console.warn('Gustav site failed:', e.message);
+    const id = u.id, kind = u.kind, zero = u.zero, pieces = u.pieces.map((p) => ({ i: p.i, x: p.pos.x, z: p.pos.z, bearing: p.bearing }));
+    if (kind === 'gustav' && buildSite) {
+      const arc = u.arc, p = pieces[0];
+      slot(id, id, sites, 15000, () => {
+        // the ground under a point of the site's frame, in its rail-head frame (the flak stands off the levelled pad)
+        let root = null;
+        const ground = (x, z) => {
+          if (!root) return -0.55;
+          const c = Math.cos(root.rotation.y), s = Math.sin(root.rotation.y);
+          return terrain.heightAt(root.position.x + x * c + z * s, root.position.z - x * s + z * c) - root.position.y - 0.55;
+        };
+        const site = buildSite({ arc, yard, ground });
+        root = site.root;
+        place(site.root, p.x, p.z, p.bearing);
+        return site;
+      });
     }
+    if (kind === 'v1' || kind === 'v2') continue;
+    const works = kind === 'karl'
+      ? stops.map((q, i) => ({ key: `${id}:${q.id}`, origin: q.pos, pieces: [{ x: q.pos.x, z: q.pos.z }], seed: id * 79 + i }))
+      : [{ key: `${id}`, origin: { ...u.pos }, pieces: pieces.map((p) => ({ x: p.x, z: p.z })), seed: id * 79 }];
+    for (const q of works) slot(q.key, id, batteryWorks, 4000, () => buildGermanBatteryWorks({ kind, origin: q.origin, bearing: zero,
+      pieces: q.pieces, terrain, seed: q.seed, woodland }));
+    if (kind === 'gustav') continue;
+    const spots = kind === 'karl'
+      ? stops.map((q, i) => ({ key: `${id}:position:${q.id}`, x: q.pos.x, z: q.pos.z, bearing: zero, seed: id * 37 + i }))
+      : pieces.map((p) => ({ key: `${id}:${p.i}`, x: p.x, z: p.z, bearing: p.bearing, seed: id * 37 + p.i }));
+    for (const q of spots) slot(q.key, id, gunPositions, 4000, () => {
+      const position = buildGermanGunSite(kind, q.seed);
+      place(position.root, q.x, q.z, q.bearing);
+      return position;
+    });
+  }
+  const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
+  function buildSlot(q) {
+    try {
+      q.obj = q.make();
+    } catch (e) {
+      console.warn(`scenery ${q.key} failed:`, e.message);
+      return;
+    }
+    scene.add(q.obj.root);
+    q.map.set(q.key, q.obj);
+    _box.setFromObject(q.obj.root).getBoundingSphere(_sphere);
+    q.c.copy(_sphere.center);
+    q.r = _sphere.radius;
+    if (q.map === sites) renderLayer?.detail?.add(`site:${q.key}`, q.obj.root);
+  }
+  function dropSlot(q) {
+    if (!q.obj) return;
+    scene.remove(q.obj.root);
+    if (q.map === sites) renderLayer?.detail?.remove(`site:${q.key}`);
+    disposeDetached(scene, [q.obj.root]);
+    q.map.delete(q.key);
+    q.obj = null;
+  }
+  for (const q of slots) buildSlot(q);
+
+  // after sim.newGame: a game (not the title's demonstration, not a lesson) frees the scenery of the batteries it
+  // has not got; the scenery of a battery that comes back is built again
+  function reset(s = sim) {
+    const game = !s.attract && !s.scripted;
+    for (const q of slots) {
+      const present = !!s.unitById(q.unitId);
+      if (present && !q.obj) buildSlot(q);
+      else if (!present && game) dropSlot(q);
+    }
+    focus.clear(); framed.clear(); cams.clear();
   }
 
   // the controllers' moments that have a picture or a sound of their own
   const prevSpecial = sim.events.special, prevRaid = sim.events.raid;
   sim.events.special = (u, what, x) => {
     prevSpecial?.(u, what, x);
-    if (u.kind === 'v2' && what === 'done' && x === 'prestage') {
+    // the A4's igniter lights as the Vorstufe step begins (its flame is drawn every frame while the step runs)
+    if (u.kind === 'v2' && what === 'step' && x === 'prestage') {
       const at = anchorPos(u, 'rocket', _p);
       fx.v2Ignition?.(at, 0);
       w.audio?.v2Launch?.(at, 0);
@@ -129,12 +228,62 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     return false;
   }
 
+  // The Gustav stands where its works have it (on the assembly section, on its way onto the curve) until it stands at its
+  // firing station: the rig's root follows it there, then goes back to the station. The camera's focus (the unit's
+  // root, which the chase camera orbits) follows the gun, or, while a task of the preparation is chosen on the procedure
+  // card (focusTask), that task's work (gustav_works.js focusOf), gliding from one to the other.
+  const works = new Map(), away = new Set(), focus = new Map(), framed = new Map(), cams = new Map();
+  const _fc = new THREE.Vector3(), _fq = { x: 0, y: 0, z: 0, dist: 80, pitch: 0.3 }, _st = { stage: {}, assembly: 1 };
+  // the procedure card's choice for a unit: a task id, or null for the gun itself; framed once when it changes
+  function focusTask(unitId, task) {
+    if ((focus.get(unitId) ?? null) === (task ?? null)) return;
+    if (task) focus.set(unitId, task); else focus.delete(unitId);
+    framed.set(unitId, task ?? 'gun');
+  }
+  function standGustav(u, rig, g, W, st, rawDt) {
+    const p = u.pieces[0], y = terrain.heightAt(p.pos.x, p.pos.z), yaw = headingFor(p.bearing), root = unitRoot[u.id];
+    const v = renderLayer?.guns?.byKey?.get(`${u.id}:0`);
+    if (root && root.userData.gy == null) root.userData.gy = root.position.y - y;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    let wx = p.pos.x, wz = p.pos.z, wa = yaw;
+    if (g.works) {
+      away.add(u.id);
+      wx = p.pos.x + g.x * c + g.z * s; wz = p.pos.z - g.x * s + g.z * c; wa = yaw + g.a;
+      rig.root.position.set(wx, y, wz); rig.root.rotation.y = wa;
+      if (v) v.baseY = y;
+    } else if (away.delete(u.id)) {
+      rig.root.position.set(p.pos.x, y, p.pos.z); rig.root.rotation.y = yaw;
+    }
+    if (!root) return;
+    // where the camera should look: the chosen task's work, or the gun
+    const task = focus.get(u.id), q = task && W ? W.focusOf(task, st ?? _st, _fq) : null;
+    if (q) _fc.set(p.pos.x + q.x * c + q.z * s, y + q.y, p.pos.z - q.x * s + q.z * c);
+    else _fc.set(wx, y + root.userData.gy, wz);
+    let cam = cams.get(u.id);
+    if (!cam) cams.set(u.id, (cam = _fc.clone()));
+    else cam.lerp(_fc, 1 - Math.exp(-3.5 * Math.max(0, rawDt ?? 0)));
+    root.position.copy(cam);
+    root.rotation.y = wa;
+    if (q && framed.get(u.id) === task) framed.set(u.id, q); // the framing for main to pick up (framing())
+  }
+
   function poseSpecial(u, rawDt) {
     const st = u.special, rig = rigOf(u);
     if (!st || !rig) return;
     if (st.kind === 'gustav') {
-      rig.setAssembly?.(st.assembly);
-      sites.get(u.id)?.setStage?.(st.stage);
+      // the setup as motion (gustav_works.js): the trains, the cranes and the derricks on the site, the gun's parts and
+      // bogies on the rig, and where the gun itself stands on its track
+      let W = works.get(u.id);
+      if (!W && rig.works) works.set(u.id, (W = createWorks(gustavLayout({ arc: u.arc, yard }), rig.works)));
+      rig.assembly = st.assembly;
+      const site = sites.get(u.id);
+      site?.setStage?.(st.stage);
+      if (W) {
+        const pose = W.update(st, u.pieces[0].az, rig.carZ ?? 0);
+        site?.setWorks?.(pose);
+        rig.setWorks?.(pose);
+        standGustav(u, rig, pose.gun, W, st, rawDt);
+      }
     } else if (st.kind === 'karl') {
       // the Karl drives: its rig, the camera's focus and the render layer's resting height follow the sim
       const p = u.pieces[0], y = terrain.heightAt(p.pos.x, p.pos.z);
@@ -150,27 +299,159 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       rig.setLower?.(st.lower);
       rig.setDrive?.(st.drive);
       rig.setSchlepper?.(st.schlepper.k);
-    } else if (st.kind === 'v1') {
-      rig.setMissile?.(st.where);
-      rig.setWings?.(st.wings);
-      rig.setGenerator?.(st.generator);
-      const t = sim.time - st.launchT;
-      rig.launch?.(st.launchT >= 0 && t < 1.5 ? t : null);
-    } else if (st.kind === 'v2') {
-      rig.setErect?.(st.erect);
-      rig.setMeiller?.(st.meiller);
-      rig.setTable?.(st.table);
-      rig.setFuel?.({ alcohol: st.fuelA, lox: st.fuelL });
-      rig.setRocket?.(st.missile && !(st.launchT >= 0 && sim.time - st.launchT < 0.5 && st.erect === 0));
+    } else if (st.kind === 'v1' || st.kind === 'v2') {
+      // the drill's machinery (render/crews_vweap.js, shared with the crew), then what burns and boils off
+      const c = poseVSite(rig, u, sim, vclock(u));
+      if (c && rawDt > 0) vsiteFx(u, rig, c);
+    }
+  }
+
+  // ---------------------------------------------------------------- the V-weapon sites
+  const vclocks = new Map(), vstate = new Map();
+  let askedFor = null; // the unit main last asked about (a new selection gets its framing again)
+  const vclock = (u) => { let c = vclocks.get(u.id); if (!c) vclocks.set(u.id, (c = {})); return c; };
+  const _e = { x: 0, y: 0, z: 0, k: 0 }, _ev = new THREE.Vector3(), _ed = new THREE.Vector3(), _fr = {};
+  let lastDt = 0;
+  // per frame while the steps run: the pulse jet started on the ramp, the A4's Vorstufe and Hauptstufe on the
+  // table, the liquid oxygen's vapour boiling off the rocket and the trailer
+  function vsiteFx(u, rig, c) {
+    if (!fx.trail || !(lastDt > 0)) return;
+    if (c.kind === 'v1' && c.engine >= 0 && rig.v1?.misR?.visible) {
+      const m = rig.v1.misR;
+      m.updateWorldMatrix(true, false);
+      _ev.set(0, 0.73, 4.3).applyMatrix4(m.matrixWorld);
+      _ed.set(0, 0, -1).transformDirection(m.matrixWorld);
+      _e.x = _ed.x; _e.y = _ed.y; _e.z = _ed.z; _e.k = c.engine;
+      fx.trail(_ev, _e, 'v1run', lastDt);
+    }
+    if (c.kind === 'v2') {
+      rig.root.updateWorldMatrix(true, false);
+      const T = rig.layout?.T ?? 1.5;
+      if (c.flame >= 0) {
+        _ev.set(0, T, 0).applyMatrix4(rig.root.matrixWorld);
+        _e.x = 0; _e.y = 1; _e.z = 0; _e.k = c.flame;
+        fx.trail(_ev, _e, 'v2pre', lastDt);
+      }
+      if (c.vent > 0 && rig.v2?.rocket?.visible && c.lox > 0.05) {
+        // the oxygen tank's vent near the top of its section, and the white fog falling off the frosted skin
+        _ev.set(0, T + 7.6, 0).applyMatrix4(rig.root.matrixWorld);
+        _e.x = 0; _e.y = 1; _e.z = 0; _e.k = c.lox;
+        fx.trail(_ev, _e, 'vent', lastDt);
+        const lv = rig.layout?.LOXVENT;
+        if (lv && c.id === 'lox' && c.active) { _ev.set(lv.x, lv.y, lv.z).applyMatrix4(rig.root.matrixWorld); _e.k = 0.6; fx.trail(_ev, _e, 'vent', lastDt); }
+      }
+    }
+  }
+
+  // The camera: each step framed so its work shows (crews_vweap.js vFraming, in the site's frame), the unit's
+  // focus object (main's camera target) glided to it, and the launch followed out. framing(id) answers main once
+  // per new shot; the follow and the launch's distance are applied every frame while they run.
+  const _fw = new THREE.Vector3(), _fm = new THREE.Vector3();
+  function vCamera(u, rig, s, rawDt) {
+    const root = unitRoot[u.id];
+    if (!root) return;
+    const f = vFraming(rig, u, s, _fr);
+    if (!f) return;
+    rig.root.updateWorldMatrix(true, false);
+    _fw.set(f.x, f.y, f.z).applyMatrix4(rig.root.matrixWorld);
+    let vs = vstate.get(u.id);
+    if (!vs) vstate.set(u.id, (vs = { pos: _fw.clone(), key: '', emitted: '', yaw: 0, pitch: 0, dist: 0, live: false }));
+    // the launch: the focus rides out with the missile (its drawn place), then comes back to the site
+    vs.live = false;
+    if (f.launch) {
+      const m = newestMissile(s, u.id);
+      if (m && visPos(m, s, _fm)) {
+        // (back to the site with a cut, not a pan across a kilometre)
+        const k = u.kind === 'v1' ? smoothK(f.since, 0.6, 1.8) * (f.since < 6.8 ? 1 : 0) : smoothK(f.since, 2.5, 5) * (f.since < 20.5 ? 1 : 0);
+        _fw.lerp(_fm, k);
+        vs.live = true;
+        f.dist = u.kind === 'v1' ? f.dist * (1 - 0.35 * k) : f.dist + 150 * smoothK(f.since, 3, 14);
+        if (u.kind === 'v2') f.pitch = f.pitch - 0.1 * smoothK(f.since, 3, 10);
+      }
+    }
+    vs.pos.lerp(_fw, vs.live ? 1 - Math.exp(-rawDt * 8) : 1 - Math.exp(-rawDt * 2.2));
+    if (vs.pos.distanceTo(_fw) > 400) vs.pos.copy(_fw);
+    root.position.copy(vs.pos);
+    vs.key = f.key;
+    vs.yaw = f.yaw + rig.root.rotation.y; vs.pitch = f.pitch; vs.dist = f.dist;
+  }
+  const smoothK = (t, a, b) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+  function framing(unitId) {
+    // the Gustav: a new focus on the procedure card frames its work once (or the gun again); the player's orbit stands
+    const fr = framed.get(unitId);
+    if (fr && typeof fr === 'object') { framed.delete(unitId); _out.yaw = null; _out.pitch = fr.pitch; _out.dist = fr.dist; return _out; }
+    if (fr === 'gun') { framed.delete(unitId); _out.yaw = null; _out.pitch = 0.17; _out.dist = 115; return _out; }
+    const vs = vstate.get(unitId);
+    if (!vs) return null;
+    const fresh = askedFor !== unitId;
+    askedFor = unitId;
+    if (!fresh && vs.emitted === vs.key && !vs.live) return null;
+    const first = vs.emitted !== vs.key || fresh;
+    vs.emitted = vs.key;
+    _out.yaw = first ? vs.yaw : null; _out.pitch = vs.pitch; _out.dist = vs.dist;
+    return _out;
+  }
+  const _out = { yaw: 0, pitch: 0, dist: 0 };
+  function newestMissile(s, unitId) {
+    let best = null;
+    for (const sh of s.shells) if (sh.alive && sh.guided && sh.unitId === unitId && (!best || sh.t0 > best.t0)) best = sh;
+    return best;
+  }
+  // Where a missile is drawn: the sim flies it from its own first point, the drawing starts it where the site
+  // holds it (the V-1 on its sled at the ramp's foot until the catapult has thrown it off the top, the A4 standing
+  // on the table) and closes on the sim's track over the next seconds.
+  const vis = new WeakMap(), _vp = new THREE.Vector3();
+  function visPos(sh, s, out) {
+    const a = s.alpha ?? 1;
+    out.set(sh.prev.x + (sh.pos.x - sh.prev.x) * a, sh.prev.y + (sh.pos.y - sh.prev.y) * a, sh.prev.z + (sh.pos.z - sh.prev.z) * a);
+    let r = vis.get(sh);
+    const u = s.unitById?.(sh.unitId);
+    if (!r) { r = { lag: null, ok: sh.t < 0.8 }; vis.set(sh, r); }
+    const t = s.time - (sh.t0 ?? s.time);
+    if (sh.kind === 'v1') {
+      if (t < V1_RUN) return false; // still on its sled (drawn by the site)
+      if (!r.lag && r.ok && u) { anchorPos(u, 'muzzle', _vp); r.lag = _vp.clone().sub(out); }
+      if (r.lag) out.addScaledVector(r.lag, 1 - smoothK(t, V1_RUN, V1_RUN + 2.6));
+    } else if (sh.kind === 'v2') {
+      if (!r.lag && r.ok && u) { anchorPos(u, 'rocket', _vp); _vp.y += 7; r.lag = _vp.clone().sub(out); }
+      if (r.lag) out.addScaledVector(r.lag, 1 - smoothK(t, 0, 7));
+    }
+    return true;
+  }
+  // move the drawn missiles (render/shells.js instances) to where visPos says, or out of sight on the sled
+  const _m4 = new THREE.Matrix4(), _p3 = new THREE.Vector3(), _q3 = new THREE.Quaternion(), _s3 = new THREE.Vector3();
+  function placeMissiles(s) {
+    const kinds = renderLayer?.shells?.kinds;
+    if (!kinds) return;
+    const n = { v1: 0, v2: 0 };
+    for (const sh of s.shells) {
+      const k = sh.kind === 'v1' || sh.kind === 'v2' ? kinds.get(sh.kind) : null;
+      if (!k || !sh.alive) continue;
+      const i = n[sh.kind]++;
+      if (!sh.guided || i >= k.n) continue;
+      const shown = visPos(sh, s, _vp);
+      for (const mesh of k.meshes) {
+        mesh.getMatrixAt(i, _m4);
+        _m4.decompose(_p3, _q3, _s3);
+        if (!shown) _s3.setScalar(0); else _p3.copy(_vp);
+        mesh.setMatrixAt(i, _m4.compose(_p3, _q3, _s3));
+        mesh.instanceMatrix.needsUpdate = true;
+      }
     }
   }
 
   function update(dt, rawDt, s = sim, camera) {
-    for (const [id, site] of sites) site.root.visible = !!s.unitById(id);
-    for (const [key, works] of w.batteryWorks ?? []) works.root.visible = !!s.unitById(Number(key.split(':')[0]));
-    for (const [key, position] of w.gunPositions ?? []) position.root.visible = !!s.unitById(Number(key.split(':')[0]));
+    lastDt = dt;
+    const cam = camera?.position;
+    for (const q of slots) {
+      if (!q.obj) continue;
+      // a little further out before it goes than before it comes back, so it does not flicker on the line
+      if (cam) q.near = cam.distanceTo(q.c) - q.r < q.far * (q.near ? 1.05 : 1);
+      q.obj.root.visible = q.near && !!s.unitById(q.unitId);
+    }
     for (const u of s.units) {
       if (u.special) poseSpecial(u, rawDt);
+      if (u.kind === 'v1' || u.kind === 'v2') { const rig = rigOf(u); if (rig?.layout && u.special?.steps) vCamera(u, rig, s, rawDt); }
       if (u.kind === 'nbw41') for (const p of u.pieces) {
         const rig = rigOf(u, p.i);
         if (!rig?.setRounds) continue;
@@ -190,19 +471,23 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
           sh.burning = sh.t < 1.8;
           if (sh.burning) fx.trail(sh.pos, sh.vel, 'rocket', dt);
         } else if ((sh.kind === 'v1' && !sh.engineOff) || (sh.kind === 'v2' && sh.burning)) {
-          // the flame comes out of the tail: the V-1's pipe 4 m and the A4's nozzle 7 m behind the middle
-          const back = sh.kind === 'v1' ? 4 : 7, sp = Math.hypot(sh.vel.x, sh.vel.y, sh.vel.z);
-          if (sp > 1) { _tw.x = sh.pos.x - sh.vel.x / sp * back; _tw.y = sh.pos.y - sh.vel.y / sp * back; _tw.z = sh.pos.z - sh.vel.z / sp * back; }
-          else { _tw.x = sh.pos.x; _tw.y = sh.pos.y - back; _tw.z = sh.pos.z; }
+          // the flame comes out of the tail: the V-1's pipe 4 m behind the middle and 0.7 m up, the A4's nozzle 7 m
+          // behind it; from where the missile is drawn (visPos: on the ramp's sled it is the site's own flame)
+          if (sh.guided && !visPos(sh, s, _vp)) continue;
+          const px = sh.guided ? _vp.x : sh.pos.x, py = sh.guided ? _vp.y : sh.pos.y, pz = sh.guided ? _vp.z : sh.pos.z;
+          const back = sh.kind === 'v1' ? 4.2 : 7, sp = Math.hypot(sh.vel.x, sh.vel.y, sh.vel.z);
+          if (sp > 1) { _tw.x = px - sh.vel.x / sp * back; _tw.y = py - sh.vel.y / sp * back + (sh.kind === 'v1' ? 0.72 : 0); _tw.z = pz - sh.vel.z / sp * back; }
+          else { _tw.x = px; _tw.y = py - back; _tw.z = pz; }
           fx.trail(_tw, sh.vel, sh.kind, dt);
         }
       }
     }
+    placeMissiles(s);
     // the enemy's aircraft
     const a = s.alpha ?? 1;
-    const seen = new Set();
+    live.clear();
     for (const pl of s.aircraft ?? []) {
-      seen.add(pl.id);
+      if (pl.alive) live.add(pl.id);
       let v = planes.get(pl.id);
       if (!v && pl.alive) {
         v = pool.find((q) => !q.used) ?? { root: null };
@@ -220,7 +505,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       v.root.quaternion.copy(_q);
       if (v.prop) v.prop.rotation.z += rawDt * 90;
     }
-    for (const [id, v] of planes) if (!seen.has(id) || !(s.aircraft ?? []).find((p) => p.id === id)?.alive) {
+    for (const [id, v] of planes) if (!live.has(id)) {
       if (v.root) v.root.visible = false;
       v.used = null;
       planes.delete(id);

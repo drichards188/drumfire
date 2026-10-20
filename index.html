@@ -7,7 +7,34 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 fill=%22%231e1a14%22/%3E%3Cpath d=%22M5 21h14l6-5h3v-3h-3l-2-3h-4l-2 3h-3zm2 2a3 3 0 1 0 6 0%22 fill=%22%23c9a24a%22/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body class="title">
+  <body>
+    <!-- the main menu (ui/menu.js): DOM only, the battlefield is not built until a mission is played -->
+    <div id="menu" hidden></div>
+
+    <!-- a game page's loading screen (ui/loading.js): the operation order while the world builds -->
+    <div id="loading" hidden>
+      <div class="ld-card">
+        <header class="ld-head"><small class="ld-kicker"></small><span class="ld-diff"></span></header>
+        <h2 class="ld-title"></h2>
+        <p class="ld-sub"></p>
+        <p class="ld-blurb"></p>
+        <ul class="ld-lines"></ul>
+        <div id="load-bar"><div id="load-bar-fill"></div></div>
+        <p id="status">Loading the game</p>
+        <footer class="ld-foot">
+          <ul class="keys">
+            <li><kbd>1</kbd>-<kbd>9</kbd> select battery</li>
+            <li><kbd>Drag</kbd> orbit</li>
+            <li><kbd>Wheel</kbd> zoom</li>
+            <li><kbd>F</kbd> follow the shell to its burst</li>
+            <li><kbd>C</kbd> free camera</li>
+            <li><kbd>[</kbd> <kbd>]</kbd> time compression</li>
+          </ul>
+          <a class="ld-back" href="/">Back to the menu</a>
+        </footer>
+      </div>
+    </div>
+
     <div id="view">
       <canvas id="c"></canvas>
 
@@ -32,47 +59,6 @@
           <div id="end-stats"></div>
           <button id="end-restart">Fight again</button>
         </div>
-      </div>
-
-      <div id="title-screen">
-        <div class="brand">
-          <h1>DRUMFIRE</h1>
-          <p class="sub">Heavy artillery, Ypres salient, 1917</p>
-          <p class="blurb">A Heavy Artillery Group in the mud before Passchendaele: a 15-inch howitzer, 9.2s, 6-inch howitzers, 60-pounders and an 18-inch railway gun. Lay the guns from the board, read the observers, walk the shells onto pillboxes, batteries and dumps, and hold the line when the counter-attack comes.</p>
-        </div>
-        <div class="loader">
-          <div id="load-bar"><div id="load-bar-fill"></div></div>
-          <p id="status">Surveying the salient</p>
-        </div>
-        <div id="modes" role="tablist" aria-label="Mode">
-          <a href="/" data-m="1917" title="The British Heavy Artillery Group at Ypres, 1917">1917 <small>British</small></a>
-          <a href="/?mode=ww2" data-m="ww2" title="German artillery in the Second World War: Flanders 1944, Gustav, Karl-Gerät, V-1, V-2">WW2 <small>German</small></a>
-        </div>
-        <div id="ops" hidden></div>
-        <p id="op-note" hidden></p>
-        <div id="options">
-          <div id="difficulty">
-            <button data-d="Easy">Easy</button>
-            <button data-d="Normal" class="on">Normal</button>
-            <button data-d="Hard">Hard</button>
-          </div>
-        </div>
-        <div class="actions">
-          <button id="play" disabled>Take command</button>
-          <button id="tutorials" disabled>Tutorials</button>
-          <a id="bertha-link" href="/bertha.html" title="Demo: crew a German 42 cm howitzer in first person">Big Bertha <small>demo</small></a>
-        </div>
-        <ul class="keys">
-          <li><kbd>1</kbd>-<kbd>5</kbd> select gun</li>
-          <li><kbd>Drag</kbd> orbit</li>
-          <li><kbd>Wheel</kbd> zoom</li>
-          <li><kbd>F</kbd> follow the shell to its burst</li>
-          <li><kbd>C</kbd> free camera</li>
-          <li><kbd>M</kbd> mute</li>
-          <li><kbd>[</kbd> <kbd>]</kbd> time compression</li>
-          <li><kbd>H</kbd> hide overlay</li>
-          <li><kbd>F3</kbd> stats</li>
-        </ul>
       </div>
 
       <div id="tut-menu">
@@ -102,6 +88,6 @@
 
     <div id="panel"><div class="placeholder">FIRE CONTROL OFFLINE</div></div>
 
-    <script type="module" src="/src/main.js"></script>
+    <script type="module" src="/src/boot.js"></script>
   </body>
 </html>

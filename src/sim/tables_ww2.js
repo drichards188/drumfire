@@ -16,7 +16,7 @@ const IN = (mm) => mm / 25.4;
 // while `unit.gate` names a reason.
 export const GUNS_WW2 = {
   lefh18: {
-    name: '10.5 cm leFH 18', short: 'leFH', calibre: IN(105), mass: 14.8, shell: 'lefh18',
+    name: '10.5 cm leFH 18', short: '10.5 cm', calibre: IN(105), mass: 14.8, shell: 'lefh18',
     // six charges (Ladungen 1 to 6); Ladung 6 gives 470 m/s and 10.7 km
     charges: [{ name: 'Ladung 1', v: 200 }, { name: 'Ladung 2', v: 230 }, { name: 'Ladung 3', v: 270 }, { name: 'Ladung 4', v: 320 }, { name: 'Ladung 5', v: 390 }, { name: 'Ladung 6', v: 470 }],
     elMin: D(2), elMax: D(42), restEl: D(12), loadEl: D(4), traverse: D(60),
@@ -28,7 +28,7 @@ export const GUNS_WW2 = {
     fuzes: ['instant', 'delay', 'shrapnel'], metric: true, side: 'german', rowStep: 100,
   },
   sfh18: {
-    name: '15 cm sFH 18', short: 'sFH', calibre: IN(149), mass: 43.5, shell: 'sfh18',
+    name: '15 cm sFH 18', short: '15 cm sFH', calibre: IN(149), mass: 43.5, shell: 'sfh18',
     // eight charges in the real gun (7 and 8 wore the bore); the game offers five to 520 m/s and 13.3 km
     charges: [{ name: 'Ladung 1', v: 210 }, { name: 'Ladung 3', v: 280 }, { name: 'Ladung 5', v: 345 }, { name: 'Ladung 7', v: 450 }, { name: 'Ladung 8', v: 520 }],
     elMin: D(2), elMax: D(45), restEl: D(18), loadEl: D(4), traverse: D(60),
@@ -42,7 +42,7 @@ export const GUNS_WW2 = {
   k18: {
     // the 17 cm Kanone 18 in Mörserlafette: the long-range counter-battery gun; the barrel and cradle recoil on
     // the top carriage and the top carriage on the lower (Doppelrücklauf). 925 m/s, 29.6 km on the top charge.
-    name: '17 cm K 18', short: 'K 18', calibre: IN(172.5), mass: 62.8, shell: 'k18',
+    name: '17 cm K 18', short: '17 cm', calibre: IN(172.5), mass: 62.8, shell: 'k18',
     charges: [{ name: 'Kleine Ladung', v: 560 }, { name: 'Mittlere Ladung', v: 740 }, { name: 'Große Ladung', v: 925 }],
     elMin: D(2), elMax: D(50), restEl: D(20), loadEl: D(0), traverse: D(60),
     // the carriage swings 16 degrees on its own; the rest is the whole gun turned on its firing platform (slow)
@@ -55,7 +55,7 @@ export const GUNS_WW2 = {
   },
   mrs18: {
     // the 21 cm Mörser 18 on the same carriage: a heavy plunging shell against fieldworks and concrete
-    name: '21 cm Mrs 18', short: 'Mrs 18', calibre: IN(210.9), mass: 113, shell: 'mrs18',
+    name: '21 cm Mrs 18', short: '21 cm', calibre: IN(210.9), mass: 113, shell: 'mrs18',
     charges: [{ name: 'Ladung 1', v: 300 }, { name: 'Ladung 3', v: 400 }, { name: 'Ladung 5', v: 490 }, { name: 'Ladung 6', v: 565 }],
     elMin: D(8), elMax: D(70), restEl: D(30), loadEl: D(0), traverse: D(60),
     azRate: D(1.1), elRate: D(2.4),
@@ -68,7 +68,7 @@ export const GUNS_WW2 = {
   nbw41: {
     // the 15 cm Nebelwerfer 41: six tubes on a two-wheeled carriage, rockets ignited electrically from cover.
     // One "round" is a ripple of six; the crew reloads the tubes from behind (the rockets go in from the breech end).
-    name: '15 cm Nebelwerfer 41', short: 'NbW', calibre: IN(158.5), mass: 34, shell: 'nbw41',
+    name: '15 cm Nebelwerfer 41', short: '15 cm NbW', calibre: IN(158.5), mass: 34, shell: 'nbw41',
     charges: [{ name: 'Wurfgranate 41', v: 340 }],
     elMin: D(5), elMax: D(45), restEl: D(25), loadEl: D(10), traverse: D(50),
     azRate: D(5), elRate: D(5),
@@ -83,7 +83,7 @@ export const GUNS_WW2 = {
     // 80 cm Kanone (E) "Schwerer Gustav": no traverse of its own, it is laid for line by where it stands on the
     // curved firing track (the game slews it slowly through +-10 degrees: the shunting along the curve). A 4.8 t
     // Sprenggranate at 820 m/s reached 47 km; the 7.1 t Betongranate 38 km. Real cycle: 30 to 45 minutes.
-    name: '80 cm K (E) Gustav', short: 'Gustav', calibre: IN(800), mass: 4800, shell: 'gustav',
+    name: '80 cm K (E) Gustav', short: '80 cm', calibre: IN(800), mass: 4800, shell: 'gustav',
     charges: [{ name: 'Ladung 1', v: 560 }, { name: 'Ladung 2', v: 720 }, { name: 'Ladung 3', v: 820 }],
     elMin: D(10), elMax: D(48), restEl: D(40), loadEl: D(0), traverse: D(10),
     azRate: D(0.08), elRate: D(0.35),
@@ -96,7 +96,7 @@ export const GUNS_WW2 = {
   bertha: {
     // 42 cm M-Gerät "Dicke Bertha" (Krupp 1914): an alternate-history guest in the WW2 mode. The demo's own numbers
     // (src/bertha/ballistics.js): the 810 kg schwere Granate to about 9.3 km, here on four charges to about 12 km.
-    name: '42 cm M-Gerät (Big Bertha)', short: 'Bertha', calibre: 16.5, mass: 810, shell: 'bertha',
+    name: '42 cm M-Gerät (Big Bertha)', short: '42 cm', calibre: 16.5, mass: 810, shell: 'bertha',
     charges: [{ name: '1 Vorkartusche', v: 300 }, { name: '2 Vorkartuschen', v: 330 }, { name: '3 Vorkartuschen', v: 360 }, { name: '4 Vorkartuschen', v: 390 }],
     elMin: D(20), elMax: D(65), restEl: D(40), loadEl: D(2), traverse: D(11.5),
     azRate: D(0.9), elRate: D(2.2),
@@ -110,7 +110,7 @@ export const GUNS_WW2 = {
     // 60 cm Mörser Karl-Gerät 040: self-propelled, lowered onto the ground to fire, 4 degrees of traverse each
     // way (the rest by steering the whole vehicle), 55 to 70 degrees only. The 2,170 kg heavy shell reached about
     // 4.3 km, the 1,250 kg light one 6.6 km. Real cycle: about 10 minutes.
-    name: '60 cm Karl-Gerät 040', short: 'Karl', calibre: IN(600), mass: 2170, shell: 'karl',
+    name: '60 cm Karl-Gerät 040', short: '60 cm', calibre: IN(600), mass: 2170, shell: 'karl',
     charges: [{ name: 'Ladung 1', v: 185 }, { name: 'Ladung 2', v: 220 }, { name: 'Ladung 3 (leichte Gr.)', v: 283 }],
     elMin: D(55), elMax: D(70), restEl: D(60), loadEl: D(0), traverse: D(4), high: true,
     azRate: D(0.4), elRate: D(1.2),

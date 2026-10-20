@@ -5,6 +5,7 @@ import { buildV1Site } from './v1.js';
 import { buildV2Site } from './v2.js';
 import { buildMissile, MISSILE_EXHAUST } from './missiles.js';
 import { buildCrewman, crewForRole } from '../crew.js';
+import { VCrew, poseVSite, vFraming } from '../../../render/crews_vweap.js';
 
 // Dev page for the V-weapon sites and missiles (dev server only):
 //   ?kind=v1|v2|missiles   &cam=az,el,dist (az 0 from the front, -Z)   &at=x,y,z (look-at point)
@@ -12,6 +13,10 @@ import { buildCrewman, crewForRole } from '../crew.js';
 //   v1: &missile=none|trolley|ramp &wings=0..1 &gen=0..1 &launch=t
 //   v2: &erect=0..1 &meiller=0..1 &table=rad &alcohol=0..1 &lox=0..1 &rocket=0|1
 //   &anim=1 runs the drill in a loop (window.__vprev.t sets the time)
+//   &drill=<step id>&k=0..1 the launch crew and the machinery as the game poses them (render/crews_vweap.js) on a
+//   mock drill: the steps before it done, this one at k (&wait=1: waiting for the key; &quick=1 a set-up site;
+//   &since=s: s seconds after a launch); &frame=1 puts the camera where the step's framing does;
+//   window.__vprev.setDrill(id, k, opts) re-poses
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -157,6 +162,40 @@ function drill(t) {
     rig.setRocket(c < 28);
   }
 }
+// ---- the drill mode: a mock unit and sim for the launch crew (the game's controller is src/ww2/special.js)
+const STEPS = {
+  v1: [['bring', 35], ['wings', 30], ['compass', 40], ['airlog', 15], ['ramp', 40], ['fuel', 45], ['steam', 45], ['arm', 15], ['clear', 15], ['fire', 4]],
+  v2: [['erect', 60], ['align', 30], ['cutoff', 20], ['checks', 80], ['alcohol', 60], ['tstoff', 40], ['lox', 70], ['withdraw', 40], ['prestage', 6], ['fire', 3]],
+};
+let vcrew = null, mock = null;
+function setupDrill() {
+  const piece = { i: 0, kind, crew: 14, crewMax: 14, state: 'idle', pos: { x: 0, y: 0, z: 0 } };
+  const unit = { id: 1, kind, alive: true, zero: 0, pieces: [piece], special: null };
+  mock = { time: 1000, alpha: 0, units: [unit], unitById: () => unit };
+  vcrew = new VCrew(rig, kind);
+  setDrill(q.get('drill'), num('k', 0.5), { wait: q.get('wait') === '1', quick: q.get('quick') === '1', since: q.has('since') ? num('since', 0) : null });
+}
+function setDrill(id, k = 0.5, { wait = false, quick = false, since = null } = {}) {
+  const list = STEPS[kind], i = Math.max(0, list.findIndex((s) => s[0] === id));
+  const prep = kind === 'v1' && quick ? new Set(['wings', 'compass', 'airlog', 'fuel', 'arm']) : new Set();
+  const steps = list.map(([sid, dur], j) => ({ id: sid, dur, state: j < i || prep.has(sid) && j !== i ? 'done' : j === i && !wait ? 'doing' : 'todo' }));
+  const u = mock.units[0];
+  u.special = {
+    kind, steps, i, t: k * list[i][1], doing: !wait, fault: null, cover: false, quick, n: 1, left: 3,
+    launchT: since != null ? mock.time - since : -1, settings: { compass: 12, range: 160 }, table: 0, tableFrom: 0, lox: 100, loxOn: i > list.findIndex((s) => s[0] === 'lox'),
+  };
+  if (kind === 'v2' && steps.find((s) => s.id === 'align').state === 'done') u.special.table = (12 * Math.PI) / 180;
+  for (let n = 0; n < 40; n++) vcrew.update(u.pieces[0], mock, 0.1, 2);
+  poseVSite(rig, u, mock);
+  if (q.get('frame') === '1') {
+    const f = vFraming(rig, u, mock, {});
+    const cp = Math.cos(f.pitch);
+    controls.target.set(f.x, f.y, f.z);
+    camera.position.set(f.x + Math.sin(f.yaw) * cp * f.dist, f.y + Math.sin(f.pitch) * f.dist, f.z + Math.cos(f.yaw) * cp * f.dist);
+    controls.update();
+  }
+}
+
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   if (q.get('anim') === '1') { state.t += clock.getDelta(); drill(state.t); }
@@ -166,4 +205,5 @@ renderer.setAnimationLoop(() => {
   window.__ready = true;
 });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
-window.__vprev = { scene, rig, camera, controls, drill, state };
+if (rig && q.get('drill')) setupDrill();
+window.__vprev = { scene, rig, camera, controls, drill, state, setDrill, get crew() { return vcrew; } };

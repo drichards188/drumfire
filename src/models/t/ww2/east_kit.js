@@ -122,7 +122,7 @@ export function limestone() {
  * material, for the escarpment: Parts would flatten the colours to one tint.
  */
 export function rockMesh(geom, paint, tile = 16) {
-  const g = geom.toNonIndexed();
+  const g = geom.index ? geom.toNonIndexed() : geom;
   projectUV(g, tile);
   const p = g.attributes.position, n = g.attributes.normal, col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {

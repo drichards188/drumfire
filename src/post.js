@@ -426,9 +426,8 @@ export const GRADES = {
   Cool: { saturation: 0.95, contrast: 1.04, shadow: [0.9, 0.98, 1.12], highlight: [0.96, 1.0, 1.06] },
   Vivid: { saturation: 1.4, contrast: 1.1, shadow: [0.98, 1.0, 1.02], highlight: [1.02, 1.0, 0.98] },
   Newsreel: { saturation: 0, contrast: 1.3, shadow: [0.98, 0.98, 1], highlight: [1.04, 1.02, 0.97] },
-  // autumn 1917: drained colour, warm brown shadows and creamy highlights, lifted blacks and film
-  // (gate flicker, grain, dust and scratches, a heavier vignette)
-  '1917': { saturation: 0.52, contrast: 1.12, shadow: [1.07, 0.97, 0.82], highlight: [1.1, 1.03, 0.88], film: 1 },
+  // autumn 1917: drained colour, warm brown shadows and creamy highlights
+  '1917': { saturation: 0.52, contrast: 1.12, shadow: [1.07, 0.97, 0.82], highlight: [1.1, 1.03, 0.88] },
 };
 
 const GradeShader = {
@@ -446,13 +445,12 @@ const GradeShader = {
     uResolution: { value: new THREE.Vector2(1, 1) },
     uFade: { value: 0 },
     uNight: { value: 0 },
-    uFilm: { value: 0 },
     uFlash: { value: 0 },
   },
   vertexShader: fsVertex,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uGrain, uSaturation, uContrast, uSharpen, uFade, uNight, uFilm, uFlash;
+    uniform float uTime, uVignette, uGrain, uSaturation, uContrast, uSharpen, uFade, uNight, uFlash;
     uniform vec3 uShadowTint, uHighlightTint;
     uniform vec2 uResolution;
     varying vec2 vUv;
@@ -482,21 +480,6 @@ const GradeShader = {
       c *= 1.0 - uVignette * smoothstep(0.25, 0.9, dot(v, v) * 2.2);
       float g = fract(sin(dot(vUv * 1000.0 + uTime * 17.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
       c += g * uGrain * (1.0 - l * 0.6);
-      if (uFilm > 0.0) {
-        // old film: lifted blacks, gate flicker, a heavier vignette, coarse grain, dust and scratches
-        float ft = floor(uTime * 12.0);
-        c = c * (1.0 - 0.07 * uFilm) + 0.035 * uFilm * vec3(1.0, 0.93, 0.8);
-        c *= 1.0 + (fract(sin(ft * 12.9898) * 43758.5453) - 0.5) * 0.06 * uFilm;
-        c *= 1.0 - 0.32 * uFilm * smoothstep(0.15, 0.8, dot(v, v) * 2.4);
-        float cg = fract(sin(dot(floor(vUv * uResolution * 0.5) + ft, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
-        c += cg * 0.045 * uFilm;
-        float sx = fract(sin(ft * 7.31) * 9341.3);
-        c += step(0.82, fract(sin(ft * 3.77) * 5731.1)) * smoothstep(0.0012, 0.0, abs(vUv.x - sx)) * 0.22 * uFilm;
-        vec2 dc = floor(vUv * vec2(60.0, 34.0));
-        float dh = fract(sin(dot(dc + ft * 1.3, vec2(41.3, 289.1))) * 43758.5453);
-        vec2 df = fract(vUv * vec2(60.0, 34.0)) - 0.5;
-        c *= 1.0 - step(0.9975, dh) * smoothstep(0.35, 0.1, length(df)) * 0.5 * uFilm;
-      }
       c = mix(c, vec3(1.0), uFlash); // the white-out of a blast beside the camera
       c *= 1.0 - uFade;
       gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
@@ -598,6 +581,22 @@ export class PostFX {
     this.composer.addPass(this.dof);
 
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.35, 0.5, 2.5);
+    // The bright pass hands HDR texels to the blur chain whole: facing a low sun, the disc (thousands of times the
+    // threshold after exposure) and a wide band of sky just over the threshold (auto exposure lifts a dark muddy
+    // scene) were spread by the mips into a disc of white over the whole frame (a clear morning). Two changes: only
+    // the part of a texel's luminance above the threshold goes in (`uKnee` 1; 0 is three's whole texel), and that is
+    // capped (`uCap`, its colour kept), so a fireball or a flare still blooms hard and the sky does not.
+    // main's params `bloomCap` and `bloomKnee` set them.
+    {
+      const hp = this.bloom.materialHighPassFilter, end = 'gl_FragColor = mix( outputColor, texel, alpha );';
+      hp.uniforms.uCap = { value: 8 };
+      hp.uniforms.uKnee = { value: 1 };
+      if (hp.fragmentShader.includes(end)) {
+        hp.fragmentShader = hp.fragmentShader.replace('uniform float smoothWidth;', 'uniform float smoothWidth;\nuniform float uCap;\nuniform float uKnee;')
+          .replace(end, `texel.rgb *= min( max( v - luminosityThreshold * uKnee, 0.0 ), uCap ) / max( v, 1e-4 );\n${end}`);
+        hp.needsUpdate = true;
+      } else console.warn('post: the bloom bright pass changed; the bloom cap is not applied');
+    }
     this.composer.addPass(this.bloom);
 
     this.lens = new ShaderPass(LensShader);
@@ -672,7 +671,6 @@ export class PostFX {
     u.uContrast.value = g.contrast;
     u.uShadowTint.value.setRGB(...g.shadow);
     u.uHighlightTint.value.setRGB(...g.highlight);
-    u.uFilm.value = g.film || 0;
   }
 
   update(t, dt, sunDir, sunColor, sunElevation) {

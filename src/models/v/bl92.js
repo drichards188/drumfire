@@ -16,6 +16,7 @@ import { mulberry32 } from '../../noise.js';
 // 0.45 m at 50 degrees (the real gun shortened it to 23 in).
 
 const BH = 0.4; // top of the firing bed
+const LOADING_FLOOR = 1.55; // waist-high access to the tray, with a supported ramp from the shell store
 const TY = 2.1; // trunnion height above the bed (the breech tail clears the floor plate at 50 degrees)
 const MUZ = -1.55, BRE = 1.5;
 const HX = 0.45;
@@ -68,13 +69,13 @@ export function buildBL92() {
   for (let i = 0; i < 5; i++) PL.add('timber', box(0.4, 0.05, 2.4, -0.9 + i * 0.45, 0.22, 4.9, 0.15), { tint: 0xe6dccb });
   // a stack of nose-up shells on planks and a cordite case beside the pit, as in the LOC photograph
   const sh = shellGeometry(SHELL.len, SHELL.rad);
-  const SX = -3.3, SZ = 1.4;
+  const SX = -5.6, SZ = 1.8;
   PL.add('timber', box(1.6, 0.08, 1.4, SX, 0.04, SZ));
   for (let i = 0; i < 6; i++) {
     const x = SX - 0.5 + (i % 3) * 0.5, z = SZ - 0.3 + Math.floor(i / 3) * 0.55;
     for (const [g, k] of [[sh.body, 'shell'], [sh.band, 'brass'], [sh.fuze, 'steel']]) PL.add(k, g.clone().rotateX(-Math.PI / 2).translate(x, 0.08 + SHELL.len / 2, z));
   }
-  PL.add('rust', new THREE.CylinderGeometry(0.17, 0.17, 0.8, 12).translate(SX + 0.9, 0.45, SZ + 0.7));
+  PL.add('rust', new THREE.CylinderGeometry(0.17, 0.17, 0.8, 12).translate(SX - 0.5, 0.45, SZ - 0.6));
   rig.anchors.shellStack = new THREE.Object3D();
   rig.anchors.shellStack.position.set(SX - 0.1, 0.15, SZ + 1.2); // beside the standing rounds, where a shell can lie
   root.add(rig.anchors.shellStack);
@@ -95,11 +96,45 @@ export function buildBL92() {
   PT.add('camo', box(1.45, 0.16, 0.3, 0, 0.08, 1.95)); // rear cross-girder, low so the breech tail passes over it
   PT.add('camo', box(1.45, 0.3, 0.26, 0, 0.2, -0.95)); // front tie, low: the elevating arc swings through the height it used to stand at
   PT.add('dark', rivetRow(V(-0.65, 0.4, 2.11), V(0.65, 0.4, 2.11), 0.16, V(0, 0, 1), 0.022));
-  // rear loading platform: planks on steel brackets, with a footrail
-  // (it starts behind the breech tail's sweep at high elevation)
-  for (let i = 0; i < 4; i++) PT.add('timber', box(1.9, 0.05, 0.28, 0, 0.62, 2.8 + i * 0.3));
-  for (const x of [-0.8, 0.8]) PT.add('camo', rod(V(x, 0.6, 3.0), V(x, 0.1, 3.0), 0.04, 6));
-  for (const x of [-0.95, 0.95]) PT.add('dark', rod(V(x, 0.64, 3.8), V(x, 1.2, 3.8), 0.02, 5));
+  // Raised loading stage on braced posts. Its deck is the crew's actual support plane:
+  // the 130 kg round reaches the tray on a trolley through the broad left loading ramp.
+  const deckY = LOADING_FLOOR - BH, deckZ0 = 1.7, deckZ1 = 5.65, halfDeck = 1.5;
+  for (let z = deckZ0 + 0.15; z < deckZ1; z += 0.3) PT.add('timber', box(halfDeck * 2, 0.09, 0.285, 0, deckY - 0.045, z));
+  for (const x of [-1.3, 1.3]) {
+    PT.add('dark', box(0.12, 0.18, deckZ1 - deckZ0, x, deckY - 0.18, (deckZ0 + deckZ1) / 2));
+    for (const z of [2.15, 3.7, 5.2]) {
+      PT.add('dark', box(0.13, LOADING_FLOOR - 0.15, 0.13, x, (LOADING_FLOOR - 0.15) / 2 - BH, z));
+      PT.add('dark', box(0.35, 0.08, 0.35, x, 0.04 - BH, z));
+    }
+    for (const [z0, z1] of [[2.15, 3.7], [3.7, 5.2]]) {
+      PT.add('camo', rod(V(x, 0.14 - BH, z0), V(x, deckY - 0.2, z1), 0.045, 6));
+      PT.add('camo', rod(V(x, 0.14 - BH, z1), V(x, deckY - 0.2, z0), 0.045, 6));
+    }
+  }
+  // Continuous planks keep the trolley wheels supported; battens give the crew purchase.
+  const rampX0 = -5.55, rampX1 = -1.5, rampZ = 3.2, rampWidth = 2.1;
+  const rampRise = LOADING_FLOOR, rampRun = rampX1 - rampX0, rampAngle = Math.atan2(rampRise, rampRun);
+  const rampLength = Math.hypot(rampRun, rampRise), rampMidX = (rampX0 + rampX1) / 2;
+  PT.add('timber', box(rampLength, 0.09, rampWidth, rampMidX, rampRise / 2 - BH - 0.045, rampZ, 0, 0, rampAngle));
+  for (const z of [rampZ - 0.8, rampZ + 0.8]) PT.add('dark', rod(V(rampX0, -BH - 0.02, z), V(rampX1, deckY - 0.16, z), 0.065, 8));
+  for (let i = 1; i < 12; i++) {
+    const k = i / 12, x = rampX0 + rampRun * k, y = rampRise * k - BH;
+    // Battens stop short of the two wheel tracks.
+    for (const z of [rampZ - 0.78, rampZ + 0.78]) PT.add('timber', box(0.045, 0.025, 0.42, x, y + 0.01, z, 0, 0, rampAngle));
+  }
+  for (const x of [-4.1, -2.7]) {
+    const y = rampRise * (x - rampX0) / rampRun;
+    for (const z of [rampZ - 0.8, rampZ + 0.8]) PT.add('dark', box(0.1, Math.max(0.05, y - 0.15), 0.1, x, (y - 0.15) / 2 - BH, z));
+  }
+  rig.loadingStage = {
+    floor: LOADING_FLOOR, crewSide: 0.63, crewSpacing: 0.32,
+    pickup: { x: rampX0 + 0.25, z: rampZ }, rampTop: { x: -0.7, z: rampZ },
+    floorAt(x, z) {
+      if (x >= -halfDeck && x <= halfDeck && z >= deckZ0 && z <= deckZ1) return LOADING_FLOOR;
+      if (x >= rampX0 && x <= rampX1 && Math.abs(z - rampZ) <= rampWidth / 2) return rampRise * (x - rampX0) / rampRun;
+      return 0;
+    },
+  };
   // the elevating wheel (left), the quick-loading wheel (right), the traversing wheel behind it
   PT.add('iron', handwheel(0.5, 8, 0.028, 0.07).translate(-1.0, 0.95, 0.5));
   PT.add('steel', xTube(-1.05, -0.4, 0.045, 0.045, 8, 0.95, 0.5));
@@ -192,9 +227,9 @@ export function buildBL92() {
     PTR.add('dark', rivetRow(V(s * 0.38, 0.12, -0.05), V(s * 0.38, 0.12, 1.9), 0.18, V(s, 0, 0), 0.018));
   }
   PTR.add('camo', box(0.7, 0.06, 0.08, 0, -0.04, -0.05));
-  PTR.add('camo', rod(V(-0.55, -0.1, 0.1), V(-0.9, -0.9, 0.6), 0.045, 6));
-  PTR.add('camo', rod(V(-0.55, -0.1, 1.9), V(-0.9, -0.9, 0.7), 0.035, 6));
-  PTR.add('iron', handwheel(0.22, 5, 0.018, 0.04).translate(-1.0, -0.9, 0.65));
+  PTR.add('camo', rod(V(-0.5, -0.1, 0.1), V(-0.25, -1.3, 0.6), 0.045, 6));
+  PTR.add('camo', rod(V(-0.5, -0.1, 1.9), V(-0.25, -1.3, 0.7), 0.035, 6));
+  PTR.add('iron', handwheel(0.22, 5, 0.018, 0.04).translate(-0.55, -0.35, 0.1));
   PTR.add('chain', chain(V(-0.35, 0.1, 1.9), V(-0.5, 0.45, 0.4), 0.15, 0.05));
 
   PL.build(root, { dirt: 0.3, y0: 0 });
@@ -219,11 +254,12 @@ export function buildBL92() {
   crewSpot(rig, 'layer', -1.5, BH, 0.5, E, 'lay');
   crewSpot(rig, 'elevator', 1.6, BH, 0.9, W, 'operate');
   crewSpot(rig, 'lanyard', 1.5, BH, 3.0, N, 'lanyard');
-  crewSpot(rig, 'loader1', -0.5, BH + 0.25, 3.3, S, 'carry');
-  crewSpot(rig, 'loader2', 0.5, BH + 0.25, 3.3, S, 'carry');
-  crewSpot(rig, 'rammer1', -0.35, BH + 0.25, 4.4, N, 'ram');
-  crewSpot(rig, 'rammer2', 0.35, BH + 0.25, 4.4, N, 'ram');
+  crewSpot(rig, 'loader1', -0.75, LOADING_FLOOR, 2.8, E, 'carry');
+  crewSpot(rig, 'loader2', -0.75, LOADING_FLOOR, 3.6, E, 'carry');
+  crewSpot(rig, 'rammer1', -0.63, LOADING_FLOOR, 4.45, E, 'ram');
+  crewSpot(rig, 'rammer2', -0.63, LOADING_FLOOR, 5.2, E, 'ram');
   crewSpot(rig, 'ammo1', SX + 0.9, 0, SZ - 0.9, W, 'stand');
-  crewSpot(rig, 'ammo2', SX + 0.9, 0, SZ + 1.5, W, 'crouch');
+  crewSpot(rig, 'ammo2', 1.05, LOADING_FLOOR, 3.9, W, 'carry');
+  rig.anchors.crew.at(-1).world = false; // charge supply and man ride this loading stage
   return finishGun(rig);
 }

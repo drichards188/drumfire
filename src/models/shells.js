@@ -19,9 +19,16 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 //   rp3                               the RP-3 rocket: 3-inch motor tube, four fins, the 60 lb SAP head
 //   bomb                              British 500 lb GP bomb with its box tail
 //   v1 | v2                           delegated to models/v/de/missiles.js buildMissile (a plain stand-in until it exists)
+// WW1 German mode (DESIGN.md "WW1 German mode"; first-pass sizes, each gun's model agent refines its own row):
+//   sfh13 | m16 | k17                 German field grey HE with the yellow band (the fh15 / m21 look)
+//   max38 | gamma | paris             the 38 cm (750 kg), the 42 cm Gamma (1,160 kg), the Paris Gun's 106 kg shell
+//   b18 | b45                         British 18-pounder and 4.5-inch howitzer HE (the British yellow with a red band)
+//   fk16                              the division's 7.7 cm field gun shell (the fk77 look)
+//   cooper                            the Camel's 20 lb Cooper bomb: a short body, a pointed nose, four tail fins
 
 export const SHELL_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'fh15', 'm21', 'fk77', 'm42', 'm42l',
-  'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'bertha', 'q25', 'm55', 'rp3', 'bomb', 's76', 's122', 's152', 'v1', 'v2'];
+  'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'bertha', 'q25', 'm55', 'rp3', 'bomb', 's76', 's122', 's152', 'v1', 'v2',
+  'sfh13', 'm16', 'k17', 'max38', 'gamma', 'paris', 'b18', 'b45', 'fk16', 'cooper'];
 
 // the missiles' builder (another file, may be absent): buildShell('v1' | 'v2') delegates to it
 const MISSILES = import.meta.glob('./v/de/missiles.js', { eager: true });
@@ -54,6 +61,16 @@ const SPEC = {
   s76: { d: 0.0762, L: 0.36, og: 1.7, rho: 2.6, band: 0.12, paint: 0x6b6a52, stripe: 0x1e1e1c, nose: 'steel' },
   s122: { d: 0.1219, L: 0.56, og: 1.7, rho: 2.6, band: 0.1, paint: 0x6b6a52, stripe: 0x1e1e1c, nose: 'steel' },
   s152: { d: 0.1524, L: 0.66, og: 1.7, rho: 2.6, band: 0.1, paint: 0x6b6a52, stripe: 0x1e1e1c, nose: 'steel' },
+  // WW1 German mode
+  sfh13: { d: 0.149, L: 0.6, og: 1.5, rho: 2.2, band: 0.1, paint: 0x5b5f55, stripe: 0xc8a82a, nose: 'steel' }, // 15 cm Gr 12, 42 kg, 4 calibres
+  m16: { d: 0.211, L: 0.8, og: 1.35, rho: 2.0, band: 0.1, paint: 0x4f534d, stripe: 0xc8a82a, nose: 'steel' }, // 21 cm Gr 13, 113 kg, 3.8 calibres
+  k17: { d: 0.105, L: 0.49, og: 2.3, rho: 4.5, band: 0.11, paint: 0x585d58, stripe: 0xc8a82a, nose: 'steel' }, // 10 cm Gr 15 mit Haube: 18.5 kg, the long pointed ballistic cap
+  max38: { d: 0.38, L: 1.55, og: 1.65, rho: 2.4, band: 0.09, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' }, // 38 cm Sprenggranate L/4,1 (base fuze), 750 kg, 155 cm
+  gamma: { d: 0.42, L: 1.9, og: 1.45, rho: 2.1, band: 0.09, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' }, // 42 cm schwere Granate, 1,160 kg: 4.5 calibres [E], longer than the M-Gerät's 810 kg round
+  paris: { d: 0.21, L: 1.05, og: 2.4, rho: 6.7, band: 0.06, paint: 0x585d58, stripe: 0xc8a82a, nose: 'steel' }, // (drawn by CUSTOM.paris)
+  b18: { d: 0.0838, L: 0.35, og: 1.6, rho: 2.4, band: 0.12, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
+  b45: { d: 0.114, L: 0.42, og: 1.5, rho: 2.2, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
+  fk16: { d: 0.077, L: 0.34, og: 1.6, rho: 2.5, band: 0.12, paint: 0x23262a, stripe: 0xb03a22, nose: 'steel' },
 };
 
 const matCache = new Map();
@@ -160,6 +177,13 @@ const CART = {
   gustav: { l: 0.9, r: 0.37, brass: false }, gustavc: { l: 1.3, r: 0.48, brass: true }, // Vorkartusche bags, the brass Hauptkartusche
   karl: { l: 0.55, r: 0.27, brass: false, case: 0.5, cr: 0.31 },
   bertha: { l: 0.42, r: 0.19, brass: false },
+  // WW1 German mode (first pass; the bagged Vorkartusche ahead of a brass case on the heavies, as the 42 cm)
+  // the sliding-block howitzers seal with a brass case: the sFH 13's holds its increments; the Mörser's bag goes in
+  // ahead of a short case
+  sfh13: { l: 0.3, r: 0.08, brass: true }, m16: { l: 0.26, r: 0.1, brass: false, case: 0.26, cr: 0.115 }, k17: { l: 0.504, r: 0.068, brass: true }, // the K 17's cased charge, 105 x 504 mmR
+  max38: { l: 0.78, r: 0.17, brass: false, case: 0.856, cr: 0.19 }, // the silk fore charge bag ahead of the brass main charge case (380 x 856 mm)
+  gamma: { l: 0.45, r: 0.19, brass: false, case: 0.95, cr: 0.205 }, // the 42 cm Gamma: a fore charge bag ahead of the brass main case, 1.4 m
+  paris: { l: 0.75, r: 0.12, brass: false, case: 1.1, cr: 0.14 }, // the brass Hauptkartusche and the silk Vorkartusche (up to 196 kg)
 };
 export function buildCartridge(kind, { charges = 1 } = {}) {
   const c = CART[kind];
@@ -203,25 +227,60 @@ const done = (parts, length, radius) => { for (const p of parts) p.geometry.comp
 const fin = (span, chord, t, z, a) => new THREE.BoxGeometry(t, span, chord).translate(0, span / 2, z).rotateZ(a);
 
 const CUSTOM = {
-  // 15 cm Wurfgranate 41: 979 mm, 158 mm, 34 kg. The motor in front (ogive nose), the venturi ring of 26 nozzles
-  // angled 14 degrees for the spin two thirds back, behind it the HE warhead with its flat base.
+  // the Paris Gun's 21 cm shell, 106 kg (refs/paris: Miller's drawing, 1921): 1,050 mm, a 553 mm steel body and a
+  // 497 mm thin ballistic cap on a long ogive (radius about 1.4 m); from the base: a 25 mm step (181 mm), a narrow
+  // copper ring, a 70 mm band pre-engraved with the rifling's 64 grooves (the shell was screwed into the rifling),
+  // plain body, a second copper ring and engraved band, plain body to the cap's joint
+  paris(seg) {
+    const L = 1.05, R = 0.105, B = 0.553, n = Math.max(8, seg), rho = 1.4;
+    const og = [];
+    for (let i = 0; i <= 10; i++) { const s = (0.497 * i) / 10; og.push([B + s, Math.max(0.0138, Math.sqrt(rho * rho - s * s) - (rho - R))]); }
+    og.push([L, 0]);
+    const body = [revolve([[0, 0], [0, 0.0905], [0.025, 0.0905], [0.025, R], [B, R]], L, n)];
+    const cap = [revolve(og, L, n)];
+    const copper = [revolve([[0.055, R], [0.055, 0.1085], [0.085, 0.1085], [0.085, R]], L, n), revolve([[0.288, R], [0.288, 0.1085], [0.306, 0.1085], [0.306, R]], L, n)];
+    const bands = [revolve([[0.085, R], [0.085, 0.1072], [0.155, 0.1072], [0.155, R]], L, n), revolve([[0.306, R], [0.306, 0.1072], [0.376, 0.1072], [0.376, R]], L, n)];
+    const grooves = [];
+    if (seg >= 16) {
+      // the engraved grooves, a slight twist (a few of the 64, enough to read)
+      for (const s0 of [0.085, 0.306]) for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        grooves.push(new THREE.BoxGeometry(0.006, 0.0025, 0.07).rotateY(0.06).translate(0, 0.1074, 0).rotateZ(a).translate(0, 0, L / 2 - s0 - 0.035));
+      }
+    }
+    grooves.push(revolve([[B - 0.002, R + 0.0008], [B + 0.004, R + 0.0008]], L, n)); // the cap's joint
+    return done([
+      { geometry: merge(body), material: M.paint(0x585d58) },
+      { geometry: merge(cap), material: M.paint(0x5f645c) },
+      { geometry: merge(copper), material: M.copper() },
+      { geometry: merge(bands), material: M.steel() },
+      { geometry: merge(grooves), material: M.paint(0x2a2b27) },
+    ], L, R);
+  },
+  // 15 cm Wurfgranate 41: 979 mm, 158 mm, 34 kg (refs/nebelwerfer41, the Hämeenlinna rocket and the Smithsonian's).
+  // The motor in front under a blunt ogive nose cap with its joint ring, the venturi band of 26 nozzles angled 14
+  // degrees for the spin two thirds back, slightly proud, and behind it the narrower HE warhead (121 mm), tapering a
+  // little to a flat base with a rounded edge (the base fuze).
   nbw41(seg) {
     const L = 0.979, R = 0.079, n = Math.max(8, seg);
-    const body = [revolve([[0, 0], [0, R * 0.86], [0.014, R], [0.33, R]], L, n), revolve([[0.43, R * 0.97], [0.8, R * 0.97], [0.86, R * 0.9], [0.92, R * 0.66], [0.955, R * 0.38], [0.972, R * 0.2], [L, 0]], L, n)];
-    const ringG = [revolve([[0.33, R * 1.02], [0.43, R * 1.02]], L, n)];
+    const body = [
+      revolve([[0, 0], [0, 0.05], [0.012, 0.058], [0.27, 0.0612], [0.285, 0.0612]], L, n), // the warhead
+      revolve([[0.365, R], [0.84, R], [0.843, 0.0765], [0.847, 0.0765], [0.85, 0.077], [0.88, 0.0745], [0.91, 0.068], [0.935, 0.058], [0.955, 0.044], [0.968, 0.03], [0.976, 0.014], [L, 0]], L, n),
+    ];
+    const ringG = [revolve([[0.285, 0.0612], [0.285, 0.08], [0.36, 0.08], [0.365, R]], L, n)];
     const holes = [];
     if (seg >= 16) {
-      // the 26 nozzle mouths round the ring, each a short dark cylinder canted for the spin
+      // the 26 nozzle mouths in the band's rear face (the step down to the warhead), each canted for the spin
       for (let i = 0; i < 26; i++) {
         const a = (i / 26) * Math.PI * 2;
-        const g = new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6).rotateX(Math.PI / 2).rotateY(0.24).translate(Math.cos(a) * R * 0.96, Math.sin(a) * R * 0.96, L / 2 - 0.4);
+        const g = new THREE.CylinderGeometry(0.0065, 0.0065, 0.005, 6).rotateX(Math.PI / 2).rotateY(0.24).translate(Math.cos(a) * 0.0706, Math.sin(a) * 0.0706, L / 2 - 0.2835);
         holes.push(g);
       }
     }
     holes.push(revolve([[0.0, 0.02], [0.006, 0.02], [0.006, 0]], L, 10)); // base plug
     return done([
       { geometry: merge(body), material: M.paint(0x5a5f52) },
-      { geometry: merge(ringG), material: M.steel() },
+      { geometry: merge(ringG), material: M.paint(0x4a4e45) }, // the band painted with the rest, a shade darker
       { geometry: merge(holes), material: M.paint(0x161616) },
     ], L, R);
   },
@@ -255,6 +314,19 @@ const CUSTOM = {
       { geometry: merge(tail), material: M.paint(0x4b5034) },
       { geometry: merge(band), material: M.paint(0x8a1c14) },
       { geometry: merge(fz), material: M.steel() },
+    ], L, R);
+  },
+  // the 20 lb Cooper bomb the Camels carried in fours under the fuselage: about 0.6 m with its tail, 127 mm across
+  cooper(seg) {
+    const L = 0.62, R = 0.0635, n = Math.max(8, seg);
+    const body = [revolve([[0.2, 0.02], [0.24, R * 0.75], [0.3, R], [0.48, R], [0.54, R * 0.8], [0.59, R * 0.4], [L, 0]], L, n)];
+    const tail = [revolve([[0, 0.012], [0.2, 0.02]], L, 8)];
+    for (let i = 0; i < 4; i++) tail.push(fin(0.07, 0.14, 0.003, L / 2 - 0.08, i * Math.PI / 2 + Math.PI / 4));
+    const band = [revolve([[0.44, R + 0.001], [0.46, R + 0.001]], L, n)];
+    return done([
+      { geometry: merge(body), material: M.paint(0x5a5a48) },
+      { geometry: merge(tail), material: M.paint(0x5a5a48) },
+      { geometry: merge(band), material: M.paint(0x8a1c14) },
     ], L, R);
   },
   v1: (seg) => missile('v1', seg),

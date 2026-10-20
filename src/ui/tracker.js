@@ -29,7 +29,8 @@ export class Tracker {
     }
     const live = new Set();
     for (const s of sim.shells || []) {
-      if (s.alive === false) continue;
+      // the Paris Gun's shell (WW1 German mode) leaves the map in the air: where it vanishes is no fall of shot
+      if (s.alive === false || s.paris) continue;
       live.add(s.id);
       let r = this.seen.get(s.id);
       if (!r) {

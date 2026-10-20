@@ -281,7 +281,9 @@ export class Sim {
       case 'mission': {
         const m = this.missionById(args.id);
         if (!m) return false;
-        return d.assign(u, m);
+        const r = d.assign(u, m);
+        this.tell(u);
+        return r;
       }
       case 'lay':
         if (u.missionId != null) d.release(u);
@@ -289,16 +291,34 @@ export class Sim {
         u.order.fuze = 'instant';
         u.order.chargeAuto = true;
         g.setTarget(u, args.x, args.z, {});
+        this.tell(u);
         return u.order.ok;
-      case 'correct': g.correct(u, args.add ?? 0, args.right ?? 0); return true;
-      case 'charge': g.setCharge(u, args.charge); return true;
+      case 'correct': g.correct(u, args.add ?? 0, args.right ?? 0); this.tell(u); return true;
+      case 'charge': g.setCharge(u, args.charge); this.tell(u); return true;
       case 'fuze': g.setFuze(u, args.fuze); return true;
       case 'rounds': g.setRounds(u, args.n); return true;
-      case 'fire': return g.fire(u, args.guns);
+      case 'fire': {
+        const r = g.fire(u, args.guns);
+        if (!r || u.mode === 'hold') this.tell(u, true);
+        return r;
+      }
       case 'cease': g.cease(u); return true;
       case 'mode': g.setMode(u, args.mode); return true;
     }
     return this.special?.command(u, name, args) ?? false;
+  }
+
+  // The general rule for the player's orders: one the guns cannot carry out is explained at once on the radio (and the
+  // console keeps showing guns.problem(u) while it stands). `refused`: the command itself did nothing (fire).
+  // The same words again within 4 s are not repeated (a held key).
+  tell(u, refused = false) {
+    let why = this.guns.problem(u);
+    if (!why && refused) why = u.order.target ? 'no gun can fire on this order' : 'no target: lay the guns first (click the board, or take a mission)';
+    if (!why) { u.told = null; return; }
+    const text = `${u.callsign}: cannot fire. ${why[0].toUpperCase()}${why.slice(1)}.`;
+    if (u.told && u.told.text === text && this.time - u.told.t < 4) return;
+    u.told = { text, t: this.time };
+    this.radio(text, 'warn');
   }
 
   sosCommand(sector) {

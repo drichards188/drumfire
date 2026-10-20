@@ -404,7 +404,7 @@ async function runGun(kind) {
 }
 
 async function main() {
-  await loadGuns();
+  await loadGuns([...new Set(['bl6', 'bl60', ...KINDS])]); // any registered kind asked for (the WW2 and WW1 guns too)
   const result = {};
   window.__clip = { done: false, result };
   for (const kind of KINDS) {

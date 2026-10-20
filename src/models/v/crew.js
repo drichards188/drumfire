@@ -29,12 +29,16 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  *   fig.bones     { hips, spine, chest, neck, head, upperArmL, forearmL, handL, thighL, shinL, footL, ...R }
  *   fig.anchors   { handL, handR, carry }: handL/handR sit at the grip point inside each fist (children
  *                 of the hand bones); carry is a child of root placed by every pose, see below.
+ *   fig.groundSlope { x: 0, z: 0 }: optional ground gradient in figure space. Before pose(), set
+ *                 the plane y = x * groundSlope.x + z * groundSlope.z through the root's ground
+ *                 point (forward uphill means negative z gradient). Feet follow it; torso stays
+ *                 upright. The caller places the root on the ramp and clears both values off it.
  *   fig.pose(name, t = 0, blend = 1)  sets the bone rotations (and the hips, shoulder and carry
  *                 positions) for pose `name` at phase t. blend < 1 moves that fraction of the way
  *                 from the current pose (call every frame with e.g. 1 - exp(-8 dt) to cross-fade).
- *                 A few two-bone IK solves (legs and the arms that hold something), about 4 us, no
- *                 allocation; call it every frame. Wrists are kept within a 57 degree bend and a
- *                 90 degree twist: the grip point always lands, the hand's orientation gives way.
+ *                 Body/contact targets blend before two-bone IK, so planted soles remain on the
+ *                 ground during transitions. No per-frame allocation. Wrists are kept near a
+ *                 57 degree bend and 90 degree twist: reachable grips land and orientation gives way.
  *   fig.reach(side, point, blend = 1, fingers?, palm?, pole?)  optional, after pose(): puts the grip
  *                 point of hand 'L' | 'R' on `point` (Vector3 in root space) with the same IK;
  *                 fingers / palm (root space directions) orient the hand, pole is where the elbow points.
@@ -51,6 +55,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  *   carryWalk    the same, walking (CREW_GAITS.carryWalk.stride per cycle).
  *   carryShoulder  a load on the right shoulder, the right hand under it in front, head tilted away.
  *   crouch       kneeling on the right knee, hands forward and low under the load (picking it up).
+ *   lift         finite progress 0..1: squat, take the load, then stand with it at the belt.
+ *   ramLoad      finite progress 0..1: transfer weight from the rear leg into one rammer stroke.
  *   reachUp      arms raised, hands on the underside of a load hanging from a crane (t sways it).
  *   push         lunging, both hands on the end of a load at chest height, shoving it forward (t).
  *   climb        cycle, climbing the side of a vehicle: holds on a wall 0.32 m in front of the root,
@@ -112,6 +118,7 @@ const PARENT = {
   upperArmL: 'chest', forearmL: 'upperArmL', handL: 'forearmL', upperArmR: 'chest', forearmR: 'upperArmR', handR: 'forearmR',
   thighL: 'hips', shinL: 'thighL', footL: 'shinL', thighR: 'hips', shinR: 'thighR', footR: 'shinR',
 };
+const PBI = CREW_BONES.map((b) => PARENT[b] ? BI[PARENT[b]] : -1);
 const L_TH = 0.425, L_SH = 0.415, L_UA = 0.295, L_FA = 0.26; // thigh, shin, upper arm, forearm (joint to joint)
 const SH_X = 0.185, SH_Y = 1.445, SH_Z = 0.012, HIP_X = 0.092, HIP_Y = 0.93, ANKLE_Y = 0.09;
 // joint centres of a 1.78 m man standing straight, arms hanging (index 0 left, 1 right; SIDE -1 / +1)
@@ -833,6 +840,7 @@ export function buildCrewman(opts = {}) {
   bones.handL.add(handL); bones.handR.add(handR); root.add(carry);
   const fig = {
     root, mesh, bones, anchors: { handL, handR, carry }, grip: opts.grip ?? 0.2, outfit: o,
+    groundSlope: { x: 0, z: 0 },
     pose: (name, t = 0, blend = 1) => solvePose(fig, name, t, blend),
     reach: (side, point, blend = 1, fingers = null, palm = null, pole = null) => reach(fig, side, point, blend, fingers, palm, pole),
     dispose: () => mesh.skeleton.dispose(),
@@ -853,7 +861,7 @@ export function buildCrew(n, opts = {}) {
 // ---------------------------------------------------------------- poses
 
 export const CREW_POSES = ['stand', 'walk', 'carry', 'carryWalk', 'carryShoulder', 'crouch', 'reachUp', 'push', 'climb', 'signal', 'operate', 'sidestep', 'stoopWalk',
-  'haul', 'ram', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead'].filter((p, i, a) => a.indexOf(p) === i);
+  'haul', 'ram', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead'].filter((p, i, a) => a.indexOf(p) === i);
 export const CREW_GAITS = {
   walk: { stride: 1.25, period: 0.98 }, // metres the root moves per cycle, seconds per cycle at a natural pace
   carryWalk: { stride: 0.9, period: 1.1 },
@@ -868,7 +876,7 @@ export const CREW_GAITS = {
 // point with the hand's finger and palm directions and the elbow's pole.
 function makeSpec() {
   const foot = () => ({ ankle: new V3(), rot: new THREE.Euler(0, 0, 0, 'YXZ'), pole: new V3() });
-  const arm = () => ({ ik: false, onCarry: false, ua: new THREE.Euler(), fa: 0, hand: new THREE.Euler(), grip: new V3(), fingers: new V3(), palm: new V3(), pole: new V3() });
+  const arm = () => ({ ik: false, onCarry: false, onHead: false, ua: new THREE.Euler(), fa: 0, hand: new THREE.Euler(), grip: new V3(), fingers: new V3(), palm: new V3(), pole: new V3() });
   return {
     hips: new V3(), hipsRot: new THREE.Euler(0, 0, 0, 'YXZ'), spine: new THREE.Euler(0, 0, 0, 'YXZ'), chest: new THREE.Euler(0, 0, 0, 'YXZ'),
     neck: new THREE.Euler(0, 0, 0, 'YXZ'), head: new THREE.Euler(0, 0, 0, 'YXZ'), shrug: [0, 0], feet: [foot(), foot()], arms: [arm(), arm()],
@@ -884,18 +892,25 @@ function reset(S) {
   for (let i = 0; i < 2; i++) {
     const s = SIDE[i], f = S.feet[i], a = S.arms[i];
     f.ankle.set(s * 0.115, ANKLE_Y, 0); f.rot.set(0, -s * 0.12, 0); f.pole.set(s * 0.15, 0, -1);
-    a.ik = false; a.onCarry = false; a.ua.set(0.03, 0, s * 0.1); a.fa = 0.2; a.hand.set(0, 0, 0);
+    a.ik = false; a.onCarry = false; a.onHead = false; a.ua.set(0.03, 0, s * 0.1); a.fa = 0.2; a.hand.set(0, 0, 0);
   }
   S.carry.set(0, 1.0, -0.36); S.carryRot.set(0, 0, 0); S.carryChest = false;
 }
 
 // Ankle of a foot whose flat ankle would be at (x, z), pitched by p (> 0 toe up, rolling on the
 // heel; < 0 heel up, rolling on the toe: the boot is rigid, so it tips up on its toe cap), lifted by `lift`.
-function ankleAt(out, x, z, p, lift) {
+// The sole's bottom profile comes from the boot loft above. Rolling about the actual contact
+// edge keeps its toe from sinking, including when the foot is turned out.
+const SOLE = [[0.08, 0.015], [0.066, 0.002], [0.02, 0], [-0.03, 0], [-0.09, 0], [-0.15, 0], [-0.195, 0], [-0.224, 0.002]];
+function ankleAt(out, x, z, p, lift, yaw = 0) {
   const c = Math.cos(p), s = Math.sin(p);
-  if (p >= 0) out.set(x, 0.09 * c + 0.07 * s, z + 0.07 + 0.09 * s - 0.07 * c);
-  else out.set(x, 0.09 * c - 0.215 * s, z - 0.215 + 0.09 * s + 0.215 * c);
-  out.y += lift;
+  let y = -Infinity, pivotZ = 0, pivotY = 0;
+  for (const pt of SOLE) {
+    const support = (ANKLE_Y - pt[1]) * c + pt[0] * s;
+    if (support > y) { y = support; pivotZ = pt[0]; pivotY = pt[1]; }
+  }
+  const dz = pivotZ * (1 - c) + (ANKLE_Y - pivotY) * s;
+  out.set(x + Math.sin(yaw) * dz, y + lift, z + Math.cos(yaw) * dz);
   return out;
 }
 
@@ -906,14 +921,16 @@ function gaitFoot(f, ph, stride, duty, x, yaw, lift) {
   if (ph < duty) {
     const k = ph / duty;
     z = -A + 2 * A * k;
-    p = k < 0.16 ? 0.3 * (1 - sstep(0, 0.16, k)) : k > 0.58 ? -0.72 * ((k - 0.58) / 0.42) ** 1.5 : 0;
+    p = 0.22 * (1 - sstep(0, 0.18, k)) - 0.48 * sstep(0.7, 1, k);
   } else {
     const k = (ph - duty) / (1 - duty);
-    z = A - 2 * A * sstep(0.02, 0.98, k);
-    p = lerp(-0.72, 0.3, sstep(0.0, 0.85, k));
-    l = lift * Math.sin(Math.PI * Math.min(1, k * 1.1)) ** 0.8;
+    // Cubic Hermite: the swing leaves and rejoins stance at the same velocity. A smoothstep
+    // position alone stops the boot abruptly at takeoff and heel strike.
+    z = A * (1 - 2 * sstep(0, 1, k)) + stride * (1 - duty) * k * (1 - k) * (1 - 2 * k);
+    p = lerp(-0.48, 0.22, sstep(0, 0.82, k));
+    l = lift * Math.sin(Math.PI * k) ** 2;
   }
-  ankleAt(f.ankle, x, z, p, l);
+  ankleAt(f.ankle, x, z, p, l, yaw);
   f.rot.set(p, yaw, 0);
 }
 
@@ -924,30 +941,27 @@ function setIK(a, gx, gy, gz, fx, fy, fz, nx, ny, nz, px, py, pz) {
 
 // hands on the carry anchor at +-grip along its X: fingers (carry space), palms turned in and up
 // by palmIn / palmUp, elbows toward the pole (given for the right arm, mirrored for the left)
-const _cq = new THREE.Quaternion(), _cv = new V3(), _cf = new V3(), _cn = new V3(), _cp = new V3();
 function holdCarry(S, grip, fx, fy, fz, palmIn, palmUp, px, py, pz) {
-  _cq.setFromEuler(S.carryRot);
   for (let i = 0; i < 2; i++) {
     const s = SIDE[i];
-    _cv.set(s * grip, 0, 0).applyQuaternion(_cq).add(S.carry);
-    _cf.set(fx, fy, fz).applyQuaternion(_cq);
-    _cn.set(-s * palmIn, palmUp, 0).applyQuaternion(_cq);
-    _cp.set(s * px, py, pz);
-    setIK(S.arms[i], _cv.x, _cv.y, _cv.z, _cf.x, _cf.y, _cf.z, _cn.x, _cn.y, _cn.z, _cp.x, _cp.y, _cp.z);
+    setIK(S.arms[i], s * grip, 0, 0, fx, fy, fz, -s * palmIn, palmUp, 0, s * px, py, pz);
+    S.arms[i].onCarry = true;
   }
 }
 
 function walkLegs(S, t, stride, duty, hy, bob, lift) {
   const c = Math.cos(TAU * t), c2 = Math.cos(2 * TAU * t), sn = Math.sin(TAU * t);
-  S.hips.set(-0.016 * sn, hy - bob * c2, 0);
-  S.hipsRot.set(-0.03, -0.07 * c, -0.035 * sn);
-  S.spine.set(-0.02, 0.04 * c, 0.02 * sn);
-  S.chest.set(0.0, 0.06 * c, 0.015 * sn);
+  // The pelvis travels over the supporting leg; the chest counterbalances it, while the
+  // head stays quieter. Double support is low and the body rises over the planted foot.
+  S.hips.set(-0.035 * sn, hy - bob * c2, -0.008);
+  S.hipsRot.set(-0.035, -0.065 * c, -0.025 * sn);
+  S.spine.set(-0.015, 0.035 * c, 0.018 * sn);
+  S.chest.set(0.0, 0.06 * c, 0.012 * sn);
   S.neck.set(0.03, -0.03 * c, 0);
   S.head.set(-0.03 + 0.015 * c2, 0, 0);
   for (let i = 0; i < 2; i++) {
     const s = SIDE[i];
-    gaitFoot(S.feet[i], fract(t + (i ? 0.5 : 0)), stride, duty, s * 0.085, -s * 0.08, lift);
+    gaitFoot(S.feet[i], fract(t + (i ? 0.5 : 0)), stride, duty, s * 0.105, -s * 0.08, lift);
     S.feet[i].pole.set(s * 0.12, 0, -1);
   }
   return c;
@@ -978,10 +992,10 @@ const POSES = {
   },
   carry(S, t, fig) {
     const b = Math.sin(TAU * t);
-    S.hips.set(0, 0.962, 0.025);
-    S.hipsRot.set(0.04, 0, 0);
-    S.spine.set(0.03, 0, 0); S.chest.set(0.02 + 0.008 * b, 0, 0); S.neck.set(0.06, 0, 0); S.head.set(0.06, 0, 0);
-    S.feet[0].ankle.set(-0.13, ANKLE_Y, 0.0); S.feet[1].ankle.set(0.13, ANKLE_Y, 0.03);
+    S.hips.set(0, 0.948, 0.025);
+    S.hipsRot.set(0.035, 0, 0);
+    S.spine.set(0.025, 0, 0); S.chest.set(0.02 + 0.005 * b, 0, 0); S.neck.set(0.06, 0, 0); S.head.set(0.06, 0, 0);
+    S.feet[0].ankle.set(-0.15, ANKLE_Y, -0.04); S.feet[1].ankle.set(0.15, ANKLE_Y, 0.06);
     S.carry.set(0, 1.07 + 0.004 * b, -0.34);
     holdCarry(S, fig.grip, 0, -0.15, -1, 0.8, 0.6, 0.45, -1, 0.35);
   },
@@ -989,8 +1003,9 @@ const POSES = {
     walkLegs(S, t, CREW_GAITS.carryWalk.stride, 0.64, 0.942, 0.016, 0.06);
     S.hipsRot.x = 0.035; S.spine.x = 0.02; S.chest.x = 0.02; S.neck.x = 0.06; S.head.x = 0.05;
     S.chest.y *= 0.4; S.spine.y *= 0.4;
-    S.carry.set(0, S.hips.y + 0.11, -0.34);
-    S.carryRot.set(0, 0.03 * Math.cos(TAU * t), 0);
+    // Bent elbows absorb the pelvis' rise; a heavy shell does not bounce with every footfall.
+    S.carry.set(S.hips.x * 0.3, 1.056 - 0.004 * Math.cos(2 * TAU * t), -0.34);
+    S.carryRot.set(0, 0.012 * Math.cos(TAU * t), 0.008 * Math.sin(TAU * t));
     holdCarry(S, fig.grip, 0, -0.15, -1, 0.8, 0.6, 0.45, -1, 0.35);
   },
   carryShoulder(S, t) {
@@ -1022,6 +1037,19 @@ const POSES = {
     S.carryRot.set(0, 0.12, 0);
     holdCarry(S, fig.grip, 0, -1, -0.35, 1, -0.15, 0.9, 0.1, 0.7);
   },
+  // A single pickup. Keep both feet under the load and extend the legs before finishing the
+  // back extension. Renderers can reverse progress for placing a load and pin hands to its grips.
+  lift(S, t, fig) {
+    const rise = sstep(0.06, 0.94, t), back = sstep(0.16, 0.96, t);
+    S.hips.set(0, lerp(0.52, 0.948, rise), lerp(0.12, 0.025, back));
+    S.hipsRot.set(lerp(-0.36, 0.035, back), 0, 0);
+    S.spine.set(lerp(-0.14, 0.025, back), 0, 0); S.chest.set(lerp(-0.035, 0.02, back), 0, 0);
+    S.neck.set(lerp(0.19, 0.06, back), 0, 0); S.head.set(lerp(0.12, 0.06, back), 0, 0);
+    S.feet[0].ankle.set(-0.18, ANKLE_Y, -0.08); S.feet[0].rot.set(0, 0.18, 0); S.feet[0].pole.set(-0.38, 0, -1);
+    S.feet[1].ankle.set(0.18, ANKLE_Y, 0.1); S.feet[1].rot.set(0, -0.18, 0); S.feet[1].pole.set(0.38, 0, -1);
+    S.carry.set(0, lerp(0.45, 1.07, rise), lerp(-0.43, -0.34, back));
+    holdCarry(S, fig.grip, 0, -0.15, -1, 0.8, 0.6, 0.4, -1, 0.2);
+  },
   reachUp(S, t, fig) {
     const w = Math.sin(TAU * t);
     S.hips.set(0.0, 0.972, 0.02);
@@ -1034,12 +1062,12 @@ const POSES = {
   },
   push(S, t, fig) {
     const k = 0.5 - 0.5 * Math.cos(TAU * t); // a shove: weight forward and back
-    S.hips.set(0.0, 0.875 - 0.01 * k, 0.08 - 0.05 * k);
+    S.hips.set(0.0, 0.865 - 0.02 * k, 0.04 - 0.12 * k);
     S.hipsRot.set(-0.2 - 0.04 * k, 0.04, 0);
     S.spine.set(-0.1, -0.02, 0); S.chest.set(-0.04, -0.02, 0); S.neck.set(0.12, 0, 0); S.head.set(-0.18, 0.02, 0);
     // front knee bent, the rear leg driving nearly straight from the ball of the foot
     S.feet[0].ankle.set(-0.13, ANKLE_Y, -0.27); S.feet[0].rot.set(0, 0.06, 0); S.feet[0].pole.set(-0.1, 0, -1);
-    ankleAt(S.feet[1].ankle, 0.13, 0.68, -0.55, 0); S.feet[1].rot.set(-0.55, -0.1, 0);
+    ankleAt(S.feet[1].ankle, 0.15, 0.45, -0.26, 0, -0.1); S.feet[1].rot.set(-0.26, -0.1, 0);
     S.carry.set(0, 1.25 - 0.01 * k, -0.6 - 0.05 * k);
     S.carryRot.set(0, Math.PI / 2, 0);
     for (let i = 0; i < 2; i++) { const s = SIDE[i]; setIK(S.arms[i], s * 0.15, S.carry.y, S.carry.z + 0.005, s * 0.2, 1, 0, 0, 0, -1, s * 0.7, -1, 0.15); }
@@ -1074,21 +1102,20 @@ const POSES = {
     // each foot is off the ground for a third of the cycle (the right one first, the left half a cycle
     // later); in stance it slides toward -X by what the root moves, so the feet stay planted
     const L = CREW_GAITS.sidestep.stride, duty = 0.66, A = (L * duty) / 2, c2 = Math.cos(2 * TAU * t);
-    let w = 0;
+    const w = Math.cos(TAU * (t - 0.17));
     for (let i = 0; i < 2; i++) {
       const s = SIDE[i], ph = fract(t + (i ? 0 : 0.5));
       let x, lift = 0;
       if (ph < 1 - duty) {
         const k = ph / (1 - duty);
-        x = -A + 2 * A * sstep(0, 1, k);
-        lift = 0.07 * Math.sin(Math.PI * k);
-        w += s * 0.5; // the weight on the other foot
+        x = -A + 2 * A * sstep(0, 1, k) - L * (1 - duty) * k * (1 - k) * (1 - 2 * k);
+        lift = 0.07 * Math.sin(Math.PI * k) ** 2;
       } else x = A - (2 * A * (ph - 1 + duty)) / duty;
       S.feet[i].ankle.set(s * 0.17 + x, ANKLE_Y + lift, i ? -0.01 : 0.02);
       S.feet[i].rot.set(0.12 * lift / 0.07, -s * 0.12, 0);
       S.feet[i].pole.set(s * 0.25, 0, -1);
     }
-    S.hips.set(-0.02 * w, 0.952 - 0.012 * c2, 0.01);
+    S.hips.set(-0.035 * w, 0.952 - 0.012 * c2, 0.01);
     S.hipsRot.set(-0.02, 0, 0.03 * w);
     S.spine.set(-0.02, 0, -0.02 * w); S.chest.set(0.0, 0, -0.01 * w); S.neck.set(0.04, 0, 0); S.head.set(-0.03, 0, 0);
     for (let i = 0; i < 2; i++) { const s = SIDE[i], a = S.arms[i]; a.ua.set(0.1, 0, s * 0.16); a.fa = 0.45; a.hand.set(0.05, 0, s * 0.05); }
@@ -1107,28 +1134,33 @@ const POSES = {
   // haul: leaning back on a rope held at chest height ahead (carry anchor: the rope, +X along it); t is a heave
   haul(S, t) {
     const k = 0.5 - 0.5 * Math.cos(TAU * t);
-    S.hips.set(0, 0.89 - 0.02 * k, 0.17 + 0.07 * k);
-    S.hipsRot.set(0.2 + 0.07 * k, 0.12, 0);
-    S.spine.set(0.08, 0, 0); S.chest.set(0.05, 0, 0); S.neck.set(-0.05, 0, 0); S.head.set(-0.15, 0, 0);
-    S.feet[0].ankle.set(-0.14, ANKLE_Y, -0.38); S.feet[0].rot.set(0.1, 0.1, 0); S.feet[0].pole.set(-0.2, 0, -1);
-    S.feet[1].ankle.set(0.15, ANKLE_Y, 0.34 + 0.05 * k); S.feet[1].rot.set(0, -0.3, 0); S.feet[1].pole.set(0.3, 0, -1);
-    S.carry.set(0, 1.22, -0.62 + 0.08 * k);
+    S.hips.set(0.01, 0.84 - 0.015 * k, 0.04 + 0.12 * k);
+    S.hipsRot.set(0.06 + 0.09 * k, 0.08, 0);
+    S.spine.set(0.025, 0, 0); S.chest.set(0.02, 0, 0); S.neck.set(-0.03, 0, 0); S.head.set(-0.12, 0, 0);
+    S.feet[0].ankle.set(-0.16, ANKLE_Y, -0.32); S.feet[0].rot.set(0, 0.1, 0); S.feet[0].pole.set(-0.2, 0, -1);
+    S.feet[1].ankle.set(0.16, ANKLE_Y, 0.37); S.feet[1].rot.set(0, -0.25, 0); S.feet[1].pole.set(0.3, 0, -1);
+    S.carry.set(0, 1.12, -0.36 + 0.16 * k);
     S.carryRot.set(0, Math.PI / 2, 0);
-    for (let i = 0; i < 2; i++) { const s = SIDE[i]; setIK(S.arms[i], s * 0.1, 1.22, -0.62 + 0.08 * k - i * 0.08, 0, -0.3, -1, -s, 0, 0, s * 0.7, -1, 0.2); }
+    for (let i = 0; i < 2; i++) { const s = SIDE[i]; setIK(S.arms[i], s * 0.025, S.carry.y, S.carry.z - i * 0.12, 0, -0.3, -1, -s, 0, 0, s * 0.45, -1, 0.2); }
   },
   // ram: both hands on the rammer staff (carry anchor: its middle, +X along it), thrusting forward and back in a lunge
   ram(S, t) {
     const k = 0.5 - 0.5 * Math.cos(TAU * t);
-    S.hips.set(0.0, 0.9 - 0.02 * k, 0.07 - 0.1 * k);
-    S.hipsRot.set(-0.14 - 0.1 * k, 0.05, 0);
-    S.spine.set(-0.1, 0, 0); S.chest.set(-0.05, 0, 0); S.neck.set(0.1, 0, 0); S.head.set(-0.12, 0, 0);
-    S.feet[0].ankle.set(-0.14, ANKLE_Y, -0.3 - 0.05 * k); S.feet[0].rot.set(0, 0.05, 0); S.feet[0].pole.set(-0.1, 0, -1);
-    ankleAt(S.feet[1].ankle, 0.14, 0.52 + 0.06 * k, -0.35, 0); S.feet[1].rot.set(-0.35, -0.1, 0);
-    const z = -0.6 - 0.34 * k;
-    S.carry.set(0, 1.06, z - 0.2);
+    POSES.ramLoad(S, k);
+  },
+  ramLoad(S, t) {
+    const k = sstep(0, 1, t);
+    S.hips.set(lerp(0.012, -0.018, k), 0.855 - 0.02 * k, 0.1 - 0.2 * k);
+    S.hipsRot.set(-0.05 - 0.18 * k, 0.06, 0);
+    S.spine.set(-0.06 - 0.07 * k, -0.025, 0); S.chest.set(-0.02 - 0.04 * k, -0.025, 0);
+    S.neck.set(0.13, 0, 0); S.head.set(-0.04, 0, 0);
+    S.feet[0].ankle.set(-0.16, ANKLE_Y, -0.31); S.feet[0].rot.set(0, 0.08, 0); S.feet[0].pole.set(-0.18, 0, -1);
+    S.feet[1].ankle.set(0.17, ANKLE_Y, 0.35); S.feet[1].rot.set(0, -0.16, 0); S.feet[1].pole.set(0.22, 0, -1);
+    const z = -0.3 - 0.22 * k;
+    S.carry.set(0, 1.05, z);
     S.carryRot.set(0, Math.PI / 2, 0);
-    setIK(S.arms[0], -0.12, 1.06, z + 0.12, 1, -0.3, 0, 0, -1, 0, -0.7, -0.8, 0.3);
-    setIK(S.arms[1], 0.12, 1.06, z - 0.42, -1, -0.3, 0, 0, -1, 0, 0.7, -0.8, 0.3);
+    setIK(S.arms[0], -0.025, 1.05, z + 0.1, 1, -0.3, 0, 0, -1, 0, -0.45, -1, 0.2);
+    setIK(S.arms[1], 0.025, 1.05, z - 0.13, -1, -0.3, 0, 0, -1, 0, 0.45, -1, 0.2);
   },
   // lay: the layer at the dial sight, one eye to it, the other hand winding the handwheel in front of him
   lay(S, t) {
@@ -1161,7 +1193,11 @@ const POSES = {
     S.spine.set(-0.14, 0, 0); S.chest.set(-0.08 + 0.01 * b, 0, 0); S.neck.set(0.22, 0, 0); S.head.set(0.18, 0, 0);
     S.shrug[0] = S.shrug[1] = 0.05;
     S.feet[0].ankle.set(-0.17, ANKLE_Y, 0.0); S.feet[1].ankle.set(0.17, ANKLE_Y, 0.02);
-    for (let i = 0; i < 2; i++) { const s = SIDE[i]; setIK(S.arms[i], s * 0.125, 1.63 - 0.025, 0.02, 0, 1, -0.2, -s, 0, 0, s * 0.8, -0.2, 0.5); }
+    for (let i = 0; i < 2; i++) {
+      const s = SIDE[i];
+      setIK(S.arms[i], s * 0.115, 0.055, 0.012, 0, 1, -0.2, -s, 0, 0, s * 0.65, -0.55, -0.35);
+      S.arms[i].onHead = true;
+    }
   },
   // point: the right arm out toward the target, the left hand on the hip (a sergeant giving the line)
   point(S, t) {
@@ -1180,7 +1216,8 @@ const POSES = {
     S.hipsRot.set(0, 0.1, 0);
     S.spine.set(-0.04, 0, 0); S.chest.set(-0.04, 0.05, 0); S.neck.set(0.1, 0, 0); S.head.set(0.04, -0.08, 0.1);
     S.feet[0].ankle.set(-0.15, ANKLE_Y, 0.02); S.feet[1].ankle.set(0.15, ANKLE_Y, -0.02);
-    setIK(S.arms[0], -0.1, 1.64, -0.02, 0.1, 1, -0.2, 1, 0, 0, -0.8, -0.2, 0.7);
+    setIK(S.arms[0], -0.11, 0.05, 0, 0.1, 1, -0.2, 1, 0, 0, -0.5, -1, -0.1);
+    S.arms[0].onHead = true;
     setIK(S.arms[1], 0.14 + 0.01 * b, 1.1, -0.32, -0.2, -0.3, -1, 0, 1, 0, 0.7, -0.8, 0.3);
   },
   // dead: lying face down, arms out, one knee a little bent (the figure's root stays where he fell)
@@ -1213,6 +1250,11 @@ const TQ = Array.from({ length: NB }, () => new THREE.Quaternion());
 const _qh = new THREE.Quaternion(), _qs = new THREE.Quaternion(), _qc = new THREE.Quaternion(), _qw = new THREE.Quaternion();
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _qx = new THREE.Quaternion();
 const _qcar = new THREE.Quaternion(), _pcar = new V3();
+const _qhead = new THREE.Quaternion(), _phead = new V3();
+const _oldP = new V3(), _oldQ = new THREE.Quaternion(), _targetQ = new THREE.Quaternion();
+const _shoulders = [new V3(), new V3()], _support = new V3();
+const _limbA = new V3(), _limbB = new V3(), _limbEnd = new V3(), _limbAxis = new V3(), _limbQ = new THREE.Quaternion();
+const _groundQ = new THREE.Quaternion(), _groundNormal = new V3(), UP = new V3(0, 1, 0);
 const _pS = new V3(), _pC = new V3(), _pA = new V3(), _pT = new V3(), _sh = new V3();
 const _d = new V3(), _pp = new V3(), _u = new V3(), _X = new V3(), _Y = new V3(), _Z = new V3(), _M = new THREE.Matrix4();
 const XAXIS = new V3(1, 0, 0), _qr = new THREE.Quaternion();
@@ -1225,9 +1267,13 @@ function solve2(A, T, l1, l2, pole, s, outQ) {
   _d.subVectors(T, A);
   let d = _d.length();
   if (d < 1e-6) { _d.set(0, -1, 0); d = 1e-6; } else _d.divideScalar(d);
-  d = clamp(d, Math.abs(l1 - l2) + 1e-4, l1 + l2 - 1e-4);
+  d = clamp(d, Math.abs(l1 - l2) + 1e-4, l1 + l2 - (s > 0 ? 0.002 : 0.0001));
   _pp.copy(pole).addScaledVector(_d, -pole.dot(_d));
-  if (_pp.lengthSq() < 1e-8) _pp.set(0, 0, -s).addScaledVector(_d, s * _d.z);
+  if (_pp.lengthSq() < 1e-8) {
+    // A pole parallel to the target still needs an orthonormal bend plane.
+    _pp.set(Math.abs(_d.x) < 0.8 ? 1 : 0, Math.abs(_d.x) < 0.8 ? 0 : 1, 0);
+    _pp.addScaledVector(_d, -_pp.dot(_d));
+  }
   _pp.normalize();
   const ca = clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1), sa = Math.sqrt(1 - ca * ca);
   _u.copy(_d).multiplyScalar(ca).addScaledVector(_pp, sa); // upper bone direction
@@ -1242,9 +1288,14 @@ function solve2(A, T, l1, l2, pole, s, outQ) {
 // Hand rotation (root space) from finger and palm directions: bind pose fingers -Y, palm -X*side.
 function handBasis(f, n, s, outQ) {
   _Y.copy(f).negate().normalize();
+  if (_Y.lengthSq() < 1e-8) _Y.set(0, 1, 0);
   _X.copy(n).multiplyScalar(-s);
-  _X.addScaledVector(_Y, -_X.dot(_Y)).normalize();
-  _Z.crossVectors(_X, _Y);
+  _X.addScaledVector(_Y, -_X.dot(_Y));
+  if (_X.lengthSq() < 1e-8) {
+    _X.set(Math.abs(_Y.x) < 0.8 ? 1 : 0, Math.abs(_Y.x) < 0.8 ? 0 : 1, 0);
+    _X.addScaledVector(_Y, -_X.dot(_Y));
+  }
+  _X.normalize(); _Z.crossVectors(_X, _Y).normalize();
   return outQ.setFromRotationMatrix(_M.makeBasis(_X, _Y, _Z));
 }
 
@@ -1259,7 +1310,7 @@ function armIK(i, a, qC, sh) {
   const b = 5 + i * 3;
   handBasis(a.fingers, a.palm, SIDE[i], _qw);
   let beta = 0;
-  for (let pass = 0; pass < 3; pass++) {
+  for (let pass = 0; pass < 5; pass++) {
     _pT.copy(GRIP[i]).applyQuaternion(_qw);
     _pT.subVectors(a.grip, _pT); // wrist target
     solve2(sh, _pT, L_UA, L_FA, a.pole, 1, _qa);
@@ -1271,7 +1322,7 @@ function armIK(i, a, qC, sh) {
     tw = tw > Math.PI ? tw - TAU : tw < -Math.PI ? tw + TAU : tw;
     _qsw.copy(_qr).multiply(_qi.copy(_qt).invert());
     const bend = 2 * Math.acos(Math.min(1, Math.abs(_qsw.w)));
-    if (pass === 2 || (bend <= MAX_BEND + 0.01 && Math.abs(tw) <= MAX_TWIST + 0.01)) break;
+    if (pass === 4 || (bend <= MAX_BEND + 0.01 && Math.abs(tw) <= MAX_TWIST + 0.01)) break;
     if (Math.abs(tw) > MAX_TWIST) _qt.setFromAxisAngle(_Y.set(0, 1, 0), Math.sign(tw) * MAX_TWIST);
     if (bend > MAX_BEND) _qsw.copy(_qid.slerp(_qsw, MAX_BEND / bend)), _qid.identity();
     _qw.copy(_qb).multiply(_qsw).multiply(_qt);
@@ -1281,24 +1332,132 @@ function armIK(i, a, qC, sh) {
   TQ[b + 2].copy(_qb.invert()).multiply(_qw);
 }
 
+// Read a joint in figure space without updating scene matrices (the renderer may already have
+// moved the figure's root). All bones are unscaled, so this short chain is sufficient.
+function jointFrame(B, index, p, q) {
+  p.set(0, 0, 0); q.identity();
+  for (let j = index; j >= 0; j = PBI[j]) {
+    p.applyQuaternion(B[j].quaternion).add(B[j].position);
+    q.premultiply(B[j].quaternion);
+  }
+}
+
+function blendPole(B, first, pole, k) {
+  jointFrame(B, first, _limbA, _limbQ);
+  jointFrame(B, first + 1, _limbB, _limbQ);
+  jointFrame(B, first + 2, _limbEnd, _limbQ);
+  _limbAxis.subVectors(_limbEnd, _limbA).normalize();
+  _limbB.sub(_limbA);
+  _limbB.addScaledVector(_limbAxis, -_limbB.dot(_limbAxis));
+  if (_limbB.lengthSq() > 1e-8) pole.normalize().lerp(_limbB.normalize(), 1 - k).normalize();
+}
+
+function blendGrip(B, i, a, k) {
+  if (k >= 1) return;
+  jointFrame(B, 7 + i * 3, _oldP, _oldQ);
+  _oldP.add(_support.copy(GRIP[i]).applyQuaternion(_oldQ));
+  a.grip.lerpVectors(_oldP, a.grip, k);
+  handBasis(a.fingers, a.palm, SIDE[i], _targetQ);
+  _oldQ.slerp(_targetQ, k);
+  a.fingers.set(0, -1, 0).applyQuaternion(_oldQ);
+  a.palm.set(-SIDE[i], 0, 0).applyQuaternion(_oldQ);
+  blendPole(B, 5 + i * 3, a.pole, k);
+}
+
+function soleHeight(q, gx = 0, gz = 0) {
+  let y = 0;
+  for (const pt of SOLE) for (const side of SIDE) {
+    _support.set(side * 0.053, pt[1] - ANKLE_Y, pt[0]).applyQuaternion(q);
+    y = Math.max(y, gx * _support.x + gz * _support.z - _support.y);
+  }
+  return y;
+}
+
+function inclineFeet(gx, gz) {
+  _groundNormal.set(-gx, 1, -gz).normalize();
+  _groundQ.setFromUnitVectors(UP, _groundNormal);
+  for (const foot of S.feet) {
+    _targetQ.setFromEuler(foot.rot);
+    const flatSupport = soleHeight(_targetQ);
+    _targetQ.premultiply(_groundQ);
+    // Keep the horizontal stance coordinates: gait distance cancels root movement along the
+    // ramp. Only the sole orientation and vertical support change; swing clearance is retained.
+    foot.ankle.y += gx * foot.ankle.x + gz * foot.ankle.z + soleHeight(_targetQ, gx, gz) - flatSupport;
+    foot.rot.setFromQuaternion(_targetQ, 'YXZ');
+  }
+}
+
+// A shoulder girdle contributes a little protraction and elevation before the elbow locks.
+// This is deliberately bounded by the overlapping sleeve, rather than stretching the arm bones.
+function shoulderFor(i, a, qC, pC, shrug, out) {
+  out.copy(OFF[i ? 'upperArmR' : 'upperArmL']);
+  out.y += shrug; out.x -= SIDE[i] * shrug * 0.3;
+  if (!a.ik) return;
+  _sh.copy(out).applyQuaternion(qC).add(pC);
+  _support.subVectors(a.grip, _sh).applyQuaternion(_qi.copy(qC).invert());
+  const extension = sstep(0.36, 0.59, _support.length());
+  out.z += clamp(_support.z, -1, 1) * 0.045 * extension;
+  out.x += clamp(_support.x, -0.4, 0.4) * 0.035 * extension;
+  out.y += 0.018 * sstep(0, 0.42, _support.y);
+}
+
 function solvePose(fig, name, t, blend) {
   const fn = POSES[name] || POSES.stand;
+  const B = fig.mesh.skeleton.bones, k = clamp(blend, 0, 1);
+  if (k <= 0) return;
   reset(S);
   fn(S, t, fig);
-  // torso chain (root space)
+  const grounded = name !== 'climb' && name !== 'dead';
+  const gx = grounded ? (fig.groundSlope?.x || 0) : 0, gz = grounded ? (fig.groundSlope?.z || 0) : 0;
+  if (gx || gz) inclineFeet(gx, gz);
+  // Blend the body and contact targets before IK. Blending solved leg angles instead cuts
+  // an arc through the floor when changing between standing, crouching and a working lunge.
   TQ[0].setFromEuler(S.hipsRot);
   TQ[1].setFromEuler(S.spine); TQ[2].setFromEuler(S.chest); TQ[3].setFromEuler(S.neck); TQ[4].setFromEuler(S.head);
+  if (k < 1) {
+    S.hips.lerpVectors(B[0].position, S.hips, k);
+    for (let j = 0; j < 5; j++) TQ[j].slerp(B[j].quaternion, 1 - k);
+    for (let i = 0; i < 2; i++) {
+      const f = S.feet[i];
+      jointFrame(B, 13 + i * 3, _oldP, _oldQ);
+      // Gait phase is distance-driven. Its contact points must not lag behind the moving root.
+      const fk = CREW_GAITS[name] && fig._poseName === name ? 1 : k;
+      f.ankle.lerpVectors(_oldP, f.ankle, fk);
+      _oldQ.slerp(_targetQ.setFromEuler(f.rot), fk);
+      f.rot.setFromQuaternion(_oldQ, 'YXZ');
+      if (grounded) f.ankle.y = Math.max(f.ankle.y, gx * f.ankle.x + gz * f.ankle.z + soleHeight(_oldQ, gx, gz));
+      blendPole(B, 11 + i * 3, f.pole, k);
+    }
+  }
   _qh.copy(TQ[0]);
   _qs.copy(_qh).multiply(TQ[1]);
   _qc.copy(_qs).multiply(TQ[2]);
+  // Let the pelvis settle if a planted ankle would otherwise be beyond a straight leg.
+  // Leaving a small knee bend also removes the singular, snapping knee at full extension.
+  if (grounded) {
+    const reach = L_TH + L_SH - 0.003;
+    for (let i = 0; i < 2; i++) {
+      _pA.copy(OFF[i ? 'thighR' : 'thighL']).applyQuaternion(_qh);
+      const f = S.feet[i].ankle, dx = S.hips.x + _pA.x - f.x, dz = S.hips.z + _pA.z - f.z;
+      const vertical = Math.sqrt(Math.max(0.04, reach * reach - dx * dx - dz * dz));
+      S.hips.y = Math.min(S.hips.y, f.y + vertical - _pA.y);
+    }
+  }
   _pS.copy(OFF.spine).applyQuaternion(_qh).add(S.hips);
   _pC.copy(OFF.chest).applyQuaternion(_qs).add(_pS);
   // the carry anchor (in chest space for loads on the shoulder) and hands placed on it
   _qcar.setFromEuler(S.carryRot);
   if (S.carryChest) { _qcar.premultiply(_qc); _pcar.copy(S.carry).applyQuaternion(_qc).add(_pC); } else _pcar.copy(S.carry);
+  const carry = fig.anchors.carry;
+  if (k < 1) { _pcar.lerpVectors(carry.position, _pcar, k); _qcar.slerp(carry.quaternion, 1 - k); }
+  _qhead.copy(_qc).multiply(TQ[3]);
+  _phead.copy(OFF.head).applyQuaternion(_qhead).add(_pC).add(_support.copy(OFF.neck).applyQuaternion(_qc));
+  _qhead.multiply(TQ[4]);
   for (let i = 0; i < 2; i++) {
     const a = S.arms[i];
     if (a.onCarry) { a.grip.applyQuaternion(_qcar).add(_pcar); a.fingers.applyQuaternion(_qcar); a.palm.applyQuaternion(_qcar); }
+    if (a.onHead) { a.grip.applyQuaternion(_qhead).add(_phead); a.fingers.applyQuaternion(_qhead); a.palm.applyQuaternion(_qhead); }
+    if (a.ik) blendGrip(B, i, a, (a.onCarry || a.onHead) && fig._poseName === name ? 1 : k);
   }
   // legs
   for (let i = 0; i < 2; i++) {
@@ -1315,35 +1474,33 @@ function solvePose(fig, name, t, blend) {
   // arms
   for (let i = 0; i < 2; i++) {
     const a = S.arms[i], b = 5 + i * 3;
+    shoulderFor(i, a, _qc, _pC, S.shrug[i], _shoulders[i]);
+    if (k < 1) _shoulders[i].lerpVectors(B[b].position, _shoulders[i], k);
     if (a.ik) {
-      _sh.copy(OFF[i ? 'upperArmR' : 'upperArmL']);
-      _sh.y += S.shrug[i];
-      _sh.x -= SIDE[i] * S.shrug[i] * 0.3;
-      _sh.applyQuaternion(_qc).add(_pC);
+      _sh.copy(_shoulders[i]).applyQuaternion(_qc).add(_pC);
       armIK(i, a, _qc, _sh);
     } else {
       TQ[b].setFromEuler(a.ua);
       TQ[b + 1].setFromAxisAngle(XAXIS, a.fa);
       TQ[b + 2].setFromEuler(a.hand);
+      if (k < 1) for (let j = b; j < b + 3; j++) TQ[j].slerp(B[j].quaternion, 1 - k);
     }
   }
-  // apply, cross-fading from the current pose
-  const B = fig.mesh.skeleton.bones, k = clamp(blend, 0, 1);
-  for (let i = 0; i < NB; i++) { if (k >= 1) B[i].quaternion.copy(TQ[i]); else B[i].quaternion.slerp(TQ[i], k); }
-  B[0].position.lerp(S.hips, k);
+  for (let i = 0; i < NB; i++) B[i].quaternion.copy(TQ[i]);
+  B[0].position.copy(S.hips);
   for (let i = 0; i < 2; i++) {
-    const ua = B[5 + i * 3], o = OFF[i ? 'upperArmR' : 'upperArmL'];
-    ua.position.set(lerp(ua.position.x, o.x - SIDE[i] * S.shrug[i] * 0.3, k), lerp(ua.position.y, o.y + S.shrug[i], k), o.z);
+    B[5 + i * 3].position.copy(_shoulders[i]);
   }
-  const c = fig.anchors.carry;
-  c.position.lerp(_pcar, k);
-  if (k >= 1) c.quaternion.copy(_qcar); else c.quaternion.slerp(_qcar, k);
+  carry.position.copy(_pcar); carry.quaternion.copy(_qcar);
+  fig._poseName = name;
 }
 
 const _rf = new V3(), _rn = new V3(), _rp = new V3();
 const RA = { ik: true, grip: new V3(), fingers: new V3(), palm: new V3(), pole: new V3() };
 function reach(fig, side, point, blend, fingers, palm, pole) {
   const i = side === 'L' || side === 0 ? 0 : 1, s = SIDE[i], B = fig.mesh.skeleton.bones, b = 5 + i * 3;
+  const k = clamp(blend, 0, 1);
+  if (k <= 0) return;
   _qh.copy(B[0].quaternion);
   _qs.copy(_qh).multiply(B[1].quaternion);
   _qc.copy(_qs).multiply(B[2].quaternion);
@@ -1353,10 +1510,10 @@ function reach(fig, side, point, blend, fingers, palm, pole) {
   RA.grip.copy(point);
   RA.fingers.copy(fingers || _rf.set(0, -0.3, -1));
   RA.palm.copy(palm || _rn.set(-s, 0, 0));
-  RA.pole.copy(pole || _rp.set(s * 0.5, -1, 0.5));
+  RA.pole.copy(pole || _rp.set(s * 0.4, -1, 0.18).applyQuaternion(_qc));
+  blendGrip(B, i, RA, k);
   armIK(i, RA, _qc, _sh);
-  const k = clamp(blend, 0, 1);
-  for (let j = b; j < b + 3; j++) { if (k >= 1) B[j].quaternion.copy(TQ[j]); else B[j].quaternion.slerp(TQ[j], k); }
+  for (let j = b; j < b + 3; j++) B[j].quaternion.copy(TQ[j]);
 }
 
 // The outfit options for a gun-crew role at spot i (varied skin so a crew is not clones).

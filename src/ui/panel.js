@@ -1,4 +1,5 @@
-// The right half of the screen: the battery tabs and the selected unit's fire control console.
+// The right of the screen: the selected unit's fire control console and, at the far right edge, the battery tabs
+// in a column (one row per unit, so ten units still read).
 // Reads only what update() is given ({ sim, selectedId }); talks back through onSelect(unitId) and
 // onCommand(unitId, name, args). Optional hooks main can call: radio(text, kind) from sim.events.radio,
 // sos(sectorId) from sim.events.sos, reset() on a new game.
@@ -12,8 +13,15 @@ import { KIND_SHORT, clockStr, KINDS } from './consoles/common.js';
 import { TH } from './theatre.js';
 import { GUNS } from '../sim/tables.js';
 
-const DESIGN_W = 800;
-const DESIGN_H = 900;
+// the roster's short form of an order the battery cannot carry out (sim/guns.js problem); '' for none or for the
+// states the tile does not flag (holding, a special weapon's preparation)
+const blockCode = (why) => (why.startsWith('out of arc') ? 'OUT OF ARC' : why.startsWith('out of range') ? 'OUT OF RANGE'
+  : why.startsWith('inside') ? 'TOO CLOSE' : why.startsWith('no shells') || why.startsWith('no shrapnel') ? 'NO SHELLS'
+  : why.startsWith('too few') ? 'NO CREW' : why.startsWith('every gun') ? 'SILENCED' : '');
+
+const DESIGN_W = 800; // the console's design box
+const DESIGN_H = 840;
+const TABS_W = 160;   // the tab column's design width, scaled with the console
 const MODE_LETTER = { auto: 'A', manual: 'M', hold: 'H' };
 
 // Loading progress of one piece, 0 to 1, weighted by the nominal step durations of GUNS[kind].load
@@ -55,8 +63,8 @@ export class Panel {
     this.scaleEl = el('div', 'pn-scale');
     this.tabsEl = el('div', 'tabs');
     this.host = el('div', 'conhost');
-    this.scaleEl.append(this.tabsEl, this.host);
-    root.append(this.scaleEl);
+    this.scaleEl.append(this.host);
+    root.append(this.scaleEl, this.tabsEl);
     this.tabs = new Map();
     this.tabIds = '';
     this.mounted = null;
@@ -71,12 +79,16 @@ export class Panel {
     const fit = () => {
       const w = root.clientWidth, h = root.clientHeight;
       if (!w || !h) return;
-      const s = Math.max(0.55, Math.min(1.6, Math.min(w / DESIGN_W, h / DESIGN_H)));
+      const s = Math.max(0.55, Math.min(1.6, Math.min(w / (DESIGN_W + TABS_W), h / DESIGN_H)));
       hw.scale = s;
       const st = this.scaleEl.style;
-      st.width = `${w / s}px`;
+      st.width = `${w / s - TABS_W}px`;
       st.height = `${h / s}px`;
       st.transform = `scale(${s})`;
+      const tt = this.tabsEl.style;
+      tt.width = `${TABS_W}px`;
+      tt.height = `${h / s}px`;
+      tt.transform = `scale(${s})`;
     };
     fit();
     if (typeof ResizeObserver !== 'undefined') { this.ro = new ResizeObserver(fit); this.ro.observe(root); }
@@ -136,7 +148,7 @@ export class Panel {
       const hp = new Bar({ cls: 'mini' }), am = new Bar({ cls: 'mini ammo' });
       const mode = el('span', 'tmode', 'A');
       const line = el('div', 'tline');
-      const kind = el('i', 'ttype', KIND_SHORT[u.kind] || u.kind);
+      const kind = el('i', TH.metric ? 'ttype metric' : 'ttype', KIND_SHORT[u.kind] || u.kind);
       line.append(kind, hp.el, am.el, mode);
       main.append(call, line);
       t.title = `${u.name}: HP, ammunition, mode (A: auto or manual; HOLD on the console)`;
@@ -161,7 +173,7 @@ export class Panel {
     this.stFront = el('div', 'sfront');
     this.fronts = TH.sectors.map((s) => { const c = el('i', 'fchip', s.id); this.stFront.append(c); return c; });
     this.status.append(this.stClock, this.stState, this.stScore, this.stFront);
-    this.tabsEl.append(this.status);
+    this.tabsEl.prepend(this.status);
     applyHighlight();
   }
 
@@ -215,7 +227,18 @@ export class Panel {
       else if (nReady) { txt = np > 1 ? `${nReady}/${np - nDead} READY` : 'READY'; tc = 'rdy'; }
       else if (nFire) { txt = 'FIRING'; tc = 'fir'; }
       else if (nLoad) { txt = `LOAD ${Math.floor(best * 100)}%`; tc = 'ldg'; }
+      else if ((txt = blockCode(sim.guns?.problem?.(u) ?? ''))) tc = 'bad'; // an order it cannot carry out
       else { txt = 'IDLE'; tc = 'idle'; }
+      // a launch site: the pip fills with the drill, the words say what it waits for
+      const sp = KINDS[u.kind]?.launcher ? u.special : null;
+      if (sp && t.pips[0] && nDead === 0) {
+        const pp = t.pips[0], k = sp.done ? 0 : sp.steps.filter((q) => q.state === 'done').length / sp.steps.length;
+        [txt, tc] = sp.done ? ['SPENT', 'idle'] : sp.fault ? ['FAULT', 'bad'] : sp.cover ? ['COVER', 'bad'] : sp.hold === 'fire' ? ['READY', 'rdy'] : sp.hold === 'dial' ? ['DIAL', 'bad'] : sp.hold === 'repair' ? ['DAMAGED', 'bad'] : sp.doing ? [`STEP ${sp.i + 1}/${sp.steps.length}`, 'ldg'] : ['WAITING', 'idle'];
+        const st = tc === 'rdy' ? 'rdy' : tc === 'ldg' ? 'ldg' : 'idle';
+        if (pp.st !== st) { pp.pip.className = `tpc st-${st}`; pp.st = st; }
+        const w = Math.round((tc === 'rdy' ? 1 : k) * 200) / 2;
+        if (pp.w !== w) { pp.f.style.width = `${w}%`; pp.w = w; }
+      }
       setText(t.ltxt, txt);
       if (t.ltxtCls !== tc) { t.ltxt.className = `tltxt st-${tc}`; t.ltxtCls = tc; }
       setCls(t.el, 'sel', u.id === view.selectedId);
@@ -237,7 +260,7 @@ export class Panel {
       if (this.mounted && this.mounted.con.dispose) this.mounted.con.dispose();
       this.host.replaceChildren();
       const memo = this.memo[sel.id] || (this.memo[sel.id] = {});
-      const con = mountConsole({ id: sel.id, kind: sel.kind, send: (name, args) => this._send(sel.id, name, args), memo, shared: this.shared, mail: this.mail, tracker: this.tracker });
+      const con = mountConsole({ id: sel.id, kind: sel.kind, send: (name, args) => this._send(sel.id, name, args), focus: (task) => this.opts.onFocus?.(sel.id, task), memo, shared: this.shared, mail: this.mail, tracker: this.tracker });
       this.host.append(con.el);
       this.mounted = { id: sel.id, con };
       applyHighlight();

@@ -3,12 +3,14 @@
 // The errors the player must find by ranging are hidden here: unit.bias (the map error of this lay),
 // each piece's calibration (muzzle velocity and line), the wear, the day's wind (in the integrator) and
 // the dispersion drawn at every shot.
-import { UNITS, piecePlacements, bearingOf, headingFor, DEG } from '../sector.js';
+import { UNITS, piecePlacements, bearingOf, headingFor, DEG, YARD } from '../sector.js';
 import { GUNS, SHELLS, STEP, DIFFICULTY } from './tables.js';
 import { solveElevation, autoCharge, rangeTable, elSlope, shellK, reaches } from './shells.js';
 import { solveLanding } from './script.js';
 
 const TAU = Math.PI * 2;
+const commas = (v) => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const span = (s) => (s < 120 ? `${Math.ceil(s)} seconds` : `${Math.round(s / 60)} minutes`);
 export const wrapPi = (a) => {
   a %= TAU;
   return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
@@ -46,7 +48,7 @@ export function createUnits(sim) {
     return {
       id: def.id, kind: def.kind, name: def.name, callsign: def.callsign, battery: def.battery,
       pos: { x: def.pos.x, y: sim.heightAt(def.pos.x, def.pos.z), z: def.pos.z }, zero: def.zero, alive: true,
-      mode: 'auto', pieces, missionId: null, charges: g0.charges.length, arc: g0.traverse,
+      mode: 'auto', pieces, missionId: null, charges: g0.charges.length, arc: def.arc ?? g0.traverse,
       ammo: { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo)), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
       signature: 0, def, gate: def.special ? 'not ready' : null,
       order: {
@@ -133,8 +135,8 @@ export class Guns {
       let azr = wrapPi(p.bearing - brg);
       let ok = o.charge >= 0;
       let why = o.charge < 0 ? (D < 2000 ? 'inside minimum range' : 'out of range') : '';
-      if (Math.abs(azr) > g.traverse) {
-        azr = clamp(azr, -g.traverse, g.traverse);
+      if (Math.abs(azr) > u.arc) {
+        azr = clamp(azr, -u.arc, u.arc);
         ok = false;
         why = 'out of arc';
       }
@@ -152,6 +154,7 @@ export class Guns {
         p.cmd.tof = sol.tof;
       }
       p.cmd.ok = ok;
+      p.cmd.why = why;
       p.blocked = !ok;
       if (ok) any = true; else if (!reason) reason = why;
       if (!first && sol) first = sol;
@@ -163,6 +166,51 @@ export class Guns {
       o.el = first.el;
       o.tof = first.tof;
     }
+  }
+
+  // Why the unit cannot carry out its order, in the player's words, or '' when it can (or has no order). The general
+  // rule: an order the guns cannot carry out is always explained. sim.command radios it when the player gives the
+  // order, and the console shows it for as long as the order stands (status line, guns card, FIRE key, roster).
+  problem(u, short = false) {
+    const o = u.order, g = GUNS[u.kind];
+    if (!u.alive) return 'every gun is out of action';
+    if (!o.target) return '';
+    if (u.gate) return g.launcher ? '' : u.gate; // a launch site's console walks the drill itself
+    if (u.mode === 'hold') return short ? 'holding (A or MANUAL to go on)' : 'the battery is holding (cease fire): press A or MANUAL to go on';
+    const live = u.pieces.filter((p) => p.state !== 'dead');
+    const len = (m) => (g.metric ? `${commas(m)} m` : `${commas(m / YARD)} yards`);
+    const deg = (r) => `${+(Math.abs(r) / DEG).toFixed(1)}`;
+    if (!o.ok) {
+      if (o.why === 'out of arc') {
+        if (u.loadThrough) return ''; // the set-up Karl's crew turns the vehicle onto the line by itself
+        const off = wrapPi(live[0].bearing - o.line), side = off > 0 ? 'left' : 'right';
+        const bed = u.special?.bed; // the WW1 mode's 42 cm guns: the bed can be relaid (src/ww1/special.js)
+        if (short) return `out of arc: ${deg(off)}° ${side} (${bed ? 'T: relay the bed' : `±${deg(u.arc)}°`})`;
+        return `out of arc: the target is ${deg(off)} degrees ${side} of the line of fire and the `
+          + `${u.pieces.length > 1 ? 'guns traverse' : 'gun traverses'} ${deg(u.arc)} degrees either way`
+          + (g.special === 'karl' ? '. Raise the hull (R), turn the vehicle (T), lower it (L)'
+            : bed ? `. Relay the bed onto its line (T: Bettung umlegen${bed.dur ? `, the gun out of action for about ${span(bed.dur)}` : ''})`
+            : '. Give it to a battery that can bear on it');
+      }
+      if (o.why === 'out of range' || o.why === 'inside minimum range') {
+        const far = o.why === 'out of range';
+        // a charge the player chose that cannot reach, where another one could
+        if (!o.chargeAuto && g.charges.some((c, i) => reaches(u.kind, i, o.range))) {
+          const ch = g.charges[o.charge]?.name ?? 'this charge';
+          return short ? `charge too ${far ? 'small' : 'big'} (Q/E)`
+            : `${o.why} on ${ch}: a ${far ? 'bigger' : 'smaller'} charge reaches it (Q/E)`;
+        }
+        const lim = far ? rangeTable(u.kind, g.charges.length - 1).rMax : rangeTable(u.kind, 0).rMin;
+        if (short) return `${far ? 'out of range' : 'too close'} (${far ? 'max' : 'min'} ${len(lim)})`;
+        return far ? `out of range: ${len(o.range)} against ${len(lim)} at most` : `inside the minimum range: ${len(o.range)} against ${len(lim)} at least`;
+      }
+      return o.why || 'the guns cannot be laid on it';
+    }
+    if (live.some((p) => p.loaded)) return '';
+    const sh = o.fuze === 'shrapnel';
+    if ((sh ? u.ammo.shrapnel : u.ammo.he) <= 0) return sh ? 'no shrapnel left at the guns' : 'no shells left at the guns';
+    if (live.every((p) => p.crew < Math.ceil(p.crewMax * 0.3))) return 'too few men left to serve the guns';
+    return '';
   }
 
   correct(u, add, right) {
@@ -248,8 +296,10 @@ export class Guns {
   }
 
   needLoad(u, p) {
-    if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold' || u.gate) return false;
-    if (!u.order.target || p.blocked || !p.cmd.ok) return false;
+    // `loadThrough` (set by a controller: the sandbox Karl turning its hull onto a line past its own traverse) lets the
+    // crew load while the unit is gated or the line is out of arc, as the other guns load while they traverse
+    if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold' || (u.gate && !u.loadThrough)) return false;
+    if (!u.order.target || ((p.blocked || !p.cmd.ok) && !(u.loadThrough && u.order.why === 'out of arc'))) return false;
     if (p.crew < Math.ceil(p.crewMax * 0.3)) return false;
     const sh = u.order.fuze === 'shrapnel';
     return (sh ? u.ammo.shrapnel : u.ammo.he) > 0;
@@ -294,9 +344,10 @@ export class Guns {
     }
   }
 
-  slew(p, dt, elTarget) {
+  slew(p, dt, elTarget, azTarget = p.cmd.az) {
+    if (p.fixed) return; // a controller holds the piece where it is (the Gustav while it is still being assembled)
     const g = GUNS[p.kind];
-    const da = p.cmd.az - p.az, de = elTarget - p.el;
+    const da = azTarget - p.az, de = elTarget - p.el;
     const ma = g.azRate * dt, me = g.elRate * dt;
     p.az += Math.abs(da) <= ma ? da : Math.sign(da) * ma;
     p.el += Math.abs(de) <= me ? de : Math.sign(de) * me;
@@ -335,25 +386,47 @@ export class Guns {
       return;
     }
     const ordered = u.order.target && p.cmd.ok;
+    // `stowed` (set by a controller: the Karl with its hull not down, rising, turning or on the road; the Paris Gun
+    // between rounds): the gun is not laid. The barrel waits at its loading elevation on the middle of its traverse (on
+    // its line with `stowLaid`), and a round laid or being laid goes back to waiting at its lay step; it lays again when
+    // the hull is down
+    const held = !!u.stowed;
+    if (held && (p.state === 'ready' || p.state === 'laying')) {
+      const li = g.load.findIndex((s) => s.step === 'lay');
+      if (li >= 0) {
+        p.state = 'loading';
+        p.ji = li;
+        this.beginStep(u, p);
+      }
+    }
     if (p.state === 'idle') {
-      this.slew(p, dt, ordered ? p.cmd.el : p.el);
+      if (held) this.slew(p, dt, g.loadEl, u.stowLaid ? p.cmd.az : 0); else this.slew(p, dt, ordered ? p.cmd.el : p.el);
+      if (p.breech > 0) p.breech = Math.max(0, p.breech - dt / 6); // a cycle given up: the breech closes again
       if (this.needLoad(u, p)) this.startLoad(u, p);
       return;
     }
     if (p.state === 'loading') {
+      // stowed without `loadThrough` (the Karl raising its hull to move off), the crew stops loading: a shell not yet
+      // rammed goes back on the carrier (it is counted off at the ram) and the cycle is given up; a rammed one is
+      // closed up and waits at its lay
+      if (held && !u.loadThrough && !p.loaded) {
+        p.state = 'idle';
+        p.job = null;
+        return;
+      }
       const job = p.job, st = g.load[p.ji];
       job.t += dt;
       let elT = heavy ? g.loadEl : p.cmd.el;
-      if (st.step === 'lay') elT = p.cmd.el;
+      if (st.step === 'lay' && !held) elT = p.cmd.el;
       if (heavy && p.ji === 0 && st.step === 'depress') elT = g.loadEl;
-      this.slew(p, dt, elT);
+      this.slew(p, dt, elT, held ? 0 : p.cmd.az);
       // breech and ammunition follow the step
       const k = Math.min(1, job.t / Math.max(0.01, job.dur));
       if (st.step === 'open') p.breech = k;
       else if (st.step === 'close') p.breech = 1 - k;
       if (job.t >= job.dur) {
         if (st.step === 'depress' && Math.abs(p.el - g.loadEl) > 0.002) return;
-        if (st.step === 'lay' && !this.laid(p)) return;
+        if (st.step === 'lay' && (held || !this.laid(p))) return;
         // the round is in when it is rammed (a rocket launcher has no rammer: when the rockets are in the tubes)
         if (st.step === 'ram' || (st.step === 'shell' && g.salvo)) {
           p.loaded = true;

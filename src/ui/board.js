@@ -73,15 +73,15 @@ export class Board {
     this.lg = this.layer.getContext('2d');
     this.bar = el('div', 'bbar');
     this.refEl = el('span', 'bref', '');
-    this.hint = el('span', 'bhint', 'click: lay the guns here   click a target: take its mission   drag: pan   wheel: zoom');
+    this.hint = el('span', 'bhint', TH.boardHint ?? 'click: lay the guns here   click a target: take its mission   drag: pan   wheel: zoom');
     this.bar.append(this.refEl, this.hint);
     const tools = el('div', 'btools');
     const mk = (t, tip, fn) => { const b = new Btn({ main: t, cls: 'mini', onClick: fn, tip }); tools.append(b.el); return b; };
     mk('+', 'Zoom in', () => this.zoom(1 / 1.4));
     mk('−', 'Zoom out', () => this.zoom(1.4));
-    mk('FIT', 'Fit the battery, its range and the front', () => this.fit());
+    mk('FIT', TH.fitTip ?? 'Fit the battery, its range and the front', () => this.fit());
     mk('GUN', 'Centre on the battery', () => this.centre('unit'));
-    mk('AIM', 'Centre on the ordered point', () => this.centre('aim'));
+    mk('AIM', TH.aimTip ?? 'Centre on the ordered point', () => this.centre('aim'));
     this.el.append(this.cv, tools, this.bar);
     this.W = 0; this.H = 0; this.dpr = 1;
     this.view = memo.view || null;
@@ -376,7 +376,7 @@ export class Board {
 
   // the German grid: a line every kilometre (every 500 m zoomed in), numbered by the kilometres of the reference
   drawGridM(g, x0, x1, z0, z1) {
-    const v = this.view, sq = 1000 / v.mpp, step = sq > 170 ? 500 : sq < 30 ? 5000 : 1000;
+    const v = this.view, sq = 1000 / v.mpp, step = sq > 170 ? 500 : sq < 6 ? 10000 : sq < 30 ? 5000 : 1000;
     g.lineCap = 'butt';
     for (let x = Math.floor(x0 / step) * step; x <= x1; x += step) {
       const kilo = x % 1000 === 0, big = x % 10000 === 0;
@@ -491,6 +491,7 @@ export class Board {
     this.drawFalls(g, sim, unit, tracker, T);
     this.drawOrder(g, sim, unit, T);
     this.drawUnits(g, sim, unit, tracker, T);
+    TH.overlay?.(this, g, sim, unit, T); // a theatre's own picture (the WW1 Paris Gun's targets 120 km off)
     this.drawShells(g, sim, unit, tracker, T);
     this.drawEnemy(g, tracker, sim, T);
     this.drawFrame(g, sim, unit, T);
@@ -500,8 +501,8 @@ export class Board {
     if (h) {
       const x = this.wx(h.px), z = this.wz(h.py);
       const range = Math.hypot(x - unit.pos.x, z - unit.pos.z), br = bearingOf(x - unit.pos.x, z - unit.pos.z);
-      const t = this.pickTarget(h.px, h.py);
-      setText(this.refEl, `${TH.ref(x, z)}   ${yd(range)} ${lenShort()}   ${dm(br)}${t ? '   ' + t.name : ''}`);
+      const t = this.pickTarget(h.px, h.py), own = TH.hoverText?.(this, x, z, sim, unit);
+      setText(this.refEl, own ?? `${TH.ref(x, z)}   ${yd(range)} ${lenShort()}   ${dm(br)}${t ? '   ' + t.name : ''}`);
       this.cv.classList.toggle('pick', !!t);
     } else { setText(this.refEl, TH.refHint); this.cv.classList.remove('pick'); }
   }
