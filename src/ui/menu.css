@@ -159,15 +159,15 @@ body.loaded #loading { opacity: 0; pointer-events: none; }
 .mn-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
 .mn-still {
   position: absolute; inset: -4%; background: center / cover no-repeat; opacity: 0; transition: opacity 1.4s ease;
-  filter: saturate(.85) brightness(.92); animation: mn-drift-a 26s ease-in-out infinite alternate; will-change: transform, opacity;
+  filter: saturate(.9); animation: mn-drift-a 26s ease-in-out infinite alternate; will-change: transform, opacity;
 }
 .mn-still + .mn-still { animation-name: mn-drift-b; }
 .mn-still.on { opacity: 1; }
 .mn-shade {
   position: absolute; inset: 0;
   background:
-    linear-gradient(90deg, #0a0c08f2 0%, #0a0c08cc 30%, #0a0c0888 55%, #0a0c0899 78%, #0a0c08d9 100%),
-    linear-gradient(180deg, #0a0c0866 0%, transparent 30%, transparent 62%, #0a0c08cc 100%);
+    linear-gradient(90deg, #0a0c08e6 0%, #0a0c08c2 32%, #0a0c085c 56%, #0a0c0861 78%, #0a0c08b0 100%),
+    linear-gradient(180deg, #0a0c0840 0%, transparent 28%, transparent 66%, #0a0c08b0 100%);
 }
 @keyframes mn-drift-a { from { transform: scale(1) translate(0, 0); } to { transform: scale(1.07) translate(-1.6%, -0.8%); } }
 @keyframes mn-drift-b { from { transform: scale(1.07) translate(1.4%, 0.6%); } to { transform: scale(1) translate(0, 0); } }

@@ -28,10 +28,12 @@ node tools/berthatest.mjs 1 2 3 --difficulty all              # Big Bertha demo 
 node tools/progressiontest.mjs                                # the campaigns: prerequisites, saves, rosters, targets, every victory path
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
+node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
 ```
 
 - **`simtest`** runs whole games on worker threads and prints win rates and per-game figures. Run it after changing the gun, shell, target or difficulty tables, the AI crews, the enemy or the director.
 - **`shot.mjs`** launches its own headless Chromium through `playwright-core` (Chromium from `~/.cache/ms-playwright`). Its other flags are `--size WxH`, `--until "expr"` (wait for a condition), `--eval "expr"` (run after the wait, result printed) and `--dev` (dev mode on, every battery open).
+- **`menushots.mjs`** takes the main menu's background stills from the game itself: for each gun it opens the game page with every battery open, hides the console, puts the gun on auto, runs the battle on until it fires and captures the blast (`--size WxH`, `--quality`, `--out`). Each run plays a new battle, so look at the pictures before keeping them.
 
 ## URL parameters
 
@@ -130,7 +132,8 @@ src/ui/              the fire control console (consoles/: the cards, the procedu
 src/audio.js         the sound engine; public/audio holds the four recordings
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
-tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot
+tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot, menushots
+public/menu/         the main menu's background stills (tools/menushots.mjs)
 docs/                PLAYING.md (how to play, every key), MODELLED.md (rendering, simulation, sound), HISTORY.md (what is real), DEVELOPMENT.md (this page),
                      WW1.md and WW2.md (history, sources, departures), PROGRESSION.md (the campaign), screenshot.jpg
 refs/                local reference sheets and photographs (gitignored)
