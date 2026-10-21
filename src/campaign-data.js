@@ -19,7 +19,6 @@ export const rosterFor = era => BATTERIES.filter(b => b.era === era);
 export const CAMPAIGN = ['1917', 'ww2'].flatMap(era => rosterFor(era).slice(1).map((b, i) => ({
   id: `earn-${b.kind}`, era, reward: b.kind, title: b.title, briefing: b.task,
   roster: rosterFor(era).slice(0, i + 2).map(b => b.kind),
-  prerequisite: i ? `earn-${rosterFor(era)[i].kind}` : null,
   // More batteries means more concurrent assignments; time allows for siege preparation and slow cycles.
   timeLimit: 900 + i * 150,
 })));

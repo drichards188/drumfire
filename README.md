@@ -11,7 +11,7 @@
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
 - **Three eras.** 1917 British heavies; WW1 German in 1918, with the Paris Gun; WW2 German, with the Gustav, the Karl-Gerät, the V-1 and the V-2.
-- **Campaigns.** In 1917 and WW2 you start with one battery and earn the rest.
+- **Campaigns.** In 1917 and WW2 you start with one battery and earn the rest, in missions you can play in any order.
 - **Tutorials.** Six guided lessons each for 1917 and WW2.
 - **Big Bertha demo.** Take each man's place in turn on a German 42 cm howitzer.
 

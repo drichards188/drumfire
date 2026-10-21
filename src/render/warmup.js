@@ -21,6 +21,10 @@ export function warmUp(renderer, scene, camera) {
   const prev = renderer.getRenderTarget();
   try {
     renderer.setRenderTarget(rt);
+    // the shadow maps too: before their first pass the materials' shadow samplers have nothing proper to read, and
+    // every draw failed (GL_INVALID_OPERATION, a texture format and sampler type mismatch); the game redraws them
+    // each frame anyway
+    renderer.shadowMap.needsUpdate = true;
     renderer.render(scene, camera);
   } catch (e) {
     console.warn('warm-up draw failed:', e.message);

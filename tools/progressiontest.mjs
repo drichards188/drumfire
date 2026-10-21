@@ -4,16 +4,22 @@ import { BATTERIES, CAMPAIGN } from '../src/campaign-data.js';
 import { campaignTheatre } from '../src/campaign.js';
 import { Sim } from '../src/sim/sim.js';
 import { ww2Theatre } from '../src/ww2/theatre.js';
+import { menuItems } from '../src/menuItems.js';
 const storage = { data: new Map(), getItem(k) { return this.data.get(k); }, setItem(k,v) { this.data.set(k,v); } };
 const career = new Progression(storage);
 assert.deepEqual(BATTERIES.filter(b=>career.unlocked(b.kind)).map(b=>b.kind), ['bl6','lefh18']);
-assert.equal(career.canPlay('earn-rail'), false);
-assert.equal(career.complete('earn-rail'), false);
+// every mission, operation and lesson is open from the start, in any order
+assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
+assert.equal(career.canPlay('earn-nothing'), false);
+assert.ok(menuItems(career).every(i=>!i.locked), 'No menu entry may be locked');
+assert.equal(career.complete('earn-rail'), true, 'A later mission may be won first');
+assert.equal(career.unlocked('rail'), true);
+assert.equal(career.unlocked('bl92'), false, 'A win earns only its own battery');
 assert.equal(career.complete('earn-bl60'), true);
 assert.equal(career.complete('earn-bl60'), false);
 assert.equal(career.unlocked('bl60'), true);
-assert.equal(career.canPlay('earn-bl92'), true);
 assert.equal(new Progression(storage).unlocked('bl60'), true);
+assert.equal(new Progression(storage).unlocked('rail'), true, 'Wins out of order must survive a reload');
 const old = new Progression({ getItem(k) { return k === SAVE_KEY ? null : '{"xp":999999}'; } });
 assert.equal(old.unlocked('rail'), false, 'XP must never unlock campaign batteries');
 career.unlockAll();
@@ -51,7 +57,7 @@ for (const def of CAMPAIGN) {
   s.time=def.timeLimit*s.difficulty.time+1; s.director.update(.05);
   assert.equal(s.state,'defeat','Incomplete assignments must fail at deadline');
 }
-console.log(`Campaign checks passed: ${CAMPAIGN.length} missions, prerequisite saves, XP migration, roster exclusion, reachable targets, deadlines.`);
+console.log(`Campaign checks passed: ${CAMPAIGN.length} missions, any order, saves, XP migration, roster exclusion, reachable targets, deadlines.`);
 
 // Exercise damage qualification, combined-objective victory, and failed attempts.
 for (const def of CAMPAIGN) {

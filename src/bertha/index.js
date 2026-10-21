@@ -705,6 +705,8 @@ async function init() {
   });
   const tutBtn = document.getElementById('tutorial-btn');
   tutBtn.addEventListener('click', () => tutorial.start());
+  // the way out of a game or the tutorial: the title screen, with its options and the link back to the main menu
+  document.getElementById('to-title').addEventListener('click', () => (tutorial.active ? tutorial.stop() : toTitle()));
   // the language: English by default, the switch on the title screen and in the settings
   const langSwitch = (l) => {
     setLang(l);

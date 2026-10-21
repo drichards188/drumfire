@@ -9,8 +9,8 @@ export class Progression {
     this.saved = !!storage;
     try {
       const data = JSON.parse(storage?.getItem(SAVE_KEY) || 'null');
-      // Only contiguous mission completions are accepted. Old XP never grants batteries.
-      for (const m of CAMPAIGN) if (Array.isArray(data?.completed) && data.completed.includes(m.id) && (!m.prerequisite || this.completed.has(m.prerequisite))) this.completed.add(m.id);
+      // Missions are played in any order, so every saved completion counts. Old XP never grants batteries.
+      for (const m of CAMPAIGN) if (Array.isArray(data?.completed) && data.completed.includes(m.id)) this.completed.add(m.id);
       this.dev = data?.dev === true;
       if (!data) this.dev = JSON.parse(storage?.getItem('drumfire.command-career.v1') || 'null')?.dev === true;
     } catch { this.saved = false; }
@@ -19,9 +19,9 @@ export class Progression {
     const b = BATTERIES.find(b => b.kind === kind);
     return !!b && (this.dev || rosterFor(b.era)[0].kind === kind || this.completed.has(`earn-${kind}`));
   }
+  // every mission is open from the start, in any order: winning one earns its battery for the open battles
   canPlay(id) {
-    const m = missionById(id);
-    return !!m && (this.dev || !m.prerequisite || this.completed.has(m.prerequisite));
+    return !!missionById(id);
   }
   complete(id) {
     if (!this.canPlay(id) || this.completed.has(id)) return false;
@@ -36,7 +36,7 @@ export class Progression {
       this.saved = true;
     } catch { this.saved = false; }
   }
-  // dev mode: every battery and mission open, for testing (saved in this browser like the rest)
+  // dev mode: every battery in the open battles, for testing (saved in this browser like the rest)
   setDev(on) { this.dev = !!on; this.save(); }
   unlockAll() { this.setDev(true); }
 }

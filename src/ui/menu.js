@@ -85,7 +85,7 @@ export function mountMenu(root = document.getElementById('menu')) {
       <p class="mn-help"></p>
       <div class="mn-list" role="listbox" aria-label="Missions"></div>
       <ul class="mn-roster" hidden></ul>
-      <footer class="mn-foot"><span class="mn-save"></span><button id="dev-unlock" type="button" aria-pressed="false" title="Dev mode opens every battery and mission for testing; switch it off to return to your earned career. Saved in this browser."><span class="dev-light"></span>Dev mode <b class="dev-state">OFF</b></button></footer>
+      <footer class="mn-foot"><span class="mn-save"></span><button id="dev-unlock" type="button" aria-pressed="false" title="Dev mode puts every battery in the open battles for testing; switch it off to return to your earned career. Saved in this browser."><span class="dev-light"></span>Dev mode <b class="dev-state">OFF</b></button></footer>
     </section>
   </div>`;
   const $ = (s) => root.querySelector(s);
@@ -96,8 +96,8 @@ export function mountMenu(root = document.getElementById('menu')) {
   const playable = (i) => i && i.era === era && !i.locked;
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
   const HELP = {
-    battles: { '1917': 'A battle with the batteries you have earned.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'A battle with the batteries you have earned. Each other operation opens when the campaign earns its gun.' },
-    campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'Each mission loans you a new battery: win it to keep it.' },
+    battles: { '1917': 'A battle with the batteries you have earned.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have earned, or a special weapon\'s own operation (open to all).' },
+    campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'Each mission loans you a new battery: win it to keep it. Play them in any order.' },
     tutorials: { ww1: 'No lessons of its own yet: the 1917 and WW2 lessons teach the same drill (lay from the board, range, fire for effect).', other: 'Short lessons on a quiet range, in daylight.' },
     batteries: { ww1: 'Every battery of the Gruppe is yours from the start.', other: 'Earn batteries in the campaign, then take them into battle.' },
   };

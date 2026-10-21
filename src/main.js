@@ -69,8 +69,12 @@ const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxT
 const UNITS = TH ? TH.units : UNITS_1917;
 // back to the menu (src/ui/menu.js), with this page's entry selected
 const MENU = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
-// a battle or mission the career has not opened yet goes back to the menu, which says how to earn it (lessons are open)
-const LOCKED = !query.get('tutorial') && !SANDBOX && (requestedMission ? !CAMPAIGN_MISSION : WW2 && TH.opId !== 'flanders' && !career.unlocked(UNITS[0].kind));
+// Every mission, operation and lesson is open, in any order; only a campaign mission asked for on the other era's page
+// (no theatre for it here) goes back to the menu
+const MISPLACED = !query.get('tutorial') && !SANDBOX && !!requestedMission && !CAMPAIGN_MISSION;
+// a WW2 special weapon's own operation (the Gustav siege, the Karl, the V-1, the V-2): its whole roster is the player's,
+// earned or not, as a campaign mission's is; only the open battle's batteries are earned
+const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -467,7 +471,7 @@ async function init() {
 
   // ---------------------------------------------------------------- units and camera
   // the WW1 mode is a sandbox: every unit is the player's (its kinds are not in the campaign's roster)
-  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind);
+  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || OPERATION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind);
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
@@ -559,7 +563,7 @@ async function init() {
     chase.cine(false);
     following = false;
     newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
-      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : WW1 ? null : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
+      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : WW1 || OPERATION ? null : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
@@ -1248,7 +1252,7 @@ async function init() {
   Object.defineProperty(drumfire, 'state', { get: () => state, configurable: true });
 }
 
-if (LOCKED) location.replace(MENU);
+if (MISPLACED) location.replace(MENU);
 else init().catch((e) => {
   console.error(e);
   document.getElementById('status').textContent = `Failed to start: ${e.message}`;

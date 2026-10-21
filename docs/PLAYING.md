@@ -15,11 +15,12 @@ This page covers the menu, the campaigns, every era's units and operations, the 
 ## Campaigns and earned batteries
 
 - **Start small.** In the 1917 and WW2 eras you start with one battery (the 6-inch howitzers, or the 10.5 cm leFH 18) and earn the rest in that era's campaign.
-- **Each mission** loans you its battery on manual, with every battery you have already earned beside it on auto. Each has its own target matched to its role, under counter-battery fire.
+- **Any order.** Every mission is open from the start: play them in whatever order you like.
+- **Each mission** loans you its battery on manual, with every earlier battery of its era beside it on auto (earned or not). Each has its own target matched to its role, under counter-battery fire.
 - **To win**, finish every assignment with the right fuze and enough rounds before the time runs out (longer on Easy, shorter on Hard). A V-1 or V-2 launch counts when the bearing is within 1 degree and the range within 1 %, with no oxygen shortfall.
 - **To lose:** lose the loaned battery, or let its target be destroyed before its shoot is complete.
-- **The reward.** Win and the battery is yours: it joins the open battle (the V-1 and V-2 fire only in their own operations) and the next mission opens.
-- **Locks.** A battery not yet earned stays out of the battle. The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations open when their battery is earned.
+- **The reward.** Win and the battery is yours: it joins the open battle (the V-1 and V-2 fire only in their own operations).
+- **What earning does.** A battery not yet earned stays out of the open battles (Ypres and WW2 Flanders). The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start.
 - **Saving.** Progress is saved in the browser; the "Your batteries" tab lists the roster.
 - **WW1 German** has no campaign: every battery is yours from the start.
 - **Dev mode.** A switch at the foot of the menu opens every battery and mission for testing, without marking anything won.
@@ -82,7 +83,7 @@ The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five
 
 ## WW2 German: five operations
 
-In the menu, **WW2 German** switches to a second mode (`/?mode=ww2`): German artillery in the Second World War, in five separate operations, because these weapons never served together. Pick one in the menu's Battles tab, or open it directly with `&play=1`. The four special-weapon operations open once the campaign has earned their gun.
+In the menu, **WW2 German** switches to a second mode (`/?mode=ww2`): German artillery in the Second World War, in five separate operations, because these weapons never served together. Pick one in the menu's Battles tab, or open it directly with `&play=1`. The four special-weapon operations are open from the start, each with its whole roster.
 
 | Operation (menu name) | URL | What you do |
 |---|---|---|
@@ -207,7 +208,7 @@ A separate first-person demo (`/bertha.html`, in the Battles tab of the WW1 Germ
 - **Your part:** take each man's place in turn: gun commander, layer for line, layer for elevation, loader, firer.
 - **The drill:** take the fire order on the field telephone, lay the line through the panoramic sight, set the clinometer and crank the barrel, hoist, ram and charge the 810 kg shell, and pull the lanyard.
 - **The enemy:** the British gun line 10 to 13 km to the west answers.
-- **The title screen** has the difficulty, a crew-assist option (the stations you are not at work themselves), a tutorial (one round, key by key, in about five minutes) and an English or German switch.
+- **The title screen** has the difficulty, a crew-assist option (the stations you are not at work themselves), a tutorial (one round, key by key, in about five minutes) and an English or German switch. The menu opens the demo straight into a game; the **Title screen** button beside the gear leads there, and its link back to the main menu.
 
 ## Controls
 

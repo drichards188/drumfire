@@ -25,7 +25,7 @@ node tools/simtest.mjs 1 2 3 --all --difficulty all --table   # + a scripted pla
 node tools/ww2test.mjs 1 2 3 --op all --difficulty all        # the WW2 operations with the auto crews; --log, --quiet
 node tools/ww1test.mjs 1 2 3 --difficulty all --quiet         # the WW1 German battle and the Paris Gun's mission; --op, --player, --table, --jobs N
 node tools/berthatest.mjs 1 2 3 --difficulty all              # Big Bertha demo games played by the crew logic; --log, --limit
-node tools/progressiontest.mjs                                # the campaigns: prerequisites, saves, rosters, targets, every victory path
+node tools/progressiontest.mjs                                # the campaigns: any-order play, saves, rosters, targets, every victory path
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)

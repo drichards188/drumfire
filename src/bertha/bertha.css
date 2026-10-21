@@ -1,7 +1,7 @@
 /* Dicke Bertha: the first-person page. The shared style.css lays out the HUD pieces it reuses (compass,
-   score, clock, time compression, toast, hint, kills, end card, title); this sheet gives the view the
-   whole window and adds the order card, the station bar, the prompt, the readout, the sight and the
-   clinometer. */
+   score, clock, time compression, toast, hint, kills, end card); this sheet gives the view the whole
+   window and adds the title screen, the order card, the station bar, the prompt, the readout, the sight
+   and the clinometer. */
 body.bertha #view { flex: 1 1 100%; width: 100%; }
 body.bertha #panel { display: none; }
 body.bertha #unit { top: auto; bottom: 112px; left: 22px; }
@@ -22,6 +22,104 @@ body.bertha.title #title-screen { max-width: min(600px, 88%); }
   padding: 12px 6px;
 }
 #back-link:hover { color: var(--paper); }
+/* in a game or the tutorial: back to the title screen (beside the gear, as the main game's Main menu button) */
+#to-title {
+  position: absolute;
+  right: 54px;
+  bottom: 16px;
+  z-index: 30;
+  height: 30px;
+  padding: 0 12px;
+  font: 700 10px var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ui-dim);
+  background: var(--plate);
+  border: 1px solid rgba(233, 223, 196, 0.28);
+  border-radius: 3px;
+  cursor: pointer;
+}
+#to-title:hover { color: var(--ui); border-color: rgba(233, 223, 196, 0.6); }
+body.title #to-title { display: none; }
+
+/* the title screen: the brand, the load bar, the options and the buttons over the crew's demonstration (these rules
+   lived in style.css while the main game had a title screen of its own; it has the menu now) */
+#title-screen {
+  position: absolute;
+  left: 7%;
+  bottom: 11%;
+  z-index: 10;
+  max-width: min(540px, 88%);
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity 0.9s ease, transform 0.9s ease;
+}
+body.title #title-screen { opacity: 1; transform: none; pointer-events: auto; }
+body.title #view::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(14, 10, 4, 0.82), rgba(14, 10, 4, 0.35) 55%, transparent 85%), linear-gradient(0deg, rgba(14, 10, 4, 0.62), transparent 55%);
+  pointer-events: none;
+  z-index: 5;
+}
+.brand h1 {
+  font-family: var(--serif);
+  font-size: clamp(46px, 7.4vw, 100px);
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 0.95;
+  color: var(--paper);
+  text-shadow: 0 5px 40px rgba(207, 169, 75, 0.28), 0 2px 0 rgba(0, 0, 0, 0.6), var(--shadow);
+}
+.brand h1::after { content: ''; display: block; width: 3.2em; height: 5px; margin: 14px 0 0 4px; background: var(--red); box-shadow: 0 0 18px rgba(196, 55, 43, 0.5); }
+.brand .sub {
+  margin: 14px 0 14px 4px;
+  font: 700 12px var(--mono);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--brass);
+  text-shadow: var(--shadow);
+}
+.brand .blurb { margin: 0 0 22px 4px; max-width: 470px; font-size: 15px; line-height: 1.55; font-style: italic; text-shadow: var(--shadow); }
+.loader { margin: 0 0 20px 4px; transition: opacity 0.6s; }
+body.ready .loader { opacity: 0; height: 0; margin: 0; overflow: hidden; }
+#load-bar { width: 260px; height: 3px; background: rgba(233, 223, 196, 0.16); overflow: hidden; }
+#load-bar-fill { height: 100%; width: 0; background: var(--brass); transition: width 0.3s ease; }
+#status { font: 12px var(--mono); letter-spacing: 0.1em; color: var(--ui-dim); margin-top: 10px; min-height: 1.2em; }
+#options { display: none; margin: 0 0 18px 4px; }
+body.ready #options { display: block; }
+#difficulty { display: flex; gap: 8px; }
+#difficulty button {
+  font: 700 11px var(--mono);
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  border: 1px solid rgba(233, 223, 196, 0.3);
+  background: rgba(20, 16, 9, 0.45);
+  color: var(--ui-dim);
+  cursor: pointer;
+}
+#difficulty button:hover { border-color: rgba(233, 223, 196, 0.6); color: var(--ui); }
+#difficulty button.on { border-color: var(--brass); color: #fff4d6; background: var(--brass-soft); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+#play {
+  font: 700 13px var(--mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding: 15px 38px 15px 42px;
+  border: 1px solid rgba(207, 169, 75, 0.9);
+  background: var(--brass-soft);
+  color: #fff4d6;
+  cursor: pointer;
+  transition: background 0.25s, letter-spacing 0.25s, opacity 0.4s;
+}
+#play:hover:not(:disabled) { background: rgba(207, 169, 75, 0.32); letter-spacing: 0.38em; }
+#play:disabled { opacity: 0; pointer-events: none; }
+@media (max-height: 820px) {
+  .brand .blurb { margin-bottom: 14px; }
+}
 
 #hp-box { position: absolute; top: 150px; right: 22px; text-align: right; text-shadow: var(--shadow); }
 #hp-box span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }

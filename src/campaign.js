@@ -159,8 +159,11 @@ function campaignDirector(Base) {
           sim.radio(`${b.name}: assignment complete.`, 'kill');
         }
       }
-      if (sim.campaignObjectives.every(o => o.done)) this.resolve(true, `${profile(sim.theatre.campaign.reward).name} is now available ${profile(sim.theatre.campaign.reward).sandbox === false ? 'in its own operation' : 'in sandbox'}. All supporting assignments completed.`);
-      else if (sim.time >= sim.theatre.campaign.timeLimit * sim.difficulty.time) this.resolve(false, 'The operation window closed before every battery completed its assignment.');
+      if (sim.campaignObjectives.every(o => o.done)) {
+        // a V-1 or V-2 win adds nothing to fire: their own operations are open to all
+        const r = profile(sim.theatre.campaign.reward);
+        this.resolve(true, `${r.name} ${r.sandbox === false ? 'earned' : 'is now available in sandbox'}. All supporting assignments completed.`);
+      } else if (sim.time >= sim.theatre.campaign.timeLimit * sim.difficulty.time) this.resolve(false, 'The operation window closed before every battery completed its assignment.');
     }
   };
 }

@@ -535,7 +535,8 @@ unattended; it is how the lessons are tested (every lesson must complete under a
 ## Dicke Bertha mode (demo)
 
 A first-person demo on the German side, meant to become a mode of the main game if it works: `bertha.html`
-(a build input, reached from the menu's WW1 German battle "Big Bertha", `/bertha.html?play=1`; its back link returns there). One 42 cm M-Gerät
+(a build input, reached from the menu's WW1 German battle "Big Bertha", `/bertha.html?play=1`; in a game or the tutorial the
+"Title screen" button beside the gear (`#to-title`) leads to the title screen, whose back link returns there). One 42 cm M-Gerät
 at `sector.js` `BERTHA` (10000, -2600, reverse slope behind the ridge, base line 253 degrees) and its
 detachment; the player is one man at a time. It reuses the stage of the main game (atmosphere, terrain,
 world dressing, craters, fx, flares, weather, post, audio, the chase camera for the shell ride, `HUD`), the
@@ -1485,3 +1486,22 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   has loaded, a rotation every 10 s, the next one fetched ahead; `menu.css`: each layer drifts slowly its own way under
   a shade darkest behind the briefing; no drift or rotation with `prefers-reduced-motion`. The folio lets the picture
   through a little (a blur behind it).
+- (menu, campaign) Missions, operations and lessons are open from the start, in any order, at the user's request:
+  `Progression.canPlay(id)` is true for every mission (`CAMPAIGN` has no `prerequisite` now, and a save's completed
+  missions all count, in whatever order they were won); `menuItems.js` sets no `locked` on the WW2 operations or the
+  campaign (the menu's `locked` handling stays, unused). A WW2 special weapon's own operation (`main.js` `OPERATION`:
+  the Gustav siege, the Karl, the V-1, the V-2) plays its whole roster, earned or not, as a campaign mission does; only
+  the open battles (Ypres, Flanders) still field just the earned batteries. `LOCKED` is now `MISPLACED`: only a campaign
+  mission asked for on the other era's page goes back to the menu. A V-1 or V-2 campaign win says the battery is earned
+  (its operation was already open). `tools/progressiontest.mjs` checks any-order play and that no menu entry is locked.
+  docs/PROGRESSION.md's table lost a stale Big Bertha mission (twelve missions, not thirteen).
+- (bertha) The title screen shows again: the WW1 work took its rules (`#title-screen`, `.brand`, `.loader`,
+  `#options`, `#difficulty`, `#play`) out of style.css with the main game's old title screen, which left the demo's
+  card below the window (no options, no tutorial button, no way back to the menu, no load bar). They live in
+  `bertha.css` now. A "Title screen" button beside the gear (`#to-title`, i18n `toTitle`), shown in a game and in the
+  tutorial, returns to it (the tutorial's stop, or `toTitle()`), since the menu opens the demo straight into a game.
+- (render) `warmUp` (render/warmup.js) draws the shadow maps too (`renderer.shadowMap.needsUpdate` before its render).
+  It runs before the game's first frame, when no shadow pass had run yet, and every one of its draws failed with
+  GL_INVALID_OPERATION ("mismatch between texture format and sampler type"), 256 console warnings and then "too
+  many errors" on every game page. The uploads it exists for happened anyway, so nothing showed; the console is clean
+  now, and the shadow pass's programs are warmed as well.

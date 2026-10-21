@@ -47,7 +47,8 @@ const forceLine = (k) => {
   return `${b.name}: ${b.role}${b.fuze ? ` (${b.fuze} fuze, ${Math.round(b.damage * 100)}% effective target damage, ${b.rounds}+ ${b.rounds === 1 ? 'round' : 'rounds'})` : ' (bearing ±1°, range ±1%, no oxygen shortfall)'}.`;
 };
 
-// every entry, with its locks and marks for this career (null: none locked) and the lessons done ({ id: true })
+// every entry, with its marks for this career (missions done, batteries earned) and the lessons done ({ id: true }); every
+// mission, operation and lesson is open from the start, in any order (an entry's `locked` reason would grey it out)
 export function menuItems(career = null, lessons = {}) {
   const items = [];
   items.push({
@@ -57,10 +58,11 @@ export function menuItems(career = null, lessons = {}) {
     lines: [earned(career, '1917')], query: { play: 1 }, difficulty: true, still: 'bl15',
   });
   for (const id of OP_IDS) {
-    const op = OPS[id], b = battery(op.units[0].kind), m = CAMPAIGN.find((q) => q.reward === b?.kind);
-    const locked = id !== 'flanders' && career && b && !career.unlocked(b.kind) ? `Win mission ${pad(numberOf(m))}, “${m.title}”, to earn the ${b.name}` : '';
+    // the special weapons' operations are open from the start, with their whole roster (only the open battle's
+    // batteries are earned)
+    const op = OPS[id], b = battery(op.units[0].kind);
     items.push(wip({
-      key: `op:${id}`, era: 'ww2', tab: 'battles', title: op.short, side: id === 'flanders' ? 'Your batteries' : b.name, locked,
+      key: `op:${id}`, era: 'ww2', tab: 'battles', title: op.short, side: id === 'flanders' ? 'Your batteries' : b.name,
       kicker: 'Battle · WW2 German', sub: `German artillery, ${op.title}`, blurb: op.blurb,
       lines: id === 'flanders' ? [earned(career, 'ww2', (q) => q.sandbox !== false)] : [], query: { mode: 'ww2', op: id, play: 1 }, difficulty: true,
       still: id === 'flanders' ? 'nbw41' : stillFor(op.units[0].kind),
@@ -86,7 +88,6 @@ export function menuItems(career = null, lessons = {}) {
     const n = numberOf(m), b = battery(m.reward), done = !!career?.completed.has(m.id);
     items.push(wip({
       key: `campaign:${m.id}`, era: m.era, tab: 'campaign', n: done ? '✓' : pad(n), done, title: m.title, side: b.name,
-      locked: career && !career.canPlay(m.id) ? `Win mission ${pad(n - 1)} first` : '',
       kicker: `Campaign · mission ${pad(n)}`, sub: `Earn the ${b.name}`, blurb: m.briefing,
       lines: [`Loaned battery: ${b.name}. Win to keep it.`, ...m.roster.map(forceLine)],
       query: { ...(m.era === 'ww2' ? { mode: 'ww2' } : {}), campaign: m.id, play: 1 }, difficulty: true, still: stillFor(m.reward),
