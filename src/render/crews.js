@@ -6,7 +6,7 @@ import { ramp, smooth, lerp, wrapPi, headingOf, clamp01 } from './anim.js';
 import { CrewField, newPoly, polyAt, finishPoly } from './crewfield.js';
 import { crewForRoleDE } from '../models/v/crew.js';
 import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crews_de.js';
-import { ROLES_HEAVY, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
+import { ROLES_HEAVY, heavyBuild, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
 import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
 // a node and every parent up to the rig's root are visible (an anchor whose part the rig has hidden is not)
 const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent) if (!n.visible) return false; return !!node; };
@@ -273,6 +273,9 @@ export class GunCrew {
     this.lw = F.level(this.workY); this.l0 = F.level(0);
     this.pairLead = this.men.find((q) => /^pair/.test(q.beh)) ?? null;
     this.snapTmp = out;
+    // the super-heavies' drill equipment now, not at the first update: built then, its materials were compiled in play
+    // (a hitch) and missed patchSceneFog (main.js runs it after the crews are made)
+    heavyBuild(this);
   }
 
   // standing men are obstacles for the walkers (not the one asking)
@@ -301,6 +304,17 @@ export class GunCrew {
   plan(m, tag, l, ax, az, bx, bz, r, ignoreBlock = false, down = false, fl = 'work', relax = 0.28, ext = null) {
     const P = m.plans[tag] ??= { poly: newPoly(), k: [1e9, 1e9, 1e9, 1e9, 0, 1e9] };
     const k = P.k;
+    if (this.planHold) { // (prepare)
+      if (k[0] !== 1e9) return P.poly;
+      // nothing planned yet (the unit was just selected) and nobody walks now: a straight stand-in between the same
+      // ends, so the first search runs at the loading pose and need not run again
+      const poly = P.poly, pts = !ext ? [ax, az, bx, bz] : ext.head ? [ax, az, ext.x, ext.z, bx, bz] : [ax, az, bx, bz, ext.x, ext.z];
+      poly.n = pts.length / 2;
+      for (let i = 0; i < poly.n; i++) { poly.x[i] = pts[2 * i]; poly.z[i] = pts[2 * i + 1]; }
+      finishPoly(poly);
+      poly.step = -1;
+      return poly;
+    }
     if (Math.abs(k[0] - ax) > 0.02 || Math.abs(k[1] - az) > 0.02 || Math.abs(k[2] - bx) > 0.02 || Math.abs(k[3] - bz) > 0.02 || k[4] !== r || Math.abs(k[5] - this.az) > 0.01) {
       k[0] = ax; k[1] = az; k[2] = bx; k[3] = bz; k[4] = r; k[5] = this.az;
       if (ignoreBlock) this.field.blk.length = 0; else this.blockers(m);
@@ -350,6 +364,12 @@ export class GunCrew {
     this.bd.x = -this.sa; this.bd.z = -this.ca;
     this.rt.x = this.ca; this.rt.z = -this.sa;
     this.aT = _a.copy(this.T).sub(this.B).dot(this.u);
+    // The walks to the tray and the breech happen in these steps, with the gun at its loading pose. In the others the
+    // tray moves while nobody walks to it (it lays, depresses, or runs out after a shot: the K 18's and the Mrs 18's
+    // whole top carriage recoils), and re-planning the routes every frame cost tens of milliseconds a frame (crewfield
+    // route), so plan() keeps them until the next loading pose: once a cycle, or never when the lay has not changed.
+    const st = p.job?.step;
+    this.planHold = !(st === 'shell' || st === 'ram' || st === 'cartridge');
   }
 
   // root-space centre of a shell lying on the tray with its middle at axial position a (from the breech)
@@ -603,7 +623,7 @@ export class GunCrew {
     // a man far from his work place goes as near as a short walk gets him
     if (Math.hypot(fq.x - fh.x, fq.z - fh.z) > 2.5) {
       const key = m.cq ??= [1e9, 1e9, 1e9, 1e9, 1e9];
-      if (Math.abs(key[0] - fq.x) > 0.02 || Math.abs(key[1] - fq.z) > 0.02 || Math.abs(key[2] - fh.x) > 0.02 || Math.abs(key[3] - fh.z) > 0.02 || Math.abs(key[4] - this.az) > 0.01) {
+      if (!(this.planHold && key[0] !== 1e9) && (Math.abs(key[0] - fq.x) > 0.02 || Math.abs(key[1] - fq.z) > 0.02 || Math.abs(key[2] - fh.x) > 0.02 || Math.abs(key[3] - fh.z) > 0.02 || Math.abs(key[4] - this.az) > 0.01)) {
         key[0] = fq.x; key[1] = fq.z; key[2] = fh.x; key[3] = fh.z; key[4] = this.az;
         F.closest(fl, this.lw, fh.x, fh.z, fq.x, fq.z, R_STAND, Math.min(6.5, Math.hypot(fq.x - fh.x, fq.z - fh.z) * 1.6), (m.cqOut ??= { x: 0, z: 0 }), m.world);
       }

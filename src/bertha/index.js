@@ -179,6 +179,7 @@ async function init() {
   const chase = new ChaseCamera(camera, canvas, { ground: terrain.heightAt });
   chase.enabled = false;
   const audio = new AudioEngine();
+  audio.prepare(); // the sample banks render in a worker behind the loading screen
   const wake = () => {
     removeEventListener('pointerdown', wake);
     removeEventListener('keydown', wake);

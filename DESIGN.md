@@ -1550,9 +1550,41 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   and named an unreachable target only when the gate lifted. Now an out-of-range or too-close order is reported
   through the gate (the radio at the order, the status line's CANNOT FIRE ahead of NOT READY); an arc may still
   change with the gate (a bed), the Karl keeps its gate (it drives to a new position), launch sites as before.
+- (render) WW2 firing lag: the crews re-planned their walks every frame while the gun moved. `GunCrew.plan()` re-ran the
+  `CrewField.route` search (about 37 ms each) whenever a route's end moved more than 2 cm, and the ends hang on the
+  tray and the breech: on the K 18 and the Mrs 18 the whole top carriage recoils (`setRecoil` moves `car`), so the 4 s
+  run-out after every shot, the depress and the lay cost 2 to 4 searches a frame (75 to 160 ms frames; 114 searches,
+  3 s, over 240 frames with the Mrs 18 selected). The walks happen only in the shell, ram and cartridge steps, with
+  the gun at its loading pose, so `prepare()` sets `planHold` outside them and `plan()` (and carryMan's `closest`)
+  keep what they have; with nothing planned yet (the unit just selected) a straight stand-in between the same ends
+  serves until the loading pose. Now 4 searches, once, at the first loading after selection (and again only when
+  the lay changes). The super-heavies' drill equipment (`crews_heavy.js` `drill()`) is built in the `GunCrew`
+  constructor (`heavyBuild`), not at the first update: its materials compiled in play and missed `patchSceneFog`.
 - (sim) One report a volley. `guns.fire` numbers each fire order per unit (`u.volleys`, `piece.volley`, `shell.volley`)
   and `Observers.onBurst` folds every burst of a volley into the report still waiting, on the mean point of impact,
   holding it until 2 s after the latest burst (a ripple lasts about 8 s); a burst of a volley already answered
   (`unit.answered`) says nothing more. A Nebelwerfer's ranging volley (a ripple of six, up to 18 rockets with every
   launcher) gave a correction per rocket; the British batteries ranging with every gun gave one per round. A lone round
   draws from `sim.rng` as before. Balance re-run (Balance; WW1 and WW2 Test and balance).
+- (render, perf) Switching batteries. The camera's glide across the map (tens of metres a frame) re-centred the finest
+  terrain levels, the trench and track masks and the trees on nearly every frame of it (40 to 60 ms frames for 15 to 20
+  frames, measured in the WW2 battle). `Terrain.update` now leaves a level alone while the camera moves more than 5 % of
+  its width a frame (the next coarser level covers that ground), the masks and the trees likewise; as the camera slows
+  they catch up one at a time (one level a frame, masks and trees each in a frame of their own); `GroundMasks.update`
+  returns whether it rebuilt, and `rebuildCover` reuses its 8 MB accumulation buffer. The crews' first plan after a
+  switch (4 routes, 107 ms) is now 2 ms: `CrewField.route` remembers a cell's clearance once a search (`okS`, `okV`;
+  it was asked up to 24 times a cell) and pulls the string over the grid path's corners only (it tested lines from
+  the far end back to every cell). A switch now costs one 11 to 22 ms frame (the console's rebuild) and the terrain's
+  catch-up at 12 to 17 ms; the Karl's far position still costs one 55 ms frame on arrival.
+- (audio, perf) The sample banks render in a worker while the page loads. `AudioEngine.prepare()` (main.js after
+  enableWW2/WW1, the Bertha demo after construction) starts `src/audioWorker.js`, which runs the same `bankTasks` with
+  a `make` that returns `{ chans, sr }` (copied into buffers of their own and transferred) and posts each bank; the
+  engine keeps them in `raw` until `start()` makes the context, then wraps them (`wrap`, `received`). The browser lets
+  the context start only after a gesture, which is why the banks were built at `start()`, on the main thread, up to
+  220 ms a bank (the WW2 colossal gun and rockets the heaviest) over the first seconds of play. The worker's banks
+  are identical: `SR` enters `bankTasks` only as min(SR, 32000) and min(SR, 24000), so 48000 renders what a 44.1 or
+  48 kHz context would (checked sample for sample). While the worker is alive `start()` builds nothing, not even the
+  essentials: its finished banks wait in the message queue until the end of loading is over, a moment later, and a
+  sound asked for meanwhile plays the nearest bank there is or nothing (`variant`, `bankOf`); `pump()` waits for it
+  and builds only what a failed worker left. `audio.built` counts the banks built here and in the worker (the WW2
+  battle: 0 and 94). Without workers, or with a given context (the tests), `start()` builds them as before.

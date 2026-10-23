@@ -270,6 +270,7 @@ async function init() {
     audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : WW1 ? { ww1: true } : undefined) : null;
     if (WW2) audio?.enableWW2?.();
     if (WW1) audio?.enableWW1?.();
+    audio?.prepare?.(); // the sample banks render in a worker behind the loading screen
     if (modeR) modeR.audio = audio;
   } catch (e) {
     console.warn('AudioEngine failed:', e.message);

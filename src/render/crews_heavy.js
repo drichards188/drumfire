@@ -127,6 +127,11 @@ function drill(crew) {
   return d;
 }
 
+// build the drill's equipment with the crew (render/crews.js GunCrew), so it is drawn by the load's warm-up
+export function heavyBuild(crew) {
+  if (HEAVY.has(crew.kind)) drill(crew);
+}
+
 export function heavyState(crew, c) {
   if (!HEAVY.has(crew.kind)) return false;
   const d = drill(crew), k = c.k;

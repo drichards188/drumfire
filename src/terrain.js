@@ -214,10 +214,13 @@ class GroundMasks {
     this.ncx = 1e9; this.ncz = 1e9; this.mcx = 1e9; this.mcz = 1e9; this.fcx = 1e9; this.fcz = 1e9;
   }
 
+  // true when it rebuilt something (Terrain.update spreads the heavy work over frames)
   update(p, all) {
-    if (all || Math.abs(p.x - this.ncx) > 56 || Math.abs(p.z - this.ncz) > 56) this.rebuildNear(Math.round(p.x / 32) * 32, Math.round(p.z / 32) * 32);
-    if (all || Math.abs(p.x - this.mcx) > 480 || Math.abs(p.z - this.mcz) > 480) this.rebuildCover(this.mid, this.midWin, MID, Math.round(p.x / 128) * 128, Math.round(p.z / 128) * 128, 'm');
-    if (all || Math.abs(p.x - this.fcx) > 1800 || Math.abs(p.z - this.fcz) > 1800) this.rebuildCover(this.far, this.farWin, FAR, Math.round(p.x / 512) * 512, Math.round(p.z / 512) * 512, 'f');
+    let did = false;
+    if (all || Math.abs(p.x - this.ncx) > 56 || Math.abs(p.z - this.ncz) > 56) { this.rebuildNear(Math.round(p.x / 32) * 32, Math.round(p.z / 32) * 32); did = true; }
+    if (all || Math.abs(p.x - this.mcx) > 480 || Math.abs(p.z - this.mcz) > 480) { this.rebuildCover(this.mid, this.midWin, MID, Math.round(p.x / 128) * 128, Math.round(p.z / 128) * 128, 'm'); did = true; }
+    if (all || Math.abs(p.x - this.fcx) > 1800 || Math.abs(p.z - this.fcz) > 1800) { this.rebuildCover(this.far, this.farWin, FAR, Math.round(p.x / 512) * 512, Math.round(p.z / 512) * 512, 'f'); did = true; }
+    return did;
   }
 
   rebuildNear(cx, cz) {
@@ -254,7 +257,8 @@ class GroundMasks {
     if (which === 'm') { this.mcx = cx; this.mcz = cz; } else { this.fcx = cx; this.fcz = cz; }
     const S = W.size, ext = W.extent, tx = ext / S, x0 = cx - ext / 2, z0 = cz - ext / 2;
     win.set(x0, z0, ext, 1 / S);
-    const acc = new Float32Array(S * S * 2);
+    const acc = (this.acc ??= {})[S] ??= new Float32Array(S * S * 2); // reused: 8 MB a call at 1024 (GC, zeroing)
+    acc.fill(0);
     const splat = (segs, ch, width, trackKinds) => {
       const step = Math.min(2, tx * 0.5), w = (step * width) / (tx * tx);
       for (const s of segs) {
@@ -424,12 +428,20 @@ export class Terrain {
     this._clock = now;
     this.craters.update(dt);
     const p = camera.position;
-    let budget = all ? LEVELS : 2;
+    // While the camera sweeps across the map (the glide from one battery to another, tens of metres a frame), a level
+    // it crosses in a few frames is not re-centred: the next coarser level covers that ground (it is drawn wherever
+    // the finer one is not), and re-sampling the finest levels on every frame of the glide cost 40 to 60 ms a frame.
+    // They catch up as the camera slows; `all` rebuilds everything.
+    const moved = this._p ? Math.hypot(p.x - this._p.x, p.z - this._p.z) : 0;
+    (this._p ??= new THREE.Vector3()).copy(p);
+    // one level a frame (about 10 ms for the finest), so the catch-up after a sweep is spread over frames too
+    let budget = all ? LEVELS : 1;
     const L = this.levels;
     for (let k = 0; k < LEVELS; k++) {
       const lv = L[k], step = lv.cell * 2;
       const cx = Math.round(p.x / step) * step, cz = Math.round(p.z / step) * step;
       if (cx !== lv.cx || cz !== lv.cz) {
+        if (!all && lv.valid && moved > lv.cell * N * 0.05) continue;
         if (budget <= 0) continue;
         budget--;
         lv.rebuild(cx, cz);
@@ -447,8 +459,12 @@ export class Terrain {
       const e = (N * f.cell) / 2;
       lv.setHole(f.valid ? { x0: f.cx - e, x1: f.cx + e, z0: f.cz - e, z1: f.cz + e } : null);
     }
-    this.masks.update(p, all);
-    this.trees.update(camera, all);
+    // the trench and track masks and the trees (re-planted every 110 m, 20 to 50 ms each) wait the same way, and each
+    // takes a frame of its own: none while a level was rebuilt, the trees not while the masks were
+    const sweeping = !all && moved > BASE_CELL * N * 0.05;
+    const busy = !all && budget < 1;
+    const masked = !sweeping && !busy && this.masks.update(p, all);
+    if (!sweeping && (all || (!busy && !masked))) this.trees.update(camera, all);
     this.grass.update(camera);
   }
 

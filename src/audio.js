@@ -1250,6 +1250,8 @@ export class AudioEngine {
     this.lastPlay = {};
     this.used = {};
     this.bank = {};
+    this.raw = {}; // banks the worker sent before the context existed (prepare)
+    this.built = { here: 0, worker: 0 }; // banks rendered on the main thread and in the worker
     this.pending = [];
     this.bedEnergy = 0;
     this.combat = 0;
@@ -1355,11 +1357,17 @@ export class AudioEngine {
       return b;
     };
     this.make = make;
+    // the banks the worker has rendered while the page loaded (prepare) are only wrapped; runTask skips them
+    for (const g in this.raw) for (const k in this.raw[g]) (this.bank[g] ||= {})[k] = this.wrap(this.raw[g][k]);
+    this.raw = {};
     this.ww2 = this.wantWW2;
     const tasks = bankTasks(ctx.sampleRate, make, { ww2: this.ww2 });
     const split = tasks.indexOf(null);
-    for (const t of tasks.slice(0, split)) this.runTask(t);
-    this.pending = tasks.slice(split + 1);
+    // with the worker still at it (prepare) even the essentials come from it: its finished banks wait in the message
+    // queue until this busy stretch of the page (the end of loading) is over, a moment from now. A sound asked for
+    // before then plays the nearest bank there is, or nothing (variant, bankOf).
+    if (!this.worker) for (const t of tasks.slice(0, split)) this.runTask(t);
+    this.pending = this.worker ? tasks.filter(Boolean) : tasks.slice(split + 1);
     if (this.wantWW1) {
       this.ww1 = true;
       this.pending.push(...bankTasks(ctx.sampleRate, make, { ww1: 'only' }));
@@ -1375,16 +1383,52 @@ export class AudioEngine {
   }
 
   runTask([group, key, fn]) {
+    if (this.bank[group]?.[key]) return; // (the worker's, prepare)
     (this.bank[group] ||= {})[key] = fn();
+    this.built.here++;
   }
 
-  // one bank per tick so the first seconds never stall
+  /**
+   * Render the sample banks in a worker while the page loads (src/audioWorker.js): they are plain Float32Array maths
+   * and need no audio context, and built on the main thread after the first click (up to 220 ms a bank, the WW2
+   * ones the heaviest) they stuttered the first salvos. Call after enableWW2/enableWW1 so the era's banks come too.
+   * Without workers (or with a given context, the tests) start() builds them as before.
+   */
+  prepare() {
+    if (this.worker || this.given || this.ctx || typeof Worker === 'undefined') return;
+    try {
+      const w = this.worker = new Worker(new URL('./audioWorker.js', import.meta.url), { type: 'module' });
+      w.onmessage = ({ data }) => this.received(data);
+      w.onerror = () => { this.worker = null; };
+      w.postMessage({ SR: 48000, ww2: !!this.wantWW2, ww1: !!this.wantWW1 });
+    } catch (e) {
+      this.worker = null;
+    }
+  }
+
+  received({ group, key, v, done }) {
+    if (done) { this.worker?.terminate(); this.worker = null; return; }
+    this.built.worker++;
+    if (!this.ctx) (this.raw[group] ||= {})[key] = v;
+    else if (!this.bank[group]?.[key]) (this.bank[group] ||= {})[key] = this.wrap(v);
+  }
+
+  wrap(v) {
+    const one = (s) => this.make(s.chans, s.sr);
+    return Array.isArray(v) ? v.map(one) : one(v);
+  }
+
+  // one bank per tick so the first seconds never stall; while the worker still renders them (prepare) it waits for it
   pump() {
     if (!this.pending.length) {
       this.pumping = false;
       return;
     }
     this.pumping = true;
+    if (this.worker) {
+      setTimeout(() => this.pump(), 100);
+      return;
+    }
     this.runTask(this.pending.shift());
     setTimeout(() => this.pump(), 12);
   }

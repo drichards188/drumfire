@@ -217,6 +217,7 @@ export class CrewField {
     this.surfL = dr.map((v, i) => v | df[i]);
     this.g = new Float32Array(n); this.from = new Int32Array(n); this.stamp = new Uint32Array(n); this.closed = new Uint8Array(n);
     this.heap = new Int32Array(n + 8); this.f = new Float32Array(n);
+    this.okS = new Uint32Array(n); this.okV = new Uint8Array(n); // a cell's clearance, once per search (route)
     this.cur = 0;
     this.blk = [];
     this.ends = null;
@@ -320,18 +321,24 @@ export class CrewField {
     const hf = (k) => { const dx = Math.abs((k % w) - ex), dz = Math.abs(((k / w) | 0) - ez); return (Math.max(dx, dz) + 0.414 * Math.min(dx, dz)) * CELL; };
     const up = (i) => { while (i > 0) { const p = (i - 1) >> 1; if (F[H[p]] <= F[H[i]]) break; const t = H[p]; H[p] = H[i]; H[i] = t; i = p; } };
     const down = (i) => { for (;;) { let m = i; const l1 = 2 * i + 1, r1 = l1 + 1; if (l1 < hn && F[H[l1]] < F[H[m]]) m = l1; if (r1 < hn && F[H[r1]] < F[H[m]]) m = r1; if (m === i) break; const t = H[m]; H[m] = H[i]; H[i] = t; i = m; } };
+    // a cell's clearance is asked up to 24 times a search (each neighbour, the diagonals' corners): remember it
+    const OS = this.okS, OV = this.okV;
     const ok = (k) => {
+      if (OS[k] === st) return OV[k] === 1;
+      OS[k] = st;
       const x = x0 + ((k % w) + 0.5) * CELL, z = z0 + (((k / w) | 0) + 0.5) * CELL, re = this.rAt(x, z, E, rr);
-      if (this.dAt(fl, l, x, z, world) < re) return false;
-      for (const b of this.blk) if (Math.hypot(b[0] - x, b[1] - z) < re + b[2]) return false;
-      return true;
+      let v = this.dAt(fl, l, x, z, world) >= re;
+      if (v) for (const b of this.blk) if (Math.hypot(b[0] - x, b[1] - z) < re + b[2]) { v = false; break; }
+      OV[k] = v ? 1 : 0;
+      return v;
     };
     G[s] = 0; F[s] = hf(s); S[s] = st; C[s] = 0; P[s] = -1; H[hn++] = s;
-    let found = false;
+    let found = false, nx = 0;
     while (hn) {
       const k = H[0]; H[0] = H[--hn]; down(0);
       if (C[k]) continue;
       C[k] = 1;
+      nx++;
       if (k === e) { found = true; break; }
       const ki = k % w, kj = (k / w) | 0;
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
@@ -348,6 +355,7 @@ export class CrewField {
         if (hn < H.length - 1) { H[hn] = nk; up(hn++); }
       }
     }
+    this.nExp = nx; // (cells expanded, for profiling)
     if (!found) {
       // boxed in by the other men: try again past them, then give up and walk straight
       this.ends = null;
@@ -361,7 +369,10 @@ export class CrewField {
     const cells = [];
     for (let k = e; k >= 0; k = P[k]) { cells.push(k); if (k === s) break; }
     cells.reverse();
-    const pts = cells.map((k) => [x0 + ((k % w) + 0.5) * CELL, z0 + (((k / w) | 0) + 0.5) * CELL]);
+    // only the corners of the grid path (where its step turns) are candidates for the pulled string: the straight
+    // runs between them add nothing, and testing lines to every cell from the far end back cost tens of ms a route
+    const keep = cells.filter((k, n) => n === 0 || n === cells.length - 1 || k - cells[n - 1] !== cells[n + 1] - k);
+    const pts = keep.map((k) => [x0 + ((k % w) + 0.5) * CELL, z0 + (((k / w) | 0) + 0.5) * CELL]);
     pts[0] = [ax, az]; pts[pts.length - 1] = [bx, bz];
     let i = 0;
     push(ax, az);
