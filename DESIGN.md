@@ -453,14 +453,23 @@ the objective at about 40.5 min; defeat earlier when two sectors fall or every g
 
 | Difficulty | all auto | scripted 15in+9.2in+6in | scripted all five |
 |---|---|---|---|
-| Easy | 39 of 72 | 65 | 69 |
-| Normal | 20 of 72 | 46 | 58 |
-| Hard | 1 of 72 | 8 | 15 |
+| Easy | 54 of 72 | 66 | 67 |
+| Normal | 22 of 72 | 52 | 65 |
+| Hard | 1 of 72 | 6 | 14 |
+
+(units by calibre, one report a volley) All nine cells re-run on seeds 1 to 72 after the British units were renumbered
+smallest first and the observers answered each volley once (see the changelog). Nothing in the tables changed, but the
+crews pick missions in unit order (the 60-pounders now choose first, the 15-inch fourth), the SOS and barrage spread follows
+the ids, and a battery ranging with every gun gets one report on the mean point of impact instead of one a round: the auto
+crews win more on Easy (39 before) and the scripted player on all five more on Normal (56 before; the elevation-limit run's
+Easy 39 / 64 / 68, Normal 18 / 46 / 56, Hard 2 / 8 / 14; with the renumbering alone 50 / 65 / 67, 21 / 49 / 66, 1 / 6 / 14).
+On Normal 55 % of the infantry reach the objective with auto crews, 65 % with the scripted 15-inch, 9.2-inch and 6-inch, 73 %
+with the scripted player on all five.
 
 (rail18) All nine cells re-run on seeds 1 to 72 after the railway gun became the 18-inch (cycle 60 to 90 s, 36 rounds instead of 50, the biggest blast and crater in the game). Before: Easy 39 / 66 / 69, Normal 14 / 48 / 61, Hard 0 / 4 / 15. Kills per game by unit on Normal (15in, 9.2in, 6in, 60pdr, rail), scripted all five: 2.1 1.3 1.0 1.0 0.6 before, 2.3 1.4 0.9 1.0 1.3 after (all auto 1.0 before, 1.5 after), so the 18-inch gets about as many kills as the 15-inch but fires only about 25 rounds a game; it does not win the game alone.
 
-On Normal the auto crews hold the SOS 46 % of the time (scripted all five 77 %), 50 % of the infantry reach the objective on
-average with auto crews against 68 % with the scripted player (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Tuning knobs:
+On Normal the auto crews hold the SOS 46 % of the time (scripted all five 77 %), 55 % of the infantry reach the objective on
+average with auto crews against 73 % with the scripted player on all five (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Tuning knobs:
 `DIFFICULTY` (err, cb, dmg, assault, time, ammo, sig, zero), the dispersion and calibration in `GUNS`, `SHELLS` radii, the CB
 cadence in `enemy.js` (one round per gun per 85 s / (cb * activity)), the breach penalty in `director.js` (0.5 of a sector per group in),
 the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or more; single games flip near the loss line.
@@ -754,7 +763,8 @@ Special controllers (`unit.special`, plain data; commands through `sim.command`)
 
 Events added (optional): `special(unit, what, x)` ('ready', 'drive', 'step', 'done', 'launch', 'result'),
 `raid(raid, 'warning' | 'attack', plane)`. `tools/ww2test.mjs [seeds] --op all --difficulty all` plays every
-operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 4, Normal 3, Hard 1 won).
+operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 6, Normal 5, Hard 1 won, with the first order at
+0 s and one report a volley).
 
 ## WW1 German mode
 
@@ -998,8 +1008,8 @@ to Wilhelm; its end card is the controller's `sim.over`.
 [--table] [--jobs N] [--log]` plays the open battle and the Paris Gun's mission (default both) with every crew on
 auto; `--player` puts a scripted competent player on the Paris Gun instead (ALL HANDS, each round at once, the charge
 to the gauge, the table and half of each report, faults fixed, the order due soonest, a spent barrel changed unless an
-order would run out). On seeds 1 to 72, the battle all-auto (without the Paris Gun, the bed relay instant): Easy 21,
-Normal 10, Hard 3 won (the British game: 39, 18, 2; 27, 16, 5 with the Paris Gun in it and the 100 s relay; 25, 10, 3
+order would run out). On seeds 1 to 72, the battle all-auto (without the Paris Gun, the bed relay instant): Easy 20,
+Normal 15, Hard 1 won with the first order at 0 s and one report a volley (before them 21, 10, 3; the British game: 54, 22, 1; 27, 16, 5 with the Paris Gun in it and the 100 s relay; 25, 10, 3
 with it and the instant relay). The Paris Gun's mission, all-auto: Easy 25, Normal 6, Hard 1 (3.1, 2.3 and 1.3 of the
 5 orders; about 7 shots, 5 in a target's area on Normal); the scripted player: 59, 49, 10 (4.0, 3.8, 2.2 orders;
 about 9 shots); the auto gangs stand the gun at 253 s; 4 to 7 raids a mission, none has destroyed the gun. Single games flip near the loss line: decide on 72 seeds. After touching `tables_ww1.js`, `src/ww1/*` or the shared sim, run it and `node
@@ -1540,3 +1550,9 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   and named an unreachable target only when the gate lifted. Now an out-of-range or too-close order is reported
   through the gate (the radio at the order, the status line's CANNOT FIRE ahead of NOT READY); an arc may still
   change with the gate (a bed), the Karl keeps its gate (it drives to a new position), launch sites as before.
+- (sim) One report a volley. `guns.fire` numbers each fire order per unit (`u.volleys`, `piece.volley`, `shell.volley`)
+  and `Observers.onBurst` folds every burst of a volley into the report still waiting, on the mean point of impact,
+  holding it until 2 s after the latest burst (a ripple lasts about 8 s); a burst of a volley already answered
+  (`unit.answered`) says nothing more. A Nebelwerfer's ranging volley (a ripple of six, up to 18 rockets with every
+  launcher) gave a correction per rocket; the British batteries ranging with every gun gave one per round. A lone round
+  draws from `sim.rng` as before. Balance re-run (Balance; WW1 and WW2 Test and balance).

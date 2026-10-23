@@ -2,7 +2,8 @@
 // (add or drop, left or right), the aeroplane in the RFC clock code (a circle letter and an hour with 12 at
 // true north from the target), the kite balloon like an observer but from further back. Map shoots and
 // sound ranging give no reports. Rail spotters report on the railhead even after wide misses.
-// Reports arrive a few seconds after the burst.
+// Reports arrive a few seconds after the burst; a volley (the shells of one fire order) gets one report, on its mean
+// point of impact.
 import { YARD, DEG } from '../sector.js';
 
 const CIRCLES = [['Y', 10], ['Z', 25], ['A', 50], ['B', 100], ['C', 200], ['D', 300], ['E', 400], ['F', 500]];
@@ -64,11 +65,27 @@ export class Observers {
     const fx = dx / r, fz = dz / r, rx = -fz, rz = fx;
     const bx = pos.x - ref.x, bz = pos.z - ref.z;
     const over = bx * fx + bz * fz, right = bx * rx + bz * rz;
+    // one report a volley: a Nebelwerfer's ripples (up to 18 rockets) or a section's salvo is read as one fall of
+    // shot, on the mean point of impact. Its later bursts join the report still waiting and hold it until a moment
+    // after they land (a ripple lasts about 8 s); a burst of a volley already answered says nothing more. A lone
+    // round draws from sim.rng exactly as before, so single-gun ranging plays out unchanged.
+    const vol = shell.volley;
+    if (vol != null) {
+      const open = this.queue.find((q) => q.u === u && q.vol === vol && q.m === m);
+      if (open) {
+        open.over = (open.over * open.n + over) / (open.n + 1);
+        open.right = (open.right * open.n + right) / (open.n + 1);
+        open.n++;
+        open.t = Math.max(open.t, sim.time + 2);
+        return;
+      }
+      if (u.answered?.has(vol)) return;
+    }
     // the "not observed" answer to a wild round in a battle draws nothing from sim.rng, so a seeded game
     // plays out exactly as it did before that answer existed
     let delay = wild && !sim.scripted ? 6 : m.observer === 'air' ? 6 + sim.rng() * 5 : m.observer === 'balloon' ? 5 + sim.rng() * 3 : 3 + sim.rng() * 4;
     if (sim.scripted) delay = 2 + (delay - 3) * 0.4; // the range's observers are quick, so a lesson does not stall
-    this.queue.push({ t: sim.time + delay, m, u, shell, over, right, ref, fx, fz, rx, rz, wild });
+    this.queue.push({ t: sim.time + delay, m, u, shell, over, right, ref, fx, fz, rx, rz, wild, vol, n: 1 });
   }
 
   update() {
@@ -78,6 +95,7 @@ export class Observers {
       const q = this.queue[i];
       if (q.t > now) continue;
       this.queue.splice(i--, 1);
+      if (q.vol != null) (q.u.answered ??= new Set()).add(q.vol);
       if (q.m.state === 'done' || q.m.state === 'failed') continue;
       this.deliver(q);
     }

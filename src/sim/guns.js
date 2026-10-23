@@ -255,8 +255,11 @@ export class Guns {
     const ranging = guns == null && o.rounds === 1 && m && m.state === 'ranging' && live.length > 1;
     const sel = guns != null ? pickGuns(u, guns) : ranging ? [live.find((p) => p.loaded) ?? live[0]] : live;
     if (guns != null && !sel.length) return false;
+    // the volley: every shell of this order (a section's salvo, a Nebelwerfer's ripples) is one for the observer
+    const volley = u.volleys = (u.volleys ?? 0) + 1;
     let i = 0;
     for (const p of sel) {
+      p.volley = volley;
       p.rounds = o.rounds;
       p.fireAt = sim.time + (ranging ? 0 : 0.35 * i + sim.rng() * 0.9 * (i > 0 ? 1 : 0));
       i++;
@@ -533,7 +536,7 @@ export class Guns {
       fuze: p.shot ?? o.fuze, t: 0, t0: sim.time, tof: p.cmd.tof, aim: { x: o.x, z: o.z }, alive: true,
       k: shellK(p.kind), aimY: sim.heightAt(o.x, o.z) + (o.h || (o.fuze === 'shrapnel' ? 25 : 0)),
       plane: Math.hypot(o.x - p.pos.x, o.z - p.pos.z), pbx: dirx, pbz: dirz, ox: p.pos.x, oz: p.pos.z,
-      fuzeErr: sim.gauss() * 22,
+      fuzeErr: sim.gauss() * 22, volley: p.volley ?? null,
     };
     sim.shells.push(shell);
     if (g.salvo) {
