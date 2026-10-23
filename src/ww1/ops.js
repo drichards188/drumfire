@@ -147,7 +147,7 @@ export function ww1Pads() {
   // half-sizes: the field pits (gun_sites_ww1.js) are 12 to 15 m across with the dugout walk up to 9 m behind the gun
   // [rx, rz, back, right]: back and right move the pad's middle that far behind the piece and to its right, so the
   // pad covers the site as built (measured in the site's frame: the Langer Max x -63 to 64, z -24 to 52; the Gamma
-  // x -36 to 12, z -19 to 32; the Paris Gun x -28 to 18, z -34 to 48)
+  // x -36 to 12, z -14 to 32; the Paris Gun x -28 to 18, z -34 to 48)
   // Bertha's and the Gamma's beds can be relaid onto any line (special.js), their emplacements turning with them: their
   // pads are squares round the gun that hold the site at any bearing (it reaches 22 and 48 m from the gun)
   const size = { bertha: [22, 22], max38: [64, 38, 14, 0], gamma: [48, 48], paris: [23, 41, 7, -5], m16: [10, 12], sfh13: [9, 12], k17: [9, 12] };

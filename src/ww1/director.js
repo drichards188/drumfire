@@ -145,14 +145,15 @@ export class DirectorWW1 extends DirectorWW2 {
     if (!this.sim.scripted) this.fieldFire();
   }
 
-  // the British guns announce themselves when they fire; the 18-pounders are found from the start of the duel. The Paris
-  // Gun's mission has no battle: its controller (special.js) gives the orders and ends it.
+  // the British guns announce themselves when they fire; the 18-pounders are found from the start of the duel, the
+  // first order on the battle's first frame (a silent start reads as a broken game). The Paris Gun's mission has no
+  // battle: its controller (special.js) gives the orders and ends it.
   buildScript() {
     if (this.op.kind !== 'battle') return [];
     const S = [];
     const at = (t, fn) => S.push({ t, fn });
     const D = this;
-    at(40, () => D.siteMission('F1', { observer: 'foo', deadline: 700 }));
+    at(0, () => D.siteMission('F1', { observer: 'foo', deadline: 700 }));
     at(70, () => D.siteMission('T1', { deadline: 650 }));
     at(200, () => D.siteMission('D1'));
     at(300, () => D.siteMission('F2', { observer: 'foo', deadline: 700 }));

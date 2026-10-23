@@ -24,7 +24,7 @@ const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent
 // the tray is played inside the step. The heavies lift the shell from the ground instead.
 
 const POSES = new Set(CREW_POSES);
-const FALLBACK = { ram: 'push', lay: 'operate', lanyard: 'stand', ears: 'stand', point: 'stand', phone: 'stand', haul: 'push', dead: 'stand' };
+const FALLBACK = { ram: 'push', ramLow: 'push', lay: 'operate', lanyard: 'stand', ears: 'stand', point: 'stand', phone: 'stand', haul: 'push', dead: 'stand' };
 const STRIDE = CREW_GAITS.walk.stride, CSTRIDE = CREW_GAITS.carryWalk.stride;
 
 const ROLES = {

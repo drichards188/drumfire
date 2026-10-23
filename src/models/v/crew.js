@@ -57,6 +57,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
  *   crouch       kneeling on the right knee, hands forward and low under the load (picking it up).
  *   lift         finite progress 0..1: squat, take the load, then stand with it at the belt.
  *   ramLoad      finite progress 0..1: transfer weight from the rear leg into one rammer stroke.
+ *   ramLow       cycle, the rammer's stroke bent low over a staff at hip height (0.72 m), hands as in ram.
  *   reachUp      arms raised, hands on the underside of a load hanging from a crane (t sways it).
  *   push         lunging, both hands on the end of a load at chest height, shoving it forward (t).
  *   climb        cycle, climbing the side of a vehicle: holds on a wall 0.32 m in front of the root,
@@ -861,7 +862,7 @@ export function buildCrew(n, opts = {}) {
 // ---------------------------------------------------------------- poses
 
 export const CREW_POSES = ['stand', 'walk', 'carry', 'carryWalk', 'carryShoulder', 'crouch', 'reachUp', 'push', 'climb', 'signal', 'operate', 'sidestep', 'stoopWalk',
-  'haul', 'ram', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead'].filter((p, i, a) => a.indexOf(p) === i);
+  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead'].filter((p, i, a) => a.indexOf(p) === i);
 export const CREW_GAITS = {
   walk: { stride: 1.25, period: 0.98 }, // metres the root moves per cycle, seconds per cycle at a natural pace
   carryWalk: { stride: 0.9, period: 1.1 },
@@ -1147,6 +1148,22 @@ const POSES = {
   ram(S, t) {
     const k = 0.5 - 0.5 * Math.cos(TAU * t);
     POSES.ramLoad(S, k);
+  },
+  // ramLow: the same stroke on a staff at hip height (Bertha's tray, 0.7 m over her stage): knees bent in a deep
+  // lunge, the back bowed over the staff; carry anchor and hands as in ram
+  ramLow(S, t) {
+    const k = 0.5 - 0.5 * Math.cos(TAU * t);
+    S.hips.set(lerp(0.012, -0.018, k), 0.76 - 0.04 * k, 0.16 - 0.22 * k);
+    S.hipsRot.set(-0.42 - 0.12 * k, 0.06, 0);
+    S.spine.set(-0.18 - 0.06 * k, -0.025, 0); S.chest.set(-0.08 - 0.04 * k, -0.025, 0);
+    S.neck.set(0.38, 0, 0); S.head.set(0.18, 0, 0);
+    S.feet[0].ankle.set(-0.17, ANKLE_Y, -0.42); S.feet[0].rot.set(0, 0.08, 0); S.feet[0].pole.set(-0.18, 0, -1);
+    S.feet[1].ankle.set(0.18, ANKLE_Y, 0.44); S.feet[1].rot.set(0, -0.16, 0); S.feet[1].pole.set(0.22, 0, -1);
+    const z = -0.42 - 0.22 * k;
+    S.carry.set(0, 0.72, z);
+    S.carryRot.set(0, Math.PI / 2, 0);
+    setIK(S.arms[0], -0.025, 0.72, z + 0.1, 1, -0.3, 0, 0, -1, 0, -0.45, -1, 0.2);
+    setIK(S.arms[1], 0.025, 0.72, z - 0.13, -1, -0.3, 0, 0, -1, 0, 0.45, -1, 0.2);
   },
   ramLoad(S, t) {
     const k = sstep(0, 1, t);

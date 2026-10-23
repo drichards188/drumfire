@@ -287,11 +287,7 @@ export function heavyAct(crew, m, c, h) {
       m.put(h.x, h.y, h.z, lead ? side < 0 ? -Math.PI / 2 + crew.az : Math.PI / 2 + crew.az : heading,
         lead && on ? 'operate' : 'stand', on ? ramp(k, 0.14, 0.97) * 4 : crew.idleT + m.seed);
       if (lead) control(crew, m, h, on ? ramp(k, 0.14, 0.97) * 4 : 0, on ? 1 : 0, 'rammer');
-    } else if (s === 'ram') {
-      crew.ramMan(m, c, h);
-    } else {
-      m.put(h.x, h.y, h.z, h.h, 'stand', crew.idleT + m.seed);
-    }
+    } else berthaRammer(crew, m, c, h);
     return true;
   }
   if (m.beh === 'guide0' || m.beh === 'guide1') {
@@ -370,6 +366,52 @@ export function heavyAct(crew, m, c, h) {
     return true;
   }
   return false;
+}
+
+// Bertha's two rammers walk the staff up the bore as in the demo's drill (src/bertha/crew.js): ahead of the tray's
+// rear end the deck is cut away for the recoiling breech, so they stand behind the tray either side of the staff,
+// the first 0.75 m behind its head and the second 1.35 m, never past the back of the stage, and the staff runs
+// through their hands a grip and a heave at a time. They come over at the start of the ram and go back to their
+// places as the bags come up.
+const BERTHA_RAM = { rammer1: { side: -1, gap: 0.75, rear: 0.3 }, rammer2: { side: 1, gap: 1.35, rear: 0.9 } };
+const GRIP = 0.45; // the staff travel per heave
+const _st = new THREE.Vector3();
+
+function berthaStation(crew, r, head, out) {
+  const tz = crew.rig.berthaModel?.trayZ, rear = crew.aT - (tz ? (tz.z1 - tz.z0) / 2 : 0.9);
+  const a = Math.max(rear - 0.98, Math.min(rear - r.rear, head - r.gap));
+  crew.trayAt(a, out);
+  out.x += crew.rt.x * r.side * 0.34; out.z += crew.rt.z * r.side * 0.34;
+  return a;
+}
+
+function berthaRammer(crew, m, c, h) {
+  const s = c.s, k = c.k, r = BERTHA_RAM[m.role] ?? BERTHA_RAM.rammer2;
+  const fwd = headingOf(crew.u.x, crew.u.z);
+  const start = crew.aT - crew.half - 0.04; // the staff's head against the shell's base before the stroke
+  // to the station and back: a short shuffle, still facing the breech (backwards or sideways steps, not a turn)
+  const shuffle = (into) => {
+    berthaStation(crew, r, start, _st);
+    const kk = into ? smooth(k, 0, 0.12) : 1 - smooth(k, 0, 0.12);
+    const x = lerp(h.x, _st.x, kk), z = lerp(h.z, _st.z, kk);
+    const moving = kk > 0.01 && kk < 0.99;
+    m.put(x, h.y, z, h.h + wrapPi(fwd - h.h) * kk, moving ? 'walk' : into ? 'ramLow' : 'stand',
+      moving ? Math.hypot(_st.x - h.x, _st.z - h.z) * kk / 1.15 : crew.idleT + m.seed);
+  };
+  if (s === 'cartridge' && k < 0.12) return shuffle(false);
+  if (s !== 'ram' || crew.staffA == null) return m.put(h.x, h.y, h.z, h.h, 'stand', crew.idleT + m.seed);
+  if (k < 0.12) return shuffle(true);
+  const a = berthaStation(crew, r, crew.staffA, _st);
+  // each heave: the hands go along with the wood for 80% of GRIP while he lunges into it, then let go and take a
+  // fresh hold behind as he straightens (the pose's cycle: lunge over its first half, recover over the second)
+  const phase = ((((crew.staffA - start) / GRIP) % 1) + 1) % 1, push = phase < 0.8;
+  const travel = push ? phase : 0.8 * (1 - smooth(phase, 0.8, 1));
+  m.put(_st.x, h.y, _st.z, fwd, 'ramLow', push ? 0.5 * smooth(phase, 0, 0.8) : 0.5 + 0.5 * smooth(phase, 0.8, 1));
+  const hold = windowK(k, 0.12, 0.17, 0.97, 1) * (1 - windowK(phase, 0.8, 0.85, 0.95, 1));
+  for (const [hand, off] of [['L', 0.15], ['R', 0.42]]) {
+    crew.trayAt(Math.min(crew.staffA - 0.1, a + off + travel * GRIP), q);
+    m.hand(hand, q.x, q.y, q.z, hold); // (the stoop brings the staff in reach: reachable() measures from a standing man)
+  }
 }
 
 // Do not draw a locked hand if the work point is beyond the man's actual arm span. This is especially

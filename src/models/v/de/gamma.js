@@ -603,11 +603,13 @@ export function buildGamma() {
 // ground y = 0 (put it where the rig's root is, turned with it). The pit's spoil banked in a low parapet across the
 // front, revetted with boards; the planked apron round the bed; the standard-gauge spur on the right that brought
 // the ten wagon loads; the 25 t gantry crane that set the gun up, on its own rails either side of the pit, parked at
-// the front end of its run beyond the parapet (behind the gun it would stand in the chase camera's view); the Feldbahn from the end of the gun's arc track back to the shell store (a timber and
-// earth dugout) with loaded trolleys waiting, the charge store; the camouflage net on poles over the rear of the
-// position and the lift (setCamo(k) 0..1 draws it over from the rear); the crew's dugout and the officer's post.
+// the rear end of its run behind the camouflage net, out of the muzzle's way (refs/gamma; from the chase camera's
+// place 50 m behind the gun the view runs under its bridge and between its legs); the Feldbahn from the end of the
+// gun's arc track back to the shell store (a timber and earth dugout) with loaded trolleys waiting, the charge store;
+// the camouflage net on poles over the rear of the position and the lift (setCamo(k) 0..1 draws it over from the
+// rear); the crew's dugout and the officer's post.
 // Nothing of it enters the gun's sweep (the deck and the lift's foot within 7.2 m of the pivot over +-23 degrees).
-export const GAMMA_SITE = { spurX: 6.8, gantryX: 9.4, gantryZ: -15.5, gantryH: 10.4 };
+export const GAMMA_SITE = { spurX: 6.8, gantryX: 9.4, gantryZ: 18.5, gantryH: 10.4 };
 export function buildGammaSite(seed = 1) {
   const mats = vehicleMats('bunt');
   const rnd = mulberry32(5101 + (seed | 0) * 7);
@@ -646,13 +648,14 @@ export function buildGammaSite(seed = 1) {
     P.add('timber', box(2.2, 0.8, 0.5, S.spurX, 0.4, -4.3));
     P.add('dark', box(2.6, 0.12, 0.3, S.spurX, 0.7, -4.0));
   }
-  // the gantry crane: a lattice trestle on a two-axle bogie each side, its own rails, a plate girder bridge 17 m
-  // across and 10 m up with a walkway, the crab and hook block on it, the winch house at the right leg
+  // the gantry crane: a lattice trestle on a two-axle bogie each side, its own rails (from ahead of the pit, so it
+  // could reach over the whole gun, back past the net), a plate girder bridge 17 m across and 10 m up with a
+  // walkway, the crab and hook block on it, the winch house at the right leg
   {
     const xs = [-S.gantryX, S.gantryX], zc = S.gantryZ, H = S.gantryH, span = xs[1] - xs[0];
     for (const xx of xs) {
-      for (const s of [-1, 1]) P.add('steel', box(0.07, 0.15, 30, xx + s * 0.6, 0.21, -4));
-      for (let z = -18.8; z < 11; z += 0.8) P.add('timber', box(1.8, 0.12, 0.22, xx, 0.06, z), { tint: 0xc0b6a4 });
+      for (const s of [-1, 1]) P.add('steel', box(0.07, 0.15, 31, xx + s * 0.6, 0.21, 6.5));
+      for (let z = -8.8; z < 22; z += 0.8) P.add('timber', box(1.8, 0.12, 0.22, xx, 0.06, z), { tint: 0xc0b6a4 });
       P.add('camo', box(0.7, 0.5, 4.4, xx, 0.62, zc));
       for (const z of [-1.6, 1.6]) for (const s of [-1, 1]) P.add('dark', xTube(xx + s * 0.6 - 0.06, xx + s * 0.6 + 0.06, 0.32, 0.32, 14, 0.38, zc + z));
       // two legs leaning in to the bridge, horizontal ties and diagonals between them
@@ -669,7 +672,7 @@ export function buildGammaSite(seed = 1) {
       P.add('dark', rivetRow(V(-span / 2 - 0.6, H + 0.4, zc + z * 1.15), V(span / 2 + 0.6, H + 0.4, zc + z * 1.15), 0.4, V(0, 0, Math.sign(z)), 0.03));
     }
     P.add('iron', box(span + 1.4, 0.05, 0.8, 0, H + 0.52, zc), { tint: 0xa8a8a0 });
-    const cx = -1.6;
+    const cx = S.spurX; // the crab parked over the spur, where it took the loads off the wagons (not over the gun)
     P.add('camo', rbox(1.6, 0.9, 1.5, 0.08, cx, H + 0.98, zc));
     P.add('iron', xTube(cx - 0.6, cx + 0.6, 0.28, 0.28, 16, H + 0.95, zc));
     for (const s of [-1, 1]) P.add('chain', rod(V(cx + s * 0.25, H - 0.5, zc), V(cx + s * 0.12, 5.6, zc), 0.03, 5));

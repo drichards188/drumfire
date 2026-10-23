@@ -1505,3 +1505,21 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   GL_INVALID_OPERATION ("mismatch between texture format and sampler type"), 256 console warnings and then "too
   many errors" on every game page. The uploads it exists for happened anyway, so nothing showed; the console is clean
   now, and the shadow pass's programs are warmed as well.
+- (render) Bertha's rammers work the staff. `heavyState` returns before crews.js gives the staff an owner (the Gustav
+  and the Karl ram with a drive worked from control wheels), so Bertha's staff slid up the bore with nobody on it
+  while both rammers stood at their places. `crews_heavy.js` `berthaRammer` follows the demo's drill
+  (src/bertha/crew.js): the deck ahead of the tray's rear end is cut away for the recoiling breech, so the two stand
+  behind the tray either side of the staff (rammer1 left, 0.75 m behind its head, rammer2 right, 1.35 m; never
+  past the back of the stage), come over in the first 12% of the step and go back in the first 12% of the bags. Each
+  heave carries the hands along the wood for 0.36 m, then they let go and take a fresh hold behind. New pose
+  `ramLow` in `models/v/crew.js`: the ram stroke bent low over a staff at hip height (Bertha's bore axis at the
+  loading angle is 0.70 m over her stage; `ram` holds it at 1.05 m).
+- (models) The Gamma's gantry crane is parked at the rear of its rails, as refs/gamma has it, not 15.5 m in front of
+  the muzzle: `GAMMA_SITE.gantryZ` 18.5 (behind the camouflage net, clear of the shell and charge stores), its rails
+  from z -9 (ahead of the pit, so it reaches over the whole gun) to 22, the crab parked over the spur at the bridge's
+  right end so its hook hangs clear of the chase camera's view of the gun, which from 50 m behind runs under the
+  bridge and between the legs. The site's extent (ww1/ops.js pads comment) is z -14 to 32.
+- (sim) The open battles give their first order on the battle's first frame: the WW1 German battle's Gegenbatterie on
+  F1 (was at 40 s, a silence that read as a broken game) and the WW2 Flanders battle's AOP strip O1 (was at 8 s), both
+  at 0 s, after the phase message in the same step. Frame time is clamped to 0.1 s, so on a slow machine game time
+  runs slower than the clock and any later time can stretch past a few real seconds. The 1917 battle is unchanged (8 s).

@@ -127,7 +127,7 @@ export class DirectorWW2 extends Director {
     const at = (t, fn) => S.push({ t, fn });
     const D = this;
     if (this.op.kind === 'battle') {
-      at(8, () => D.siteMission('O1', { deadline: 600 }));
+      at(0, () => D.siteMission('O1', { deadline: 600 })); // on the first frame, whatever the frame rate: a silent start reads as a broken game
       at(60, () => D.siteMission('T1', { deadline: 650 }));
       at(220, () => D.siteMission('D1'));
       at(335, () => D.siteMission('T2'));
