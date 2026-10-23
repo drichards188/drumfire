@@ -13,7 +13,7 @@ npm run preview  # serve the built bundle on http://localhost:4173
 
 - **Browser.** A browser with WebGL2 is required.
 - **Sharing.** Build the game and put the contents of `dist/` at the root of a web server.
-- **Root only.** `vite.config.js` sets no `base`, so the bundle and the menu's links use absolute paths (`/assets/...`, `/bertha.html`). The build runs at the root of a site, as `npm run preview` serves it, but not from a subfolder (a GitHub Pages project page, itch.io) and not from `file://`.
+- **Any folder.** `vite.config.js` sets `base: './'` and the menu's links, stills and back links are relative (`index.html?...`, `bertha.html`, `menu/<id>.jpg`), so the build runs at the root of a site or in a subfolder (itch.io, a GitHub Pages project page), but not from `file://` (module scripts and the audio worker need a server). For itch.io, zip the contents of `dist/` (`index.html` at the zip's root) and upload it as an HTML game.
 
 ## Tools
 

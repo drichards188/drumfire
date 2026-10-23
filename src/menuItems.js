@@ -29,7 +29,7 @@ export const STILLS = new Set(['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'max38', '
 export const ERA_STILLS = { '1917': ['bl15', 'rail', 'bl92', 'bl60', 'bl6'], ww1: ['max38', 'paris', 'gamma', 'm16'], ww2: ['gustav', 'nbw41', 'v2', 'karl', 'k18'] };
 const stillFor = (kind) => (STILLS.has(kind) ? kind : null);
 export const stillsOf = (item) => (item?.still ? [item.still] : ERA_STILLS[item?.era] ?? []);
-export const stillUrl = (id) => `/menu/${id}.jpg`;
+export const stillUrl = (id) => `menu/${id}.jpg`; // (relative, as every link here: the build may live in a subfolder)
 // the settings a menu URL hands on to the game it opens (in the game the gear menu sets them)
 const PASS = ['quality', 'hour', 'weather'];
 export const DIFFICULTIES = ['Easy', 'Normal', 'Hard'];
@@ -82,7 +82,7 @@ export function menuItems(career = null, lessons = {}) {
   items.push(wip({
     key: 'bertha:ww1', era: 'ww1', tab: 'battles', title: 'Big Bertha', side: 'demo', kicker: 'Demo · first person',
     sub: 'A German 42 cm howitzer crew', blurb: 'Crew a German 42 cm howitzer in first person: command, traverse, elevate, load and fire, one station at a time.',
-    lines: [], page: '/bertha.html', query: { play: 1 }, pass: ['quality'], still: 'bertha-demo',
+    lines: [], page: 'bertha.html', query: { play: 1 }, pass: ['quality'], still: 'bertha-demo',
   }));
   for (const m of CAMPAIGN) {
     const n = numberOf(m), b = battery(m.reward), done = !!career?.completed.has(m.id);
@@ -111,7 +111,7 @@ export function hrefOf(item, difficulty, from) {
   for (const [k, v] of Object.entries(item.query)) p.set(k, v);
   if (item.difficulty && DIFFICULTIES.includes(difficulty)) p.set('difficulty', difficulty);
   for (const k of item.pass ?? PASS) if (from?.get(k)) p.set(k, from.get(k));
-  return `${item.page ?? '/'}?${p}`;
+  return `${item.page ?? 'index.html'}?${p}`;
 }
 
 // the entry a game URL plays (the loading screen), or the one an old-style menu URL points at
@@ -132,5 +132,5 @@ export function menuHref(q, sel = null) {
   if (sel) p.set('sel', sel);
   for (const k of PASS) if (q.get(k)) p.set(k, q.get(k));
   const s = p.toString();
-  return s ? `/?${s}` : '/';
+  return s ? `index.html?${s}` : 'index.html';
 }

@@ -22,7 +22,7 @@ npm install
 npm run dev      # then open http://localhost:5201
 ```
 
-You need a browser with WebGL2. To share it, run `npm run build` and serve `dist/` from the root of a web server (not a subfolder or `file://`). Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+You need a browser with WebGL2. To share it, run `npm run build` and serve `dist/` from any folder of a web server (not `file://`); for itch.io, zip the contents of `dist/` and upload it as an HTML game. Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Controls
 

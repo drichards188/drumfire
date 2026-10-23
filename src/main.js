@@ -611,7 +611,7 @@ async function init() {
           // a WW2 lesson on another operation: load the page there (the theatre is fixed per page)
           redirect(def) {
             if (!WW2 || !def.op || def.op === TH.opId) return false;
-            location.href = `/?mode=ww2&op=${def.op}&tutorial=${def.id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+            location.href = `index.html?mode=ww2&op=${def.op}&tutorial=${def.id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
             return true;
           },
           enter(def) {
