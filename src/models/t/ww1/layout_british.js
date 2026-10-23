@@ -9,11 +9,11 @@
 // and its parts are then the pieces' placements seen from there.
 import { UNITS, piecePlacements } from '../../../sector.js';
 
-export const BGUN_UNIT = { bgun15: 1, bgun92: 2, bgun6: 3, bgun60: 4, bgunrail: 5 };
+export const BGUN_UNIT = { bgun15: 'bl15', bgun92: 'bl92', bgun6: 'bl6', bgun60: 'bl60', bgunrail: 'rail' }; // the unit's kind
 
 /** Where a British gun site must stand so its parts sit in the world's pits: { pos: { x, z }, bearing, unit }. */
 export function britishGunSite(kind) {
-  const u = UNITS.find((q) => q.id === BGUN_UNIT[kind]);
+  const u = UNITS.find((q) => q.kind === BGUN_UNIT[kind]);
   return u ? { pos: { x: u.pos.x, z: u.pos.z }, bearing: u.zero, unit: u } : null;
 }
 

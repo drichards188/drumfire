@@ -46,10 +46,10 @@ The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five
 
 | Key | Unit | Call sign | Battery | Guns |
 |---|---|---|---|---|
-| 1 | 15-inch howitzer | Granny | No. 3 RMA Howitzer | 1 |
-| 2 | 9.2-inch howitzer | Mother | 91st Siege Battery | 2 |
-| 3 | 6-inch 26 cwt howitzers | Ginger | 118th Siege Battery | 4 |
-| 4 | 60-pounders | Long Tom | 1/1st Lowland Heavy Battery | 2 |
+| 1 | 60-pounders | Long Tom | 1/1st Lowland Heavy Battery | 2 |
+| 2 | 6-inch 26 cwt howitzers | Ginger | 118th Siege Battery | 4 |
+| 3 | 9.2-inch howitzer | Mother | 91st Siege Battery | 2 |
+| 4 | 15-inch howitzer | Granny | No. 3 RMA Howitzer | 1 |
 | 5 | 18-inch railway howitzer | Wolfe | No. 13 Railway Siege Battery | 1 |
 
 - **The heavies are slow and powerful.** The 15-inch loads in about 50 s, the 18-inch railway gun in about 90 s, the 60-pounder in about 10 s.

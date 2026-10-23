@@ -26,10 +26,12 @@ try {
 // ---------------------------------------------------------------- the scripted player
 // A competent battery commander: answers the rockets at once, ranges with the reports and applies them
 // exactly, fires for effect, lifts the barrage on time, goes to hold when counter-battery fire builds up.
-function playerFor(ids) {
+function playerFor(kinds) {
   const mem = new Map();
+  let ids = null;
   return (sim) => {
     const now = sim.time;
+    ids ??= kinds.map((k) => sim.units.find((u) => u.kind === k)?.id).filter((id) => id != null);
     const sos = sim.missions.find((m) => m.kind === 'sos' && m.state !== 'done' && m.state !== 'failed');
     for (const id of ids) {
       const u = sim.unitById(id);
@@ -165,8 +167,8 @@ function playerFor(ids) {
 
 const PLAYERS = {
   auto: null,
-  player: () => playerFor([1, 2, 3]),
-  full: () => playerFor([1, 2, 3, 4, 5]),
+  player: () => playerFor(['bl15', 'bl92', 'bl6']),
+  full: () => playerFor(['bl15', 'bl92', 'bl6', 'bl60', 'rail']),
 };
 const playerName = { auto: 'all auto', player: 'scripted 15in + 9.2in + 6in', full: 'scripted all five' };
 
@@ -285,6 +287,6 @@ if (!isMainThread) {
     console.log(`  SOS: ${sosAll.length} calls, response ${resp.length ? f1(mean(resp)) : '-'} s, held ${sosAll.filter((s) => s.held).length}, breached ${sosAll.filter((s) => !s.held).length}`);
     const zr = rs.filter((r) => r.zero != null);
     if (zr.length) console.log(`  Zero hour reached in ${zr.length} games, ${f1(mean(zr.map((r) => r.zero)) * 100)}% of the infantry on the objective on average`);
-    console.log('  kills by unit (1 15in, 2 9.2in, 3 6in, 4 60pdr, 5 rail): ' + [0, 1, 2, 3, 4].map((i) => f1(mean(rs.map((r) => r.unitKills[i])))).join(' ') + ' | rounds ' + [0, 1, 2, 3, 4].map((i) => Math.round(mean(rs.map((r) => r.unitRounds[i])))).join(' '));
+    console.log('  kills by unit (1 60pdr, 2 6in, 3 9.2in, 4 15in, 5 rail): ' + [0, 1, 2, 3, 4].map((i) => f1(mean(rs.map((r) => r.unitKills[i])))).join(' ') + ' | rounds ' + [0, 1, 2, 3, 4].map((i) => Math.round(mean(rs.map((r) => r.unitRounds[i])))).join(' '));
   }
 }

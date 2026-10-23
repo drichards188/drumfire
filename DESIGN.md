@@ -1523,3 +1523,12 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   F1 (was at 40 s, a silence that read as a broken game) and the WW2 Flanders battle's AOP strip O1 (was at 8 s), both
   at 0 s, after the phase message in the same step. Frame time is clamped to 0.1 s, so on a slow machine game time
   runs slower than the clock and any later time can stretch past a few real seconds. The 1917 battle is unchanged (8 s).
+- (lead) The British units are numbered by calibre, smallest first, as the German rosters are: 1 the 60-pounders
+  (Long Tom), 2 the 6-inch (Ginger), 3 the 9.2-inch (Mother), 4 the 15-inch (Granny), 5 the 18-inch railway gun
+  (Wolfe). The ids, the keys 1 to 5 and the tab column follow `sector.js` `UNITS`. Was 1 15-inch, 2 9.2-inch, 3
+  6-inch, 4 60-pounders, 5 railway. Without `?unit` the 1917 battle still opens on the 15-inch (main.js). Moved with
+  it: the lessons' `unit`/`units`, their key numbers and checks (tutorial.js), the Big Bertha demo's British targets
+  (`TARGET_LIST` `unit`), the WW1 British gun sites (`layout_british.js` `BGUN_UNIT` now names the unit's kind),
+  `dev/worldview.js`, simtest's scripted players (by kind, in the same order as before: the 15-inch, the 9.2-inch,
+  the 6-inch, then the 60-pounders and the railway gun) and its kills-by-unit label, the PLAYING.md table. The SOS
+  and barrage lateral spread (`(u.id - 3) * 65`) now runs in calibre order. Balance re-run: see Balance.

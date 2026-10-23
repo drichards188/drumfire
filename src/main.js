@@ -366,7 +366,8 @@ async function init() {
   let resScale = 1;
   let state = 'title'; // title | playing | ended
   let freeCam = false;
-  let selected = Math.max(0, Math.min(UNITS.length - 1, Number(query.get('unit') ?? 1) - 1)); // ?unit=N is the unit id (1 to 5)
+  // ?unit=N is the unit id (1 to 5); without it the 1917 battle opens on the 15-inch, the Group's centrepiece
+  let selected = Math.max(0, Math.min(UNITS.length - 1, Number(query.get('unit') ?? (TH ? 1 : UNITS.findIndex((u) => u.kind === 'bl15') + 1)) - 1));
   let following = false; // the camera is on a shell (F)
   let cineClock = 0; // title screen: seconds since the last cut
 

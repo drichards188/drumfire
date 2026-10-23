@@ -21,22 +21,17 @@ export const bearingOf = (dx, dz) => {
 export const headingFor = (b) => -b;
 
 // ---------------------------------------------------------------------------------------------
-// The Group: five units, keys 1 to 5. `pieces` are the guns of the unit (model kind, offset from
-// the unit position in metres, platform bearing). `zero` is the bearing of the unit's zero line
-// (the line the guns were laid on when they came into action, roughly at the enemy).
+// The Group: five units, keys 1 to 5, smallest calibre first (as the German rosters). `pieces` are the guns of the
+// unit (model kind, offset from the unit position in metres, platform bearing). `zero` is the bearing of the
+// unit's zero line (the line the guns were laid on when they came into action, roughly at the enemy).
 export const UNITS = [
   {
-    id: 1, kind: 'bl15', name: '15-inch howitzer', callsign: 'Granny',
-    battery: 'No. 3 RMA Howitzer', pos: { x: -1800, z: -400 }, zero: 92 * DEG,
-    pieces: [{ kind: 'bl15', dx: 0, dz: 0 }],
+    id: 1, kind: 'bl60', name: '60-pounders', callsign: 'Long Tom',
+    battery: '1/1st Lowland Heavy Battery', pos: { x: 900, z: 1800 }, zero: 85 * DEG,
+    pieces: [{ kind: 'bl60', dx: 0, dz: -18 }, { kind: 'bl60', dx: 3, dz: 18 }],
   },
   {
-    id: 2, kind: 'bl92', name: '9.2-inch howitzers', callsign: 'Mother',
-    battery: '91st Siege Battery', pos: { x: -600, z: 900 }, zero: 88 * DEG,
-    pieces: [{ kind: 'bl92', dx: 0, dz: 0 }, { kind: 'bl92', dx: 0, dz: 45 }],
-  },
-  {
-    id: 3, kind: 'bl6', name: '6-inch 26 cwt howitzers', callsign: 'Ginger',
+    id: 2, kind: 'bl6', name: '6-inch 26 cwt howitzers', callsign: 'Ginger',
     battery: '118th Siege Battery', pos: { x: 400, z: -1300 }, zero: 95 * DEG,
     pieces: [
       { kind: 'bl6', dx: 0, dz: -60 }, { kind: 'bl6', dx: 5, dz: -20 },
@@ -44,9 +39,14 @@ export const UNITS = [
     ],
   },
   {
-    id: 4, kind: 'bl60', name: '60-pounders', callsign: 'Long Tom',
-    battery: '1/1st Lowland Heavy Battery', pos: { x: 900, z: 1800 }, zero: 85 * DEG,
-    pieces: [{ kind: 'bl60', dx: 0, dz: -18 }, { kind: 'bl60', dx: 3, dz: 18 }],
+    id: 3, kind: 'bl92', name: '9.2-inch howitzers', callsign: 'Mother',
+    battery: '91st Siege Battery', pos: { x: -600, z: 900 }, zero: 88 * DEG,
+    pieces: [{ kind: 'bl92', dx: 0, dz: 0 }, { kind: 'bl92', dx: 0, dz: 45 }],
+  },
+  {
+    id: 4, kind: 'bl15', name: '15-inch howitzer', callsign: 'Granny',
+    battery: 'No. 3 RMA Howitzer', pos: { x: -1800, z: -400 }, zero: 92 * DEG,
+    pieces: [{ kind: 'bl15', dx: 0, dz: 0 }],
   },
   {
     id: 5, kind: 'rail', name: '18-inch railway howitzer', callsign: 'Wolfe',

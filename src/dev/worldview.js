@@ -28,7 +28,7 @@ const site = (id) => SITES.find((s) => s.id === id).pos;
 
 // named viewpoints: target, default camera (az, el, dist)
 const VIEWS = {
-  battery: { at: { x: UNITS[2].pos.x + 30, z: UNITS[2].pos.z }, cam: [85, 14, 60] },
+  battery: { at: { x: UNITS.find((u) => u.kind === 'bl6').pos.x + 30, z: UNITS.find((u) => u.kind === 'bl6').pos.z }, cam: [85, 14, 60] },
   front: { at: { x: 4300, z: 0 }, cam: [80, 8, 45] },
   nml: { at: { x: 4450, z: 0 }, cam: [90, 6, 70] },
   zone: { at: { x: 4900, z: 200 }, cam: [90, 30, 320] },

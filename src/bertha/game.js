@@ -26,10 +26,10 @@ export const STATIONS = [
 
 // the British targets: the main game's five units (their pieces are the aim points) and the Cloth Hall at Ypres
 const TARGET_LIST = [
-  { id: 'ginger', unit: 3, name: 'Englische 6-Zoll-Batterie', en: '6-inch battery "Ginger"', fuze: 'oV', points: 80 },
-  { id: 'longtom', unit: 4, name: 'Englische 60-Pfünder', en: '60-pounder section "Long Tom"', fuze: 'oV', points: 80 },
-  { id: 'mother', unit: 2, name: 'Englische 23,4-cm-Haubitzen', en: '9.2-inch section "Mother"', fuze: 'oV', points: 120 },
-  { id: 'granny', unit: 1, name: 'Englischer 38-cm-Mörser', en: '15-inch howitzer "Granny"', fuze: 'mV', points: 150 },
+  { id: 'ginger', unit: 2, name: 'Englische 6-Zoll-Batterie', en: '6-inch battery "Ginger"', fuze: 'oV', points: 80 },
+  { id: 'longtom', unit: 1, name: 'Englische 60-Pfünder', en: '60-pounder section "Long Tom"', fuze: 'oV', points: 80 },
+  { id: 'mother', unit: 3, name: 'Englische 23,4-cm-Haubitzen', en: '9.2-inch section "Mother"', fuze: 'oV', points: 120 },
+  { id: 'granny', unit: 4, name: 'Englischer 38-cm-Mörser', en: '15-inch howitzer "Granny"', fuze: 'mV', points: 150 },
   { id: 'wolfe', unit: 5, name: 'Englisches Eisenbahngeschütz', en: '18-inch railway howitzer "Wolfe"', fuze: 'mV', points: 200 },
   { id: 'ypres', place: 'Ypres', name: 'Ypern, Tuchhallen', en: 'the Cloth Hall, Ypres', fuze: 'mV', points: 150, hp: 3, r: 90 },
 ];

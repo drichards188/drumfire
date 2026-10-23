@@ -159,7 +159,7 @@ export const TUTORIALS = [
   {
     id: 'basics',
     name: 'The basics',
-    unit: 1,
+    unit: 4,
     units: [1, 2, 3, 4, 5],
     blurb: 'The screen, the five units, the camera and the console. Then watch the 15-inch load and fire, and ride its shell.',
     outro: 'That is the whole loop: take a task, load, fire, watch. The next lessons teach you to hit what you aim at.',
@@ -193,16 +193,16 @@ export const TUTORIALS = [
       {
         id: 'units',
         title: 'Five units',
-        text: 'Keys 1 to 5 select a unit, and so do the tabs at the right edge of the screen: the 15-inch, the 9.2s, the 6-inch battery, the 60-pounders and the railway gun. Units you are not at go on fighting under their own crews, in whatever mode you left them.',
-        goal: 'Press 3 to visit the 6-inch battery, then 1 to come back',
+        text: 'Keys 1 to 5 select a unit, and so do the tabs at the right edge of the screen: the 60-pounders, the 6-inch battery, the 9.2s, the 15-inch and the railway gun. Units you are not at go on fighting under their own crews, in whatever mode you left them.',
+        goal: 'Press 2 to visit the 6-inch battery, then 4 to come back',
         hi: ['tabs'],
         tick: (T) => {
-          if (T.host.selectedId() === 3) T.mem.left = true;
+          if (T.host.selectedId() === 2) T.mem.left = true;
         },
-        done: (T) => !!T.mem.left && T.host.selectedId() === 1,
+        done: (T) => !!T.mem.left && T.host.selectedId() === 4,
         demo: (T) => {
-          if (!T.mem.left) T.once('go', () => T.host.select(3));
-          else if (T.sim.time - T.mem.t0 > 2) T.once('back', () => T.host.select(1));
+          if (!T.mem.left) T.once('go', () => T.host.select(2));
+          else if (T.sim.time - T.mem.t0 > 2) T.once('back', () => T.host.select(4));
         },
       },
       {
@@ -275,8 +275,8 @@ export const TUTORIALS = [
   {
     id: 'ranging',
     name: 'Ranging with the F.O.O.',
-    unit: 3,
-    units: [3],
+    unit: 2,
+    units: [2],
     blurb: 'The 6-inch battery on a hostile battery: take the task, a ranging round, the observer\'s telephone report, corrections, fire for effect.',
     outro: 'Range first, then fire for effect: the first round of a fresh lay is never right. Next, the aeroplane observer and the clock code.',
     keep: (T) => T.ensure('main', 'B1', { observer: 'foo', title: 'Hostile battery 1', firstError: { over: -150, right: 60 } }),
@@ -342,8 +342,8 @@ export const TUTORIALS = [
   {
     id: 'clockcode',
     name: 'The aeroplane and the clock code',
-    unit: 2,
-    units: [2],
+    unit: 3,
+    units: [3],
     blurb: 'The 9.2-inch section with an R.F.C. observer: the wireless message and decoding its clock code into a correction.',
     outro: 'Letter for distance, number for the hour, twelve at true north: that is all the code. The observer in the air sees what the trench cannot.',
     keep: (T) => T.ensure('main', 'B2', { observer: 'air', title: 'Hostile battery 2', firstError: { over: -150, right: 0 } }),
@@ -409,8 +409,8 @@ export const TUTORIALS = [
   {
     id: 'heavy',
     name: 'The heavies',
-    unit: 1,
-    units: [1, 5],
+    unit: 4,
+    units: [4, 5],
     blurb: 'Granny, the 15-inch, on a concrete pillbox with the delay fuze and the long flight; then Wolfe, the 18-inch railway gun, on the railhead.',
     outro: 'Delay fuzes for concrete, the biggest guns for the deepest targets. Counter-battery work is next.',
     keep: (T) => {
@@ -521,8 +521,8 @@ export const TUTORIALS = [
   {
     id: 'counter',
     name: 'Counter-battery',
-    unit: 3,
-    units: [3, 4],
+    unit: 2,
+    units: [1, 2],
     blurb: 'German shells walk onto your guns. Go quiet with HOLD, then answer with the 60-pounders on the sound rangers\' reference.',
     outro: 'Every round you fire is heard. Fall silent to be forgotten, and hit the enemy guns while they are busy looking for you.',
     setup: (T) => {
@@ -586,12 +586,12 @@ export const TUTORIALS = [
       {
         id: 'sixty',
         title: 'The sixty-pounders',
-        text: 'Now the answer. The 60-pounders are far from Ginger and have not been heard. Press 4 to go to Long Tom.',
-        goal: 'Press 4',
+        text: 'Now the answer. The 60-pounders are far from Ginger and have not been heard. Press 1 to go to Long Tom.',
+        goal: 'Press 1',
         hi: ['tabs'],
-        enter: (T) => T.manual(4),
-        done: (T) => T.host.selectedId() === 4,
-        demo: (T) => T.once('sel', () => T.use(4)),
+        enter: (T) => T.manual(1),
+        done: (T) => T.host.selectedId() === 1,
+        demo: (T) => T.once('sel', () => T.use(1)),
       },
       takeStep({
         key: 'cb',
@@ -653,7 +653,7 @@ export const TUTORIALS = [
   {
     id: 'sos',
     name: 'S.O.S.',
-    unit: 3,
+    unit: 2,
     units: [1, 2, 3, 4, 5],
     blurb: 'Red rockets over the front: call the S.O.S., every gun on the line, shrapnel from the 60-pounders, break the attack.',
     outro: 'When the rockets go up, every gun on the S.O.S. line, at once. The infantry in the trench are counting on you.',
@@ -701,13 +701,13 @@ export const TUTORIALS = [
       {
         id: 'shrapnel',
         title: 'Shrapnel',
-        text: 'Against men in the open, shrapnel is better than high explosive: the shell bursts in the air and throws its bullets forward. Only the 60-pounders have it. Press 4, then Z until the fuze is SHRAPNEL.',
+        text: 'Against men in the open, shrapnel is better than high explosive: the shell bursts in the air and throws its bullets forward. Only the 60-pounders have it. Press 1, then Z until the fuze is SHRAPNEL.',
         goal: 'On the 60-pounders, select SHRAPNEL',
         hi: ['tabs', 'fuze'],
-        done: (T) => T.sim.unitById(4).order.fuze === 'shrapnel',
+        done: (T) => T.sim.unitById(1).order.fuze === 'shrapnel',
         demo: (T) => {
-          T.once('sel', () => T.use(4));
-          T.once('fuze', () => T.act('fuze', { fuze: 'shrapnel' }, 4));
+          T.once('sel', () => T.use(1));
+          T.once('fuze', () => T.act('fuze', { fuze: 'shrapnel' }, 1));
         },
       },
       {
