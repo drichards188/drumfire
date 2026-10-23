@@ -222,12 +222,17 @@ export class Panel {
         if (pp.w !== w) { pp.f.style.width = `${w}%`; pp.w = w; }
       }
       const np = prs.length;
+      // an order the battery cannot carry out (sim/guns.js problem) is flagged at once, ahead of the loading and the
+      // ready states (it used to show only once the guns had loaded and could not fire); no shells or no crew wait
+      // for the guns to be idle, as before
+      const code = blockCode(sim.guns?.problem?.(u) ?? ''), bad = code === 'OUT OF ARC' || code === 'OUT OF RANGE' || code === 'TOO CLOSE';
       let txt, tc;
       if (np && nDead === np) { txt = 'DEAD'; tc = 'dead'; }
+      else if (bad) { txt = code; tc = 'bad'; }
       else if (nReady) { txt = np > 1 ? `${nReady}/${np - nDead} READY` : 'READY'; tc = 'rdy'; }
       else if (nFire) { txt = 'FIRING'; tc = 'fir'; }
       else if (nLoad) { txt = `LOAD ${Math.floor(best * 100)}%`; tc = 'ldg'; }
-      else if ((txt = blockCode(sim.guns?.problem?.(u) ?? ''))) tc = 'bad'; // an order it cannot carry out
+      else if ((txt = code)) tc = 'bad'; // no shells, no crew
       else { txt = 'IDLE'; tc = 'idle'; }
       // a launch site: the pip fills with the drill, the words say what it waits for
       const sp = KINDS[u.kind]?.launcher ? u.special : null;

@@ -1532,3 +1532,11 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   `dev/worldview.js`, simtest's scripted players (by kind, in the same order as before: the 15-inch, the 9.2-inch,
   the 6-inch, then the 60-pounders and the railway gun) and its kills-by-unit label, the PLAYING.md table. The SOS
   and barrage lateral spread (`(u.id - 3) * 65`) now runs in calibre order. Balance re-run: see Balance.
+- (ui, sim) An order the guns cannot carry out is flagged at once, not when the guns have loaded. The roster tile
+  put READY, FIRING and LOAD n% ahead of the order's problem, so an out-of-range target showed as loading for the
+  whole cycle and OUT OF RANGE only when the guns could not fire; OUT OF ARC, OUT OF RANGE and TOO CLOSE now come
+  first (NO SHELLS and NO CREW still wait for idle guns). `guns.problem` returned a gated unit's gate before its
+  order, so a gun held by its preparation or drill (the Gustav, the Paris Gun, a bed being relaid) said "not ready"
+  and named an unreachable target only when the gate lifted. Now an out-of-range or too-close order is reported
+  through the gate (the radio at the order, the status line's CANNOT FIRE ahead of NOT READY); an arc may still
+  change with the gate (a bed), the Karl keeps its gate (it drives to a new position), launch sites as before.

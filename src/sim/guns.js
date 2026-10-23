@@ -175,7 +175,11 @@ export class Guns {
     const o = u.order, g = GUNS[u.kind];
     if (!u.alive) return 'every gun is out of action';
     if (!o.target) return '';
-    if (u.gate) return g.launcher ? '' : u.gate; // a launch site's console walks the drill itself
+    // a range the gun cannot reach stays out of reach whatever holds it back (its preparation, its drill, a bed being
+    // relaid), so it is said at the order, not when the gate lifts; the Karl is the exception (it drives to a new
+    // firing position), and an arc may change with the gate (the bed). A launch site's console walks the drill itself.
+    const unreachable = o.why === 'out of range' || o.why === 'inside minimum range';
+    if (u.gate && (g.launcher || !unreachable || g.special === 'karl')) return g.launcher ? '' : u.gate;
     if (u.mode === 'hold') return short ? 'holding (A or MANUAL to go on)' : 'the battery is holding (cease fire): press A or MANUAL to go on';
     const live = u.pieces.filter((p) => p.state !== 'dead');
     const len = (m) => (g.metric ? `${commas(m)} m` : `${commas(m / YARD)} yards`);

@@ -185,7 +185,7 @@ export function mountConsole(ctx) {
     else if (alarmSet.size) { const a = [...alarmSet][0]; st = `${TH.sos} ${a}, ${TH.sectors.find((s) => s.id === a)?.name ?? ''}! Press S: every gun to the ${TH.sos} line.`; }
     else if (now - toastT < 3200) st = toast;
     else if (unit.mode === 'hold') st = 'HOLDING: cease fire. Press A or MANUAL to go on.';
-    else if (unit.gate) {
+    else if (unit.gate && (!prob || prob === unit.gate)) { // (a gated gun's unreachable target says CANNOT FIRE below)
       const cardName = { gustav: 'PREPARATION', karl: 'KARL', paris: unit.special?.ready === false ? 'STELLUNGSBAU' : 'FEUERABLAUF' }[unit.kind] ?? (unit.special?.bed ? null : 'PROCEDURE');
       st = `NOT READY: ${unit.gate}.${cardName ? ` See the ${cardName} card.` : ' See THE GUNS.'}`;
     }
