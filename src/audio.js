@@ -34,11 +34,17 @@ const GAPS = { gun: 0.02, burst: 0.02, tremor: 0.06, load: 0.05, flare: 0.2, coo
 // Real recordings in public/audio, cut into slices [start, length] (seconds, found by onset
 // analysis) that replace or layer into the synthesized banks once both are ready; anything
 // missing or undecodable leaves the synthesized sound in place.
-const RECORDINGS = {
+export const RECORDINGS = {
   blast: { file: 'explosion-182429.mp3', slices: [[0, 3]] }, // US government video (CC0)
   distant: { file: 'distant-explosions-438693.mp3', slices: [[1.35, 2.4], [6.2, 2.6], [14.1, 2.6], [29.0, 2.6], [34.35, 2.6], [48.1, 2.6], [53.6, 2.6], [72.4, 2.6], [76.15, 2.6], [87.4, 2.6]] }, // (CC0)
   cannon: { file: 'cannon-shot-187767.mp3', slices: [[0.1, 2.4], [6.36, 2.4]] }, // a gun's crack, laid under the field guns
   brass: { file: 'shell-casings-318964.mp3', slices: [[8.49, 0.4], [13.04, 0.25], [16.8, 0.2], [18.95, 0.5], [20.92, 0.25], [23.17, 0.5], [25.9, 0.3], [27.83, 0.5], [39.2, 0.5]] }, // (CC0)
+  // the guns built in layers (recordedGun, REC): a field gun's close report (crack), modern howitzers' bright reports
+  // (snap), a 76 mm gun's shots (body) and a big gun's full report (boom)
+  fieldgun: { file: 'field-artillery-702245.mp3', gun: 'crack', slices: [[0.03, 0.7]] }, // InMotionAudio (CC0)
+  artillery: { file: 'artillery-shots-182822.mp3', gun: 'snap', slices: [[0.62, 1.2], [2.69, 1.2], [10.02, 1.2], [15.39, 1.2], [22.24, 1.2], [26.4, 1.3]] }, // US government video (CC0)
+  gun76: { file: 'gun76-shots-332935.mp3', gun: 'body', slices: [[0.68, 1.4], [6.67, 1.4], [19.15, 1.4]] }, // Yle archive (CC BY 4.0)
+  gunfire: { file: 'artillery-gunfire-239137.mp3', gun: 'boom', slices: [[3.05, 2], [5.07, 1.8]] }, // US Army video (CC0)
 };
 
 // Gun classes by calibre in inches. cal: the calibre the recipe is tuned for; T: positive phase of the
@@ -264,6 +270,24 @@ function tail(x, sr, sec = 0.05) {
   return x;
 }
 
+/** Lower and longer (a bigger object), by resampling: `rate` under 1 lowers it. */
+function resample(x, rate) {
+  const n = Math.floor(x.length / rate), o = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = i * rate, j = Math.floor(p), f = p - j;
+    o[i] = (x[j] || 0) * (1 - f) + (x[j + 1] || 0) * f;
+  }
+  return o;
+}
+
+/** Where a recorded shot starts: 5 ms before its first sample within 20 dB of the peak. */
+function onset(x, sr) {
+  const m = peak(x) * 0.1;
+  let i = 0;
+  while (i < x.length && Math.abs(x[i]) < m) i++;
+  return Math.max(0, i - Math.round(0.005 * sr));
+}
+
 /** Distant versions: highs gone, a ground reflection and a rolling echo. */
 function distant(sr, r, dry, band, { len, roll: rl }) {
   const n = Math.ceil(len * sr);
@@ -462,6 +486,62 @@ function gunRecipe(sr, r, cls) {
   normalize(x);
   saturate(x, big ? 1.5 : heavy ? 1.3 : 1.15);
   return x;
+}
+
+// The guns from recordings (recordedGun), class by class: the recorded layers [role, pitch, level] (a role is
+// every recording marked with it in RECORDINGS: crack, a field gun's close report; snap, the bright reports of
+// modern howitzers; body, a 76 mm gun's shots, the weight and its tail; boom, a big gun's full, low report), pitched
+// down for the bigger guns; the synthesized sub thump's level; the saturation that thickens the mix.
+const REC = {
+  light: { layers: [['crack', 0.97, 1], ['body', 0.96, 0.5]], sub: 0.2, sat: 1 },
+  field: { layers: [['crack', 0.9, 1], ['snap', 0.96, 0.35], ['body', 0.86, 0.6]], sub: 0.26, sat: 1.1 },
+  med: { layers: [['crack', 0.8, 0.85], ['snap', 0.92, 0.5], ['body', 0.74, 0.55], ['boom', 0.9, 0.45]], sub: 0.32, sat: 1.15 },
+  heavy: { layers: [['snap', 0.86, 0.65], ['crack', 0.7, 0.5], ['boom', 0.78, 0.8], ['body', 0.62, 0.45]], sub: 0.4, sat: 1.25 },
+  huge: { layers: [['snap', 0.78, 0.6], ['crack', 0.6, 0.4], ['boom', 0.64, 0.9], ['body', 0.5, 0.5]], sub: 0.5, sat: 1.35 },
+  colossal: { layers: [['snap', 0.7, 0.5], ['crack', 0.5, 0.35], ['boom', 0.52, 1], ['body', 0.42, 0.5]], sub: 0.6, sat: 1.45 },
+  paris: { layers: [['snap', 0.95, 0.9], ['crack', 0.8, 0.5], ['boom', 0.6, 0.8], ['body', 0.5, 0.4]], sub: 0.45, sat: 1.35 },
+};
+const TAKE = [1, 0.96, 0.92, 0.98, 0.94, 0.9]; // each take pitched a little apart
+
+/**
+ * Take `k` of a gun of class `cls` built in layers from recordings, as a game's gun is (class by class, as iads
+ * builds its 8.8 cm): the class's recorded layers (REC; `rec` maps a role to its slices), each take a different
+ * slice of each role; then the synthesized parts the recordings lack: the class's sub thump, the chest and the
+ * ground's rumble of the heavy pieces, the ground reflections of the biggest, the shell's crack leaving the muzzle
+ * and the rolling echo off the landscape.
+ */
+export function recordedGun(sr, r, cls, rec, k) {
+  const c = CLS[cls], R = REC[cls], colossal = cls === 'colossal', paris = cls === 'paris', big = cls === 'huge' || colossal || paris, heavy = cls === 'heavy' || big;
+  const p = TAKE[k % TAKE.length];
+  const x = new Float32Array(Math.ceil(c.len * sr));
+  for (const [j, [role, rate, gain]] of R.layers.entries()) {
+    const list = rec[role], a = resample(list[(k + j) % list.length], rate * p);
+    mixInto(x, a.subarray(onset(a, sr)), j ? 0.002 : 0, gain, sr);
+  }
+  const [f0, f1, tau, dec] = c.boom;
+  thump(x, sr, 0.003, f0, f1, tau, R.sub, dec, 0.004);
+  if (heavy) {
+    thump(x, sr, 0.006, f0 * 1.9, f0 * 0.8, 0.05, R.sub * 0.5, dec * 0.5);
+    mixInto(x, layer(sr, r, { dur: c.len * 0.5, attack: 0.02, decay: dec * 0.7, f: 70 }), 0.02, R.sub * 0.5, sr);
+  }
+  if (big) for (const [d, g] of [[0.07, 0.3], [0.16, 0.24], [0.31, 0.18]]) mixInto(x, onePole(Float32Array.from(x.subarray(0, Math.round(0.9 * sr))), sr, 500), d, g, sr);
+  if (colossal) {
+    thump(x, sr, 0.003, 26, 11, 0.4, 0.5, 1.1, 0.004);
+    mixInto(x, layer(sr, r, { dur: c.len * 0.7, attack: 0.05, decay: 1.6, f: 45 }), 0.03, 0.4, sr);
+  }
+  if (paris) {
+    // the whip-crack and the shell's bow wave close behind it
+    blast(x, sr, 0, 0.6, 0.0016, 1.6, 0.00003);
+    mixInto(x, layer(sr, r, { dur: 0.05, attack: 0.0001, decay: 0.004, type: 'hp', f: 2400 }), 0, 0.7, sr);
+    blast(x, sr, 0.028, 0.45, 0.0012, 1.7, 0.00002);
+    mixInto(x, layer(sr, r, { dur: 0.04, attack: 0.0001, decay: 0.003, type: 'hp', f: 3200 }), 0.028, 0.5, sr);
+  }
+  // the shell's crack leaving the muzzle
+  mixInto(x, layer(sr, r, { dur: 0.06, attack: 0.0002, decay: 0.01, type: 'hp', f: c.crackF }), 0.002, 0.3 * Math.min(1, c.crack), sr);
+  const [count, t1, gain, f] = c.roll;
+  roll(x, x.slice(0, Math.round(0.35 * sr)), sr, r, { count, t0: 0.18, t1, gain: gain * 0.7, f });
+  biquad(x, sr, 'hp', 22);
+  return tail(saturate(normalize(x), R.sat), sr, 0.3);
 }
 
 /** A close shock: arrives with the sound, a hard slap and a thud (direct, not through the air filter). */
@@ -1169,6 +1249,134 @@ export function bankTasks(SR, make, { ww2 = false, ww1 = false } = {}) {
   }
 }
 
+/** A decoded recording's channels mixed to one. */
+function monoOf(buf) {
+  const x = new Float32Array(buf.length);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < x.length; i++) x[i] += d[i] / buf.numberOfChannels;
+  }
+  return x;
+}
+
+/**
+ * A recording's slices (RECORDINGS) from its mono samples `data` at `dataSR`: each with its DC removed, resampled
+ * to `sr` at `rate` (< 1: lower and longer, a bigger object), faded and normalized.
+ */
+export function cutSlices(data, dataSR, slices, sr, rate = 1) {
+  return (slices || [[0, data.length / dataSR]]).map(([t0, len]) => {
+    const a = Math.floor(t0 * dataSR), n = Math.max(1, Math.min(Math.floor(len * dataSR), data.length - a));
+    const x = Float32Array.from(data.subarray(a, a + n));
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += x[i];
+    mean /= n;
+    for (let i = 0; i < n; i++) x[i] -= mean;
+    const step = (dataSR / sr) * rate, m = Math.floor(n / step), o = new Float32Array(m);
+    for (let i = 0; i < m; i++) {
+      const p = i * step, j = Math.floor(p), f = p - j;
+      o[i] = x[j] * (1 - f) + (x[j + 1] || 0) * f;
+    }
+    const fin = Math.min(m, Math.round(0.003 * sr)), fout = Math.round(m * 0.3);
+    for (let i = 0; i < fin; i++) o[i] *= i / fin;
+    for (let i = 0; i < fout; i++) o[m - 1 - i] *= Math.pow(i / fout, 1.5);
+    return normalize(o, 0.95);
+  });
+}
+
+/**
+ * The guns' banks built from recordings (recordedGun), near, mid and far for each class in `classes`, to take the
+ * synthesized ones' places: `rec` maps a RECORDINGS key to its decoded mono samples { data, sr }; the ones marked
+ * `gun: 'crack'` and `gun: 'body'` are used. None (either missing) leaves the synthesized guns. Run by the worker
+ * while the page loads (prepare) or on the main thread one bank per tick (useRecordings).
+ */
+export function recordedGunTasks(SR, make, rec, classes) {
+  const midSR = Math.min(SR, 32000), farSR = 16000;
+  const have = new Set(Object.keys(RECORDINGS).filter((key) => RECORDINGS[key].gun && rec[key]).map((key) => RECORDINGS[key].gun));
+  let roles = null; // the slices, cut when the first bank is built (the tasks can be counted for nothing)
+  const slices = () => {
+    if (roles) return roles;
+    roles = {};
+    for (const [key, s] of Object.entries(RECORDINGS)) if (s.gun && rec[key]) (roles[s.gun] ||= []).push(...cutSlices(rec[key].data, rec[key].sr, s.slices, midSR));
+    return roles;
+  };
+  const tasks = [];
+  for (const [i, cls] of classes.entries()) {
+    // a class is built only when it has every one of its roles
+    if (!REC[cls]?.layers.every(([role]) => have.has(role))) continue;
+    const c = CLS[cls], g = 'gun_' + cls, rl = { count: 14, t0: 0.25, t1: c.roll[1] + 1.2, gain: 0.55, f: c.roll[3] };
+    let takes = null;
+    const near = () => (takes ||= TAKE.map((_, k) => recordedGun(midSR, mulberry(4300 + i * 101 + k * 7919), cls, slices(), k)));
+    const r = mulberry(4400 + i * 101);
+    tasks.push(
+      [g, 'near', () => near().map((x) => make([normalize(Float32Array.from(x), 0.95)], midSR))],
+      [g, 'mid', () => near().slice(0, 4).map((x) => make(distant(midSR, r, x, 'mid', { len: c.len + 1.8, roll: rl }), midSR))],
+      // far off: the highs taken out before the samples are thinned, and a touch lower
+      [g, 'far', () => near().filter((_, k) => k % 2 === 0).map((x) => make(distant(farSR, r, resample(biquad(biquad(Float32Array.from(x), midSR, 'lp', 5000), midSR, 'lp', 5000), (midSR / farSR) * 0.94), 'far', { len: c.len + 3.5, roll: { ...rl, t1: rl.t1 + 1.6 } }), farSR))]
+    );
+  }
+  return tasks;
+}
+
+/**
+ * Everything built from the recordings, as bankTasks-style tasks [group, key, fn, over] whose banks take the
+ * synthesized ones' places (over: 'gun' for a gun built from recordings, true for the rest): the guns of `classes`
+ * (recordedGunTasks); the far ground bursts and the drumfire's thuds from the distant explosions; the explosion under
+ * the near ground bursts; the cannon's crack under the near takes of a gun still synthesized (of every gun with
+ * `keepSynth`, the A/B on /audio.html: before its recorded bank, which keeps it); the empty case on the duckboards.
+ * `rec` maps a RECORDINGS key to its decoded mono samples { data, sr }; `synth(group, key)` gives a synthesized bank's
+ * takes as [{ data, sr }] (null if it has none). Run by the worker after the banks (prepare), or on the main thread
+ * one bank per tick (useRecordings).
+ */
+export function recordingTasks(SR, make, rec, synth, classes, { keepSynth = false } = {}) {
+  const midSR = Math.min(SR, 32000), farSR = 16000;
+  const cut = (key, sr, rate = 1) => (rec[key] ? cutSlices(rec[key].data, rec[key].sr, RECORDINGS[key].slices, sr, rate) : []);
+  // a recording laid under a synthesized take, then normalized together
+  const blend = (b, x, g) => {
+    const o = new Float32Array(Math.max(b.data.length, x.length));
+    o.set(b.data);
+    for (let i = 0; i < x.length; i++) o[i] += x[i] * g;
+    return make([normalize(o, 0.95)], b.sr);
+  };
+  const rng = mulberry(4242);
+  const lowpass = (x, sr, f) => biquad(Float32Array.from(x), sr, 'lp', f);
+  const guns = recordedGunTasks(SR, make, rec, classes).map((t) => [...t, 'gun']), built = new Set(guns.map((t) => t[0]));
+  const tasks = [];
+  // real distant explosions: the far bursts and the thuds of the drumfire
+  if (rec.distant) {
+    let dist = null;
+    for (const [i, cls] of ORDER.entries()) {
+      if (!synth('burst_ground_' + cls, 'far')) continue;
+      tasks.push(['burst_ground_' + cls, 'far', () => (dist ||= cut('distant', farSR)).map((x) => make(distant(farSR, rng, lowpass(x, farSR, 500 + 250 * (i < 3 ? 1 : 0)), 'far', { len: 3.4, roll: { count: 12, t0: 0.3, t1: 2.6, gain: 0.4, f: 360 } }), farSR)), true]);
+    }
+    tasks.push(['thud', 'far', () => [...(synth('thud', 'far') || []).map((b) => make([b.data], b.sr)), ...cut('distant', farSR, 0.8).slice(0, 6).map((x) => make([lowpass(x, farSR, 450)], farSR))], true]);
+  }
+  // the cannon's crack under the near synthesized guns, pitched down for the heavy ones
+  if (rec.cannon) {
+    for (const [cls, rate, g] of [['light', 1, 0.55], ['field', 0.9, 0.5], ['med', 0.78, 0.4], ['heavy', 0.62, 0.35], ['huge', 0.5, 0.3]]) {
+      const near = synth('gun_' + cls, 'near');
+      if (!near || (built.has('gun_' + cls) && !keepSynth)) continue;
+      tasks.push(['gun_' + cls, 'near', () => {
+        const slices = cut('cannon', midSR, rate);
+        return near.map((b, i) => blend(b, slices[i % slices.length], g));
+      }, true]);
+    }
+  }
+  // the real explosion under the near ground bursts, lower for the bigger shells
+  if (rec.blast) {
+    for (const [cls, rate, g] of [['light', 1, 0.5], ['field', 0.92, 0.5], ['med', 0.82, 0.55], ['heavy', 0.68, 0.6], ['huge', 0.55, 0.65]]) {
+      const near = synth('burst_ground_' + cls, 'near');
+      if (!near) continue;
+      tasks.push(['burst_ground_' + cls, 'near', () => {
+        const x = cut('blast', midSR, rate)[0];
+        return near.map((b, i) => blend(b, x, g * (0.8 + 0.2 * i)));
+      }, true]);
+    }
+  }
+  // brass: the empty case dropped on the duckboards (a step of its own, 'case')
+  if (rec.brass) tasks.push(['load', 'case', () => cut('brass', midSR, 0.8).map((x) => make([normalize(x, 0.9)], midSR)), true]);
+  return [...tasks, ...guns];
+}
+
 // ================================================================== the engine
 
 const MIN_GAIN = { burst: 0.003, load: 0.02, flare: 0.01 };
@@ -1227,6 +1435,21 @@ function retarded(tr, L, now, out) {
   return false;
 }
 
+// AudioBuffers made without a context (the banks the worker sends while the page loads are ready to play before the
+// first click); null where the constructor is missing (Node, workers, old Safari), and they wait in `raw` instead
+const standalone = (() => {
+  try {
+    new AudioBuffer({ length: 1, sampleRate: 16000 });
+    return (chans, sr) => {
+      const b = new AudioBuffer({ length: chans[0].length, numberOfChannels: chans.length, sampleRate: sr });
+      chans.forEach((c, i) => b.copyToChannel(c, i));
+      return b;
+    };
+  } catch {
+    return null;
+  }
+})();
+
 export class AudioEngine {
   constructor({ context = null, ww2 = false, ww1 = false } = {}) {
     this.ctx = null;
@@ -1252,12 +1475,19 @@ export class AudioEngine {
     this.bank = {};
     this.raw = {}; // banks the worker sent before the context existed (prepare)
     this.built = { here: 0, worker: 0 }; // banks rendered on the main thread and in the worker
+    this.jobs = 0; // the worker's jobs still running (prepare)
+    this.expect = 0; // the banks the worker will send (progress)
+    this.files = {}; // the recordings' files, fetched once (recording)
+    this.recorded = new Set(); // the gun banks built from recordings (recordedGunTasks)
+    this.keepSynth = false; // keep the synthesized guns too, to compare (swapGuns, /audio.html)
+    this.synthGuns = {};
     this.pending = [];
     this.bedEnergy = 0;
     this.combat = 0;
     this.throttle = {};
     this.shells = new Map(); // sim shell -> { incoming }
     this.shellVoices = [];
+    this.heard = { x: 0, y: 0, z: 0, t: 0, d: 1, closing: 0, on: 0, newest: false }; // an own shell's retarded position (updateShells)
     this.deaf = 0; // 0..1: the muffled mix and ringing after a close blast
     this.amb = { drumfire: 0, rain: 0, wind: 0.4 }; // targets set by setAmbience
     this.ambNow = { drumfire: 0, rain: 0, wind: 0.4 };
@@ -1324,7 +1554,7 @@ export class AudioEngine {
 
     // open country: a long, sparse tail that carries the guns across the flat ground
     this.reverb = ctx.createConvolver();
-    this.reverb.buffer = this.impulse(3.2, 3);
+    this.reverb.buffer = this.pre?.impulse[ctx.sampleRate] ?? this.impulse(3.2, 3);
     this.reverbSend = ctx.createGain();
     this.reverbSend.gain.value = 0.6;
     this.reverbSend.connect(this.reverb).connect(this.mix);
@@ -1344,11 +1574,11 @@ export class AudioEngine {
     this.sfx = bus(1, this.sfxDuck);
     this.shellBus = bus(0.8, this.sfxDuck);
     this.blastBus = bus(1);
-    this.uiBus = bus(1);
+    this.uiBus = bus(1, this.master); // the console stays clear while the ears are dulled
 
-    this.white = this.noiseBuffer('white');
-    this.brown = this.noiseBuffer('brown');
-    this.pink = this.noiseBuffer('pink');
+    this.white = this.pre?.white ?? this.noiseBuffer('white');
+    this.brown = this.pre?.brown ?? this.noiseBuffer('brown');
+    this.pink = this.pre?.pink ?? this.noiseBuffer('pink');
 
     // render the essential sample banks now, the rest over the next frames
     const make = (chans, sr) => {
@@ -1367,7 +1597,8 @@ export class AudioEngine {
     // queue until this busy stretch of the page (the end of loading) is over, a moment from now. A sound asked for
     // before then plays the nearest bank there is, or nothing (variant, bankOf).
     if (!this.worker) for (const t of tasks.slice(0, split)) this.runTask(t);
-    this.pending = this.worker ? tasks.filter(Boolean) : tasks.slice(split + 1);
+    // (the banks the worker has already sent are not queued again: with it done, nothing is left for later)
+    this.pending = (this.worker ? tasks.filter(Boolean) : tasks.slice(split + 1)).filter((t) => !this.bank[t[0]]?.[t[1]]);
     if (this.wantWW1) {
       this.ww1 = true;
       this.pending.push(...bankTasks(ctx.sampleRate, make, { ww1: 'only' }));
@@ -1375,46 +1606,161 @@ export class AudioEngine {
     if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
     else {
       this.pump();
-      this.loadRecordings();
+      if (!this.recByWorker) this.loadRecordings();
     }
 
     this.buildAmbience();
     for (let i = 0; i < SHELL_VOICES; i++) this.shellVoices.push(this.buildShellVoice());
   }
 
-  runTask([group, key, fn]) {
-    if (this.bank[group]?.[key]) return; // (the worker's, prepare)
-    (this.bank[group] ||= {})[key] = fn();
+  // `over`: a bank built from recordings, which takes the synthesized one's place (recordingTasks)
+  runTask([group, key, fn, over]) {
+    if (!over && this.bank[group]?.[key]) return; // (the worker's, prepare)
+    this.install(group, key, fn(), over);
     this.built.here++;
+  }
+
+  install(group, key, v, over) {
+    if (over === 'gun' && !this.recorded.has(group)) {
+      this.stash(group);
+      this.recorded.add(group);
+    }
+    (this.bank[group] ||= {})[key] = v;
   }
 
   /**
    * Render the sample banks in a worker while the page loads (src/audioWorker.js): they are plain Float32Array maths
    * and need no audio context, and built on the main thread after the first click (up to 220 ms a bank, the WW2
    * ones the heaviest) they stuttered the first salvos. Call after enableWW2/enableWW1 so the era's banks come too.
-   * Without workers (or with a given context, the tests) start() builds them as before.
+   * Without workers (or with a given context, the tests) start() builds them as before. Everything built from the
+   * recordings follows as the worker's second job (prepareRecordings). Each bank becomes an AudioBuffer as it arrives
+   * (standalone), so the loading screen can wait for them all (whenReady) and nothing is left for the first click.
    */
   prepare() {
     if (this.worker || this.given || this.ctx || typeof Worker === 'undefined') return;
     try {
       const w = this.worker = new Worker(new URL('./audioWorker.js', import.meta.url), { type: 'module' });
       w.onmessage = ({ data }) => this.received(data);
-      w.onerror = () => { this.worker = null; };
-      w.postMessage({ SR: 48000, ww2: !!this.wantWW2, ww1: !!this.wantWW1 });
+      w.onerror = () => this.workerFailed();
+      this.jobs = 2; // the banks, then everything built from the recordings
+      const ww2 = !!this.wantWW2, ww1 = !!this.wantWW1, none = () => null, all = Object.fromEntries(Object.keys(RECORDINGS).map((k) => [k, {}]));
+      this.expect = bankTasks(48000, none, { ww2 }).filter(Boolean).length + (ww1 ? bankTasks(48000, none, { ww1: 'only' }).length : 0) + recordingTasks(48000, none, all, () => [], this.gunClasses(ww2, ww1)).length;
+      w.postMessage({ SR: 48000, ww2, ww1 });
+      this.prepareRecordings(w);
     } catch (e) {
       this.worker = null;
     }
+    // the noise and the reverb's impulse (for either rate the context may have) built now, not at the first click
+    if (standalone) {
+      const make = (n, sr) => new AudioBuffer({ length: n, numberOfChannels: 2, sampleRate: sr });
+      this.pre = { impulse: { 44100: this.impulse(3.2, 3, 44100, make), 48000: this.impulse(3.2, 3, 48000, make) } };
+      for (const k of ['white', 'brown', 'pink']) this.pre[k] = this.noiseBuffer(k, 48000, make);
+    }
   }
 
-  received({ group, key, v, done }) {
-    if (done) { this.worker?.terminate(); this.worker = null; return; }
+  /** The worker died: what it has not built is built here (pump, and the recordings decoded at start). */
+  workerFailed() {
+    this.worker = null;
+    this.jobs = 0;
+    if (!this.recordingsInUse) {
+      this.recByWorker = false;
+      if (this.ctx) this.loadRecordings();
+    }
+    this.onReady?.();
+  }
+
+  /** Resolves once the worker has built every bank (prepare), at once without one. */
+  ready() {
+    if (!this.worker) return Promise.resolve();
+    return (this.readyP ||= new Promise((ok) => (this.onReady = ok)));
+  }
+
+  /** How far the worker has got, 0..1. */
+  get progress() {
+    return this.expect ? Math.min(1, this.built.worker / this.expect) : 1;
+  }
+
+  /**
+   * The loading screen's wait for every sound: until the worker has built every bank (ready), calling `tick(progress)`
+   * every 100 ms; a worker slower than `limit` ms is left to finish in the background.
+   */
+  async whenReady(tick, limit = 120000) {
+    let over = false;
+    this.ready().then(() => (over = true));
+    for (const t0 = performance.now(); !over && performance.now() - t0 < limit; ) {
+      tick?.(this.progress);
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
+  /** The classes of gun the banks have: the British five, and the colossal and Paris guns when their modes are on. */
+  gunClasses(ww2 = this.ww2, ww1 = this.ww1) {
+    return [...ORDER, ...(ww2 ? ['colossal'] : []), ...(ww1 ? ['paris'] : [])];
+  }
+
+  /**
+   * The recordings decoded while the page loads (an offline context needs no click) and handed to the worker, which
+   * builds everything from them (recordingTasks) after the synthesized banks: mono at 32 kHz, only as far as their
+   * last slice reaches. Fetched once (recording); a file that fails is left out.
+   */
+  async prepareRecordings(w) {
+    const rec = {}, SR = 32000;
+    try {
+      const dec = new OfflineAudioContext(1, 1, SR);
+      await Promise.all(Object.keys(RECORDINGS).map(async (k) => {
+        try {
+          const ab = await this.recording(k);
+          if (!ab) return;
+          const x = monoOf(await dec.decodeAudioData(ab.slice(0))), end = Math.max(...RECORDINGS[k].slices.map(([t0, len]) => t0 + len));
+          rec[k] = { data: x.slice(0, Math.min(x.length, Math.ceil(end * SR) + 1)), sr: SR };
+        } catch {
+          // undecodable: the synthesized sound stays
+        }
+      }));
+    } catch {
+      // no offline context: the recordings are decoded at the first click instead (loadRecordings)
+    }
+    if (this.worker !== w) return;
+    if (!Object.keys(rec).length) return this.jobDone();
+    this.recByWorker = true;
+    this.recKeys = Object.keys(rec);
+    w.postMessage({ SR: 48000, rec, classes: this.gunClasses(this.wantWW2, this.wantWW1), keepSynth: this.keepSynth }, Object.values(rec).map((r) => r.data.buffer));
+  }
+
+  jobDone() {
+    if (--this.jobs > 0) return;
+    this.worker?.terminate();
+    this.worker = null;
+    if (this.recByWorker) this.recordingsInUse = this.recKeys;
+    this.onReady?.();
+  }
+
+  received({ group, key, v, done, over }) {
+    if (done) return this.jobDone();
     this.built.worker++;
-    if (!this.ctx) (this.raw[group] ||= {})[key] = v;
-    else if (!this.bank[group]?.[key]) (this.bank[group] ||= {})[key] = this.wrap(v);
+    if (!over && this.bank[group]?.[key]) return;
+    const make = this.make ?? standalone;
+    if (make) this.install(group, key, this.wrap(v, make), over);
+    else {
+      if (over === 'gun') this.recorded.add(group);
+      (this.raw[group] ||= {})[key] = v;
+    }
   }
 
-  wrap(v) {
-    const one = (s) => this.make(s.chans, s.sr);
+  /** The synthesized gun's bank kept before the recorded one takes its place, when asked for (keepSynth, swapGuns). */
+  stash(group) {
+    if (this.keepSynth && this.bank[group] && !this.synthGuns[group]) this.synthGuns[group] = { ...this.bank[group] };
+  }
+
+  /** Dev (/audio.html, keepSynth): the synthesized guns back in place of the recorded ones, or the other way round. */
+  swapGuns() {
+    for (const g in this.synthGuns) [this.bank[g], this.synthGuns[g]] = [this.synthGuns[g], this.bank[g]];
+    this.gunsSwapped = !this.gunsSwapped;
+    return this.gunsSwapped ? 'synthesized' : 'recorded';
+  }
+
+  wrap(v, make = this.make) {
+    const one = (s) => make(s.chans, s.sr);
     return Array.isArray(v) ? v.map(one) : one(v);
   }
 
@@ -1446,6 +1792,7 @@ export class AudioEngine {
     }
     this.ww2 = true;
     for (const t of bankTasks(this.ctx.sampleRate, this.make, { ww2: 'only' })) if (t) this.pending.push(t);
+    this.recordLate('colossal');
     if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
     else if (!this.pumping) this.pump();
   }
@@ -1459,21 +1806,40 @@ export class AudioEngine {
     }
     this.ww1 = true;
     for (const t of bankTasks(this.ctx.sampleRate, this.make, { ww1: 'only' })) if (t) this.pending.push(t);
+    this.recordLate('paris');
     if (this.given) while (this.pending.length) this.runTask(this.pending.shift());
     else if (!this.pumping) this.pump();
+  }
+
+  /** A mode's gun asked for after the recordings were applied: built from them too, after its synthesized bank. */
+  recordLate(cls) {
+    if (!this.recApplied) return;
+    for (const t of recordedGunTasks(this.ctx.sampleRate, this.make, this.gunRecordings(), [cls])) this.pending.push([...t, 'gun']);
+  }
+
+  /** The guns' recordings, decoded with the context (loadRecordings), as recordedGunTasks takes them. */
+  gunRecordings() {
+    const out = {};
+    for (const k in this.rec) if (RECORDINGS[k].gun) out[k] = { data: monoOf(this.rec[k]), sr: this.rec[k].sampleRate };
+    return out;
+  }
+
+  /** A recording's file, fetched once (prepareGuns and loadRecordings both want it); null when missing. */
+  recording(key) {
+    const base = import.meta.env?.BASE_URL ?? '/';
+    return (this.files[key] ||= fetch(`${base}audio/${RECORDINGS[key].file}`).then((res) => (res.ok ? res.arrayBuffer() : null)).catch(() => null));
   }
 
   // Real recordings: fetched and decoded in the background; once the synthesized banks are done
   // as well they are cut up and take their places (see RECORDINGS).
   async loadRecordings() {
     const ctx = this.ctx;
-    const base = import.meta.env?.BASE_URL ?? '/';
     const rec = {};
     await Promise.all(
-      Object.entries(RECORDINGS).map(async ([key, spec]) => {
+      Object.keys(RECORDINGS).map(async (key) => {
         try {
-          const res = await fetch(`${base}audio/${spec.file}`);
-          if (res.ok) rec[key] = await ctx.decodeAudioData(await res.arrayBuffer());
+          const ab = await this.recording(key);
+          if (ab) rec[key] = await ctx.decodeAudioData(ab.slice(0));
         } catch {
           // missing or undecodable: the synthesized sound stays
         }
@@ -1484,83 +1850,27 @@ export class AudioEngine {
     apply();
   }
 
+  /**
+   * The recordings decoded here (no worker, or it failed): everything built from them (recordingTasks) joins the
+   * pending banks, one per tick, after the synthesized ones.
+   */
   useRecordings() {
-    const ctx = this.ctx, SR = ctx.sampleRate, R = this.rec, B = this.bank;
-    const midSR = Math.min(SR, 32000), farSR = 16000;
-    const make = (chans, sr) => {
-      const b = ctx.createBuffer(chans.length, chans[0].length, sr);
-      chans.forEach((c, i) => b.copyToChannel(c, i));
-      return b;
-    };
-    // each slice mixed to mono, its DC removed, resampled to `sr` at `rate` (< 1: lower and longer, a bigger object), faded and normalized
-    const cut = (key, sr = SR, rate = 1) => {
-      const buf = R[key];
-      if (!buf) return [];
-      return (RECORDINGS[key].slices || [[0, buf.duration]]).map(([t0, len]) => {
-        const a = Math.floor(t0 * buf.sampleRate), n = Math.max(1, Math.min(Math.floor(len * buf.sampleRate), buf.length - a));
-        const x = new Float32Array(n);
-        for (let c = 0; c < buf.numberOfChannels; c++) {
-          const d = buf.getChannelData(c);
-          for (let i = 0; i < n; i++) x[i] += d[a + i] / buf.numberOfChannels;
-        }
-        let mean = 0;
-        for (let i = 0; i < n; i++) mean += x[i];
-        mean /= n;
-        for (let i = 0; i < n; i++) x[i] -= mean;
-        const step = (buf.sampleRate / sr) * rate, m = Math.floor(n / step), o = new Float32Array(m);
-        for (let i = 0; i < m; i++) {
-          const p = i * step, j = Math.floor(p), f = p - j;
-          o[i] = x[j] * (1 - f) + (x[j + 1] || 0) * f;
-        }
-        const fin = Math.min(m, Math.round(0.003 * sr)), fout = Math.round(m * 0.3);
-        for (let i = 0; i < fin; i++) o[i] *= i / fin;
-        for (let i = 0; i < fout; i++) o[m - 1 - i] *= Math.pow(i / fout, 1.5);
-        return normalize(o, 0.95);
-      });
-    };
-    // a recording laid under a synthesized buffer, then normalized together
-    const blend = (buf, x, g) => {
-      if (!buf || !x.length) return buf;
-      const n = Math.max(buf.length, x.length), o = new Float32Array(n);
-      o.set(buf.getChannelData(0));
-      for (let i = 0; i < x.length; i++) o[i] += x[i] * g;
-      return make([normalize(o, 0.95)], buf.sampleRate);
-    };
-    const rng = mulberry(4242);
-    const lowpass = (x, sr, f) => biquad(Float32Array.from(x), sr, 'lp', f);
-
-    // real distant explosions: the far bursts and the thuds of the drumfire
-    const dist = cut('distant', farSR);
-    if (dist.length) {
-      for (const cls of ORDER) {
-        const g = B['burst_ground_' + cls];
-        if (g) g.far = dist.map((x) => make(distant(farSR, rng, lowpass(x, farSR, 500 + 250 * (ORDER.indexOf(cls) < 3 ? 1 : 0)), 'far', { len: 3.4, roll: { count: 12, t0: 0.3, t1: 2.6, gain: 0.4, f: 360 } }), farSR));
-      }
-      B.thud ||= {};
-      B.thud.far = [...(B.thud.far || []), ...cut('distant', farSR, 0.8).slice(0, 6).map((x) => make([lowpass(x, farSR, 450)], farSR))];
-    }
-    // the cannon's crack under the near field guns, pitched down for the heavy ones
-    for (const [cls, rate, g] of [['light', 1, 0.55], ['field', 0.9, 0.5], ['med', 0.78, 0.4], ['heavy', 0.62, 0.35], ['huge', 0.5, 0.3]]) {
-      const slices = cut('cannon', midSR, rate), near = B['gun_' + cls]?.near;
-      if (slices.length && near) B['gun_' + cls].near = near.map((b, i) => blend(b, slices[i % slices.length], g));
-    }
-    // the real explosion under the near ground bursts, lower for the bigger shells
-    for (const [cls, rate, g] of [['light', 1, 0.5], ['field', 0.92, 0.5], ['med', 0.82, 0.55], ['heavy', 0.68, 0.6], ['huge', 0.55, 0.65]]) {
-      const slices = cut('blast', midSR, rate), near = B['burst_ground_' + cls]?.near;
-      if (slices.length && near) B['burst_ground_' + cls].near = near.map((b, i) => blend(b, slices[0], g * (0.8 + 0.2 * i)));
-    }
-    // brass: the empty case dropped on the duckboards (a step of its own, 'case')
-    const brass = cut('brass', midSR, 0.8);
-    if (brass.length) (B.load ||= {}).case = brass.map((x) => make([normalize(x, 0.9)], midSR));
-    this.recordingsInUse = Object.keys(R);
+    const all = {};
+    for (const k in this.rec) all[k] = { data: monoOf(this.rec[k]), sr: this.rec[k].sampleRate };
+    const synth = (group, key) => this.bank[group]?.[key]?.map((b) => ({ data: b.getChannelData(0), sr: b.sampleRate })) ?? null;
+    const classes = this.gunClasses().filter((cls) => !this.recorded.has('gun_' + cls));
+    for (const t of recordingTasks(this.ctx.sampleRate, this.make, all, synth, classes, { keepSynth: this.keepSynth })) this.pending.push(t);
+    if (!this.pumping) this.pump();
+    this.recApplied = true;
+    this.recordingsInUse = Object.keys(this.rec);
   }
 
   // ------------------------------------------------------------------ basics
 
-  noiseBuffer(type) {
-    const ctx = this.ctx;
-    const len = ctx.sampleRate * 4;
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  // with `sr` and `make` (standalone) they are built before the context, while the page loads (prepare)
+  noiseBuffer(type, sr = this.ctx.sampleRate, make = (n, rate) => this.ctx.createBuffer(2, n, rate)) {
+    const len = sr * 4;
+    const buf = make(len, sr);
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
       let last = 0;
@@ -1585,10 +1895,9 @@ export class AudioEngine {
     return buf;
   }
 
-  impulse(seconds, decay) {
-    const ctx = this.ctx;
-    const len = Math.round(ctx.sampleRate * seconds);
-    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  impulse(seconds, decay, sr = this.ctx.sampleRate, make = (n, rate) => this.ctx.createBuffer(2, n, rate)) {
+    const len = Math.round(sr * seconds);
+    const buf = make(len, sr);
     for (let ch = 0; ch < 2; ch++) {
       const d = buf.getChannelData(ch);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
@@ -2008,7 +2317,10 @@ export class AudioEngine {
   shell(sh) {
     if (!sh || this.shells.has(sh) || sh.kind === 'v2') return;
     if (ROCKET_KINDS[sh.kind] || sh.kind === 'v1' || COLOSSAL_KINDS[sh.kind]) this.enableWW2();
-    this.shells.set(sh, { incoming: false, t0: this.ctx?.currentTime ?? 0, offAt: Infinity });
+    // our own shells leave from beside the listener: heard from where their sound left them (updateShells), so the
+    // tearing starts with the gun's report and not before it; the V-1 keeps its own delay (offAt)
+    const tr = sh.own && sh.kind !== 'v1' ? track(0.1) : null;
+    this.shells.set(sh, { incoming: false, t0: this.ctx?.currentTime ?? 0, offAt: Infinity, tr, at: tr && { x: 0, y: 0, z: 0 } });
   }
 
   /** An enemy shell coming down close to the listener: adds the rising scream to its flight voice. */
@@ -2054,19 +2366,35 @@ export class AudioEngine {
   }
 
   updateShells(dt, now) {
-    const l = this.listenerPos, lv = this.listenerVel;
+    const l = this.listenerPos, lv = this.listenerVel, H = this.heard;
+    // a camera riding a shell carries its air along: it hears the shell where it is, with no delay and no shift
+    const riding = Math.hypot(lv.x, lv.y, lv.z) > 100;
     const cand = [];
     for (const [sh, e] of this.shells) {
       if (sh.alive === false) {
         this.shells.delete(sh);
         continue;
       }
-      const p = sh.pos, v = sh.vel;
+      let p = sh.pos, te = now;
+      const v = sh.vel;
       if (!p) continue;
+      // an own shell is heard from where it was when the sound arriving now left it: nothing before the muzzle's
+      // sound reaches the listener, then the shell receding behind its true place, its pitch falling
+      if (e.tr) {
+        trackPush(e.tr, now, p, true, !e.tr.n);
+        if (!riding) {
+          if (!retarded(e.tr, l, now, H)) continue;
+          e.at.x = H.x;
+          e.at.y = H.y;
+          e.at.z = H.z;
+          p = e.at;
+          te = H.t;
+        }
+      }
       const dx = p.x - l.x, dy = p.y - l.y, dz = p.z - l.z, d = Math.max(Math.hypot(dx, dy, dz), 0.5);
       const spd = v ? Math.hypot(v.x, v.y, v.z) : 0, sp = clamp(spd / 450, 0, 1);
       // closing speed along the line of sight, relative to the listener (a camera riding the shell hears no shift)
-      const closing = v ? -((v.x - lv.x) * dx + (v.y - lv.y) * dy + (v.z - lv.z) * dz) / d : 0;
+      const closing = p === e.at ? H.closing : v ? -((v.x - lv.x) * dx + (v.y - lv.y) * dy + (v.z - lv.z) * dz) / d : 0;
       const cal = sh.calibre ?? KIND_CAL[sh.kind] ?? 6, size = clamp(cal / 15, 0.15, 1.1), big = smooth(cal, 7, 12);
       const own = sh.own ? 1 : 0.9;
       const g = {
@@ -2082,7 +2410,7 @@ export class AudioEngine {
       if (ROCKET_KINDS[sh.kind]) {
         // the moan carries well beyond the tearing; louder while the motor still burns (about 1.8 s)
         kind = 1;
-        const burning = sh.burning ?? now - e.t0 < 1.8;
+        const burning = sh.burning ?? te - e.t0 < 1.8;
         g.moan = 0.8 * Math.min(1, 400 / d) * (burning ? 1 : 0.6) * (0.4 + 0.6 * sp);
         g.tear *= 0.4;
         g.whistle = 0;

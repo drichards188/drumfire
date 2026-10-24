@@ -1588,3 +1588,42 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   sound asked for meanwhile plays the nearest bank there is or nothing (`variant`, `bankOf`); `pump()` waits for it
   and builds only what a failed worker left. `audio.built` counts the banks built here and in the worker (the WW2
   battle: 0 and 94). Without workers, or with a given context (the tests), `start()` builds them as before.
+- (audio) The guns built in layers from recordings, as iads builds its 8.8 cm, for every class (light to huge, and
+  the colossal and Paris guns in their modes). `RECORDINGS` (now exported) marks four new files with a `gun` role:
+  `fieldgun` (InMotionAudio's field gun, CC0) the crack, `artillery` (qubodup's US government howitzer shots, CC0) the
+  snap, `gun76` (Yle's 76 mm, CC BY 4.0) the body and `gunfire` (qubodup's US Army big gun, CC0) the boom. `REC[cls]`
+  lists each class's recorded layers `[role, pitch, level]` (pitched lower for the bigger guns), its synthesized sub
+  thump's level and its saturation; `recordedGun(sr, r, cls, roles, k)` builds take k (the layers onset-aligned, the
+  class's `CLS.boom` thump, the heavy pieces' chest and rumble, the biggest guns' ground reflections, the Paris Gun's
+  whip-crack, the shell's crack, the roll); `recordedGunTasks(SR, make, rec, classes)` gives 6 near takes, 4 mid and
+  3 far (through `distant`) per class, skipping a class that lacks one of its roles. `recordingTasks(SR, make, rec,
+  synth, classes, { keepSynth })` is everything built from the recordings as `[group, key, fn, over]` tasks (`over`
+  'gun' for a recorded gun, true for the rest): the guns, the far ground bursts and the drumfire's thuds from the
+  distant explosions, the explosion under the near ground bursts, the cannon shot under a gun still synthesized, the
+  case; `rec` is `{ key: { data, sr } }` (decoded mono), `synth(group, key)` the synthesized takes they blend with.
+  `cutSlices(data, dataSR, slices, sr, rate)` is the slicing `useRecordings` did. CPU: about 2 s, in the worker.
+- (audio, perf) Every sound ready before the loading screen ends. `prepare()` gives the worker two jobs (`jobs`,
+  `jobDone`): the banks, then `prepareRecordings` fetches every recording once (`recording(key)`, shared with
+  `loadRecordings`), decodes it with an OfflineAudioContext at 32 kHz (no gesture needed), trims it to its last slice
+  and posts it; the worker keeps its synthesized `gun_`, `burst_ground_` and `thud` takes and runs `recordingTasks`.
+  Each bank becomes an AudioBuffer as it arrives (`standalone`, the AudioBuffer constructor, no context needed; `raw`
+  only where it is missing), and `prepare` also builds the noise buffers and the reverb impulse for 44.1 and 48 kHz
+  (`pre`), so `start()` makes the context, the graph and the voices and queues nothing (pending skips built banks).
+  `audio.whenReady(tick, limit = 120000)` resolves when the worker is done (`ready()`, `progress` against `expect`,
+  counted at prepare); main awaits it before `hud.setLoading(1)` ("Sounding the guns"), the Bertha demo before its
+  title (and starts the engine there, as main starts it with the battle; Play then only resumes it). Main's and the
+  demo's first gesture now always call `audio.start()`, which resumes a context the browser made suspended. Before:
+  the WW2 battle's worker was often still busy when loading ended and `useRecordings` cost a 300 to 400 ms freeze a
+  few seconds into the battle; now no long task after loading. Without a worker `useRecordings` queues
+  `recordingTasks` one bank per tick; `workerFailed()` falls back to it; `recordLate` covers a mode enabled after it.
+  `uiBus` bypasses the deafness low-pass (the console stays clear while the ears are dulled).
+- (audio) An own shell's flight voice (`sh.own`, not the V-1) is heard from its retarded position: `shell()` gives it
+  a `track(0.1)` and `updateShells` uses `retarded()` (the movers' code) for its place, distance and closing speed,
+  so the tearing starts when the muzzle's sound reaches the listener (with the gun's report, not before it) and the
+  receding shell falls behind its true place with its pitch dropping. Enemy shells keep their current position (the
+  incoming warning), and a camera riding a shell (listener faster than 100 m/s) hears it where it is.
+- (audio, dev) `/audio.html`: `audio.keepSynth = true` keeps the synthesized guns (`synthGuns`, `stash`) for the A/B
+  button (`swapGuns()`), a 6-inch battery salvo and a 15-inch at 25 m, and `update` keeps running after the smoke test
+  so the buttons land; the report has `recordedGuns` (fails if the recordings are in use but a gun is not built from
+  them) and `ownShellHeardAfter` (an own shell 200 m off must be silent for about 0.58 s). `tools/audiotest.mjs`
+  checks `recordingTasks` with synthesized stand-ins placed at the recordings' slices.

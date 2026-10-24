@@ -2,7 +2,7 @@
 
 Back to the [README](../README.md).
 
-Everything is procedural: terrain, guns, crews, targets, shells, the consoles and most of the sound are generated in code. The only asset files are four CC0 recordings in `public/audio`.
+Everything is procedural: terrain, guns, crews, targets, shells, the consoles and most of the sound are generated in code. The only asset files are eight recordings in `public/audio`.
 
 ## Rendering
 
@@ -36,10 +36,11 @@ In `src/sim/`, headless and deterministic per seed. The German modes plug their 
 
 ## Sound
 
-Synthesized at start, with four CC0 recordings from Freesound layered on top: "Cannon Shot" (qubodup), "G43-14-25 Distant Explosions" (craigsmith), "Explosion" (qubodup) and "Bouncing Shell Casings (Various Sizes)" (GryffDavid). Their sources are in [public/audio/CREDITS.md](../public/audio/CREDITS.md).
+Synthesized at start, with eight recordings from Freesound built in or layered on top. Their sources and licences are in [public/audio/CREDITS.md](../public/audio/CREDITS.md).
 
+- **Gun reports** are built in layers from four real gun recordings, the way a game sound designer builds a gun: a field gun's close crack, modern howitzers' bright reports, a 76 mm gun's body and a big gun's low boom. Each calibre class pitches them lower for the bigger guns and adds a synthesized sub thump and rolling echo. Six takes near, and versions for middle and long range. Without the recordings the synthesized guns play.
 - **Blasts and bursts** by calibre class, routed with a 343 m/s travel delay, distance filtering and air absorption. A close blast arrives as a pressure wave that shakes the camera and dulls the hearing.
-- **Shells:** flight voices with Doppler, and the rising scream of enemy shells coming down near you.
+- **Shells:** flight voices with Doppler, and the rising scream of enemy shells coming down near you. Your own shells are heard from where their sound left them, so the tearing starts with the gun's report.
 - **The battery:** ammunition cook-offs, loading sounds (trolley, crane chain, rammer, breech screw and clang), Very pistols, telephone and wireless signals.
 - **Background:** a distant drumfire bed, rain and wind.
 - **The German modes** add rocket ripples, aircraft, the air-raid siren and the Paris Gun's report.

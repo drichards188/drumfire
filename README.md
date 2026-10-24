@@ -70,7 +70,7 @@ Full list: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#not-done-yet).
 ## Credits
 
 - **Libraries:** [three.js](https://threejs.org) and [lil-gui](https://lil-gui.georgealways.com); [Vite](https://vite.dev) and [playwright-core](https://playwright.dev) for development.
-- **Recordings:** four CC0 recordings from Freesound; sources in [public/audio/CREDITS.md](public/audio/CREDITS.md).
+- **Recordings:** eight recordings from Freesound, seven CC0 and one CC BY 4.0: ["Tykki, laukaus / Big gun, cannon, 76 mm, single shots, gunshots"](https://freesound.org/s/332935/) by YleArkisto ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); sources in [public/audio/CREDITS.md](public/audio/CREDITS.md).
 - **Reference photos:** mostly from Wikimedia Commons, used only locally to check the models.
 
 **Licence:** © 2026 David Richards. Drumfire is source-available under [PolyForm Strict 1.0.0](LICENSE): you may play and study it for non-commercial purposes, but not copy, change or publish your own version of it, or use it commercially. Contributions are welcome here; see [Contributing](CONTRIBUTING.md). The libraries and recordings above keep their own licences.

@@ -275,12 +275,13 @@ async function init() {
   } catch (e) {
     console.warn('AudioEngine failed:', e.message);
   }
-  // sound starts on the first user gesture (browsers refuse earlier), whichever it is
+  // sound starts on the first user gesture (browsers refuse earlier), whichever it is; start() also resumes a context
+  // the browser made suspended when the battle started it without one
   const wake = () => {
     removeEventListener('pointerdown', wake);
     removeEventListener('keydown', wake);
     try {
-      if (audio && !audio.ctx) audio.start();
+      audio?.start();
     } catch (e) {
       console.warn('audio.start failed:', e.message);
     }
@@ -989,6 +990,8 @@ async function init() {
   atmosphere.update(chase.focus, 0, camera);
   renderer.shadowMap.needsUpdate = true;
   post.render(0.016);
+  // every sound ready before the battle: the worker's banks and everything built from the recordings (no stutter later)
+  await audio?.whenReady?.((p) => hud.setLoading(0.93 + 0.06 * p, 'Sounding the guns'));
   hud.setLoading(1, '');
   hud.ready();
   hud.setTimeScale(1);

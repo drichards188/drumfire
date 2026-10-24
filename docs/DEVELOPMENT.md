@@ -63,7 +63,7 @@ On the dev server; the root pages are also in the build.
 
 - **`/models.html?kind=bl15|bl92|bl6|bl60|rail|crew`:** the model viewer. The German kinds such as `lefh18`, `gustav` or `paris` work too. `&ortho=right|left|front|rear|top` gives blueprint views with a metre grid; `&shell=`, `&target=`, `&pose=`, `&anim=1` and more are listed at the top of `src/dev/modelviewer.js`.
 - **`/ui.html?unit=ID&scn=ranging|sos|dead|night`:** the console against a mock world.
-- **`/audio.html`:** audio smoke test.
+- **`/audio.html`:** audio smoke test, with buttons to hear every sound. The first click starts the audio; a few seconds later the guns built from recordings are in, and the "guns: recorded" button switches them with the synthesized ones to compare.
 - **`/world.html`:** terrain and dressing.
 - **`/fx.html`:** effects sandbox.
 
@@ -129,7 +129,7 @@ src/fx.js, src/fx/   particles and the artillery effects (rockets and missiles, 
 src/post.js          bloom, AO, god rays, lens, grades, shockwave, heat, dazzle; src/dynres.js dynamic resolution
 src/atmosphere.js, clouds.js, weather.js, shaderlib.js, noise.js   sky, clouds, weather and the shader library
 src/ui/              the fire control console (consoles/: the cards, the procedure cards, the launch console, the Paris Gun's cards), artillery board, message pad (mock.js for ui.html)
-src/audio.js         the sound engine; public/audio holds the four recordings
+src/audio.js         the sound engine; public/audio holds the eight recordings
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
 tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot, menushots

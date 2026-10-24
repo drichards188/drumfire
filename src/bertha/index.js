@@ -184,7 +184,7 @@ async function init() {
     removeEventListener('pointerdown', wake);
     removeEventListener('keydown', wake);
     try {
-      if (!audio.ctx) audio.start();
+      audio.start(); // (also resumes a context the browser made suspended)
     } catch (e) {
       console.warn('audio.start failed:', e.message);
     }
@@ -769,6 +769,14 @@ async function init() {
   atmosphere.update(_v, 0, camera);
   renderer.shadowMap.needsUpdate = true;
   post.render(0.016);
+  // every sound ready before the title: the worker's banks and everything built from the recordings
+  await audio.whenReady((p) => hud.setLoading(0.9 + 0.09 * p, 'Sounding the gun'));
+  // the engine started now, as main starts it with the battle: Play (a gesture) only has to resume it
+  try {
+    audio.start();
+  } catch (e) {
+    console.warn('audio.start failed:', e.message);
+  }
   hud.setLoading(1, '');
   hud.ready();
   playBtn.disabled = false;

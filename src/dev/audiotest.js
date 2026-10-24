@@ -17,6 +17,7 @@ const step = (name, fn) => {
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const audio = new AudioEngine();
+audio.keepSynth = true; // the A/B button: the synthesized guns kept beside the recorded ones
 window.__audio = audio;
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1e5);
 camera.position.set(0, 3, 0);
@@ -37,7 +38,15 @@ const btn = (label, fn) => {
   b.textContent = label;
   b.onclick = () => (audio.start(), fn());
   bar?.append(b);
+  return b;
 };
+// world sounds travel and land in update(), which the smoke test below stops calling once it is done
+let running = false;
+bar?.addEventListener('click', () => {
+  if (running) return;
+  running = true;
+  setInterval(() => audio.update(1 / 60, camera), 16);
+});
 const live = async (ms, fn) => {
   const t0 = performance.now();
   while (performance.now() - t0 < ms) {
@@ -46,6 +55,13 @@ const live = async (ms, fn) => {
     await wait(16);
   }
 };
+// A/B: the guns built from recordings against the synthesized ones they replace (ready a few seconds after the first click)
+const ab = btn('guns: recorded (click for synthesized)', () => {
+  const now = audio.swapGuns();
+  ab.textContent = `guns: ${now} (click for ${now === 'recorded' ? 'synthesized' : 'recorded'})`;
+});
+btn('6in battery salvo 300 m', () => [0, 0.35, 0.8, 1.1].forEach((t, i) => setTimeout(() => audio.gun(P(280 + i * 12, 0, -100), 6), t * 1000)));
+btn('15in beside you (25 m)', () => audio.gun(P(20, 0, -15), 15));
 for (const [cal, name] of [[2.95, '2.95in'], [5, '60-pdr'], [6, '6in'], [9.2, '9.2in'], [15, '15in']]) for (const d of [60, 400, 3000, 9000]) btn(`gun ${name} ${d} m`, () => audio.gun(P(d, 0, -d / 3), cal));
 for (const cal of [6, 9.2, 15]) for (const d of [30, 300, 3000]) btn(`burst ${cal}in ${d} m`, () => audio.burst(P(0, 0, -d), cal, { fuze: 'impact' }));
 btn('shrapnel 5in 100 m', () => audio.burst(P(0, 40, -100), 5, { fuze: 'air' }));
@@ -184,6 +200,19 @@ btn('ambience off', () => audio.setAmbience({ drumfire: 0, rain: 0, wind: 0 }));
   step('shell null', () => audio.shell(null));
   step('incoming null', () => audio.incoming(null));
 
+  // an own shell leaving a gun 200 m off: its flight voice waits for the muzzle's sound (200 / 343 = 0.58 s)
+  const own = { pos: P(200, 3, 0), vel: P(0, 300, -400), alive: true, calibre: 9.2, own: true };
+  shells = [own];
+  step('own shell', () => audio.shell(own));
+  const fired = audio.ctx.currentTime;
+  let heardAt = null;
+  await live(1500, () => {
+    if (heardAt == null && audio.shellVoices.some((v) => v.sh === own)) heardAt = audio.ctx.currentTime - fired;
+  });
+  own.alive = false;
+  tick(2);
+  report.ownShellHeardAfter = heardAt == null ? null : +heardAt.toFixed(2);
+
   for (const st of ['trolley', 'crane', 'ram', 'breech', 'screw', 'clang', 'cartridge', 'case', 'ready', 'fire', 'whistle', 'bogus']) for (const k of [15, 'bl92', 'bl60', undefined]) step(`load ${st} ${k}`, () => audio.load(st, P(5, 1, -4), k));
   for (const k of ['very', 'star', 'rocket', undefined]) step(`flare ${k}`, () => audio.flare(P(30, 8, -40), k));
   for (const n of ['phone', 'wireless', 'click', 'paper', 'bell', 'whistle', 'bogus', 'feldfernsprecher', 'funk']) step(`ui ${n}`, () => audio.ui(n));
@@ -259,10 +288,14 @@ btn('ambience off', () => audio.setAmbience({ drumfire: 0, rain: 0, wind: 0 }));
   report.pending = audio.pending.length;
   report.voices = { pos: audio.posVoices, direct: audio.directVoices, inFlight: audio.inFlight.length };
   report.recordings = audio.recordingsInUse ?? null;
+  report.recordedGuns = [...audio.recorded];
   report.stepCount = report.steps.length;
   delete report.steps;
   report.ok = !report.errors.length && !report.missingBanks.length && report.deafAfterNear15 > 0.3 && report.deafLater < report.deafAfterNear15 && report.shellVoices > 0 && report.shellsTracked === 0 && report.pending === 0 &&
-    report.britishBanksOnly && report.v2Ignored && report.ww2.moverPeak > 0 && report.ww2.buzzOn > 0.05 && report.ww2.buzzAfterCut < 0.01 && report.ww2.voicesWithMoan > 0 && report.ww2.moversAfter === 0 && report.ww2.shellsAfter === 0;
+    report.britishBanksOnly && report.v2Ignored && report.ww2.moverPeak > 0 && report.ww2.buzzOn > 0.05 && report.ww2.buzzAfterCut < 0.01 && report.ww2.voicesWithMoan > 0 && report.ww2.moversAfter === 0 && report.ww2.shellsAfter === 0 &&
+    report.ownShellHeardAfter > 0.45 && report.ownShellHeardAfter < 0.8 &&
+    // with the guns' recordings decoded, every gun is built from them (the WW2 colossal one too)
+    (!report.recordings?.includes('gun76') || ['light', 'field', 'med', 'heavy', 'huge', 'colossal'].every((c) => report.recordedGuns.includes('gun_' + c)));
   report.done = true;
   out.textContent = JSON.stringify(report, null, 1);
 })();

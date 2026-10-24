@@ -2,7 +2,7 @@
 // checks the guns, bursts and loops for the properties that make them sound right, the British banks and the
 // WW2 (German side) ones. Exits 1 on a failure.
 //   node tools/audiotest.mjs
-import { bankTasks, classOf } from '../src/audio.js';
+import { bankTasks, classOf, recordingTasks, RECORDINGS } from '../src/audio.js';
 
 const make = (chans, sr) => ({ chans, sr });
 const rows = [];
@@ -82,6 +82,12 @@ const envelope = (b, win = 0.01) => {
   return e;
 };
 const db = (v) => (20 * Math.log10(Math.max(v, 1e-6))).toFixed(0);
+/** `x` at `sr` resampled to 48 kHz (linear). */
+const resample48 = (x, sr) => {
+  const step = sr / 48000, n = Math.floor(x.length / step), o = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const p = i * step, j = Math.floor(p), f = p - j; o[i] = x[j] * (1 - f) + (x[j + 1] || 0) * f; }
+  return o;
+};
 const fail = [];
 const check = (ok, msg) => { if (!ok) { fail.push(msg); console.log('  FAIL: ' + msg); } };
 
@@ -246,6 +252,47 @@ if (sab) {
   const sp = spectrum(sab), p = ac(sab, 0.2, 0.5, 1 / 120, 1 / 80);
   console.log(`Sabre: centroid ${sp.centroid.toFixed(0)} Hz, propeller beat ${(1 / p.lag).toFixed(0)} Hz (r ${p.r.toFixed(2)})`);
   check(sp.centroid < 1500 && sp.centroid > 200, 'the Sabre should be a growl, not a whine');
+}
+
+// ---- everything built from the recordings (recordingTasks, the guns by recordedGunTasks): Node cannot decode the
+// mp3s, so synthesized sounds stand in for them, placed where each recording's slices start; this checks the code
+// paths, the levels and the order of the classes, not the sound of the recordings (hear those on /audio.html)
+const STAND = { crack: 'gun_light', snap: 'gun_field', body: 'gun_med', boom: 'gun_heavy', blast: 'burst_ground_med', distant: 'thud.far', cannon: 'gun_field', brass: 'load.clang' };
+const stand = {};
+for (const [key, s] of Object.entries(RECORDINGS)) {
+  const k = STAND[s.gun ?? key], shot = (keep[k] ?? keep[k + '.near'])[0], src = resample48(mono(shot), shot.sr);
+  const data = new Float32Array(Math.ceil((Math.max(...s.slices.map(([a, l]) => a + l)) + 1) * 48000));
+  for (const [a] of s.slices) data.set(src.subarray(0, Math.min(src.length, data.length - Math.round(a * 48000))), Math.round(a * 48000));
+  stand[key] = { data, sr: 48000 };
+}
+const synthOf = (group, key) => keep[group + '.' + key]?.map((b) => ({ data: mono(b), sr: b.sr })) ?? null;
+const ALL = ['light', 'field', 'med', 'heavy', 'huge', 'colossal', 'paris'];
+const recTasks = recordingTasks(48000, make, stand, synthOf, ALL);
+const abTasks = recordingTasks(48000, make, stand, synthOf, ALL, { keepSynth: true });
+console.log(`\nFROM RECORDINGS (stand-ins): ${recTasks.length} banks (${abTasks.length} keeping the synthesized guns for the A/B)`);
+check(recTasks.filter((t) => t[3] === 'gun').length === 21, 'every class of gun should be built from the recordings');
+check(recTasks.length === 33 && abTasks.length === 38, 'the recordings should give the guns, the far and near bursts, the thuds and the case');
+check(abTasks.findIndex((t) => t[0] === 'gun_med' && t[3] === true) < abTasks.findIndex((t) => t[0] === 'gun_med' && t[3] === 'gun'), 'the A/B cannon blend must come before the recorded gun');
+const recStats = {};
+for (const [group, key, fn] of recTasks) {
+  const t = performance.now(), out = fn(), ms = performance.now() - t;
+  for (const [i, b] of out.entries()) {
+    const x = mono(b);
+    let p = 0, s = 0, nan = 0;
+    for (const v of x) if (!Number.isFinite(v)) nan++; else { p = Math.max(p, Math.abs(v)); s += v * v; }
+    const issue = nan ? `NaN x${nan}` : p < 0.05 ? 'SILENT' : p > 1.0001 ? 'CLIPS' : '';
+    if (issue) { bad++; console.log(`  ${group}.${key}[${i}] ${issue}`); }
+  }
+  const b = out[0], e = envelope(b, 0.005), top = Math.max(...e);
+  let end = 0;
+  for (let k = 0; k < e.length; k++) if (e[k] > top * 0.0316) end = k;
+  const sp = spectrum(b);
+  if (key === 'near') recStats[group.slice(4)] = { end: end * 0.005, lo: sp.lo, cen: sp.centroid };
+  console.log(`${(group + '.' + key).padEnd(18)} x${out.length}  ${(mono(b).length / b.sr).toFixed(1)} s  -30dB at ${(end * 0.005).toFixed(1)} s  lo ${(sp.lo * 100).toFixed(0).padStart(3)}%  centroid ${sp.centroid.toFixed(0).padStart(4)}  ${ms.toFixed(0).padStart(4)} ms`);
+}
+if (recStats.huge && recStats.field) {
+  check(recStats.huge.end > recStats.field.end, 'the recorded 15-inch should ring longer than the field gun');
+  check(recStats.huge.cen < recStats.field.cen, 'the recorded 15-inch should be darker than the field gun');
 }
 
 console.log('\nCLASSES: ' + [2.95, 3.3, 5, 6, 8, 9.2, 12, 15, 16.5, 18, 23.6, 31.5].map((c) => `${c} in -> ${classOf(c)}`).join(', '));
