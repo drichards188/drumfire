@@ -1,5 +1,6 @@
 // The right of the screen: the selected unit's fire control console and, at the far right edge, the battery tabs
-// in a column (one row per unit, so ten units still read).
+// in a column (one row per unit, so ten units still read), under the status block and the ALL AUTO / ALL MANUAL pair
+// (every battery's mode at once; Shift+A flips it).
 // Reads only what update() is given ({ sim, selectedId }); talks back through onSelect(unitId) and
 // onCommand(unitId, name, args). Optional hooks main can call: radio(text, kind) from sim.events.radio,
 // sos(sectorId) from sim.events.sos, reset() on a new game.
@@ -133,8 +134,29 @@ export class Panel {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tg.isContentEditable || (tg.closest && tg.closest('.lil-gui'))) return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey || !this.mounted || !this.view) return;
+    // keys the page has taken for itself (the WW2 gunner's at the gun: opts.keysOff); releases still get through
+    if (down && this.opts.keysOff?.(e)) return;
     if (down && e.repeat && e.code.slice(0, 5) !== 'Arrow') { if (e.code === 'Space' || e.code === 'Tab') e.preventDefault(); return; }
+    // Shift+A: every battery to auto, or (when every one is on auto already) every one to manual; A alone is the console's
+    if (down && e.code === 'KeyA' && e.shiftKey && this.allEl && !this.allEl.hidden) { this._allMode(this._allIn('auto') ? 'manual' : 'auto'); e.preventDefault(); return; }
     if (this.mounted.con.key(e, down)) e.preventDefault();
+  }
+
+  // the batteries the ALL pair acts on: alive and the player's (main's isUnlocked: not a locked one, not outside a lesson)
+  _allUnits() {
+    const sim = this.view?.sim;
+    return (sim?.units ?? []).filter((u) => u.alive !== false && (!this.opts.isUnlocked || this.opts.isUnlocked(u)));
+  }
+
+  _allIn(mode) {
+    const us = this._allUnits();
+    return us.length > 0 && us.every((u) => u.mode === mode);
+  }
+
+  // every battery to one mode (a battery on HOLD goes back to work too); each goes through onCommand as the console's
+  _allMode(mode) {
+    snd('click');
+    for (const u of this._allUnits()) if (u.mode !== mode) this._send(u.id, 'mode', { mode });
   }
 
   _buildTabs(units) {
@@ -174,6 +196,18 @@ export class Panel {
     this.fronts = TH.sectors.map((s) => { const c = el('i', 'fchip', s.id); this.stFront.append(c); return c; });
     this.status.append(this.stClock, this.stState, this.stScore, this.stFront);
     this.tabsEl.prepend(this.status);
+    // every battery's mode at once
+    this.allEl = el('div', 'tall');
+    this.allBtns = { auto: el('button', 'tallb', 'ALL AUTO'), manual: el('button', 'tallb', 'ALL MANUAL') };
+    this.allBtns.auto.title = 'ALL AUTO: every battery\'s crew picks its own work and fires by itself (Shift+A toggles)';
+    this.allBtns.manual.title = 'ALL MANUAL: you give every battery its orders and fire; the crews only load and lay (Shift+A toggles)';
+    for (const [mode, b] of Object.entries(this.allBtns)) {
+      b.type = 'button';
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); this._allMode(mode); });
+      this.allEl.append(b);
+    }
+    this.allEl.dataset.tut = 'allmode';
+    this.status.after(this.allEl);
     applyHighlight();
   }
 
@@ -250,6 +284,9 @@ export class Panel {
       setCls(t.el, 'dead', dead);
       setCls(t.el, 'warn', hit);
     }
+    // the ALL pair: lit on the mode every battery is in; not on the lesson range, nor with a single battery
+    this.allEl.hidden = !!sim.scripted || this._allUnits().length < 2;
+    if (!this.allEl.hidden) for (const [mode, b] of Object.entries(this.allBtns)) setCls(b, 'on', this._allIn(mode));
     setText(this.stClock, `${clockStr(sim.clock)} hrs`);
     setText(this.stState, sim.state ? String(sim.state).toUpperCase() : '');
     const sc = sim.score;

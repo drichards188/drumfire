@@ -27,3 +27,35 @@ the far bursts and the drumfire's thuds, and the shell casings the empty case dr
 Only the Yle archive recording requires attribution: "Tykki, laukaus / Big gun, cannon, 76 mm, single
 shots, gunshots" by YleArkisto (https://freesound.org/s/332935/), licensed under CC BY 4.0, cut into slices,
 resampled and layered. The rest are CC0 and credited as a courtesy.
+
+## WW2 German crew voices (`voice-de/`)
+
+The German callouts of the WW2 open battle and the Karl-Gerät operation (`voice-de/*.mp3`, indexed by
+`voice-de/lines.json`) are synthetic speech, not recordings of people. They were generated offline by
+`tools/pick-voice-takes.py` and `tools/make-voices.py` from the text in `tools/voice-lines-ww2.json` with
+[Piper](https://github.com/OHF-Voice/piper1-gpl) and two German voices from
+[rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices); the game adds the field telephone, the radio and the
+open air at runtime (`src/ww2/voices.js`). The recipe is in `docs/VOICES.md`.
+
+| Voice | Speakers used | Who speaks | Dataset licence |
+|---|---|---|---|
+| `de_DE-mls-medium` (trained from scratch) | MLS speaker ids 194, 159, 101, 43, 203, 112 | the gun commander (194) and the loader (159), the Abteilung (101), the battery's telephone operator (43), the forward observer (203), the air observer (112) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `de_DE-thorsten_emotional-medium` | its "angry" speaker (id 1) | the battery officer's shouted commands and alarms | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+
+**Attribution (CC BY 4.0).** The `de_DE-mls-medium` voice was trained on the German part of Multilingual LibriSpeech:
+"MLS: A Large-Scale Multilingual Dataset for Speech Research" by Vineel Pratap, Qiantong Xu, Anuroop Sriram, Gabriel
+Synnaeve and Ronan Collobert (2020), [openslr.org/94](https://www.openslr.org/94/), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (its audio comes from LibriVox's public-domain audiobooks). The
+speech here is new synthesized speech from a model trained on that data, cut, filtered and encoded; it does not reproduce
+the dataset's recordings.
+
+**Licence note on the Thorsten voice.** The Thorsten-Voice dataset (Thorsten Müller) is CC0. The `thorsten_emotional`
+voice was fine-tuned from Piper's German `thorsten` voice, which was itself fine-tuned from the English `lessac` voice,
+whose training data (Blizzard 2013, Lessac Technologies) is under a research licence. That is acceptable for this
+source-available, non-commercial project (the same note as the Kirov project's Russian voices); a commercial release
+should replace the battery officer's lines with an MLS speaker, a commercially licensed TTS service or recorded actors.
+Any replacement drops in under the same ids: put the files in `voice-de/` and run `python3 tools/make-voices.py --index-only`.
+
+The lines are game dialogue in a plausible Wehrmacht artillery register, strictly the procedure (fire commands, the
+loading drill, the observers' corrections): no real units, places, slogans or salutes, and no claim to quote real
+drill. Every line was checked for intelligibility by transcribing it back with Whisper (`score` in the line table).

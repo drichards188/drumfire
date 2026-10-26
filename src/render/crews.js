@@ -334,6 +334,28 @@ export class GunCrew {
     return P.poly;
   }
 
+  // the man whose place the player has taken (the WW2 gunner, src/ww2/gunnerView.js): drawn with his head and neck
+  // hidden, the first-person camera at his eyes; null gives him his head back
+  setPlayer(role) {
+    const m = role ? this.byRole.get(role) ?? null : null;
+    if (m === (this.player ?? null)) return;
+    for (const q of this.men) q.fig.bones.neck?.scale.setScalar(q === m ? 0.001 : 1);
+    this.player = m;
+  }
+
+  // the player's man's eyes (world position into out, after update) and the heading he faces; null without one
+  eye(out) {
+    const m = this.player;
+    if (!m || !m.root.visible || !m.fig.bones.neck) return null;
+    m.fig.bones.neck.getWorldPosition(out);
+    m.fig.root.getWorldQuaternion(_q);
+    _c.set(0, 0, -1).applyQuaternion(_q);
+    // the head bone sits about 0.1 above the neck, the eyes a little above and ahead of it
+    out.addScaledVector(_c, 0.07);
+    out.y += 0.18 * m.fig.root.scale.y;
+    return Math.atan2(-_c.x, -_c.z);
+  }
+
   setLevel(level) {
     this.level = level;
     const vis = level > 0;
@@ -407,11 +429,13 @@ export class GunCrew {
     // Mechanisms and their contact points must belong to this frame before hands are solved.
     this.mechanisms(c);
     rig.root.updateMatrixWorld(true);
-    // casualties: the last men of the list leave the gun
+    // casualties: the last men of the list leave the gun (never the player's man: the next one down goes instead)
     const casualties = Math.max(0, p.crewMax - p.crew);
+    const pi = this.player ? this.men.indexOf(this.player) : -1;
     for (let i = 0; i < this.men.length; i++) {
       const m = this.men[i];
-      const gone = p.state === 'dead' || i >= this.men.length - casualties;
+      const rank = pi < 0 || i > pi ? i : i === pi ? -1 : i + 1;
+      const gone = p.state === 'dead' || rank >= this.men.length - casualties;
       if (gone) { m.hide(); continue; }
       m.root.visible = true;
       this.act(m, c);

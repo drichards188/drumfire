@@ -269,7 +269,7 @@ crossroads at night, trains at the railhead). `known` targets are drawn on the b
 
 **Mission** (`sim.missions`): `{ id, kind: 'cb' | 'destroy' | 'wire' | 'sos' | 'harass' | 'barrage',
 title, targetId, x, z, gridRef, observer: 'foo' | 'air' | 'balloon' | 'sound' | 'map', priority,
-t0, deadline, unitId, state: 'open' | 'ranging' | 'ffe' | 'done' | 'failed', reports: [Report] }`.
+t0, deadline (sim time; null: no clock, as on an SOS, which ends with its assault), unitId, state: 'open' | 'ranging' | 'ffe' | 'done' | 'failed', reports: [Report] }`.
 **Report**: `{ t, missionId, unitId, shellId, over (m, + = beyond the target along the line of fire),
 right (m, + = right of the line of fire), clock ('B3' style, for aircraft), text (the message as the
 observer would send it, in yards), ok }`. FOOs telephone add/drop and left/right in yards; aircraft
@@ -357,7 +357,10 @@ line in degrees and minutes, range in yards, charge, elevation from the range ta
 the range table; the message pad (telephone and wireless messages as written slips); the guns' state
 (loading step, crew, wear, ammunition); the missions list. Keys: Tab next mission, Enter take it,
 Space fire, G guns (1 GUN, SECTION, BATTERY), arrows correct (up/down add/drop, left/right line), Q/E charge, R rounds, Z fuze, A mode
-(auto/manual), S SOS. Main owns 1 to 5, C, F, M, H, F3, `[` and `]`.
+(auto/manual), S SOS. Main owns 1 to 5, C, F, M, H, F3, `[` and `]`. The Panel itself owns Shift+A and the ALL AUTO / ALL
+MANUAL pair under the status block of the battery tabs (`.tall`): every battery the player commands (`isUnlocked`) and
+alive to one mode through `onCommand(id, 'mode')`, a battery on HOLD too; lit when every one is in that mode; Shift+A sets
+manual when all are on auto, else auto; hidden on the lesson range (`sim.scripted`) and with a single battery.
 
 ### Audio (`src/audio.js`, audio agent)
 
@@ -454,8 +457,14 @@ the objective at about 40.5 min; defeat earlier when two sectors fall or every g
 | Difficulty | all auto | scripted 15in+9.2in+6in | scripted all five |
 |---|---|---|---|
 | Easy | 54 of 72 | 66 | 67 |
-| Normal | 22 of 72 | 52 | 65 |
-| Hard | 1 of 72 | 6 | 14 |
+| Normal | 25 of 72 | 48 | 67 |
+| Hard | 1 of 72 | 4 | 16 |
+
+(SOS without a deadline) All nine cells re-run on seeds 1 to 72 after the SOS mission lost its deadline (see the
+changelog). Before: Easy 54 / 66 / 67, Normal 22 / 52 / 65, Hard 1 / 6 / 14; Easy is unchanged, as its longer clock never
+ran out. SOS calls held (no group in our trench) by all auto, scripted 15in+9.2in+6in and scripted all five, of about 287
+on Normal: 42 / 69 / 84 before, 38 / 68 / 98 after; on Hard 6 / 34 / 41 of 166 to 277 before, 12 / 28 / 43 of 182 to 271
+after (more calls on Hard because the games last longer).
 
 (units by calibre, one report a volley) All nine cells re-run on seeds 1 to 72 after the British units were renumbered
 smallest first and the observers answered each volley once (see the changelog). Nothing in the tables changed, but the
@@ -463,13 +472,13 @@ crews pick missions in unit order (the 60-pounders now choose first, the 15-inch
 the ids, and a battery ranging with every gun gets one report on the mean point of impact instead of one a round: the auto
 crews win more on Easy (39 before) and the scripted player on all five more on Normal (56 before; the elevation-limit run's
 Easy 39 / 64 / 68, Normal 18 / 46 / 56, Hard 2 / 8 / 14; with the renumbering alone 50 / 65 / 67, 21 / 49 / 66, 1 / 6 / 14).
-On Normal 55 % of the infantry reach the objective with auto crews, 65 % with the scripted 15-inch, 9.2-inch and 6-inch, 73 %
+On Normal 54 % of the infantry reach the objective with auto crews, 64 % with the scripted 15-inch, 9.2-inch and 6-inch, 74 %
 with the scripted player on all five.
 
 (rail18) All nine cells re-run on seeds 1 to 72 after the railway gun became the 18-inch (cycle 60 to 90 s, 36 rounds instead of 50, the biggest blast and crater in the game). Before: Easy 39 / 66 / 69, Normal 14 / 48 / 61, Hard 0 / 4 / 15. Kills per game by unit on Normal (15in, 9.2in, 6in, 60pdr, rail), scripted all five: 2.1 1.3 1.0 1.0 0.6 before, 2.3 1.4 0.9 1.0 1.3 after (all auto 1.0 before, 1.5 after), so the 18-inch gets about as many kills as the 15-inch but fires only about 25 rounds a game; it does not win the game alone.
 
-On Normal the auto crews hold the SOS 46 % of the time (scripted all five 77 %), 55 % of the infantry reach the objective on
-average with auto crews against 73 % with the scripted player on all five (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Tuning knobs:
+On Normal the auto crews hold 13 % of the SOS calls (scripted all five 34 %; the 46 % and 77 % noted here before were stale), 54 % of the infantry reach the objective on
+average with auto crews against 74 % with the scripted player on all five (the attack needs 60 % on Normal, 50 % Easy, 70 % Hard). Tuning knobs:
 `DIFFICULTY` (err, cb, dmg, assault, time, ammo, sig, zero), the dispersion and calibration in `GUNS`, `SHELLS` radii, the CB
 cadence in `enemy.js` (one round per gun per 85 s / (cb * activity)), the breach penalty in `director.js` (0.5 of a sector per group in),
 the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or more; single games flip near the loss line.
@@ -763,8 +772,138 @@ Special controllers (`unit.special`, plain data; commands through `sim.command`)
 
 Events added (optional): `special(unit, what, x)` ('ready', 'drive', 'step', 'done', 'launch', 'result'),
 `raid(raid, 'warning' | 'attack', plane)`. `tools/ww2test.mjs [seeds] --op all --difficulty all` plays every
-operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 6, Normal 5, Hard 1 won, with the first order at
-0 s and one report a volley).
+operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 6, Normal 5, Hard 2 won, with the first order at
+0 s and one report a volley; Hard 1 before the Sperrfeuer lost its deadline).
+
+### The gunner (the player in person at a gun)
+
+P, or MAN on a gun's row of the guns card, puts the player in person into the detachment of a gun of the selected
+battery: the Big Bertha demo's drill on the main game's guns. The kinds are the leFH 18, the sFH 18, the K 18, the
+Mrs 18, the Gustav and the Karl (`gunner.js` `MANNABLE`; the Nebelwerfer, fired from cover, and the launch sites, with
+drills of their own, refuse with a reason, and so does the Gustav while its railway preparation has it in pieces,
+`p.fixed`). The camera sits at the eyes of the man at the player's post, the gun card lies over the 3D view,
+and the console beside it still commands the Group.
+
+- **Posts** (`POSTS`): `cmd` Geschützführer reads back each new fire command for this gun (hold E, 1.2 s). `lay`
+  Richtkanonier: A/D traverse, W/S elevation, Shift fine. The wheels ease onto the command's mark and stop there (let go
+  to pass it), and let go within a Strich they make the last turn. `load` Ladekanonier: open, shell, ram, cartridge,
+  close (hold E). `fire` Abzugskanonier: prime, then the pull (hold E, 0.7 s). The steps are the piece's own
+  `GUNS[kind].load` and `STEP_POST` gives each its post; a step the player works takes at most `HOLD` (8 s) of
+  holding, and so does the lay check once the gun is laid (the Gustav's 70 s shell hoist is 8 s in the player's
+  hands; no field gun step is longer than 8 s, so they are unchanged). The heavies' `depress` is the layer's (S to the
+  loading angle). The elevation is locked while the breech is open, and through the heavies' prime. Laid: within 1
+  Strich. While the others load, the prompt sends the layer at his post to the line (and on a gun loaded at its lay,
+  the elevation with the breech shut).
+- **The powered drives** (`DRIVEN`: the Gustav, the Karl). Their laying rates are slow (the Gustav 0.08 degrees a
+  second along its curve and 0.35 in elevation: about two minutes from 40 degrees to the loading angle), so a tap of
+  W A S D at the layer's post starts the drive (command `drive { axis: 'az' | 'el', dir }`, `st.drive`) and it runs on
+  at the gun's own rate, whichever post the player goes to, until it is on the mark, against a stop, or the breech is
+  opened under the elevation; the same key the other way stops it, Shift held is the hand wheel. The prompt counts the
+  drive down in Strich and seconds. The Karl's coarse laying stays the console's: raise the hull, turn the vehicle,
+  lower it (L, T, L on the KARL card, which keeps its keys at the gun, as Y for the carrier). `u.stowed` (the hull not
+  down) is honoured as in `sim/guns.js`: no laying, a laid round back to its lay step, a cycle not yet rammed given up
+  unless `loadThrough`, the barrel down to its loading angle; while a controller's gate holds the gun the prompt
+  names it and an auto battery's patience does not run out.
+- **Crew help** (`assist`: C, the card's button or the gear menu; localStorage `drumfire.gunner.assist`). On, the other
+  posts work at the crew's pace: the read-back after 2.5 s, the steps at 1/crewK, the lay at the gun's rates, the pull
+  0.9 s after the order's time once laid. Off, nothing at another post moves until the player goes there. The crew
+  helps only while it has 30 % of its men.
+- **Orders.** The gun's command (`st.order`) is the unit's order laid for this piece (`p.cmd`, charge, fuze). A new
+  one (another target, a correction, a sheaf, another charge or fuze) must be read back before the layer has its marks,
+  the loader starts or the firer may pull. On arrival, the command in hand counts as read back. An auto battery's AI
+  commander gives the fire orders (guns.js `fire`). The gun keeps the order's time and `p.fireAt` stays at Infinity
+  until a pull starts, so the crew covers its ears with the pull. A manual battery is the player's from the console,
+  and a pull with no fire order fires this gun alone on the battery's order, its rounds per gun (`fire(u, [i])`). An auto battery does not wait: rounds
+  ordered that the gun has not moved on for 40 s lapse, with a radio message.
+- **Other batteries** (`othersAuto`, the gear menu, default on): those on manual go to auto while the player is at a
+  gun and back to manual on leaving, if still on auto.
+- **Shape.** `sim.gunner` (`Gunner`, made by `SpecialWW2`), and `sim.gunner.st`: null, or `{ unitId, pi, kind, post,
+  assist, order { az, el, charge, fuze, ok, why, n, acked }, ack, hold { what, t, dur }, next { post, key, text, wait },
+  why, others, drive { az, el } }`. `piece.manned`: `sim/guns.js` `updatePiece` hands such a piece to `sim.gunner.updatePiece`. The piece
+  keeps the cycle's fields, so the console, the crew's choreography and leaving the gun mid-cycle work unchanged.
+  Commands `man { piece, post, assist, othersAuto }`, `post { post }`, `unman`, `assist { on }`, `drive { axis, dir }` go through
+  `sim.command` and `SpecialWW2.command`; they are not in TAKE_MANUAL, so manning keeps the battery's mode.
+  `sim.gunner.setInput({ az, el, fine, work })` every frame. Event `gunner(what, a)`: 'man', 'unman', 'post',
+  'order', 'ack', 'mark', 'nofire', 'pull', 'lapse'. A gun knocked out puts the player back at the console
+  (`check()`, after the guns' step), and so do a new game and the end of a battle; a lesson refuses `man`.
+- **Page** (`gunnerView.js`, `gunner.css`). `POST_ROLE` names the crew role at each post (officer, chief or
+  sergeant, layer, loader or loader1, lanyard). `render/crews.js` `GunCrew.setPlayer(role)` hides that man's head (he is never the
+  casualty taken off the gun) and `eye(out)` gives his eyes. The camera sits a little behind and above them (`VIEW`),
+  turned to the post's work: the middle of the barrel for the commander, the muzzle for the layer, the breech for the
+  loader and the firer (`VIEW_KIND`: the Gustav's and the Karl's commanders stand further back and higher). Main cuts
+  the camouflage nets away round the sim's piece positions, so the Karl's nets clear where it stands now, not on the
+  approach road. A drag looks round, the wheel zooms (12 to 75 degrees) and the near plane is 0.1. Keys at
+  the gun: 1 to 4 the posts, W A S D E and Shift, C crew help, N the next gun, P leave, F rides the shell. The Panel's
+  `keysOff` keeps W A S D E Q and the digits from the console, which keeps the rest (missions, corrections, Space for
+  the battery). While the player is at a gun, main sets `fx.closeUp`: a blast or burst within 80 m of
+  the camera throws fewer puffs (`fx/artillery.js` `lod`: q times 0.35 at the eye, back to 1 at 80 m, at their usual
+  size), as at arm's length its smoke would otherwise cover the screen many layers deep. Main: `#man-gun`, `syncGunner()` follows `sim.gunner.st`, `__drumfire.man(i, args)` (null leaves),
+  `__drumfire.gunner`.
+- **Test**: `node tools/gunnertest.mjs [seeds] --kind all --assist both --difficulty all [--manual] [--op]`. A scripted
+  gunner at No. 1 gun in the Flanders battle (the Karl in its own operation, or `--op flanders` for the open battle's
+  set-up Karl; the Gustav at the siege with `--op sevastopol`, manned once it stands; everything else on auto) reads
+  `st.next` and holds its key, or taps it to start a drive. Manned with crew help the Gustav and the Karl keep the
+  auto crews' pace (the siege Gustav about 300 s a round against 297; alone, holding E at each step, faster).
+
+### Crew voices (the open battle and the Karl-Gerät; the WW1 open battle)
+
+German callouts at the guns and on the field telephone, with subtitles: synthetic speech made offline (Piper; recipe in
+docs/VOICES.md) by `tools/pick-voice-takes.py` and `tools/make-voices.py` from the line table `tools/voice-lines-ww2.json`
+into `public/audio/voice-de/` (`lines.json`: `{ id: { file, speaker, ch: 'gun' | 'phone' | 'radio', de, en, seconds, log? } }`),
+played by `src/ww2/voices.js` (`CrewVoices`, page code: it reads the sim and never changes it). Only on the pages of the
+operations in its `VOICED_OPS` (`flanders`, `karl`, and the lessons that run on them, and the WW1 open battle `ridge`);
+on every other page (Sevastopol, V-1, V-2, the Paris Gun, the campaign missions, the British game) main builds no voices
+object, so those pages are unchanged.
+
+- **1918** (`era: 'ww1'`, main passes it on a WW1 page) speaks with the same clips; none is made for it. The WW1 guns
+  take the callouts of their drill: the K 17 and the sFH 13 the light guns' (shell by hand, "Kartusche rein", the
+  lanyard), the Mörser 16 the tray (`TRAY`), the Langer Max and the Gamma the lift ("Granate am Aufzug, hoch!", `LIFT`)
+  with bag charges and the friction tube (`BAGS`); the charge is called from its name as before ("Ladung 5", "Kleine
+  Ladung"; the Langer Max's Vorkartuschen and Bertha's have no clip, so no charge is called). Three WW2 clips are kept
+  out of 1918: the air observer's radio lines (in 1918 he reported by wireless telegraphy, so his reports come as the
+  observation post's on the telephone, `OBS.ww1`), "Panzer in der Bereitstellung" (a Mark IV laager gets the general
+  call, `m_any`) and the counter-attack's barrage call (the Feuerwalze is our attack; the battery officer's "Feuerwalze!"
+  at the guns says it). The British batteries are `m_cb`, the dumps `m_adump`, the road traffic `m_convoy`, the brigade
+  HQ `m_hq`, the railhead `m_train`; "Hier Abteilung" stays.
+
+- **Channels**, one utterance (a list of clips played back to back) at a time on each. `gun`: the Batterieoffizier
+  (shouted commands and alarms), the Geschützführer and the Ladekanonier of the voiced gun, heard where they stand through
+  the engine's routing (`audio.enqueue` and `route`: the 343 m/s delay, distance low-pass, the sfx bus) with a shout's EQ.
+  `tel`: the Abteilung, the battery's telephone operator and the VB on a field telephone, the air observer on a radio,
+  at the player's ear (`audio.uiBus`) through band-limited chains with a little drive, key clicks and line noise (the radio
+  narrower, noisier and fading).
+- **Who is voiced:** the selected battery (at a gun, the one served), and the calls to every gun (new fire missions,
+  Sperrfeuer, the Feuerwalze's lifts). Its voiced gun is the one the player serves, else the lowest-numbered gun standing.
+- **Events** (chained by `attach(sim)` after main's own): `load` (each step of `GUNS[kind].load` of the voiced gun, its
+  'ready'), `fire` (the first round of a volley: "abgefeuert" to the observer; the gun's callouts still waiting dropped),
+  `report` (a head, the range and the line, each a clip chosen from the report's text; a figure with no clip of its own
+  says "wie gemeldet"), `mission` ('new' by target kind; 'done' and 'failed' of the selected battery's mission),
+  `incoming` (within 350 m of its guns), `casualty`, `pieceDestroyed`, `targetDestroyed`, `targetHit` (fire for effect on
+  its target), `sos`, `lift`, `raid` (a warning within 2.5 km, an attack within 1.5 km).
+- **Watchers** (`update(sim)` every frame after the sim's step, on the selected battery): a new target (the Feuerkommando:
+  new target, fuze, charge; Sperrfeuer, Feuerwalze and its lifts), a correction, a charge or fuze the player changed, a fire
+  order (`unit.volleys` grew: which guns, and the rounds for effect), a cease (the rounds ordered gone without the last of
+  them fired, or HOLD), the whole battery ready, the Karl's stage and its ammunition carrier.
+- **Queue** (the Kirov fire cues' rules): priorities 0 loading steps and effect on the target, 1 Feuerkommando and missions,
+  2 ready reports, observer reports, "abgefeuert", cease fire, casualties, 3 fire orders and alarms; a line waits at most
+  2.5, 6, 8 or 10 s by priority on the wall clock (`performance.now`, never the game clock); a newer utterance with the
+  same key replaces one still waiting; a fire order cuts a lesser callout at the guns short and takes a waiting fire
+  command of its battery with it; a gun's ready report waits 0.4 s (an order to fire at once replaces it) and is not given
+  while it still has rounds ordered; a loading step said less than 15 s ago is left out (a field howitzer firing for effect
+  calls every other cycle); lines are started from `update`, so those of one frame go out by priority, and the next
+  follows as soon as the last ends.
+- **Page:** subtitles `«German» English` in `#voice-sub` over the 3D view; the telephone lines the sim does not log itself
+  (missions, Sperrfeuer, lifts, mission ends: `log`) also go to the HUD's radio log; the console's VOICES button
+  (`#voice-btn`, in `#panel`) and V switch them, remembered in localStorage `drumfire.voices`; mute and volume act on them
+  through the master. Main: the optional import, `voices.load()` and `await voices.ready()` behind the loading screen
+  ("Briefing the crews", after the audio banks; every clip decoded by an offline context, the telephone lines at 11.025 kHz),
+  `voices.attach(sim)` after the event wiring, `voices.update(sim)` before `audio.update`, the load handler leaves out the
+  synthesized English "Ready!" of the voiced gun (`replacesBark`), key V, `__drumfire.voices` (its `log` lists every
+  utterance: `{ t, sim, ch, ids, de, en }`).
+- **Test:** `node tools/voicetest.mjs [--op flanders|karl|sevastopol|v1|v2|ridge|paris] [--unit N] [--seconds S] [--scale K] [--then N:S]`
+  plays the battle in real time without drawing, prints the lines in order and checks the rules (one line a channel, a fire
+  command with each "abgefeuert", reports after shots, on `ridge` no WW2-only clip: `fu_`, `m_tanks`, `m_barrage`), and on
+  the other operations that there are no voices.
 
 ## WW1 German mode
 
@@ -1009,7 +1148,8 @@ to Wilhelm; its end card is the controller's `sim.over`.
 auto; `--player` puts a scripted competent player on the Paris Gun instead (ALL HANDS, each round at once, the charge
 to the gauge, the table and half of each report, faults fixed, the order due soonest, a spent barrel changed unless an
 order would run out). On seeds 1 to 72, the battle all-auto (without the Paris Gun, the bed relay instant): Easy 20,
-Normal 15, Hard 1 won with the first order at 0 s and one report a volley (before them 21, 10, 3; the British game: 54, 22, 1; 27, 16, 5 with the Paris Gun in it and the 100 s relay; 25, 10, 3
+Normal 14, Hard 6 won with the Sperrfeuer without a deadline (Sperrfeuer held on Hard 20 of 215, 5 of 177 before; 20, 15, 1 won
+before it), with the first order at 0 s and one report a volley (before them 21, 10, 3; the British game: 54, 22, 1; 27, 16, 5 with the Paris Gun in it and the 100 s relay; 25, 10, 3
 with it and the instant relay). The Paris Gun's mission, all-auto: Easy 25, Normal 6, Hard 1 (3.1, 2.3 and 1.3 of the
 5 orders; about 7 shots, 5 in a target's area on Normal); the scripted player: 59, 49, 10 (4.0, 3.8, 2.2 orders;
 about 9 shots); the auto gangs stand the gun at 253 s; 4 to 7 raids a mission, none has destroyed the gun. Single games flip near the loss line: decide on 72 seeds. After touching `tables_ww1.js`, `src/ww1/*` or the shared sim, run it and `node
@@ -1627,3 +1767,45 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   so the buttons land; the report has `recordedGuns` (fails if the recordings are in use but a gun is not built from
   them) and `ownShellHeardAfter` (an own shell 200 m off must be silent for about 0.58 s). `tools/audiotest.mjs`
   checks `recordingTasks` with synthesized stand-ins placed at the recordings' slices.
+- (sim) An SOS mission has no deadline: `director.rockets()` (and the WW2 and WW1 Sperrfeuer) passes `deadline: null`,
+  `addMission` keeps it null and `missionsUpdate` never runs it out, so the mission ends with its assault (done when no
+  group got in, failed when one did). Its clock (`go + crossing + 30` of the first group, times `difficulty.time`) ran
+  out while the Germans were still crossing (the other groups, the pinning), ceased every gun on it and failed a line that
+  held: every SOS on Hard, about a third on Normal; S could not call it again (`assign` refuses a failed mission). The
+  mission list shows no countdown for it. Mission shape: `deadline` may be null. Balance re-run, see "Balance".
+- (ww2 gunner) The player in person at a gun of a WW2 battery (section "The gunner" under "WW2 mode"): `src/ww2/gunner.js`
+  (the drill, Node-safe), `gunnerView.js` and `gunner.css` (the first-person camera, the gun card, the keys),
+  `tools/gunnertest.mjs`. Shared changes, inert without a manned piece (ww2test seeds 1 to 8, every operation and
+  difficulty, and simtest seeds 1 to 4 with both players print the same before and after): `sim/guns.js` `updatePiece`
+  hands a `piece.manned` to `sim.gunner`; `SpecialWW2` makes the Gunner, routes `man post unman assist` to it and calls
+  `check()` after the guns; `render/crews.js` `GunCrew.setPlayer(role)` and `eye(out)`, and the player's man is never the
+  casualty taken off; `ui/panel.js` option `keysOff(e)`; the guns card's MAN / LEAVE on each row (`GunsCard({ onMan })`,
+  shown for `TH.mannable`, which `ww2/ui.js` sets); main: P, `#man-gun`, the first-person camera in place of the chase
+  camera (near plane 0.1 while at a gun), gear menu "At a gun: crew help (C)" and "At a gun: other batteries to auto".
+  The scripted gunner (seeds 1 to 4, every kind, crew help on and off, Easy to Hard) fires as many rounds as each of
+  its battery's other guns, and no order lapses.
+- (ww2 voices) Crew voices for the WW2 open battle and the Karl-Gerät operation (section "Crew voices" under "WW2 mode"):
+  `src/ww2/voices.js` (`CrewVoices`, `VOICED_OPS`) and `voices.css`, the clips in `public/audio/voice-de/` (`lines.json`
+  index), the line table `tools/voice-lines-ww2.json`, `tools/pick-voice-takes.py`, `tools/make-voices.py`,
+  `tools/voicetest.mjs`, docs/VOICES.md. Main's hooks (all behind `voices?.`, null on every other page): the optional
+  import, the construction after the gunner view, `load()` and `ready()` behind the loading screen, `attach(sim)` after the
+  event wiring, `update(sim)` before `audio.update`, the load handler skipping the voiced gun's synthesized "Ready!"
+  (`replacesBark`), key V, `__drumfire.voices`. Read-only on the sim: ww2test seeds 1 to 8, every operation and
+  difficulty, and simtest seeds 1 to 3 with both players print the same before and after.
+- (ww2 gunner: Gustav and Karl) The Gustav and the Karl can be manned (section "The gunner"): `gunner.js` `MANNABLE`
+  gains them, `DRIVEN` gives them a powered laying drive (command `drive { axis, dir }`, `st.drive`; a tap starts it,
+  it stops itself on the mark), `HOLD` caps a step the player works and the lay check at 8 s, the prompt sends the
+  layer to the line while the others load, `u.stowed` and `p.fixed` are honoured as in `sim/guns.js`, a gated gun
+  neither lapses its rounds nor hides why it waits; `gunnerView.js` `POST_ROLE` and `VIEW_KIND` for both, the taps,
+  the key line per kind; main cuts the camouflage nets away round the sim's piece positions (the Karl's where it now
+  stands; identical for every gun that does not move). Two words put right on the way: the Karl's gate names the
+  carrier's key Y (it said M, the mute key) and `problem()` the hull's L (it said R). `tools/gunnertest.mjs` takes
+  `gustav` and `karl` (`--op flanders|sevastopol|karl`).
+- (voices: WW1) The crew voices speak in the WW1 German open battle (op `ridge`) with the WW2 clips, none made for it
+  (section "Crew voices"): `voices.js` `VOICED_OPS` gains `ridge`, the option `era` ('ww1' from main) picks `OBS.ww1` (every
+  report on the telephone), leaves out the counter-attack's barrage call, `MISSION_LINE` maps `bdump` and `bconvoy`, and the
+  WW1 guns join `TRAY` (m16), the new `LIFT` (with the Gustav: max38, gamma) and `BAGS` (max38, gamma); main loads the
+  module on WW1 pages too. `tools/voicetest.mjs` takes `--op ridge|paris` and fails on a WW2-only clip in 1918.
+- (ui: all batteries' mode) `ui/panel.js`: ALL AUTO and ALL MANUAL under the status block of the battery tabs and Shift+A
+  (section UI): every battery the player commands to one mode via `onCommand(id, 'mode', { mode })`, so main's lock check
+  and the sim's `mode` command are unchanged; styles `.tall`, `.tallb` in `panel.css`.

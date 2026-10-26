@@ -43,11 +43,12 @@ export class DirectorWW2 extends Director {
 
   addMission(spec) {
     const sim = this.sim;
-    const dl = (spec.deadline ?? 600) * sim.difficulty.time;
+    // deadline null: no clock, the mission ends on its own (an SOS when its assault does)
+    const dl = spec.deadline === null ? null : (spec.deadline ?? 600) * sim.difficulty.time;
     const m = {
       id: sim.nextId('m'), kind: spec.kind, title: spec.title, targetId: spec.targetId ?? null, x: spec.x, z: spec.z,
       gridRef: sim.theatre.ref(spec.x, spec.z), observer: spec.observer, priority: spec.priority ?? PRIORITY[spec.kind] ?? 5,
-      t0: sim.time, deadline: sim.time + dl, unitId: null, state: 'open', reports: [],
+      t0: sim.time, deadline: dl == null ? null : sim.time + dl, unitId: null, state: 'open', reports: [],
       units: [], obsName: spec.obsName ?? this.obsName(spec.observer), rounds: 0, alt: spec.alt ?? 0,
       lift: 0, sector: spec.sector ?? null, wireId: null, assault: spec.assault ?? null, convoy: spec.convoy ?? null,
       hint: spec.hint ?? '', metric: true,
@@ -179,7 +180,9 @@ export class DirectorWW2 extends Director {
     const g = a.groups[0];
     const m = this.addMission({
       kind: 'sos', title: `Sperrfeuer, ${sectorName(a.sector)}`, x: p.x, z: p.z, observer: 'foo', sector: a.sector, assault: a.id,
-      deadline: g.go + g.crossing + 30,
+      // no deadline: a clock ran out while the Germans were still crossing, ceased the guns and failed a
+      // line that held (every SOS on Hard); the assault ends the mission, held or broken in
+      deadline: null,
     });
     a.missionId = m.id;
     a.rocketsT = sim.time;

@@ -16,8 +16,12 @@ function lod(fx, p) {
   const d = fx._cam.distanceTo(p);
   let q = clamp(1.12 - d / 5200, 0.3, 1) * clamp(fx.budget, 0.4, 1.25);
   if (!fx.cheap()) q *= 0.6; // the pool is getting full: keep the big shapes, drop the filler
-  fx.lodQ = q;
   fx.lodZ = clamp(1 / Math.sqrt(q), 0.9, 1.9);
+  // a camera standing among the guns (`fx.closeUp`: main sets it while the WW2 gunner is at a gun): a blast within 80 m
+  // would cover the screen with its puffs many layers deep, so it throws fewer of them at their usual size (lodZ is set
+  // before the cut, so the rest do not grow to make up the cover)
+  if (fx.closeUp && d < 80) q *= 0.35 + 0.65 * (d / 80);
+  fx.lodQ = q;
   return q;
 }
 // Far off, things are drawn larger so a burst stays a readable shape (the flyers are enlarged the same way):

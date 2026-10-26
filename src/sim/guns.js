@@ -192,7 +192,7 @@ export class Guns {
         if (short) return `out of arc: ${deg(off)}° ${side} (${bed ? 'T: relay the bed' : `±${deg(u.arc)}°`})`;
         return `out of arc: the target is ${deg(off)} degrees ${side} of the line of fire and the `
           + `${u.pieces.length > 1 ? 'guns traverse' : 'gun traverses'} ${deg(u.arc)} degrees either way`
-          + (g.special === 'karl' ? '. Raise the hull (R), turn the vehicle (T), lower it (L)'
+          + (g.special === 'karl' ? '. Raise the hull (L), turn the vehicle (T), lower it (L)'
             : bed ? `. Relay the bed onto its line (T: Bettung umlegen${bed.dur ? `, the gun out of action for about ${span(bed.dur)}` : ''})`
             : '. Give it to a battery that can bear on it');
       }
@@ -365,6 +365,8 @@ export class Guns {
   }
 
   updatePiece(u, p, dt) {
+    // a gun the player serves in person (the WW2 mode's gunner, src/ww2/gunner.js) runs its drill there
+    if (p.manned && this.sim.gunner) return this.sim.gunner.updatePiece(u, p, dt);
     const sim = this.sim, g = GUNS[p.kind];
     const heavy = g.load[0]?.step === 'depress';
     // recoil: a quick kick back, then a slow run out

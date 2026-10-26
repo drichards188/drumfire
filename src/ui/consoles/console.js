@@ -136,7 +136,9 @@ export function mountConsole(ctx) {
   const cfg0 = KINDS[ctx.kind] || KINDS.bl6;
   const order = new OrderCard({ send, act, cfg: cfg0 });
   const rtab = new RangeTable();
-  const guns = new GunsCard({ onBed: () => bed() });
+  // the WW2 gunner: MAN on a gun's row takes the player to it in person, LEAVE back (src/ww2/gunner.js; not a fire
+  // order, so the battery keeps its mode)
+  const guns = new GunsCard({ onBed: () => bed(), onMan: (i, leave) => send(leave ? 'unman' : 'man', leave ? {} : { piece: i }) });
   const missions = new MissionList({ shared, take });
   const pad = new MessagePad({ apply: (s) => act('apply', s), clear: () => mail.clear() });
 

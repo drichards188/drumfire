@@ -1,9 +1,11 @@
 // The guns' state: for each piece the loading drill as it happens (shell, ram, bags, close, prime, lay,
 // ready), three lamps (laid, loaded, ready), crew, health and barrel wear; then ammunition and how well
 // the enemy has located the battery. The WW1 mode's 42 cm guns add their bed (src/ww1/special.js): its line, the arc
-// the handwheels give, and the key that relays it onto the ordered target's line (T), with its progress.
+// the handwheels give, and the key that relays it onto the ordered target's line (T), with its progress. In the WW2
+// mode a gun that can be served in person has MAN on its row (LEAVE while the player is at it: src/ww2/gunner.js).
 import { el, setText, setCls, setStyle, card, Lamp, Bar, Btn } from '../widgets.js';
 import { STEPS, stepIndex, KIND_SHORT } from './common.js';
+import { TH } from '../theatre.js';
 
 const LAID_TOL = 0.004;   // radians: a piece within about a quarter of a degree of its ordered line and elevation is laid
 const SHORT = { shell: 'SHELL', ram: 'RAM', cartridge: 'BAGS', close: 'CLOSE', prime: 'PRIME', lay: 'LAY', ready: 'READY' };
@@ -13,7 +15,8 @@ const brg = (r) => `${Math.round((((r / DEG) % 360) + 360) % 360)}°`;
 const span = (s, long) => (s < 120 ? `${Math.ceil(s)}${long ? ' seconds' : ' s'}` : `${Math.round(s / 60)}${long ? ' minutes' : ' min'}`);
 
 export class GunsCard {
-  constructor({ onBed = null } = {}) {
+  constructor({ onBed = null, onMan = null } = {}) {
+    this.onMan = onMan;
     const c = card('THE GUNS', '', 'guns');
     this.el = c.el;
     this.sub = el('i', null, '');
@@ -43,6 +46,9 @@ export class GunsCard {
       const name = el('div', 'gname');
       const no = el('b', null, `No. ${i + 1}`);
       const crew = el('i', null, '');
+      const man = el('button', 'gman', 'MAN');
+      man.type = 'button';
+      man.addEventListener('click', () => this.onMan?.(i, man.dataset.on === '1'));
       name.append(no, crew);
       const lamps = el('div', 'glamps');
       const laid = new Lamp('LAID', 'green'), loaded = new Lamp('LOADED', 'amber'), ready = new Lamp('READY', 'red');
@@ -57,10 +63,10 @@ export class GunsCard {
       const state = el('div', 'gstate', '');
       const hp = new Bar(), wear = new Bar({ invert: true });
       hp.el.title = 'Health of the piece'; wear.el.title = 'Barrel wear';
-      line.append(state, el('span', null, 'HP'), hp.el, el('span', null, 'WEAR'), wear.el);
+      line.append(state, el('span', null, 'HP'), hp.el, el('span', null, 'WEAR'), wear.el, man);
       r.append(head, dots, pipe, line);
       this.list.append(r);
-      this.rows.push({ r, crew, dots, laid, loaded, ready, cells, prog, hp, wear, state });
+      this.rows.push({ r, no, crew, man, dots, laid, loaded, ready, cells, prog, hp, wear, state });
     }
     this.n = n;
   }
@@ -76,6 +82,18 @@ export class GunsCard {
       setCls(w.r, 'dead', dead);
       setCls(w.r, 'hurt', !dead && p.hp < p.maxHp * 0.5);
       setText(w.crew, `crew ${p.crew} of ${p.crewMax}`);
+      const can = !!TH.mannable?.has(unit.kind) && !dead && !!this.onMan;
+      setCls(w.man, 'show', can);
+      setCls(w.r, 'manned', !!p.manned);
+      setText(w.no, p.manned ? `No. ${i + 1} · YOU` : `No. ${i + 1}`);
+      if (can) {
+        const on = p.manned ? '1' : '0';
+        if (w.man.dataset.on !== on) {
+          w.man.dataset.on = on;
+          setText(w.man, p.manned ? 'LEAVE' : 'MAN');
+          w.man.title = p.manned ? 'Leave the gun: its crew carries on by itself (P)' : `Man No. ${i + 1} gun in person: first person, the drill at the posts (P mans the first gun)`;
+        }
+      }
       if (w.dots.children.length !== p.crewMax) { w.dots.replaceChildren(...Array.from({ length: p.crewMax }, () => el('i'))); w.dotN = -1; }
       if (w.dotN !== p.crew) { w.dotN = p.crew; for (let k = 0; k < p.crewMax; k++) w.dots.children[k].className = k < p.crew ? 'on' : ''; }
       const laid = !dead && p.cmd && Math.abs(p.az - p.cmd.az) < LAID_TOL && Math.abs(p.el - p.cmd.el) < LAID_TOL;

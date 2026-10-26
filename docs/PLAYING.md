@@ -59,7 +59,7 @@ The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five
 
 ### How a fire mission works
 
-1. **A mission arrives.** The message pad and the mission list show it: a hostile battery (counter-battery), a pillbox or other point target to destroy, wire to cut, harassing fire on a road or the railhead, or an SOS. Missions carry a priority and a deadline. The observer is one of these:
+1. **A mission arrives.** The message pad and the mission list show it: a hostile battery (counter-battery), a pillbox or other point target to destroy, wire to cut, harassing fire on a road or the railhead, or an SOS. Missions carry a priority and a deadline; an SOS has none, it lasts as long as the attack. The observer is one of these:
    - a forward observation officer (FOO) by telephone;
    - an aeroplane by wireless (by day);
    - sound rangers, who give a map reference with some error (hostile batteries at night);
@@ -132,6 +132,29 @@ The V-1 and V-2 sites have a launch console of their own in place of the usual o
 | | R | repair the damaged ramp (V-1) or firing table (V-2), 1:30 |
 | | T | top up the liquid oxygen (V-2) |
 | | A | auto or manual |
+
+### Serving a gun in person
+
+Press **P**, or **MAN** on a gun's row of the guns card, to take a place in the detachment of a gun of the selected battery: the leFH 18, the sFH 18, the K 18, the 21 cm Mörser, the Gustav or the Karl-Gerät. The view goes to first person at that man's eyes; the console beside it still commands the whole Gruppe. P (or LEAVE) takes you back; the crew carries on where you left it.
+
+- **The posts.** 1 Geschützführer (reads back each new fire command, hold E), 2 Richtkanonier (A and D traverse, W and S elevate, Shift fine), 3 Ladekanonier (open, shell, ram, cartridge, close: hold E), 4 Abzugskanonier (fit the primer, then the pull: hold E). The heavies' barrel first runs down to its loading angle (S at post 2).
+- **The gun card.** The fire command for your gun (Seite and Erhöhung in Strich, the charge, the fuze), the gun's own lay against it, the drill step by step, the next job lit on its post, and why nothing happens where you stand.
+- **The wheels** slow over the last few Strich and stop on the commanded figure; let go and press again to go past it.
+- **The Gustav and the Karl-Gerät** lay by power, slowly (the Gustav takes about two minutes from 40 degrees to its loading angle). Tap A, D, W or S at post 2 to start the drive: it runs on by itself and stops on the commanded figure, even if you go to another post meanwhile; tap the other way to stop it, hold Shift for the hand wheel. The card counts the drive down; **]** speeds time. Their long steps (the Gustav's shell hoist, the Karl's crane) take at most 8 s of holding E when you work them yourself. The Karl's turn of the whole vehicle stays on the KARL card, which keeps its keys at the gun: L raises or lowers the hull, T turns, Y sends the carrier. The Gustav at the siege can be manned once it stands on its curve.
+- **Crew help (C).** On, the men at the other posts do their work; off, nothing at another post moves until you go there, as in the Big Bertha demo. Remembered between games; also in the gear menu.
+- **Fire orders.** On AUTO the battery's own commander takes the missions and orders Feuer; your gun fires when you pull. An auto battery does not wait for ever: a fire order your gun has not moved on for 40 s lapses. On MANUAL you give the orders from the console, and a pull with no fire order fires your gun alone, the rounds per gun set on the console (R).
+- **The other batteries** on manual go to auto while you are at a gun and back to manual when you leave (gear menu: "At a gun: other batteries to auto").
+
+The Nebelwerfer (fired from cover) and the V-1 and V-2 launch sites (drills of their own) cannot be served this way.
+
+### Crew voices
+
+In the WW2 open battle (Flanders), the Karl-Gerät operation and the WW1 German open battle the selected battery's crew and the telephone speak German, with the words and an English translation as subtitles over the 3D view. **V**, or the VOICES button at the foot of the console's battery tabs, switches them on and off (remembered between games); M mutes them with everything else.
+
+- **At the guns,** heard from where they stand, after the sound's travel time: the Batterieoffizier gives the Feuerkommando for a new target ("Achtung! Neues Ziel! Granate, Aufschlagzünder ohne Verzögerung! Ladung fünf!"), the corrections ("Verbesserung! Neu richten!"), the fire orders ("Erstes Geschütz, Feuer!", "Wirkungsschießen! Vier Schuss! Batterie, Feuer!", "Werfer, Feuer!", "Sperrfeuer, Feuer frei!"), "Batterie, halt! Feuer einstellen!", "Batterie feuerbereit!" and the alarms ("Volle Deckung!", "Fliegeralarm!", "Tiefflieger!", "Sanitäter!"). The detachment of No. 1 gun (or the gun you serve) calls each step of its loading cycle ("Verschluss auf!", "Granate kommt!", "Granate ansetzen!", "Kartusche rein!", "Verschluss zu!") and reports "Erstes Geschütz feuerbereit!". The Nebelwerfer crew loads its tubes and goes into cover; the Karl-Gerät's crew drives, swings the vehicle, lowers the hull and calls the ammunition carrier.
+- **On the telephone and the radio:** the Abteilung gives new fire missions ("Hier Abteilung, neuer Feuerauftrag, feindliche Batterie erkannt, Gegenbatteriefeuer."), the red flares of a Sperrfeuer, the Feuerwalze's lifts and the end of a mission; the battery reports each volley to the observer ("Hier Batterie, abgefeuert, Achtung auf den Einschlag."); the VB by telephone, or the air observer by radio, reports the fall of shot with the same figures as the message pad ("Hier Beobachtung. Zu kurz, weiter 150. Links 50.", "Ziel erfasst, Schuss im Ziel, Wirkungsschießen!", "Wirkung im Ziel"). These calls also appear in the radio log.
+- Only the selected battery's crew speaks; select another battery and its crew takes over. At high time compression some lines are left out rather than spoken late.
+- The voices are synthetic (generated offline with Piper; see [public/audio/CREDITS.md](../public/audio/CREDITS.md) and [VOICES.md](VOICES.md)). The other WW2 operations, the Paris Gun's mission and the 1917 game have no voices yet. In 1918 the crews use the same recordings; the air observer's reports come by telephone (he sent them by wireless telegraphy, not by voice).
 
 ## WW1 German: the Gruppe in 1918
 
@@ -217,11 +240,13 @@ A separate first-person demo (`/bertha.html`, in the Battles tab of the WW1 Germ
 | Key | Action |
 |---|---|
 | 1 to 9 | select a unit (the number on its tab; a battery not yet earned says so) |
+| P | WW2 German: man the selected battery's gun in person, or leave it ([At a gun](#at-a-gun-ww2-german)) |
 | Mouse drag, wheel | orbit and zoom the camera |
 | F | ride the selected unit's newest shell to its burst; F again returns to the gun |
 | C | free camera (drag to orbit, wheel to zoom out to 3 km, WASD to move); C again returns |
 | `[` and `]` | slower and faster time compression (x0.25 to x8); clicking the readout returns to x1 |
 | M | mute |
+| V | WW2 German, Flanders and Karl-Gerät: crew voices on or off ([Crew voices](#crew-voices)) |
 | H | hide the overlay |
 | F3 | statistics (frame time, draw calls, particles, lights) |
 | Esc | leave a lesson for the menu |
@@ -244,6 +269,7 @@ For the selected unit; clicking the buttons does the same.
 | R | rounds per piece for the next series |
 | Z | fuze (instant, delay, and shrapnel or airburst on the guns that have it) |
 | A | toggle auto and manual (the header also has a HOLD button, which ceases fire) |
+| Shift+A | every battery to auto, or every battery to manual when all are on auto already (also ALL AUTO and ALL MANUAL under the clock, at the top of the battery tabs) |
 | S | SOS: every gun that can reach it lays on the alarmed sector's line |
 | Backspace, Delete | cease fire |
 | `.` | apply the pencilled correction of the newest observer report |
@@ -252,6 +278,22 @@ For the selected unit; clicking the buttons does the same.
 - **The artillery board.** Clicking the board lays the guns on that point; clicking a known target takes its mission; dragging pans and the wheel zooms the board.
 - **Manual first.** Any control the AI crew would undo (laying, firing, charge) switches the unit to manual first.
 - **Special weapons.** The Gustav, Karl-Gerät, V-1 and V-2 keys are under [The procedure cards](#the-procedure-cards); the Paris Gun's under [The Paris Gun's mission](#the-paris-guns-mission-work-in-progress).
+
+### At a gun (WW2 German)
+
+While you serve a gun in person ([Serving a gun in person](#serving-a-gun-in-person)). The console keeps its other keys: Tab and Enter for missions, the arrow keys for corrections, Space to fire the battery.
+
+| Key | Action |
+|---|---|
+| 1 to 4 | change post: Geschützführer, Richtkanonier, Ladekanonier, Abzugskanonier (click a unit's tab to see another battery's console) |
+| E (held) | the work at your post |
+| A and D, W and S | traverse and elevate (Richtkanonier; Shift: fine). Gustav and Karl: a tap starts the drive, Shift held is the hand wheel |
+| L, T, Y | Karl-Gerät: raise or lower the hull, turn the vehicle, send the carrier (the KARL card's keys) |
+| C | crew help on or off |
+| N | the next gun of the battery |
+| Mouse drag, wheel | look round, zoom |
+| F | ride the gun's newest shell |
+| P | leave the gun |
 
 ### Big Bertha demo
 

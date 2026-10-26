@@ -369,6 +369,7 @@ export class FX {
     this.emitters = new Emitters(96);
     this.curGy = null; // ground height the running recipe is working at: smoke it spawns is kept above it
     this.lodQ = 1; // detail level of the last artillery effect (distance and pool pressure), 0.3 to 1.25
+    this.closeUp = false; // the camera stands among the guns (the WW2 gunner): blasts near it throw fewer puffs
     this.lodZ = 1; // and the size factor that goes with it
     this.onFlash = null; // (pos, color, intensity (peak power, a 15-inch muzzle ~1e7), life, { radius, reach }): a brief analytic light; both args are pooled, copy them
     this.onShock = null; // (pos, radius, speed, strength): a blast wave to draw (post.shockwave)

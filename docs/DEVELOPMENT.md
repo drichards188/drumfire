@@ -29,6 +29,7 @@ node tools/progressiontest.mjs                                # the campaigns: a
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
+node tools/voicetest.mjs --op flanders --unit 1 --seconds 200  # the German crew voices in a battle (--op ridge: WW1), headless: the lines in order and their rules
 ```
 
 - **`simtest`** runs whole games on worker threads and prints win rates and per-game figures. Run it after changing the gun, shell, target or difficulty tables, the AI crews, the enemy or the director.
@@ -129,13 +130,14 @@ src/fx.js, src/fx/   particles and the artillery effects (rockets and missiles, 
 src/post.js          bloom, AO, god rays, lens, grades, shockwave, heat, dazzle; src/dynres.js dynamic resolution
 src/atmosphere.js, clouds.js, weather.js, shaderlib.js, noise.js   sky, clouds, weather and the shader library
 src/ui/              the fire control console (consoles/: the cards, the procedure cards, the launch console, the Paris Gun's cards), artillery board, message pad (mock.js for ui.html)
-src/audio.js         the sound engine; public/audio holds the eight recordings
+src/audio.js         the sound engine; public/audio holds the eight recordings (and voice-de/, the WW2 crew voices: src/ww2/voices.js)
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
-tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot, menushots
+tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot, menushots, voicetest;
+                     make-voices.py and pick-voice-takes.py (the WW2 crew voices, docs/VOICES.md)
 public/menu/         the main menu's background stills (tools/menushots.mjs)
 docs/                PLAYING.md (how to play, every key), MODELLED.md (rendering, simulation, sound), HISTORY.md (what is real), DEVELOPMENT.md (this page),
-                     WW1.md and WW2.md (history, sources, departures), PROGRESSION.md (the campaign), screenshot.jpg
+                     WW1.md and WW2.md (history, sources, departures), PROGRESSION.md (the campaign), VOICES.md (the crew voices), screenshot.jpg
 refs/                local reference sheets and photographs (gitignored)
 shots/               development captures (gitignored)
 DESIGN.md            the contract between the modules, with a changelog

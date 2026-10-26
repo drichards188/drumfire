@@ -30,7 +30,8 @@ import { warmUp } from './render/warmup.js';
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
 // always boots (import.meta.glob also bundles whichever exist).
-const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js',
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
+  './ww2/voices.js', // the German crew voices (only the WW2 open battle's, the Karl's and the WW1 open battle's pages build them)
   './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js']);
 const optional = async (path) => {
   try {
@@ -42,6 +43,7 @@ const optional = async (path) => {
 };
 
 const TIME_SCALES = [0.25, 0.5, 1, 2, 4, 8];
+const GUNNER_ASSIST = 'drumfire.gunner.assist'; // localStorage: the WW2 gunner's crew help, '0' off
 
 const hud = new HUD();
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -161,6 +163,8 @@ async function init() {
     ww2render: WW2 ? await optional('./ww2/render.js') : null,
     ww2ui: WW2 ? await optional('./ww2/ui.js') : null,
     ww2tut: WW2 ? await optional('./ww2/tutorial.js') : null,
+    ww2gunner: WW2 ? await optional('./ww2/gunnerView.js') : null,
+    ww2voices: WW2 || WW1 ? await optional('./ww2/voices.js') : null, // (the WW1 open battle speaks with the same clips)
     ww1render: WW1 ? await optional('./ww1/render.js') : null,
     ww1ui: WW1 ? await optional('./ww1/ui.js') : null,
     ww1tut: WW1 ? await optional('./ww1/tutorial.js') : null,
@@ -297,6 +301,7 @@ async function init() {
   }
   const panelEl = document.getElementById('panel');
   let panel = null;
+  let gview = null; // the WW2 gunner's first-person view (src/ww2/gunnerView.js), made below
   if (TH && WW1) mods.ww1ui?.ww1Ui?.(TH);
   else if (TH) mods.ww2ui?.ww2Ui?.(TH);
   if (CAMPAIGN_MISSION) setUiTheatre({ salient: false, sectors: [], mppMax: 120,
@@ -312,7 +317,9 @@ async function init() {
       panel = new mods.panel.Panel(panelEl, {
         audio,
         onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
-        onCommand: (id, name, args) => canCommand(id) && sim?.command(id, name, args),
+        // (MAN on the guns card: the player's choices for the gunner go with it)
+        onCommand: (id, name, args) => canCommand(id) && sim?.command(id, name, name === 'man' ? gunnerArgs(args) : args),
+        keysOff: (e) => !!gview?.claims(e), // at a gun the drill's keys are the gun's, not the console's
         onFocus: (id, task) => modeR?.focusTask?.(id, task), // a Gustav task clicked on the procedure card
         isUnlocked: (u) => canCommand(u.id),
         keyFor: (id) => (UNITS.findIndex(u => u.id === id) + 1) % 10,
@@ -364,6 +371,10 @@ async function init() {
     rayleigh: 1.5,
     grass: true,
     trees: true,
+    // the WW2 gunner (P or MAN on the guns card): the crew works the posts the player is not at, and the batteries on
+    // manual go to their crews while the player is at a gun (back to manual on leaving it)
+    gunnerAssist: (() => { try { return localStorage.getItem(GUNNER_ASSIST) !== '0'; } catch { return true; } })(),
+    othersAuto: true,
   };
   let resScale = 1;
   let state = 'title'; // title | playing | ended
@@ -421,6 +432,14 @@ async function init() {
   fPlay.add(params, 'timeScale', TIME_SCALES).name('Time compression ([ ])').listen().onChange((v) => hud.setTimeScale(v));
   fPlay.add(params, 'fov', 30, 80, 1).name('Field of view');
   fPlay.add(params, 'shake').name('Camera shake').onChange((v) => (chase.shakeOn = v));
+  if (WW2) {
+    fPlay.add(params, 'gunnerAssist').name('At a gun: crew help (C)').listen().onChange((v) => {
+      saveAssist(v);
+      const st = sim?.gunner?.st;
+      if (st && st.assist !== v) sim.command(st.unitId, 'assist', { on: v });
+    });
+    fPlay.add(params, 'othersAuto').name('At a gun: other batteries to auto');
+  }
   const fWorld = gui.addFolder('Time & weather');
   fWorld.add(params, 'hour', 0, 24, 0.05).name('Hour (fixes the clock)').listen().onChange(() => (params.lockHour = true));
   fWorld.add(params, 'lockHour').name('Fixed time of day').listen();
@@ -533,6 +552,79 @@ async function init() {
   document.getElementById('ts-up').addEventListener('click', () => stepTime(1));
   document.getElementById('ts-down').addEventListener('click', () => stepTime(-1));
   document.getElementById('ts-val').addEventListener('click', () => setTimeScale(1));
+
+  // ---------------------------------------------------------------- the WW2 gunner (src/ww2/gunner.js, gunnerView.js)
+  // P (or MAN on the guns card) takes the player in person to a gun of the selected battery: the camera at the eyes of
+  // the man at his post, the drill's keys, the gun card over the view; the console beside it still commands the Group.
+  const saveAssist = (v) => { try { localStorage.setItem(GUNNER_ASSIST, v ? '1' : '0'); } catch { /* this session only */ } };
+  function gunnerArgs(args = {}) {
+    return { assist: params.gunnerAssist, othersAuto: params.othersAuto, ...args };
+  }
+  const gunnerSend = (name, args = {}) => {
+    const st = sim?.gunner?.st;
+    if (!st) return;
+    sim.command(st.unitId, name, name === 'man' ? gunnerArgs(args) : args);
+    if (name === 'assist' && sim.gunner.st) {
+      params.gunnerAssist = sim.gunner.st.assist;
+      saveAssist(params.gunnerAssist);
+      hud.hint(params.gunnerAssist ? 'Crew help on: the men at the other posts do their work' : 'Crew help off: nothing at another post moves until you go there', 2600);
+      audio?.ui?.('click');
+    }
+  };
+  const toggleMan = () => {
+    if (!WW2 || !sim?.gunner || state !== 'playing') return;
+    const st = sim.gunner.st;
+    if (st) { sim.command(st.unitId, 'unman'); return; }
+    const u = UNITS[selected];
+    if (canCommand(u.id)) sim.command(u.id, 'man', gunnerArgs());
+  };
+  if (WW2 && sim?.gunner && mods.ww2gunner?.GunnerView) {
+    try {
+      gview = new mods.ww2gunner.GunnerView({ camera, canvas, root: view, render: renderLayer, send: gunnerSend, onButton: () => toggleMan() });
+    } catch (e) {
+      console.warn('gunner view failed:', e.message);
+    }
+  }
+  // ---------------------------------------------------------------- the German crew voices (src/ww2/voices.js)
+  // German callouts at the guns (spatialised, shouted) and on the field telephone and radio, with subtitles: only on the
+  // WW2 open battle's and Karl-Gerät's pages and the WW1 open battle's (VOICED_OPS; 1918 reuses the WW2 clips, `era`);
+  // every other page has no voices object at all. V or the console's VOICES button switches them (localStorage
+  // drumfire.voices); the clips are decoded while the page loads.
+  let voices = null;
+  try {
+    if ((WW2 || WW1) && audio && mods.ww2voices?.VOICED_OPS?.has(TH?.opId)) {
+      voices = new mods.ww2voices.CrewVoices({
+        audio, view, panel: panelEl, radio: (text, kind) => hud.radio(text, kind),
+        selectedId: () => (gview?.active && sim?.gunner?.st ? sim.gunner.st.unitId : UNITS[selected]?.id),
+        active: () => state === 'playing' || state === 'tutorial',
+        era: WW1 ? 'ww1' : 'ww2',
+      });
+      voices.load();
+    }
+  } catch (e) {
+    console.warn('crew voices failed:', e.message);
+    voices = null;
+  }
+  const NEAR = camera.near, IDLE = { az: 0, el: 0, fine: false, work: false };
+  // the sim put the player at a gun or took him off it (a command, the gun knocked out, a new game): the camera follows
+  const syncGunner = () => {
+    if (!gview) return;
+    const st = sim?.gunner?.st;
+    if (st && !gview.active) {
+      freeCam = false;
+      chase.free(false);
+      gview.enter(sim);
+      camera.near = 0.1; // the hands and the handwheels are a forearm away
+      camera.updateProjectionMatrix();
+      hud.hint('At the gun: 1 to 4 the posts, E the work at yours, P to leave', 3200);
+    } else if (!st && gview.active) {
+      gview.leave();
+      camera.near = NEAR;
+      camera.updateProjectionMatrix();
+      chase.enabled = true;
+      if (!following) selectUnit(selected);
+    }
+  };
 
   // a new battle (the real one, a lesson's range or the demonstration): the sim, then everything that remembers the last
   const newBattle = (opts) => {
@@ -763,6 +855,7 @@ async function init() {
     },
     load(unit, piece, stepName) {
       const p = asVec(piece?.pos ?? unit.pos, _p);
+      if (voices?.replacesBark(unit, piece, stepName)) return; // the voiced gun reports "ready" in German (ww2/voices.js)
       audio?.load?.(stepName, p, piece?.kind ?? unit.kind);
     },
     // any burst, own or enemy
@@ -861,6 +954,14 @@ async function init() {
     state(s) {
       if ((s === 'victory' || s === 'defeat') && !sim.attract && state === 'playing') endGame(s);
     },
+    // the WW2 gunner (src/ww2/gunner.js): a new fire command rings at the gun, a wheel comes onto its mark, a pull refused
+    gunner(what, a) {
+      if (what === 'order') {
+        audio?.ui?.('feldfernsprecher');
+        if (sim.gunner.st?.post !== 'cmd') hud.hint('A new fire command for the gun: the Geschützführer reads it back (1)', 2600);
+      } else if (what === 'mark') audio?.ui?.('click');
+      else if (what === 'nofire') gview?.flash(`Cannot fire: ${a}.`);
+    },
   };
   const drumfire = { events: {}, hooks: {}, onFrame: [] };
   window.__drumfire = drumfire;
@@ -889,12 +990,14 @@ async function init() {
         }
       }
     };
+    voices?.attach(sim); // the crew voices chain onto the events above (src/ww2/voices.js)
   }
   const setScore = () => {
     const sc = sim?.score;
     hud.setScore(typeof sc === 'number' ? sc : sc?.points ?? 0);
   };
   const endGame = (s) => {
+    if (sim.gunner?.st) sim.command(sim.gunner.st.unitId, 'unman');
     const sc = sim.score;
     if (CAMPAIGN_MISSION && s === 'victory' && !sim.attract && !sim.scripted) {
       career.complete(CAMPAIGN_MISSION.id);
@@ -921,6 +1024,8 @@ async function init() {
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && tutorial?.escape()) return;
     if (e.repeat || e.target.closest?.('input, textarea, select')) return;
+    if (e.code === 'KeyP' && !e.ctrlKey && !e.metaKey && gview) { toggleMan(); return; }
+    if (gview?.active && gview.key(e, sim)) return; // at a gun: the posts, the crew help, the next gun, the drill's keys
     if (/^Digit[0-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && (Number(e.code.slice(5)) || 10) <= UNITS.length) unitKey((Number(e.code.slice(5)) || 10) - 1);
     else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
       if (following) {
@@ -928,7 +1033,7 @@ async function init() {
         backToUnit();
         return;
       }
-      const sh = newestShell(UNITS[selected].id);
+      const sh = newestShell(gview?.active ? sim.gunner.st.unitId : UNITS[selected].id);
       if (sh) followShell(sh);
       else hud.hint('No shell in flight from this unit', 1800);
     } else if (e.code === 'KeyC' && !e.ctrlKey) {
@@ -945,6 +1050,7 @@ async function init() {
     else if (e.code === 'BracketLeft') stepTime(-1);
     else if (e.code === 'KeyH') document.body.classList.toggle('ui-hidden');
     else if (e.code === 'KeyM') hud.hint(audio?.toggleMute?.() ? 'Sound off' : 'Sound on', 1500);
+    else if (e.code === 'KeyV' && voices) hud.hint(voices.toggle() ? 'Crew voices on' : 'Crew voices off', 1500); // (ww2/voices.js)
     else if (e.code === 'F3') {
       e.preventDefault();
       document.body.classList.toggle('debug');
@@ -992,6 +1098,10 @@ async function init() {
   post.render(0.016);
   // every sound ready before the battle: the worker's banks and everything built from the recordings (no stutter later)
   await audio?.whenReady?.((p) => hud.setLoading(0.93 + 0.06 * p, 'Sounding the guns'));
+  if (voices) {
+    hud.setLoading(0.99, 'Briefing the crews'); // the crew voices' clips, decoded behind the loading screen (ww2/voices.js)
+    await voices.ready();
+  }
   hud.setLoading(1, '');
   hud.ready();
   hud.setTimeScale(1);
@@ -1031,7 +1141,10 @@ async function init() {
     }
     scene.environmentIntensity = params.envIntensity * atmosphere.baseEnvIntensity * (1 - weather.state.storm * 0.35) + weather.flash * 2.5;
 
+    if (gview?.active && sim?.gunner) sim.gunner.setInput(following ? IDLE : gview.input());
+    fx.closeUp = !!gview?.active && !following; // at a gun, a blast near the eye throws fewer puffs (fx/artillery.js lod)
     if (dt > 0) sim?.update(dt);
+    syncGunner();
     updateCampaignObjectives(sim, state === 'playing' && !!CAMPAIGN_MISSION);
     if (tutorial?.active && !DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
     tutorial?.update(rawDt);
@@ -1070,7 +1183,9 @@ async function init() {
     }
     for (const f of drumfire.onFrame) f(dt, rawDt, t);
 
-    camera.fov += (params.fov - camera.fov) * (1 - Math.exp(-rawDt * 10));
+    const atGun = !!gview?.active && !following; // first person at a gun (src/ww2/gunnerView.js), not the chase camera
+    if (gview) gview.riding = following; // (the shell ride's drag and wheel are the chase camera's)
+    camera.fov += ((atGun ? gview.fov : params.fov) - camera.fov) * (1 - Math.exp(-rawDt * 10));
     camera.updateProjectionMatrix();
     if (state === 'title') {
       cineClock += rawDt;
@@ -1080,7 +1195,12 @@ async function init() {
         chase.cine(true);
       }
     }
-    chase.update(rawDt, sim?.alpha ?? 1);
+    chase.enabled = !atGun;
+    if (atGun) {
+      chase.trauma = Math.max(0, chase.trauma - rawDt * 1.1);
+      gview.place(rawDt, sim, params.shake ? chase.trauma : 0);
+      chase.focus.copy(camera.position); // the shadows and the haze follow the eye
+    } else chase.update(rawDt, sim?.alpha ?? 1);
     if (drumfire.aim) camera.lookAt(drumfire.aim.x, drumfire.aim.y, drumfire.aim.z); // a test can look anywhere
     camera.updateMatrixWorld();
     // camouflage nets between the camera and the gun it orbits are cut away (world/mats.js)
@@ -1088,9 +1208,11 @@ async function init() {
     if (cut) {
       cut.a.value.copy(camera.position);
       cut.b.value.copy(chase.focus);
-      cut.r.value = chase.mode === 'unit' && !freeCam ? 10 : 0;
-      // the selected unit's own nets are drawn back over its guns (every piece, the battery spreads wide)
-      const cu = UNITS[selected], places = piecePlacements(cu);
+      cut.r.value = chase.mode === 'unit' && !freeCam && !atGun ? 10 : 0;
+      // the selected unit's own nets are drawn back over its guns (every piece, the battery spreads wide); at a gun, its own.
+      // Where the sim's pieces stand (the Karl drives to its prepared positions; every other gun is where it was placed)
+      const cu = (atGun && UNITS.find((x) => x.id === sim.gunner.st.unitId)) || UNITS[selected];
+      const places = sim?.unitById?.(cu.id)?.pieces.map((p) => p.pos) ?? piecePlacements(cu);
       for (let i = 0; i < cut.p.value.length; i++) {
         const pl = places[i];
         cut.p.value[i].set(pl?.x ?? 0, pl?.z ?? 0, pl && state !== 'title' ? NET_CLEAR[cu.kind] : 0);
@@ -1168,6 +1290,11 @@ async function init() {
       if (panel.update.length >= 2) panel.update(rawDt, view2);
       else panel.update(view2);
     }
+    if (gview) {
+      gview.update(sim);
+      const su = UNITS[selected];
+      gview.setButton(state === 'playing' && (gview.active || (mods.ww2gunner.MANNABLE.has(su.kind) && canCommand(su.id) && !!sim?.unitById(su.id)?.alive)), gview.active);
+    }
     if (audio) {
       ambTimer -= rawDt;
       if (ambTimer <= 0) {
@@ -1175,6 +1302,7 @@ async function init() {
         const busy = sim ? Math.min(1, 0.25 + sim.shells.length * 0.04) : 0.3;
         audio.setAmbience?.({ drumfire: state === 'playing' || state === 'title' ? busy : state === 'tutorial' ? busy * 0.5 : 0, rain: weather.state.rain, wind: weather.state.wind });
       }
+      voices?.update(sim); // the crew voices' watchers and queues, after the sim's step (ww2/voices.js)
       audio.update?.(rawDt, camera);
     }
 
@@ -1239,7 +1367,13 @@ async function init() {
   Object.assign(drumfire, {
     renderer, scene, camera, terrain, atmosphere, post, fx, flares, hud, chase, params, frame, clouds, weather, world, craters,
     sim, tutorial, audio, panel, rigs, unitRoot, units: UNITS, handlers, renderLayer, ww2render: ww2r, ww1render: ww1r, sun, fakeShells,
-    select: selectUnit, start, setTimeScale, followShell, newestShell, sandboxBlast, sandboxBurst,
+    select: selectUnit, start, setTimeScale, followShell, newestShell, sandboxBlast, sandboxBurst, gunner: gview,
+    voices, // the German crew voices (null on other pages); voices.log lists every line spoken
+    // the WW2 gunner from a test: man(unitIndex, { piece, post, assist }) takes the place, man(null) leaves it
+    man(i, args = {}) {
+      if (i == null) return sim?.gunner?.st ? sim.command(sim.gunner.st.unitId, 'unman') : true;
+      return sim?.command(UNITS[i].id, 'man', gunnerArgs(args));
+    },
     fastForward(seconds, { unit = null, scale = 8, settle = 6 } = {}) {
       renderer.setAnimationLoop(null);
       if (unit != null) selectUnit(unit);

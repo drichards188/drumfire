@@ -1,0 +1,24 @@
+/* the WW2 crew voices (voices.js): the subtitles over the 3D view and the console's VOICES button */
+#voice-sub {
+  position: absolute; left: 50%; bottom: 15%; translate: -50% 0; z-index: 12; width: min(680px, 92%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none;
+  font: 12.5px/1.35 var(--mono); text-align: center;
+}
+#voice-sub .vs { max-width: 100%; padding: 4px 11px; background: rgba(16, 13, 8, 0.74); border-left: 3px solid rgba(233, 223, 196, 0.35); opacity: 0; transition: opacity 0.25s; }
+#voice-sub .vs.show { opacity: 1; }
+#voice-sub .vs:empty { display: none; }
+#voice-sub .vs b { font-weight: 700; color: #f2d68e; }
+#voice-sub .vs i { color: #c9bf9f; }
+#voice-sub .vs.phone { border-left-color: var(--khaki, #b5a77a); }
+#voice-sub .vs.radio { border-left-color: var(--blue, #6d8fb8); }
+#voice-sub .vs.gun { border-left-color: var(--brass, #c9a24a); }
+body.ui-hidden #voice-sub { display: none; }
+
+#voice-btn {
+  position: absolute; right: 8px; bottom: 8px; z-index: 6; padding: 5px 8px 4px;
+  font: 700 9.5px/1 'Courier 10 Pitch', 'Liberation Mono', 'FreeMono', monospace; letter-spacing: 0.1em; color: #ffcf6a;
+  background: #17110a; border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 0 6px #000, 0 1px 0 rgba(255, 235, 180, 0.08);
+  cursor: pointer;
+}
+#voice-btn:hover { color: #ffe3a3; border-color: #6b5220; }
+#voice-btn.off { color: #8a7a55; }

@@ -247,7 +247,7 @@ export class DirectorWW1 extends DirectorWW2 {
         if (!t.alive || alive <= t.parts.length * 0.4) this.finish(m, true, 'transport destroyed');
         else if (!t.present) this.finish(m, false, 'it has gone');
       }
-      if (m.state !== 'done' && m.state !== 'failed' && m.kind !== 'barrage' && now > m.deadline) this.finish(m, false, 'too late');
+      if (m.state !== 'done' && m.state !== 'failed' && m.kind !== 'barrage' && m.deadline != null && now > m.deadline) this.finish(m, false, 'too late');
     }
     if (sim.missions.length > 60) {
       const keep = sim.missions.filter((m) => (m.state !== 'done' && m.state !== 'failed') || now - (m.tEnd ?? 0) < 120);

@@ -3,6 +3,7 @@ import { setUiTheatre } from '../ui/theatre.js';
 import { MISSION_NAME, OBSERVER, FUZE } from '../ui/consoles/common.js';
 import { LINES, lineX } from '../sector.js';
 import { ww2Ref } from './theatre.js';
+import { MANNABLE } from './gunner.js';
 
 export function ww2Ui(th) {
   const op = th.op, battle = op.kind === 'battle';
@@ -24,6 +25,7 @@ export function ww2Ui(th) {
     sos: 'SPERRFEUER',
     lines: battle ? { british: 'ENEMY FRONT LINE', german: 'OUR FRONT LINE' } : null,
     orderStamp: 'Feuerkdo.',
+    mannable: MANNABLE, // the guns the player can serve in person (gunner.js): MAN on the guns card
     hq: 'Arko (artillery commander)',
     observerFrom: { foo: 'VB, forward post', air: 'Storch (wireless)', sound: 'Schallmeßtrupp', map: 'Arko', railspot: 'Bahnbeobachter' },
     // FIT: every unit and every site of the operation, with a margin

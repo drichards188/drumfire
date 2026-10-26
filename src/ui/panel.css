@@ -82,6 +82,15 @@
 .sscore { font: 700 11px/1 var(--type); color: #ffcf6a; justify-self: end; }
 .sstate { font: normal 8px/1 var(--type); color: #a69a76; letter-spacing: .1em; font-style: normal; align-self: center; }
 .sfront { grid-column: 1 / 3; display: flex; gap: 3px; }
+/* ALL AUTO / ALL MANUAL under the status block: every battery's mode at once, lit when every battery is in it */
+.tall { flex: none; display: flex; gap: 3px; margin-left: 6px; margin-bottom: 2px; }
+.tall[hidden] { display: none; }
+.tallb {
+  flex: 1; padding: 5px 2px 4px; cursor: pointer; font: 700 8.5px/1 var(--type); letter-spacing: .06em; color: #a69a76;
+  background: #17110a; border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 0 6px #000;
+}
+.tallb:hover { color: #ffe3a3; border-color: #6b5220; }
+.tallb.on { color: #ffcf6a; border-color: #6b5220; text-shadow: 0 0 5px rgba(255,170,40,.5); }
 .fchip { flex: 1; font: 700 8px/11px var(--type); font-style: normal; text-align: center; background: #3d5a2a; color: #e8e3c0; border-radius: 1px; }
 .fchip.weak { background: #a87a1c; }
 .fchip.lost { background: #7d1f16; text-decoration: line-through; }
@@ -274,6 +283,12 @@
 .grow.dead { opacity: .6; } .grow.dead .gstate { color: var(--red); font-weight: 700; }
 .grow.dead .gname b { text-decoration: line-through; }
 .grow.hurt .gname i { color: var(--red); }
+/* the WW2 gunner: MAN / LEAVE on a gun's row, and the gun the player serves in person */
+.gman { display: none; flex: none; margin-left: 3px; padding: 1px 5px; font: 700 7.5px/1.2 var(--type); letter-spacing: .1em; color: #3b2c10; background: rgba(185,158,88,.35); border: 1px solid rgba(110,90,50,.6); cursor: pointer; }
+.gman.show { display: inline-block; }
+.gman:hover { background: #f0b73c; }
+.grow.manned { background: rgba(240,183,60,.14); box-shadow: inset 3px 0 0 #b99e58; }
+.grow.manned .gname b { color: #6b4a0c; }
 .gammo { display: flex; align-items: baseline; gap: 6px; padding: 3px 4px 0; border-top: 1px solid var(--rule); }
 .gammo i { font: normal 7.5px/1 var(--serif); letter-spacing: .12em; color: var(--muted); font-style: normal; }
 .gammo b { font: 700 13px/1 var(--type); margin-right: 8px; }

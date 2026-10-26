@@ -18,6 +18,7 @@
 // carrier for shells; the launch crews run the reload steps, fix faults, take cover) and the player only fires.
 import { DEG, bearingOf } from '../sector.js';
 import { G, GUNS } from '../sim/tables.js';
+import { Gunner, GUNNER_CMDS } from './gunner.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const wrapDeg = (d) => ((d % 360) + 360) % 360;
@@ -302,7 +303,7 @@ class KarlCtl {
     else if (st.stage === 'lowering') g = 'lowering the hull';
     else if (st.stage === 'raising') g = 'raising the hull';
     else if (st.lower < 1) g = 'lower the hull before firing';
-    else if (u.ammo.he <= 0 && !p.loaded) g = st.schlepper.state === 'alongside' ? (st.reserve > 0 ? 'no shells at the gun: send the carrier (M)' : 'no shells left') : 'no shells: the carrier is away';
+    else if (u.ammo.he <= 0 && !p.loaded) g = st.schlepper.state === 'alongside' ? (st.reserve > 0 ? 'no shells at the gun: send the carrier (Y)' : 'no shells left') : 'no shells: the carrier is away';
     st.ready = !g;
     // the gun is laid only from a hull that is down: rising, turning, lowering or on the road the barrel lies flat
     // and a round waits at its lay step (sim/guns.js `stowed`). Set up (sandbox), the crew loads while the hull turns
@@ -1106,10 +1107,14 @@ export class SpecialWW2 {
   constructor(sim) {
     this.sim = sim;
     this.ctl = [];
+    // the player in person at a gun (gunner.js): sim/guns.js hands it the manned piece's steps
+    this.gunner = sim.gunner = new Gunner(sim);
   }
 
   reset() {
     const sim = this.sim;
+    this.gunner.reset();
+    for (const u of sim.units) for (const p of u.pieces) p.manned = false;
     this.ctl = [];
     for (const u of sim.units) {
       const C = CTL[u.def?.special];
@@ -1126,9 +1131,11 @@ export class SpecialWW2 {
 
   update(dt) {
     for (const c of this.ctl) c.update(dt);
+    this.gunner.check();
   }
 
   command(u, name, args) {
+    if (GUNNER_CMDS.has(name)) return this.gunner.command(u, name, args ?? {});
     return this.of(u)?.command(name, args ?? {}) ?? false;
   }
 
