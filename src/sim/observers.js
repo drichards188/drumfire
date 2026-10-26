@@ -40,7 +40,8 @@ export class Observers {
     // matches none but comes from a unit laid on its own mission (the uncorrected aim is the mission
     // point, so a wild correction took it off) is still answered: in a battle with "not observed" (the
     // crews' ranging is unchanged), on the range with a full report so a lesson cannot stall
-    const observed = (m) => m && m.state === 'ranging' && m.observer !== 'map' && m.observer !== 'sound' && m.kind !== 'sos' && m.kind !== 'barrage';
+    const watched = (m) => m && m.observer !== 'map' && m.observer !== 'sound' && m.kind !== 'sos' && m.kind !== 'barrage';
+    const observed = (m) => watched(m) && m.state === 'ranging';
     let best = null, bd = 400;
     for (const m of sim.missions) {
       if (!observed(m)) continue;
@@ -54,7 +55,14 @@ export class Observers {
     if (!best) {
       const own = u.missionId != null ? sim.missionById(u.missionId) : null;
       const tg = u.order?.target;
-      if (observed(own) && tg && Math.hypot(tg.x - own.x, tg.z - own.z) < 60) {
+      // a mission's state is shared by every unit on it, but the ranging is each unit's own: the player's ranging round
+      // on the unit's own task is still read when the task has gone on to fire for effect (an auto battery on it fired
+      // its series while the player ranges; the player ranges again after a series), unless the unit has fired for
+      // effect since the round left (its series replaces it). Only a battery the player commands (shell.ranging,
+      // guns.fire): the crews never range again on a task they fire for effect on, so their games are unchanged
+      const ownSeen = observed(own) || (watched(own) && own.state === 'ffe' && shell.ranging && shell.volley > (u.ffeVolley ?? 0));
+      if (ownSeen && Math.hypot(shell.aim.x - own.x, shell.aim.z - own.z) < 400) best = own;
+      else if (ownSeen && tg && Math.hypot(tg.x - own.x, tg.z - own.z) < 60) {
         best = own;
         wild = true;
       }

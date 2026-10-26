@@ -27,7 +27,7 @@ Gustav starts assembled in every campaign mission, including its unlock mission.
 
 The open battles (Ypres and German Flanders) are where earned batteries count: only they are instantiated in combat, and unearned batteries have no guns, AI fire, ammunition or crew contribution. German Flanders also includes the Karl; the V-1 and V-2 fire only in their own operations. The specialist operations (Gustav siege, Karl-Gerät, V-1, V-2) are open from the start with their whole roster, earned or not, as are the tutorials. The menu demonstration and tutorials may show the full equipment roster.
 
-The main-menu **Dev mode** switch puts the full roster in the open battles for testing. It does not mark campaign missions completed. Keyboard **0** selects battery ten. **Main menu** exits a battle; only completed campaign missions are saved.
+The main-menu **Dev mode** switch puts the full roster in the open battles for testing; it is on by default for now, and switching it off is remembered. It does not mark campaign missions completed. Keyboard **0** selects battery ten. **Main menu** exits a battle; only completed campaign missions are saved.
 
 ## Persistence and validation
 
@@ -36,3 +36,21 @@ Local saves use `drumfire.campaign.v2` with completed mission IDs and a dev flag
 Mission roles, roster order, target ranges and thresholds are in `src/campaign-data.js`. Scenario construction and objective evaluation are in `src/campaign.js`.
 
 Run `node tools/progressiontest.mjs` for any-order play, save migration, roster exclusion, all mission target ranges, deadlines, correct-fuze damage, launch qualification and all twelve victory paths. These tests validate mechanics; difficulty and mission pacing still need human playtesting.
+
+## Planned: missions from the lineup
+
+Not built yet (noted 2026-10-26). The open battles run a fixed day: each director's `buildScript()` (`src/sim/director.js`, `src/ww2/director.js`, `src/ww1/director.js`) sends the same sites at the same times, whatever batteries are fielded. The aim is a day generated from the lineup, so every battery brought has work that suits it.
+
+- **Why it is tractable.** Only the timeline is scripted: crews, console, observers and scoring read `sim.missions` and do not care who made them. The lineup already arrives as `newGame({ allowedKinds })`, `crews.canServe` already checks reach and arc, and the campaign missions (`src/campaign.js`) already place targets per roster and gate them with `requiredKind`.
+- **Hard part 1: sites are baked into the ground at page load.** `terrainHeight.js`, `trenchlines.js`, `world/data.js` and `world/ruins.js` read `SITES` for pads, concrete and clear ground, so a generator cannot invent a position mid-battle. It needs a larger pool of candidate slots per map, built into the terrain once, with a subset switched on per battle.
+- **Hard part 2: the long guns have nothing worth shooting.** Flanders targets are 4 to 17 km off; the K 18 reaches 29.6 km and the Gustav 47 km (the Karl was on a mission 9 % of the battle). Deep targets need ground and a map that reach that far; the British sheet is about 33 by 22 km, so beyond it needs an off-map overlay like the Paris Gun's.
+- **Hard part 3: balance starts over.** The 72-seed tables are tuned to the fixed day. Add a test of each battery's busy share across random lineups (none under about 40 %) beside the win rates.
+- **Unaffected.** The tutorials (the scripted range) and the campaign missions (their own director).
+
+Steps:
+
+1. **A generator over today's sites** (`src/sim/missiongen.js`, deterministic on `sim.rng`): keep the five phases; choose which targets, when and how many from the lineup (about one more open mission than batteries); never issue a mission nobody can serve; give a battery idle for about two minutes a target in its niche. Director code and a test only, no terrain changes; variety stays limited (14 British sites). Start on one mode: WW2 Flanders shows the idle long guns most, 1917 is the main game.
+2. **Pools of candidate slots per map** in depth bands (front 0 to 3 km past the line, close 3 to 8, deep 8 to 18, far 18 to 45).
+3. **Deep targets for the long guns**, with the off-map overlay.
+
+It only matters once lineups differ: dev mode, on by default, fields every battery. It is also the mission half of the deferred research-and-upgrades progression idea, but can be built without that economy.

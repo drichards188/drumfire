@@ -74,6 +74,7 @@ export class DirectorWW2 extends Director {
     const t = m.targetId ? this.sim.targetById(m.targetId) : null;
     if (m.kind === 'sos' || m.kind === 'barrage') return u.kind === 'lefh18' ? 'shrapnel' : 'instant';
     if (!t) return 'instant';
+    if (t.kind === 'tanks') return 'instant'; // open vehicles on the surface: graze, not buried
     const h = TARGETS[t.kind]?.hardness;
     if (h === 'hard' || h === 'deep' || t.kind === 'hq' || t.kind === 'adump') return 'delay';
     return 'instant';

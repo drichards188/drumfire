@@ -23,7 +23,7 @@ This page covers the menu, the campaigns, every era's units and operations, the 
 - **What earning does.** A battery not yet earned stays out of the open battles (Ypres and WW2 Flanders). The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start.
 - **Saving.** Progress is saved in the browser; the "Your batteries" tab lists the roster.
 - **WW1 German** has no campaign: every battery is yours from the start.
-- **Dev mode.** A switch at the foot of the menu opens every battery and mission for testing, without marking anything won.
+- **Dev mode.** A switch at the foot of the menu opens every battery and mission for testing, without marking anything won. It is on by default for now; switch it off to play the batteries you have earned.
 
 | Era | Mission | Earns |
 |---|---|---|
@@ -72,6 +72,7 @@ The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five
    - **Correct** with the arrows or `.` and fire again; good corrections get within about 30 m in two or three rounds.
    - **Errors:** wind (the day's meteor telegram), gun wear and each gun's calibration error all shift the fall of shot.
 4. **Fire for effect.** Once on, raise the rounds (R) and fire. All pieces of the unit shoot a series. The target's parts (each gun of a battery, each stack of a dump, each wagon) are damaged by a table of calibre against hardness, and a pillbox needs heavier shells or more of them. Dumps cook off in chains.
+   - **No report on a series:** to check the fall or correct, set ROUNDS back to 1 and fire a ranging round. It is answered even when another battery on the same task is already firing for effect.
 5. **Counter-battery.** Every round builds the unit's signature (flash and sound ranging), more at night and, by day, while the German kite balloon is up. German batteries walk fire onto the loudest unit; the incoming scream warns you about four seconds ahead. Go to HOLD to let the signature fade, or silence the hostile battery itself.
 6. **SOS.** When the Germans form up for an assault, the hurricane bombardment is a warning, then red rockets go up over a sector (A Frezenberg, B Zonnebeke road, C Polygon, D Gheluvelt). Press S, or click the sector's SOS button: every unit that can reach the line lays on it and fires. Infantry that reach the British trench breach the sector; two lost sectors lose the game.
 7. **Zero hour.** In the last phase the British infantry go forward behind a creeping barrage that lifts on a timetable. Keep the guns on the lane and lift on time. The game is won when enough of the infantry reach the objective (50 % on Easy, 60 % on Normal, 70 % on Hard). It is lost when two front sectors fall or every gun is destroyed.

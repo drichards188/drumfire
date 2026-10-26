@@ -44,6 +44,7 @@ export class DirectorWW1 extends DirectorWW2 {
     if (m.kind === 'sos' || m.kind === 'barrage') return GUNS_SHRAPNEL.has(u.kind) ? 'shrapnel' : 'instant';
     if (!t) return 'instant';
     if ((t.kind === 'bconvoy' || t.kind === 'bballoon') && GUNS_SHRAPNEL.has(u.kind)) return 'shrapnel';
+    if (t.kind === 'btanks') return 'instant'; // open vehicles on the surface: graze, not buried
     const h = TARGETS[t.kind]?.hardness;
     if (h === 'hard' || t.kind === 'hq' || t.kind === 'bdump' || t.heavy) return 'delay';
     return 'instant';

@@ -423,7 +423,9 @@ Conventions as implemented:
   when the mission is 'ffe', a report says on target or ROUNDS is above 1, and the player can override it until one of those changes.
 - Reports: `mission.reports[]` (also `sim.reports`): `{ t, missionId, unitId, shellId, n, observer, observed, over, right, clock, text,
   ok, corr: { add, right } }`. `over`/`right` are the OBSERVER's estimate (m; air reports are quantised to the circle and hour),
-  `corr` is what to apply with `correct`. Reports are only sent while the mission is 'ranging'. Not observed: `observed false`, `over null`.
+  `corr` is what to apply with `correct`. Reports are sent while the mission is 'ranging', and on a mission in 'ffe' for the
+  ranging rounds (`rounds 1`) of a unit not on auto fired since its own last fire for effect (`shell.ranging`, `unit.ffeVolley`):
+  the player joining a task an auto battery fires for effect on, or ranging again after a series. Not observed: `observed false`, `over null`.
   Only `report` events carry them (no duplicate `radio`). The clock code: circle letters Y Z A B C D E F = 10 25 50 100 200 300 400
   500 yards, hour with 12 at true north from the target ('B3' = 100 yards east); `ok` for A or better; FOO `ok` within 45 m.
 - Targets: `parts: [{ x, z, hp, alive, y?, type? }]` placed from `src/models/t/layout.js` `partLayout`; extra `present` (false while
@@ -1809,3 +1811,16 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (ui: all batteries' mode) `ui/panel.js`: ALL AUTO and ALL MANUAL under the status block of the battery tabs and Shift+A
   (section UI): every battery the player commands to one mode via `onCommand(id, 'mode', { mode })`, so main's lock check
   and the sim's `mode` command are unchanged; styles `.tall`, `.tallb` in `panel.css`.
+- (career: dev mode on by default) `progression.js` `DEV_DEFAULT = true`: a browser without a choice of its own starts in
+  dev mode (every battery in the open battles). `setDev` records the choice (`devSet` in the save) and it is kept over
+  the default; an older save keeps dev mode only if it had it on. `tools/progressiontest.mjs` switches it off before
+  checking the earned roster.
+- (sim: ranging on a task in fire for effect) The observers read rounds only while the mission was 'ranging', but the
+  state is shared by every unit on the task: once an auto battery on it fired its series, the player's ranging rounds
+  there got no report at all, nor did ranging again after the player's own series (the task never returns to
+  'ranging'). `guns.fire` marks a ranging order of a unit not on auto (`piece.ranging`, `shell.ranging`; an auto crew's
+  series of one, the super-heavies' and on a magazine, is for effect) and the unit's latest fire for effect
+  (`unit.ffeVolley`); `Observers.onBurst` also reads such a round on the unit's own task in 'ffe' when it left after
+  that series. The crews never range again on a task in fire for effect, so the British simtest (with the scripted
+  players), `ww2test`, `ww1test --player` and `gunnertest` are bit-identical; `gunnertest --manual`, whose commander
+  takes tasks other batteries hold, now gets those reports and plays out differently.

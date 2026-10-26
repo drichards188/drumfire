@@ -7,6 +7,10 @@ import { ww2Theatre } from '../src/ww2/theatre.js';
 import { menuItems } from '../src/menuItems.js';
 const storage = { data: new Map(), getItem(k) { return this.data.get(k); }, setItem(k,v) { this.data.set(k,v); } };
 const career = new Progression(storage);
+assert.equal(career.dev, true, 'Dev mode is on by default');
+assert.ok(BATTERIES.every(b=>career.unlocked(b.kind)), 'Dev mode by default fields every battery');
+career.setDev(false);
+assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must survive a reload');
 assert.deepEqual(BATTERIES.filter(b=>career.unlocked(b.kind)).map(b=>b.kind), ['bl6','lefh18']);
 // every mission, operation and lesson is open from the start, in any order
 assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
@@ -21,6 +25,7 @@ assert.equal(career.unlocked('bl60'), true);
 assert.equal(new Progression(storage).unlocked('bl60'), true);
 assert.equal(new Progression(storage).unlocked('rail'), true, 'Wins out of order must survive a reload');
 const old = new Progression({ getItem(k) { return k === SAVE_KEY ? null : '{"xp":999999}'; } });
+old.setDev(false);
 assert.equal(old.unlocked('rail'), false, 'XP must never unlock campaign batteries');
 career.unlockAll();
 assert.ok(BATTERIES.every(b=>new Progression(storage).unlocked(b.kind)));
