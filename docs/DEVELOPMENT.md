@@ -112,7 +112,7 @@ Page-local viewers (dev server only):
 index.html           the main menu and the game page (src/boot.js picks which)
 bertha.html          the Big Bertha demo
 models.html, ui.html, audio.html, world.html, fx.html   dev pages
-src/boot.js          menu or game: a URL with play, tutorial or sandbox is a game
+src/boot.js          menu or game: a URL with play, tutorial or sandbox is a game; first the WebGL check (src/ui/gpu.js)
 src/menuItems.js     the menu's entries; src/ui/menu.js the menu (DOM only), src/ui/loading.js the loading screen
 src/progression.js, campaign-data.js, campaign.js   the career, the batteries and missions, the mission scenarios
 src/main.js          orchestration, settings (lil-gui), keys, frame order

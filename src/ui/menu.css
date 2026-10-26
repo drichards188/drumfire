@@ -150,6 +150,17 @@ body.loaded #loading { opacity: 0; pointer-events: none; }
   .ld-foot { flex-direction: column; align-items: flex-start; }
 }
 
+/* ---------------------------------------------------------- no graphics acceleration (ui/gpu.js), on the order's paper */
+#gpu { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(10, 12, 8, 0.86); }
+.gpu-steps { margin: 14px 0 0 22px; display: grid; gap: 5px; font-size: 14px; line-height: 1.5; color: #2e2a20; }
+.gpu-steps code, .gpu-note code { font: 12.5px var(--mono); color: #8a2f22; user-select: all; }
+.gpu-note { margin-top: 12px; font: 13px/1.5 var(--serif); color: #5b5440; }
+.gpu-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; padding-top: 14px; border-top: 1px solid #1d191226; }
+.gpu-actions button { font: 700 11px var(--mono); letter-spacing: .2em; text-transform: uppercase; padding: 11px 22px; border: 1px solid var(--ink); background: rgba(29, 25, 18, 0.08); color: var(--ink); cursor: pointer; }
+.gpu-actions button:hover { background: rgba(29, 25, 18, 0.2); }
+.gpu-actions button.quiet { border-color: #1d191266; background: none; color: #5b5440; }
+.gpu-actions button.quiet:hover { background: rgba(29, 25, 18, 0.1); }
+
 /* a list with nothing in it (the WW1 era has no campaign) */
 .mn-empty { padding: 18px 4px; font: italic 13px/1.6 var(--serif); color: #a9a68f; }
 
