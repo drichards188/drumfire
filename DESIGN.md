@@ -2100,3 +2100,9 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   leFH 18, the Mörser 18 and the Karl fired through the first-person view on key events; `tools/rangetest.mjs` keeps the
   headless check). The range card hides at the
   gun.
+- (game: the camera on the guns in the field) main's camera anchor for a unit (`unitRoot`) was the centre of all its
+  pits, and its distance (`KIND[kind].dist`) framed the whole battery, so a unit fielding fewer guns than pits (the test
+  range always one, a career's battery one of four at first) was framed on empty pits. `centreUnits()`, run by
+  `newBattle` after `sim.newGame`, now puts each anchor at the centre of the sim's pieces and sets `unitDist[id]`: the
+  battery's distance with every gun in, else the larger of 14 m, 2.2 times the gun rig's size and 1.6 times the spread
+  of the guns fielded (a lone leFH 18 18 m, a 6-inch 14 m, a K 18 31 m). Battles with every gun are unchanged.

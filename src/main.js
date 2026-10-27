@@ -522,7 +522,7 @@ async function init() {
     chase.free(false);
     chase.releaseShot();
     chase.setTarget(unitRoot[u.id]);
-    chase.goalDist = KIND[u.kind].dist;
+    chase.goalDist = unitDist[u.id] ?? KIND[u.kind].dist;
     // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
     chase.goalYaw += 0.75;
     chase.goalPitch = 0.17;
@@ -641,12 +641,33 @@ async function init() {
     }
   };
 
+  // The camera's anchor on each unit: the centre of the guns the sim fields, not of every pit (a career's lineup may
+  // field one gun of four, the test range always one), and how far back the camera stands: the battery's distance, or
+  // closer for fewer guns (a little over twice a gun's size for one, more for the spread of several)
+  const unitDist = {}; // unit id -> the camera's distance
+  const centreUnits = () => {
+    const box = new THREE.Box3(), size = new THREE.Vector3();
+    for (const u of UNITS) {
+      const g = unitRoot[u.id], all = piecePlacements(u), su = sim?.unitById?.(u.id);
+      const ps = su?.pieces?.length ? su.pieces.map((p) => p.pos) : all;
+      const cx = ps.reduce((s, p) => s + p.x, 0) / ps.length, cz = ps.reduce((s, p) => s + p.z, 0) / ps.length;
+      g.position.set(cx, terrain.heightAt(cx, cz) + KIND[u.kind].eye, cz);
+      unitDist[u.id] = KIND[u.kind].dist;
+      if (!su || ps.length >= all.length) continue;
+      const rig = rigs.get(`${u.id}:${su.pieces[0].i}`);
+      const len = rig ? box.setFromObject(rig.root).getSize(size).length() : 8;
+      let spread = 0;
+      for (const a of ps) for (const b of ps) spread = Math.max(spread, Math.hypot(a.x - b.x, a.z - b.z));
+      unitDist[u.id] = Math.min(KIND[u.kind].dist, Math.max(14, len * 2.2, spread * 1.6));
+    }
+  };
   // a new battle (the real one, a lesson's range or the demonstration): the sim, then everything that remembers the last
   const newBattle = (opts) => {
     if (!sim) return;
     flares.clear();
     fx.clearLitter?.();
     sim.newGame(opts);
+    centreUnits();
     renderLayer?.reset?.(sim);
     modeR?.reset?.(sim);
     panel?.reset?.();
