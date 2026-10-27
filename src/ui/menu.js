@@ -35,6 +35,17 @@ const nameOf = (kind) => BATTERIES.find((b) => b.kind === kind)?.name ?? kind;
 // a row of level marks: `have` lit of `of`
 const pips = (have, of) => { const p = el('span', 'rs-pips'); p.setAttribute('aria-hidden', 'true'); for (let i = 0; i < of; i++) p.append(el('i', i < have ? 'on' : null)); return p; };
 // an action button; `act` keeps the focus on it across a render
+// the test range (src/ui/range.js) with this battery selected, in its era (the menu's settings passed on)
+const rangeHref = (era, kind) => {
+  const p = new URLSearchParams();
+  if (era !== '1917') p.set('mode', era);
+  p.set('range', 1);
+  p.set('kind', kind);
+  const from = new URLSearchParams(location.search);
+  for (const k of ['quality', 'hour', 'weather']) if (from.get(k)) p.set(k, from.get(k));
+  return `index.html?${p}`;
+};
+const rangeBtn = (era, kind) => actBtn('Try on the range', `range:${kind}`, '', () => { location.href = rangeHref(era, kind); });
 const actBtn = (text, act, why, onClick) => {
   const b = el('button', 'rs-act', text);
   b.type = 'button';
@@ -138,7 +149,9 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
   const head = el('header', 'rs-card-head');
   const title = el('div');
   title.append(el('small', null, `Tier ${ROMAN[node.tier - 1]} · ${BATTERIES.find((b) => b.kind === kind)?.role ?? ''}`), el('h3', null, nameOf(kind)));
-  head.append(title, actBtn('Preview the full battery', `preview:${kind}`, '', () => onHangar(kind)));
+  const acts = el('div', 'rs-head-acts');
+  acts.append(actBtn('Preview the full battery', `preview:${kind}`, '', () => onHangar(kind)), rangeBtn(era, kind));
+  head.append(title, acts);
   card.append(head, career.owns(kind) ? modsBlock(career, kind, onChange) : researchBlock(career, kind, onChange));
   root.append(card);
   return root;
@@ -244,6 +257,11 @@ function hangarInfo(career, era, kind, preview = false) {
     for (const [k, v] of figs) dl.append(el('dt', null, k), el('dd', null, v));
     box.append(dl);
   }
+  // the test range: any battery, earned or not, with any upgrades, nothing paid
+  const tr = rangeBtn(era, kind);
+  tr.classList.add('hg-range');
+  tr.title = 'Fire it on the test range: any target, any upgrades, nothing scored';
+  box.append(tr);
   box.append(el('p', 'hg-state', sandbox ? 'Yours from the start: the WW1 German era is a sandbox.' : own ? 'Researched: in your lineup for the open battle.'
     : career.dev ? `In the lineup in dev mode; your own career has not researched it (${career.researchBlock(kind)}).` : `Not researched: ${career.researchBlock(kind)}.`));
   if (career.dev && !sandbox) box.append(el('p', 'rs-note', 'Dev mode is on: on parade and in battle every battery is researched and at its best. The modifications are your own career.'));
@@ -518,7 +536,8 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (view === 'research' && !loaded) hangar.show({ era, battery: parade(career, era, inHangar()) });
   }
 
-  const go = () => { if (playable(sel)) location.href = hrefOf(sel, difficulty, query); };
+  // (the test range opens with the battery shown in the hangar)
+  const go = () => { if (playable(sel)) location.href = sel.key.startsWith('range:') ? rangeHref(era, inHangar()) : hrefOf(sel, difficulty, query); };
 
   $('[data-act="back-research"]').addEventListener('click', () => pick(preview ?? shown(), 'research'));
   for (const b of $$('[data-view]')) b.addEventListener('click', () => {

@@ -54,6 +54,7 @@ export class EnemyWW1 extends EnemyWW2 {
       this.airUpdate(dt);
       return;
     }
+    if (sim.scripted) this.hostileUpdate(dt); // the scripted range's hostile fire (sim/script.js hostile, the test range)
     // who is the loudest of our units
     let focus = null, fs = 0;
     for (const u of sim.units) if (u.alive && u.signature > fs) { fs = u.signature; focus = u; }

@@ -104,7 +104,7 @@ export class Gunner {
     if (name === 'man') {
       const g = GUNS[u.kind];
       if (sim.attract) return false;
-      if (sim.scripted) return this.refuse('Not during a lesson: the lesson keeps you at the console.');
+      if (sim.scripted && !sim.range) return this.refuse('Not during a lesson: the lesson keeps you at the console.'); // (the test range allows it)
       if (!MANNABLE.has(u.kind)) {
         return this.refuse(u.kind === 'nbw41' ? `${u.callsign}: the Nebelwerfer is fired electrically from cover; there is no gun to serve in person.`
           : `${u.callsign}: the ${g?.name ?? u.name} has a drill of its own; it cannot be served in person.`);

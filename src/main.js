@@ -31,7 +31,7 @@ import { warmUp } from './render/warmup.js';
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
 // always boots (import.meta.glob also bundles whichever exist).
-const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './models/looks.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './ui/range.js', './audio.js', './models/guns.js', './models/looks.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
   './ww2/voices.js', // the German crew voices (only the WW2 open battle's, the Karl's and the WW1 open battle's pages build them)
   './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js']);
 const optional = async (path) => {
@@ -54,6 +54,9 @@ const step = async (p, msg) => {
 };
 const query = new URLSearchParams(location.search);
 const SANDBOX = !!query.get('sandbox');
+// the test fire range (?range=1, any era): the era's map and batteries on the scripted range, any battery, nothing paid
+// (src/ui/range.js)
+const RANGE = query.has('range') && !SANDBOX;
 // The mode: the British game of 1917 (default) or the WW2 German mode (?mode=ww2&op=...). The WW2 theatre must exist
 // before the terrain is first sampled: it adds its positions' levelled pads (src/ww2/theatre.js).
 const WW2 = query.get('mode') === 'ww2';
@@ -71,16 +74,16 @@ const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && car
 const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
 // back to the menu (src/ui/menu.js), with this page's entry selected
-const MENU = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
+const MENU = menuHref(query, RANGE ? `range:${WW2 ? 'ww2' : WW1 ? 'ww1' : '1917'}` : CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
 // Every mission, operation and lesson is open, in any order; only a campaign mission asked for on the other era's page
 // (no theatre for it here) goes back to the menu
-const MISPLACED = !query.get('tutorial') && !SANDBOX && !!requestedMission && !CAMPAIGN_MISSION;
+const MISPLACED = !query.get('tutorial') && !SANDBOX && !RANGE && !!requestedMission && !CAMPAIGN_MISSION;
 // a WW2 special weapon's own operation (the Gustav siege, the Karl, the V-1, the V-2): its whole roster is the player's,
 // earned or not, as a campaign mission's is; only the open battle's batteries are earned
 const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
 // the open battles of the two research eras (src/research.js): the career's researched lineup takes the field, with its
 // guns and upgrades, and the battle pays RP and battery points (null: everything else, which pays nothing)
-const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || WW1 || SANDBOX ? null : WW2 ? 'ww2' : '1917';
+const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || WW1 || SANDBOX || RANGE ? null : WW2 ? 'ww2' : '1917';
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -174,6 +177,7 @@ async function init() {
     ww1ui: WW1 ? await optional('./ww1/ui.js') : null,
     ww1tut: WW1 ? await optional('./ww1/tutorial.js') : null,
     ww1crews: WW1 ? await optional('./render/crews_ww1.js') : null,
+    range: RANGE ? await optional('./ui/range.js') : null,
   };
   // a WW1 page: the 1917 dress and the Bertha's 1917 colours, set before any rig or crew is built
   if (WW1 && mods.guns?.GUN_ERA) mods.guns.GUN_ERA.ww1 = true;
@@ -389,6 +393,9 @@ async function init() {
   let freeCam = false;
   // ?unit=N is the unit id (1 to 5); without it the 1917 battle opens on the 15-inch, the Group's centrepiece
   let selected = Math.max(0, Math.min(UNITS.length - 1, Number(query.get('unit') ?? (TH ? 1 : UNITS.findIndex((u) => u.kind === 'bl15') + 1)) - 1));
+  if (RANGE && UNITS.some((u) => u.kind === query.get('kind'))) selected = UNITS.findIndex((u) => u.kind === query.get('kind'));
+  // the test range's battery: the only one in the field there
+  const RANGE_KIND = RANGE ? UNITS[selected].kind : null;
   let following = false; // the camera is on a shell (F)
   let cineClock = 0; // title screen: seconds since the last cut
 
@@ -501,7 +508,7 @@ async function init() {
 
   // ---------------------------------------------------------------- units and camera
   // the WW1 mode is a sandbox: every unit is the player's (its kinds are not in the campaign's roster)
-  const canCommand = (id) => state === 'tutorial' || !!CAMPAIGN_MISSION || OPERATION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind);
+  const canCommand = (id) => (RANGE ? UNITS.find((u) => u.id === id)?.kind === RANGE_KIND : state === 'tutorial' || !!CAMPAIGN_MISSION || OPERATION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind));
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
@@ -685,6 +692,42 @@ async function init() {
     }
     hud.radio(WW2 ? `Arko: ${TH.op.short}. All units, stand to.` : WW1 && TH ? (TH.op?.kind === 'battle' ? 'Arko: all batteries of the Gruppe, stand to. Feuerbereitschaft melden; the observers report at first light.' : 'Armee to Wilhelm: Feuerbereitschaft melden. The orders follow through the day.') : 'Group HQ: all batteries, stand to. Observers report at first light.', 'info');
     drumfire.events.start?.(params.difficulty);
+  };
+
+  // the test range (src/ui/range.js): the scripted range with the battery asked for, the card on the left of the view
+  let range = null;
+  const startRange = () => {
+    state = 'playing';
+    hud.hideEnd();
+    hud.showTitle(false);
+    chase.autoOrbit = 0;
+    chase.cine(false);
+    following = false;
+    range ??= mods.range?.mountRange({
+      sim: () => sim, units: UNITS, kind: RANGE_KIND, selectedId: () => UNITS[selected].id, select: (i) => selectUnit(i), hint: (t, ms) => hud.hint(t, ms),
+      // the range again (a new lineup): the scripted game, the same battery in view
+      restart: ({ loadout }) => {
+        newBattle({ scripted: true, range: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0, loadout });
+        setTimeScale(params.timeScale);
+        selectUnit(selected);
+      },
+      // a link to this range with these settings (null drops one)
+      href: (set) => {
+        const p = new URLSearchParams(location.search);
+        for (const [k, v] of Object.entries(set)) if (v == null) p.delete(k); else p.set(k, v);
+        return `index.html?${p}`;
+      },
+    }, query) ?? null;
+    if (!range) { start(); return; } // no range module: the battle stands in
+    range.begin();
+    drumfire.onFrame.push(() => { range.update(); range.refresh(); });
+    try {
+      audio?.start?.();
+    } catch (e) {
+      console.warn('audio.start failed:', e.message);
+    }
+    hud.toast('Test range', `${UNITS[selected].name}: nothing is scored or paid`, 3200);
+    hud.radio('Range officer: the range is clear. Lay on any target and fire when ready.', 'info');
   };
 
   // the way back to the menu (src/ui/menu.js): the game page is left, the menu builds nothing of the battlefield
@@ -1386,6 +1429,9 @@ async function init() {
   // the page is a game (src/boot.js): straight into the battle or the lesson, then the loading screen goes
   if (SANDBOX) {
     start();
+  } else if (RANGE) {
+    selectUnit(selected);
+    startRange();
   } else if (query.get('tutorial')) {
     if (tutorial?.defs.some((d) => d.id === query.get('tutorial'))) tutorial.start(query.get('tutorial'));
     else toMenu();
@@ -1399,6 +1445,7 @@ async function init() {
     renderer, scene, camera, terrain, atmosphere, post, fx, flares, hud, chase, params, frame, clouds, weather, world, craters,
     sim, tutorial, audio, panel, rigs, unitRoot, units: UNITS, handlers, renderLayer, ww2render: ww2r, ww1render: ww1r, sun, fakeShells,
     select: selectUnit, start, setTimeScale, followShell, newestShell, sandboxBlast, sandboxBurst, gunner: gview,
+    range, // the test range's API (src/ui/range.js), on a range page
     voices, // the German crew voices (null on other pages); voices.log lists every line spoken
     // the WW2 gunner from a test: man(unitIndex, { piece, post, assist }) takes the place, man(null) leaves it
     man(i, args = {}) {

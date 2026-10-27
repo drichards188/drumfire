@@ -105,7 +105,7 @@ export class Script {
   // A German battery shells unit `at`: see Enemy.hostileUpdate. Returns the counter-battery mission (sound ranging).
   hostile(batteryId, { at, interval = 14, start = 450, walk = 90, grace = 4, deadline = 3600 } = {}) {
     const sim = this.sim, t = sim.targetById(batteryId), e = sim.enemyAI;
-    if (!t || t.kind !== 'battery' || !sim.unitById(at)) return null;
+    if (!t || (t.kind !== 'battery' && !t.battery) || !sim.unitById(at)) return null; // (a WW2 or WW1 enemy battery: t.battery)
     if (!t.alive) sim.targetAI.revive(t);
     e.hostiles = e.hostiles.filter((h) => h.bat !== batteryId);
     e.hostiles.push({ bat: batteryId, at, interval, start, walk, grace, n: 0, cool: 2 });

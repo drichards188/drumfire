@@ -28,6 +28,7 @@ node tools/berthatest.mjs 1 2 3 --difficulty all              # Big Bertha demo 
 node tools/progressiontest.mjs                                # research, upgrades, pay, saves, and the campaigns: any order, rosters, targets, every victory path
 node tools/researchtest.mjs 1 2 3 --lineup all                # open battles with a career's lineups (start..max): wins, RP, battery points; --era, --jobs N
 node tools/hangarsheet.mjs --era all --jobs 3                 # the menu hangar's contact sheets: each battery's parade and each upgrade's hover view, levels 0 to 3 (shots/sheets)
+node tools/rangetest.mjs                                      # the test range: every WW2 gun served in person fires, alone in the field; exits 1 on a failure
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
@@ -40,7 +41,7 @@ node tools/voicetest.mjs --op flanders --unit 1 --seconds 200  # the German crew
 
 ## URL parameters
 
-A URL with `play`, `tutorial` or `sandbox` is a game page; anything else is the menu.
+A URL with `play`, `tutorial`, `sandbox` or `range` is a game page; anything else is the menu.
 
 - **`?play=1`:** the 1917 battle straight away. With `mode=ww2&op=flanders|sevastopol|karl|v1|v2` or `mode=ww1&op=ridge|paris`, that battle or mission. An operation the career has not opened goes back to the menu.
 - **`?campaign=<id>&play=1`:** a campaign mission, ids `earn-<kind>`: `earn-bl60`, `earn-bl92`, `earn-bl15`, `earn-rail`; with `mode=ww2`, `earn-sfh18`, `earn-nbw41`, `earn-k18`, `earn-mrs18`, `earn-karl`, `earn-gustav`, `earn-v1`, `earn-v2`.
@@ -49,6 +50,7 @@ A URL with `play`, `tutorial` or `sandbox` is a game page; anything else is the 
 - **`?unit=N`:** start on the page's Nth unit (its key).
 - **`?hour=H`:** fix the time of day (for example `5.25`); without it the sim's clock drives the sun.
 - **`?weather=Clear|Overcast|Drizzle|Rain|Mist`** (default Overcast).
+- **`?range=1`:** the test range (with `mode=ww2|ww1` for the German eras): the era's map on the scripted range with one gun of one battery, nothing else in the sim or drawn. `&kind=<kind>` chooses the battery, `&lv=shells3.barrel1` sets its levels, `&perfect=1` no errors, `&endless=0` and `&invuln=0` turn those off, `&tab=targets|battery|debug` opens a tab. The card's Copy link writes these.
 - **`?sandbox=1`:** test keys over the battle. B fires a blast of the selected unit's calibre and a fake shell that bursts 300 m ahead, N a 15-inch burst 300 m ahead, K a star shell, L a Very light, J an SOS rocket over the selected unit's front.
 - **On the menu,** `?mode=ww1|ww2` opens that era, and `?sel=<key>`, `?op=<id>`, `?campaign=<id>` or `?lessons=1` select an entry or the Tutorials tab. The menu passes `quality`, `hour` and `weather` on to the game it opens.
 - **Big Bertha:** `/bertha.html?play=1` (with `&station=cmd|trav|elev|load|fire`, `&assist=1`, `&quality=`), `?tutorial=1`, `?lang=en|de`.
@@ -57,6 +59,7 @@ A URL with `play`, `tutorial` or `sandbox` is a game page; anything else is the 
 
 - **`window.__drumfire`** exposes every system (renderer, scene, camera, terrain, sim, audio, panel, the render layers and the rest) plus `select(i)`, `start()`, `setTimeScale`, `followShell`, `newestShell`, `sandboxBlast`, `sandboxBurst`, `frame(dt, draw)`, `hooks.<event>` (called after each sim event), `onFrame` (per-frame callbacks) and `state`.
 - **Fast forward.** `__drumfire.fastForward(seconds, { unit, scale, settle })` stops the loop, runs the battle without drawing at `scale` (default 8) and draws a few frames, so a capture can jump into a raid. `unit` there is a 0-based index, while `?unit=N` counts from 1.
+- **The test range.** On a range page `__drumfire.range` drives the card: `mission(targetId)`, `lay(targetId)`, `level(part, n)` (starts the range again), `__drumfire.man(i)` for the WW2 gunner, `set('perfect'|'invuln'|'endless', on)`, `hostile()`, `sos()`, `convoy()`, `train()`, `clear()`, `revive()`, `link()`. With `fastForward` that isolates one gun against one target, for example on `?range=1&kind=bl92`: `__drumfire.range.mission('M1'); __drumfire.sim.command(3, 'fire'); __drumfire.fastForward(60)` (`command` takes the unit id).
 - **Lessons.** `__drumfire.tutorial.autoplaySync({ id })` plays a whole lesson without drawing and lists any step that stalled.
 - **Big Bertha.** The demo's page has `window.__bertha`.
 
@@ -136,7 +139,7 @@ src/ui/              the fire control console (consoles/: the cards, the procedu
 src/audio.js         the sound engine; public/audio holds the eight recordings (and voice-de/, the WW2 crew voices: src/ww2/voices.js)
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
-tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, hangarsheet, audiotest, shot, menushots, voicetest;
+tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, rangetest, hangarsheet, audiotest, shot, menushots, voicetest;
                      make-voices.py and pick-voice-takes.py (the WW2 crew voices, docs/VOICES.md)
 public/menu/         the main menu's background stills (tools/menushots.mjs)
 docs/                PLAYING.md (how to play, every key), MODELLED.md (rendering, simulation, sound), HISTORY.md (what is real), DEVELOPMENT.md (this page),

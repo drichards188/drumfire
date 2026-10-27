@@ -12,6 +12,7 @@ This page covers the menu, research and the campaigns, every era's units and ope
 - **Upgrades you can see.** Every modification shows on parade: Barrel (sponge staves and a bucket on a groundsheet, then the star gauge on its trestles, then a canvas cover on the muzzle), Breech (the rammer and shell tongs, then oil cans and the artificer's chest, then the breech opened and oiled with a round on the loading tray), Sights (red-and-white aiming posts, then the director on its tripod, then the plotting table under an awning), Camouflage (disruptive paint, then hessian screens along the gun's right and back, then the net drawn back off the gun and hung behind it), Ammunition supply (more of the gun's own shells piled behind its display, one pyramid, then two, then three, and the powder heaped higher with them), Relief crews (a squad of their own in working dress). Hover a modification and the camera goes to it, with a ring on the ground under it; before you buy the first level, to the place where it will stand. The next gun's place is pegged out at the end of the line.
 - **In battle** the guns wear the same camouflage paint, and the radio says when a relief takes a fallen man's place.
 - **Research.** The era's tree: click a battery to see it, research it, or upgrade it. "Preview the full battery" opens it in the hangar at full strength, every gun with its crew, with a way back to Research.
+- **Test range.** "Try on the range" (in the hangar under a battery's figures, and on Research) opens the test range with one gun of that battery; each era's Battles list also has a Test range entry, for the battery shown in the hangar. See [The test range](#the-test-range).
 - **To battle.** The dropdown beside the To battle button chooses what to play: the Battles, Campaign and Tutorials lists, the chosen one's orders, and the difficulty (Easy, Normal or Hard). To battle, Enter, or a double-click on an entry plays it; in the dropdown Up and Down walk the list and Esc closes it. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back, and the end card's Research button goes straight to the Research screen.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
@@ -49,6 +50,14 @@ Details, costs and numbers: [PROGRESSION.md](PROGRESSION.md).
 | WW2 | 06 Under the rock (WIP) | Schwerer Gustav (it starts assembled in every campaign mission) |
 | WW2 | 07 Prepare the launch corridor | V-1 catapult |
 | WW2 | 08 The mobile launch operation | V-2 firing table |
+
+## The test range
+
+A quiet range on the era's own battle map, in daylight, with one gun of the battery you chose (earned or not) and nothing else: no other battery is drawn or in play. Nothing is scored or paid.
+
+- **The card** on the left of the 3D view has three tabs. **Targets:** every target on the map, nearest first, with its range and whether the gun reaches it; **Mission** gives it an observed mission (the aeroplane reports each fall), **Lay** lays it on the target, and the board works as in battle. **Upgrades:** the seven parts at any level; a change starts the range again with them (their effect, not their look). **Debug:** an invulnerable gun and endless ammunition (both on), no errors (no wind, calibration, map error or dispersion), and buttons for hostile fire on the gun, an attack with its SOS, a convoy, a train, clearing the range and copying a link to the setup.
+- **In person.** On the WW2 guns that can be served in person, P (or Man the gun) puts you at the gun and the drill fires it, as in battle; the card steps aside while you are there.
+- **Keys** are the battle's: Space fires, `[` and `]` change the time, H hides the panels. Another gun: go back to the menu and use Try on the range on its card.
 
 ## 1917 British: the Heavy Artillery Group
 

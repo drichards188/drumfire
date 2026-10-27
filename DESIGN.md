@@ -565,6 +565,27 @@ little noise; not the role sites, not traffic, not a site with a mission). Own r
 0x11e0b)`). `day.stats` counts `moved waited dropped work`; `tools/researchtest.mjs` prints them and the site missions
 opened, done and failed, and `NODAY=1` runs the fixed day to compare.
 
+## Test range
+
+A game page with `?range=1` (`src/ui/range.js` `mountRange(host, query)`, loaded by main only there; `isGame` counts
+`range`; the menu's entries `range:<era>`, which open with the hangar's battery). main's `startRange()` starts the era's
+theatre (1917, WW2 Flanders, WW1 ridge) as the lessons do, `newBattle({ scripted: true, range: true, loadout })`: no
+script, no phases, the clock held at 10:00, no enemy fire unless asked, nothing paid (`RESEARCH_ERA` null). The loadout
+is always `{ [kind]: { guns: 1, mods } }`: one gun of the battery chosen (`&kind=`, else the page's default unit,
+`RANGE_KIND`) is the only piece in the sim, so the render hides every other rig and the panel lists only it;
+`canCommand` is true for it alone. `sim.range` (set only with `scripted`) lets the WW2 gunner man a gun on the scripted
+range (`gunner.js` refuses in a lesson); the card hides while `body.gunner`.
+The host: `{ sim(), units, kind, selectedId(), select(i), hint(text, ms), restart({ loadout }), href(params) }`; main calls
+`range.update()` (endless ammunition) and `range.refresh()` (the card, rebuilt when its state changes, at most every
+0.3 s) from `onFrame`. After each start the unit is set `manual` (the scripted range holds it) and the ammunition
+recorded; `level(part, n)` starts the range again with the new `mods`. **No errors** sets the wind to
+calm (`sim.rangeWind` kept), `u.mods` to the unit's with `disp: 0, bias: 0` (`u.rangeMods` kept), `u.bias` to zero and
+each piece's `calib` to zero (`p.rangeCalib` kept); off puts them back. Missions are `sim.script.mission(id, { observer:
+'air', unitId })` (an open one is assigned instead); hostile fire is `script.hostile` from the nearest standing enemy
+battery (now any with `t.battery`, the WW2 and WW1 kinds, and `EnemyWW1.update` runs `hostileUpdate` on the scripted
+range); `sos` cycles the sectors through `script.assault`; `clear` is `script.quiet` and `script.clear`. `__drumfire.range`
+is the API.
+
 ## Tutorial (phase 3)
 
 A playable tutorial, reached from the menu's Tutorials tab (each lesson a page, `?tutorial=<id>`): a list of
@@ -2066,3 +2087,16 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   11.1). WW2 start 220 RP (228), 1.2 / 2.6 (1.3 / 5.0); early 576 (533), 4.6 / 4.8 (3.9 / 7.8); full won 8 (6),
   21.7 / 7.9 (12.3 / 7.2), about 14 missions a game given as work. The convoy and train guard a null mission. Without a
   loadout nothing changes (simtest, ww2test).
+- (menu + game: the test range) `?range=1` in any era (DESIGN.md "Test range", `src/ui/range.js`): the era's map on the
+  scripted range with any battery, its guns and upgrades set on the card, observed missions or a plain lay on any
+  target, and debug switches (invulnerable, endless ammunition, no errors) and events (hostile fire, an attack and its
+  SOS, convoy, train, clear); the setup goes into a link. The menu: "Try on the range" under a battery's figures in the
+  hangar and on its Research card, and a Test range entry in each era's Battles list. `Script.hostile` takes the German
+  enemy batteries (`t.battery`), and `EnemyWW1.update` runs the scripted hostile fire.
+- (game: the test range, one gun) The range fields one gun of the chosen battery and nothing else (loadout `{ [kind]: {
+  guns: 1, mods } }`; the Guns selector is gone), so only that gun is drawn, listed and commandable. `newGame({ range:
+  true })` sets `sim.range` on the scripted game, and `gunner.js` lets the player man the gun there (headless check: every
+  mannable WW2 gun fired three rounds through the drill on the range, with and without crew help; in the page the
+  leFH 18, the Mörser 18 and the Karl fired through the first-person view on key events; `tools/rangetest.mjs` keeps the
+  headless check). The range card hides at the
+  gun.

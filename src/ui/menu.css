@@ -235,6 +235,8 @@ body.menu #view, body.menu #panel { display: none; }
 .rs-card-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .rs-card-head small { font: 9px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #aaa88b; }
 .rs-card-head h3 { font: normal 21px var(--serif); color: #ece2c6; margin-top: 4px; }
+.rs-head-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.hg-range { margin-top: 14px; justify-self: start; }
 .rs-pts { font: 11px var(--mono); color: #c9c5ae; }
 .rs-pts b { font: normal 18px var(--serif); color: #f0d999; margin-right: 3px; }
 .rs-help { font: italic 13px/1.6 var(--serif); color: #bdb9a9; }

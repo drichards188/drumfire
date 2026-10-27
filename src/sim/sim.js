@@ -49,8 +49,10 @@ export class Sim {
   // research.js loadoutOf): { kind: { guns, mods } }, the kinds that take the field with how many of their guns and their
   // upgrades (guns.js). opposition ({ cb, assault }): the lineup's scale on the enemy's counter-battery fire and raids
   // and on the assaults (research.js opposition). Without them everything is as before.
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null } = {}) {
+  // range: the test range (src/ui/range.js), a scripted game the player may also serve a gun in person on
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false } = {}) {
     this.loadout = loadout;
+    this.range = scripted && range;
     this.allowedKinds = allowedKinds != null ? new Set(allowedKinds) : loadout ? new Set(Object.keys(loadout)) : null;
     this.seed = seed;
     this.scripted = scripted;
