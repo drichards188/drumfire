@@ -548,6 +548,23 @@ the last ended, sooner (120 s) when a battery that can serve one has had no miss
 field can serve it. Their own random stream (`mulberry32(seed ^ 0x5eed5)`), so they never draw on `sim.rng`. The crews add
 10 to a role mission's score.
 
+### The day fitted to the lineup
+
+`src/sim/lineup.js` `LineupDay`, made by `Director.reset` and `DirectorWW2.reset` (the open battle) only when the game
+has a loadout and is neither attract mode nor the scripted range; without one the day is exactly as before. The
+director wraps its script (`day.wrap`, so `day.scripting` is set while an entry runs) and both `siteMission`s ask
+`day.gate(id, over)` first: `{ id, over }` to go ahead (perhaps another site) or null. **Reach:** a scripted site no
+battery in the field can serve (`Crews.canServe` on a probe mission: range, arc, `suits`) or that already has a mission
+goes to another site of the same kind one can, else it is left out; the counter-battery calls and the convoy and train
+(checked before their traffic is spawned) come only for what a battery reaches. **Cadence:** while the missions in hand
+(open, ranging, ffe; not `sos`, `barrage` or a role's) fill the lineup's capacity (1 + 1 a battery with two guns or
+more, 0.6 with one, rounded, 3 at least) a scripted site waits in `day.queue` for up to 600 s; a free hand takes the
+waiting one that best suits a battery (`Crews.score`). **Work:** from phase 2 until the barrage, with a free hand and
+nothing waiting, a battery that has had no mission for 80 s gets the site that suits it best (`Crews.score` plus a
+little noise; not the role sites, not traffic, not a site with a mission). Own random stream (`mulberry32(seed ^
+0x11e0b)`). `day.stats` counts `moved waited dropped work`; `tools/researchtest.mjs` prints them and the site missions
+opened, done and failed, and `NODAY=1` runs the fixed day to compare.
+
 ## Tutorial (phase 3)
 
 A playable tutorial, reached from the menu's Tutorials tab (each lesson a page, `?tutorial=<id>`): a list of
@@ -2041,3 +2058,11 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   Flanders battle carries the V-weapons' `op.target`, which had sent every battery there down the strategic branch).
   The reach now counts each unit's own charges (`maxReach`; the leFH 18 has six, the sFH 18 five), which also fixes the
   board's out-of-range mark for those two.
+- (sim: the open battle's day fitted to the lineup) `src/sim/lineup.js` (DESIGN.md "The day fitted to the lineup"): with
+  a career's loadout the scripted site missions only go to sites a battery in the field can serve, wait while the
+  lineup's hands are full, and an idle battery is given a site that suits it. Measured with `tools/researchtest.mjs`,
+  seeds 1 to 24, Normal, all auto, against the fixed day (`NODAY=1`): 1917 start RP 204 (202 before), site missions
+  done / failed 2.0 / 1.0 (2.0 / 2.9); early 578 RP (587), 5.6 / 5.0 (5.5 / 9.6); full won 10 (9), 11.2 / 11.7 (10.8 /
+  11.1). WW2 start 220 RP (228), 1.2 / 2.6 (1.3 / 5.0); early 576 (533), 4.6 / 4.8 (3.9 / 7.8); full won 8 (6),
+  21.7 / 7.9 (12.3 / 7.2), about 14 missions a game given as work. The convoy and train guard a null mission. Without a
+  loadout nothing changes (simtest, ww2test).

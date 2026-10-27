@@ -50,6 +50,16 @@ The open battles now have targets made for the guns that are usually idle:
 
 One of each comes at a time, by day, from the bombardment on, with a 25-minute window and 90 points. They only appear when a battery in the field can serve them, and sooner when such a battery has been idle for 90 seconds.
 
+## The day fits your lineup
+
+The open battle's timetable was written for the whole Group. With your lineup in the field (`src/sim/lineup.js`):
+
+- **Reach.** A mission no battery of yours can serve (out of range, out of arc, or the wrong gun for it) goes to another site of the same kind one can, or is left out. Counter-battery calls, convoys and trains only come for what you can reach.
+- **Cadence.** Missions wait while your hands are full: about one at a time per battery, three at least. A free hand gets the waiting mission that best suits one of your batteries.
+- **Work.** A battery idle for 80 seconds is given a site that suits it: concrete and hostile batteries for the heavies, lighter targets for the field guns, the balloon for the 60-pounders. A big lineup gets more to do.
+
+Battles without a lineup (the tests, the WW1 sandbox) run the fixed day.
+
 ## The campaign: one-off challenges
 
 The 12 campaign missions stay, open in any order. Each loans its battery for a set task. **The first win pays an RP bonus** (half that battery's research cost, at least 500); it no longer grants the battery. Batteries come only from research.
@@ -89,6 +99,6 @@ The **Dev mode** switch in the top right corner of the menu bar is on by default
 
 ## Still to do
 
-- **Missions from the lineup.** The open battles still run a fixed day (`buildScript()` in the directors); only the heavy and long guns' missions follow the lineup. A day generated from the lineup would give every battery work that suits it. The hard part is that sites are baked into the ground at page load (`terrainHeight.js`, `trenchlines.js`, `world/data.js` read `SITES`), so a generator needs a pool of candidate positions per map.
+- **A day generated from the lineup.** The day now fits the lineup (above), but over the map's fixed sites and the script's timetable. A generated day, with new sites placed for the batteries fielded, needs a pool of candidate positions per map: the sites are baked into the ground at page load (`terrainHeight.js`, `trenchlines.js`, `world/data.js` read `SITES`).
 - **Upgrade visuals in battle, after that.** In order: an end-card line naming what the upgrades did; the Shells marks on shells in flight and in the crews' hands; aiming posts and bigger ready-use stacks in the gun pits; relief crews walking in to replace a fallen man. The paint and the relief radio line already carry over.
 - **Balance.** The pay and costs come from the all-auto headless crews; they need human playtesting. In WW2, the counter-attack's own short rounds grow with the number of guns still firing, so some upgrades turn early defeats into failed counter-attacks (DESIGN.md changelog).

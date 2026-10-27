@@ -8,6 +8,7 @@ import { SECTORS, LINES, lineX, DEG } from '../sector.js';
 import { TARGETS } from '../sim/tables.js';
 import { Director } from '../sim/director.js';
 import { Specialists } from '../sim/specialists.js';
+import { LineupDay } from '../sim/lineup.js';
 import { ENEMY_BATTERIES } from './targets.js';
 
 const PRIORITY = { sos: 10, barrage: 9, cb: 8, harass: 6, destroy: 5, wire: 4 };
@@ -34,6 +35,9 @@ export class DirectorWW2 extends Director {
     sim.phase = 1;
     sim.barrage = null;
     this.script = sim.scripted ? [] : this.buildScript();
+    // a career's lineup: the open battle's day fitted to it (sim/lineup.js)
+    this.day = sim.loadout && !sim.attract && !sim.scripted && this.op.kind === 'battle' ? new LineupDay(sim) : null;
+    if (this.day) this.script = this.day.wrap(this.script);
     this.si = 0;
     this.nobs = 0;
     this.attractT = 6;
@@ -96,6 +100,8 @@ export class DirectorWW2 extends Director {
   }
 
   siteMission(id, over = {}) {
+    // a lineup's day may send it to another site, hold it back or leave it out (sim/lineup.js)
+    if (this.day) { const g = this.day.gate(id, over); if (!g) return null; ({ id, over } = g); }
     const sim = this.sim, t = sim.targetById(id);
     if (!t) return null;
     const kind = t.kind;
@@ -211,17 +217,17 @@ export class DirectorWW2 extends Director {
 
   convoy() {
     const sim = this.sim, t = sim.targetById('X1');
-    if (!t) return null;
+    if (!t || (this.day && !this.day.reachable(t))) return null; // no battery in the field reaches the road
     sim.targetAI.convoy(t, sim.rng() < 0.5 ? 1 : -1);
     t.known = true;
     const m = this.siteMission('X1');
-    m.convoy = true;
+    if (m) m.convoy = true;
     return m;
   }
 
   train() {
     const sim = this.sim, t = sim.targetById('R1');
-    if (!t) return null;
+    if (!t || (this.day && !this.day.reachable(t))) return null;
     sim.targetAI.train(t);
     t.known = true;
     return this.siteMission('R1');

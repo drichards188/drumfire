@@ -35,13 +35,17 @@ function run({ seed, era, lineup, difficulty }) {
   const opp = opposition(era, levels);
   sim.newGame({ difficulty, seed, loadout: loadoutOf(levels), opposition: opp });
   for (const u of sim.units) u.mode = 'auto';
+  if (process.env.NODAY) sim.director.day = null; // NODAY=1: the fixed day, as before the lineup's (sim/lineup.js), to compare
   const roles = { deep: [0, 0], hard: [0, 0] }; // the heavy and long guns' missions (sim/specialists.js): opened, done
   sim.events.mission = (m, c) => { if (m.role && (c === 'new' || c === 'done')) roles[m.role][c === 'new' ? 0 : 1]++; };
+  let opened = 0, done = 0, failed = 0; // the site missions (not the SOS, the barrage or the roles')
+  const prev = sim.events.mission;
+  sim.events.mission = (m, c) => { prev(m, c); if (m.kind !== 'sos' && m.kind !== 'barrage' && !m.role) { if (c === 'new') opened++; else if (c === 'done') done++; else if (c === 'failed') failed++; } };
   while (sim.state === 'playing' && sim.time < 4000) sim.update(0.05);
   const r = battleReward(sim, { won: sim.state === 'victory' });
   return { seed, era, lineup, difficulty, won: sim.state === 'victory', min: sim.time / 60, opp, ...r,
     rounds: Object.fromEntries(sim.units.map((u) => [u.kind, u.stats.rounds])),
-    roles, sectors: sim.stats.sectorsLost, sos: sim.stats.sos.filter((q) => q.held).length + '/' + sim.stats.sos.length,
+    roles, sites: { opened, done, failed }, day: sim.director.day?.stats ?? null, sectors: sim.stats.sectorsLost, sos: sim.stats.sos.filter((q) => q.held).length + '/' + sim.stats.sos.length,
     zero: sim.zero ? `${sim.zero.survivors ?? '?'}/${sim.zero.n0} ${JSON.stringify(Object.fromEntries(Object.entries(sim.stats.lossBy).map(([k, v]) => [k, Math.round(v)])))}` : '-' };
 }
 
@@ -81,6 +85,8 @@ if (!isMainThread) {
     const kinds = Object.keys(rs[0].batteries);
     console.log(`${era} ${lineup} ${difficulty}: won ${rs.filter((r) => r.won).length}/${rs.length}, ${mean(rs.map((r) => r.min)).toFixed(1)} min, opposition cb ${rs[0].opp.cb.toFixed(2)} assault ${rs[0].opp.assault.toFixed(2)}, ` +
       `RP ${Math.round(mean(rs.map((r) => r.rp)))} (fought ${Math.round(mean(rs.map((r) => r.fought)))}, time ${Math.round(mean(rs.map((r) => r.time)))}, win ${Math.round(mean(rs.map((r) => r.win)))})`);
+    const day = rs[0].day ? ` (the lineup's day: ${['moved', 'waited', 'dropped', 'work'].map((k) => `${k} ${mean(rs.map((r) => r.day[k])).toFixed(1)}`).join(', ')})` : '';
+    console.log(`   site missions per game: opened ${mean(rs.map((r) => r.sites.opened)).toFixed(1)}, done ${mean(rs.map((r) => r.sites.done)).toFixed(1)}, failed ${mean(rs.map((r) => r.sites.failed)).toFixed(1)}${day}`);
     console.log('   heavy and long guns\' missions done/opened per game: ' + ['deep', 'hard'].map((k) => `${k} ${mean(rs.map((r) => r.roles[k][1])).toFixed(1)}/${mean(rs.map((r) => r.roles[k][0])).toFixed(1)}`).join(', '));
     if (process.env.GAMES) for (const r of rs) console.log(`   seed ${r.seed}: ${r.won ? 'won' : 'lost'} ${r.min.toFixed(1)} min, sectors lost ${r.sectors}, SOS held ${r.sos}, zero ${r.zero}`);
     console.log('   battery points: ' + kinds.map((k) => `${k} ${Math.round(mean(rs.map((r) => r.batteries[k])))} (${Math.round(mean(rs.map((r) => r.rounds[k])))} rds)`).join(', '));

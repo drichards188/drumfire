@@ -4,6 +4,7 @@
 import { SITES, SECTORS, LINES, lineX, gridRef, YARD, DEG } from '../sector.js';
 import { PHASES, CLOCK_KEYS, TARGETS } from './tables.js';
 import { Specialists } from './specialists.js';
+import { LineupDay } from './lineup.js';
 
 const OBS_AIR = ['AB', 'KT', 'PQ', 'WD', 'RX'];
 const PRIORITY = { sos: 10, barrage: 9, cb: 8, harass: 6, destroy: 5, wire: 4 };
@@ -30,6 +31,9 @@ export class Director {
     sim.phase = 1;
     sim.barrage = null;
     this.script = sim.scripted ? [] : this.buildScript(); // the tutorial range has no day's script
+    // a career's lineup: the day fitted to it (lineup.js)
+    this.day = sim.loadout && !sim.attract && !sim.scripted ? new LineupDay(sim) : null;
+    if (this.day) this.script = this.day.wrap(this.script);
     this.si = 0;
     this.nobs = 0;
     this.attractT = 6;
@@ -151,6 +155,8 @@ export class Director {
 
   // ------------------------------------------------------------------ mission specs from the sites
   siteMission(id, over = {}) {
+    // a lineup's day may send it to another site, hold it back or leave it out (lineup.js)
+    if (this.day) { const g = this.day.gate(id, over); if (!g) return null; ({ id, over } = g); }
     const sim = this.sim, t = sim.targetById(id);
     if (!t) return null;
     const kind = t.kind;
@@ -276,15 +282,17 @@ export class Director {
 
   convoy() {
     const sim = this.sim, t = sim.targetById('X1');
+    if (this.day && !this.day.reachable(t)) return null; // no battery in the field reaches the road
     sim.targetAI.convoy(t, sim.rng() < 0.5 ? 1 : -1);
     t.known = true;
     const m = this.siteMission('X1');
-    m.convoy = true;
+    if (m) m.convoy = true;
     return m;
   }
 
   train() {
     const sim = this.sim, t = sim.targetById('R1');
+    if (this.day && !this.day.reachable(t)) return null;
     sim.targetAI.train(t);
     t.known = true;
     return this.siteMission('R1');
@@ -418,6 +426,7 @@ export class Director {
   missionsUpdate() {
     const sim = this.sim, now = sim.time;
     this.specialists?.update();
+    this.day?.update();
     for (const m of sim.missions) {
       if (m.state === 'done' || m.state === 'failed') continue;
       const t = m.targetId ? sim.targetById(m.targetId) : null;
