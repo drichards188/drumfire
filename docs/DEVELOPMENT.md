@@ -25,7 +25,9 @@ node tools/simtest.mjs 1 2 3 --all --difficulty all --table   # + a scripted pla
 node tools/ww2test.mjs 1 2 3 --op all --difficulty all        # the WW2 operations with the auto crews; --log, --quiet
 node tools/ww1test.mjs 1 2 3 --difficulty all --quiet         # the WW1 German battle and the Paris Gun's mission; --op, --player, --table, --jobs N
 node tools/berthatest.mjs 1 2 3 --difficulty all              # Big Bertha demo games played by the crew logic; --log, --limit
-node tools/progressiontest.mjs                                # the campaigns: any-order play, saves, rosters, targets, every victory path
+node tools/progressiontest.mjs                                # research, upgrades, pay, saves, and the campaigns: any order, rosters, targets, every victory path
+node tools/researchtest.mjs 1 2 3 --lineup all                # open battles with a career's lineups (start..max): wins, RP, battery points; --era, --jobs N
+node tools/hangarsheet.mjs --era all --jobs 3                 # the menu hangar's contact sheets: each battery's parade and each upgrade's hover view, levels 0 to 3 (shots/sheets)
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
@@ -101,7 +103,8 @@ Page-local viewers (dev server only):
 
 - **Bed relaying.** Relaying Bertha's or the Gamma's bed is instant for now; the 100 s it took is to come back (`src/ww1/special.js`).
 - **WW1 German lessons.** The era has none yet.
-- **Campaign playtesting.** The campaigns' difficulty and mission pacing still need playtesting; the tests check the rules only ([PROGRESSION.md](PROGRESSION.md)).
+- **Progression playtesting.** The research pace, the upgrade costs and the campaigns' difficulty come from the headless auto crews and need human playtesting; the tests check the rules only ([PROGRESSION.md](PROGRESSION.md)).
+- **Missions from the lineup.** Only the heavy and long guns' missions follow the batteries fielded; the rest of the open battle's day is fixed ([PROGRESSION.md](PROGRESSION.md#still-to-do)).
 - **Planned for the WW2 mode**, not built yet ([WW2.md, "Planned improvements"](WW2.md#d-planned-improvements-not-built-yet)): short skill moments at the key steps of the V-1 and V-2 launches; shoot and scoot for the A4 (several firing points, the convoy driving between them); and the Karl's crew, who slide along in their standing poses while it drives between positions.
 - **The Paris Gun's target effects.** Its effects on the railway junction, the tank depot and the reserve camp are written but inactive: they need the gun in the open battle, which no operation has. Only the aerodrome's (fewer raids on the gun) works.
 - **Blast-flattened grass.** Grass flattened by a muzzle blast (`fx.onGust`) is written but not switched on.
@@ -113,7 +116,7 @@ index.html           the main menu and the game page (src/boot.js picks which)
 bertha.html          the Big Bertha demo
 models.html, ui.html, audio.html, world.html, fx.html   dev pages
 src/boot.js          menu or game: a URL with play, tutorial or sandbox is a game; first the WebGL check (src/ui/gpu.js)
-src/menuItems.js     the menu's entries; src/ui/menu.js the menu (DOM only), src/ui/loading.js the loading screen
+src/menuItems.js     the menu's entries; src/ui/menu.js the menu (hangar, research, the mission dropdown), src/ui/hangar.js its 3D gun view, src/ui/loading.js the loading screen
 src/progression.js, campaign-data.js, campaign.js   the career, the batteries and missions, the mission scenarios
 src/main.js          orchestration, settings (lil-gui), keys, frame order
 src/sector.js        the world frame: units, trench lines, sectors, sites, places, grid references
@@ -133,7 +136,7 @@ src/ui/              the fire control console (consoles/: the cards, the procedu
 src/audio.js         the sound engine; public/audio holds the eight recordings (and voice-de/, the WW2 crew voices: src/ww2/voices.js)
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
-tools/               simtest, ww2test, ww1test, berthatest, progressiontest, audiotest, shot, menushots, voicetest;
+tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, hangarsheet, audiotest, shot, menushots, voicetest;
                      make-voices.py and pick-voice-takes.py (the WW2 crew voices, docs/VOICES.md)
 public/menu/         the main menu's background stills (tools/menushots.mjs)
 docs/                PLAYING.md (how to play, every key), MODELLED.md (rendering, simulation, sound), HISTORY.md (what is real), DEVELOPMENT.md (this page),

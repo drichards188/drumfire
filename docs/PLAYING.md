@@ -2,30 +2,40 @@
 
 Back to the [README](../README.md).
 
-This page covers the menu, the campaigns, every era's units and operations, the special weapons' drills, the Big Bertha demo, every key and the tutorials.
+This page covers the menu, research and the campaigns, every era's units and operations, the special weapons' drills, the Big Bertha demo, every key and the tutorials.
 
 ## The menu
 
-- **Choose.** The page opens on the main menu. Pick an era (1917 British, WW1 German or WW2 German), a tab (Battles, Campaign, Tutorials, Your batteries), one entry in its list and a difficulty (Easy, Normal or Hard).
-- **Play.** Press "Play mission", or Enter, or double-click the entry; Up and Down walk the list. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back.
+- **The top bar.** Pick an era and nation (1917 British, WW1 German or WW2 German), then a screen: **Hangar** or **Research** (with the era's research points beside it).
+- **Loading.** The menu opens behind a loading screen that lifts once the hangar is fully drawn.
+- **Hangar.** Your unlocked batteries. The one you pick is drawn up on a parade ground for inspection: every gun it has earned side by side, each gun's real minimal crew in ranks in front of it (in blocks for the biggest guns), plus any relief crews, an inspecting officer and his sergeant facing them. The railway guns stand on their track, their crews either side of it. Drag to orbit, the wheel to zoom; the camera turns slowly by itself. The battery's figures are on the left, its **modifications** (guns and parts to buy) on the right, and every battery of the era along the bottom: click one, or Left and Right. With dev mode on, the parade shows every battery at its best, as it would take the field. Beside each gun stand its shells and its powder (bagged charges or brass cases), the shells marked by the battery's Shells upgrade: a fresh coat and a green band (I), a white band and a taller fuze (II), a pointed ballistic cap (III).
+- **Upgrades you can see.** Every modification shows on parade: Barrel (sponge staves and a bucket on a groundsheet, then the star gauge on its trestles, then a canvas cover on the muzzle), Breech (the rammer and shell tongs, then oil cans and the artificer's chest, then the breech opened and oiled with a round on the loading tray), Sights (red-and-white aiming posts, then the director on its tripod, then the plotting table under an awning), Camouflage (disruptive paint, then hessian screens along the gun's right and back, then the net drawn back off the gun and hung behind it), Ammunition supply (more of the gun's own shells piled behind its display, one pyramid, then two, then three, and the powder heaped higher with them), Relief crews (a squad of their own in working dress). Hover a modification and the camera goes to it, with a ring on the ground under it; before you buy the first level, to the place where it will stand. The next gun's place is pegged out at the end of the line.
+- **In battle** the guns wear the same camouflage paint, and the radio says when a relief takes a fallen man's place.
+- **Research.** The era's tree: click a battery to see it, research it, or upgrade it. "Preview the full battery" opens it in the hangar at full strength, every gun with its crew, with a way back to Research.
+- **To battle.** The dropdown beside the To battle button chooses what to play: the Battles, Campaign and Tutorials lists, the chosen one's orders, and the difficulty (Easy, Normal or Hard). To battle, Enter, or a double-click on an entry plays it; in the dropdown Up and Down walk the list and Esc closes it. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back, and the end card's Research button goes straight to the Research screen.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
 - **AI crews.** Units you are not operating fight on their own with an AI crew, in whatever mode you left them.
 
-## Campaigns and earned batteries
+## Research, upgrades and the campaign
 
-- **Start small.** In the 1917 and WW2 eras you start with one battery (the 6-inch howitzers, or the 10.5 cm leFH 18) and earn the rest in that era's campaign.
-- **Any order.** Every mission is open from the start: play them in whatever order you like.
-- **Each mission** loans you its battery on manual, with every earlier battery of its era beside it on auto (earned or not). Each has its own target matched to its role, under counter-battery fire.
-- **To win**, finish every assignment with the right fuze and enough rounds before the time runs out (longer on Easy, shorter on Hard). A V-1 or V-2 launch counts when the bearing is within 1 degree and the range within 1 %, with no oxygen shortfall.
-- **To lose:** lose the loaned battery, or let its target be destroyed before its shoot is complete.
-- **The reward.** Win and the battery is yours: it joins the open battle (the V-1 and V-2 fire only in their own operations).
-- **What earning does.** A battery not yet earned stays out of the open battles (Ypres and WW2 Flanders). The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start.
-- **Saving.** Progress is saved in the browser; the "Your batteries" tab lists the roster.
-- **WW1 German** has no campaign: every battery is yours from the start.
-- **Dev mode.** A switch at the foot of the menu opens every battery and mission for testing, without marking anything won. It is on by default for now; switch it off to play the batteries you have earned.
+- **Start small.** In the 1917 and WW2 eras you start with one battery (the 6-inch howitzers, or the 10.5 cm leFH 18) with **one gun**. The open battle (Ypres, or the WW2 ridge battle) fields the batteries you have researched, with the guns and parts they have earned.
+- **Every battle pays**, won or lost: research points (RP) for the era, and battery points to each battery for its own fire. Leaving early pays what was earned so far.
+- **Research.** The Research screen (top bar) shows the era's tree and your RP: click a battery to see it, then research it. 1917: 6-inch, then the 60-pounders and the 9.2-inch, then the 15-inch (after the 9.2-inch) and the 18-inch railway gun (after the 60-pounders). WW2: leFH 18, then the sFH 18 and the Nebelwerfer, then the Mörser 18 and the K 18 (after the sFH 18), then the Karl (after the Mörser) and the Gustav (after the K 18).
+- **Upgrades.** In the hangar's modifications panel (or on the Research screen), a researched battery spends its own points on more guns (up to its full battery) and on seven parts with three levels each: shells (damage), barrel (accuracy), breech and loading gear (reload), sights and survey (first round and laying), camouflage (less for the enemy to locate), ammunition supply, and relief crews (more men at each gun to take turns at the heavy work: reserves against casualties, and a little faster loading). Any order.
+- **The enemy follows your strength.** A small lineup meets less counter-battery fire and smaller attacks.
+- **Heavy and long guns' missions.** "Deep target" missions stand beyond every gun's reach but the long guns' (the 18-inch railway gun; the K 18 and the Gustav). "Heavy target" missions are concrete shelters only heavy shells break (the 9.2-inch and up; the Mörser 18, the Karl and the Gustav). They come by day, one of each at a time, only when you field a battery that can take them.
+- **Campaign missions** are one-off challenges in any order: each loans its battery, with every earlier battery of its era beside it on auto, each with its own target under counter-battery fire. Finish every assignment with the right fuze and enough rounds before the time runs out (a V-1 or V-2 launch counts within 1 degree and 1 % of range, with no oxygen shortfall). The first win pays an RP bonus; it does not grant the battery.
+- **Always open.** The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start, with their whole roster.
+- **Saving.** Progress is saved in the browser.
+- **WW1 German** has no career: every battery is yours from the start.
+- **Dev mode.** A switch in the top right corner of the menu bar puts every battery in the open battles, researched and fully upgraded, for testing. It is on by default for now; your own career still earns underneath and the hangar and the Research screen show it. Switch it off to play it.
+- **Unlimited points.** The switch under it makes research and modifications cost nothing (the tree order still holds), for testing. Off by default; the points you earn keep adding up underneath.
+- **Reset.** The red button beside the switches starts a new career: research, upgrades, points, battles and campaign wins back to nothing. Click it, then click "Confirm?" within 4 seconds. The switches stay as they are.
 
-| Era | Mission | Earns |
+Details, costs and numbers: [PROGRESSION.md](PROGRESSION.md).
+
+| Era | Mission | Battery on loan |
 |---|---|---|
 | 1917 | 01 Beyond the howitzers | 60-pounders |
 | 1917 | 02 Crack the pillboxes | 9.2-inch howitzers |
@@ -42,7 +52,7 @@ This page covers the menu, the campaigns, every era's units and operations, the 
 
 ## 1917 British: the Heavy Artillery Group
 
-The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five units (in the battle, the ones you have earned):
+The 1917 battle is "Ypres salient" in the menu's Battles tab. The Group has five units (in the battle, the ones you have researched):
 
 | Key | Unit | Call sign | Battery | Guns |
 |---|---|---|---|---|
@@ -240,7 +250,7 @@ A separate first-person demo (`/bertha.html`, in the Battles tab of the WW1 Germ
 
 | Key | Action |
 |---|---|
-| 1 to 9 | select a unit (the number on its tab; a battery not yet earned says so) |
+| 1 to 9 | select a unit (the number on its tab; a battery not yet researched says so) |
 | P | WW2 German: man the selected battery's gun in person, or leave it ([At a gun](#at-a-gun-ww2-german)) |
 | Mouse drag, wheel | orbit and zoom the camera |
 | F | ride the selected unit's newest shell to its burst; F again returns to the gun |
@@ -315,7 +325,7 @@ While you serve a gun in person ([Serving a gun in person](#serving-a-gun-in-per
 
 - **Where.** The menu's Tutorials tab holds short guided lessons on a quiet scripted range, always in daylight: the sun is held at 10:00 and the weather is Clear or Overcast; your own settings come back when you leave.
 - **How.** Each lesson shows an instruction card over the 3D view, pulses the console controls it is about, and completes a step when you have done what it asks. Skip step and Esc are always there.
-- **Always open.** Lessons are open whatever the campaign has earned, and completed ones are ticked (stored in the browser).
+- **Always open.** Lessons are open whatever you have researched, and completed ones are ticked (stored in the browser).
 
 **1917 British**, six lessons (`/?tutorial=basics|ranging|clockcode|heavy|counter|sos`):
 

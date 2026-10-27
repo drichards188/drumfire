@@ -635,10 +635,12 @@ export function buildKarl() {
     PM.add('dark', box(0.1, 0.22, 0.9, -1.43, 1.95, -1.0));
   }
   // four shells in the hold (the leading one, at the crane's pick-up, is the one crews.js lifts first)
-  // (lying across the hold, noses to the left; the slot at the pick-up is left empty: crews.js draws that one)
+  // (lying across the hold, noses to the left; the slot at the pick-up is left empty: crews.js draws that one). The
+  // pick-up lies near the bin's rear wall (z -2.65), so the other three lie forward of it, 0.68 m apart (the 0.6 m shell
+  // and its driving bands clear), all inside the bin (z -2.65 to 0.75)
   const PMS = mk();
   const pickZ = CRANE.z - R - (SCH.z0 + SCH.z1) / 2; // the pick-up in the carrier's frame
-  for (const dz of [-1.2, -0.6, 0.6]) {
+  for (const dz of [0.68, 1.36, 2.04]) {
     const g = shellGeometry(SHELL.len, SHELL.rad);
     const t = new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(0, PICK_Y, pickZ + dz);
     PMS.add('shell', g.body.applyMatrix4(t), { tint: 0xa2aab4 }); PMS.add('brass', g.band.applyMatrix4(t)); PMS.add('steel', g.fuze.applyMatrix4(t));

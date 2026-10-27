@@ -5,7 +5,7 @@ import { V, box, rbox, vehicleMats, Parts, shellGeometry } from './kit.js';
 
 export function newRig(scheme) {
   const root = new THREE.Group();
-  const rig = { root, mats: vehicleMats(scheme), pivots: {}, anchors: { muzzles: [], missileSlots: [] }, boxes: [], slots: [], setLoaded: null };
+  const rig = { root, scheme, mats: vehicleMats(scheme), pivots: {}, anchors: { muzzles: [], missileSlots: [] }, boxes: [], slots: [], setLoaded: null };
   rig.P = new Parts(rig.mats);
   rig.setLoaded = (i, loaded) => { const s = rig.slots[i]; if (s) for (const o of s) o.visible = loaded; };
   return rig;

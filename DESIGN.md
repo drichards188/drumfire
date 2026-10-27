@@ -223,6 +223,8 @@ sim.events = {                         // all optional; called with optional cha
   phase(n, title, sub), state(state),  // director
 };
 sim.newGame({ difficulty: 'Normal', attract: false, seed });
+// optional: allowedKinds (the kinds in the field), loadout ({ kind: { guns, mods } }: the open battles' researched lineup,
+// research.js), opposition ({ cb, assault }: scales on the enemy for that lineup); see "Research and upgrades"
 sim.update(dt);                        // dt already scaled by the time compression
 sim.command(unitId, name, args);       // see Commands
 sim.units; sim.targets; sim.shells; sim.missions; sim.infantry; sim.state; sim.phase; sim.score;
@@ -234,6 +236,7 @@ sim.rangeTable(kind, charge);          // [{ range, el, tof, apex }] from the ga
 sim.solve(unitId, x, z, charge?);      // { line, range, el, tof, charge } nominal laying for a point (no errors)
 sim.unitById(id); sim.targetById(id); sim.missionById(id);
 sim.alpha;                             // 0..1, how far the real time is into the next fixed step (render interpolation)
+sim.earned;                            // { unitId: credit } this battle's pay so far (sim.credit; research.js battleReward)
 ```
 
 **Unit** (`sim.units[i]`, plain data read by the UI and the render layer):
@@ -390,8 +393,8 @@ the chase camera, audio and the panel; the frame loop steps the sim with `dt` sc
 settings (lil-gui behind the gear button); `QUALITY` presets (Low/Medium/High/Ultra) set pixel ratio,
 shadow map, AO, samples and the fx budget. `window.__drumfire` exposes every system, `frame(dt, draw)`
 and `fastForward(seconds, { unit, scale })`. URL params `?quality=`, `?play=1`, `?difficulty=`, `?unit=N`.
-The page boots through `src/boot.js`: `/` is the main menu (`src/ui/menu.js`, DOM only, entries from
-`src/menuItems.js`), a URL with `play`, `tutorial` or `sandbox` is a game page whose loading screen
+The page boots through `src/boot.js`: `/` is the main menu (`src/ui/menu.js`, entries from `src/menuItems.js`; only its
+hangar loads three.js, `src/ui/hangar.js`, and nothing of the battlefield), a URL with `play`, `tutorial` or `sandbox` is a game page whose loading screen
 (`src/ui/loading.js`) stands while `init()` builds the world; then `start()` runs `sim.newGame` (or the lesson
 starts) at once.
 
@@ -458,9 +461,16 @@ the objective at about 40.5 min; defeat earlier when two sectors fall or every g
 
 | Difficulty | all auto | scripted 15in+9.2in+6in | scripted all five |
 |---|---|---|---|
-| Easy | 54 of 72 | 66 | 67 |
-| Normal | 25 of 72 | 48 | 67 |
-| Hard | 1 of 72 | 4 | 16 |
+| Easy | 46 of 72 | 67 | 71 |
+| Normal | 20 of 72 | 46 | 64 |
+| Hard | 0 of 72 | 6 | 14 |
+
+(heavy and long guns' missions) All nine cells re-run on seeds 1 to 72 after the deep and hard missions came in
+(section "Missions for the heavy and the long guns"). Before: Easy 54 / 66 / 67, Normal 25 / 48 / 67, Hard 1 / 4 / 16. The
+auto crews lose a little more (their 9.2-inch, 15-inch and railway gun spend time on long shoots and are on them when an
+SOS comes); the scripted players, who keep to their own missions, are about where they were. All auto on Normal, per game:
+deep missions done 0.1 of 2, hard 0.4 of 2 (the 18-inch alone, at about 100 s a round, rarely finishes a depot in the
+window; with upgrades 1.3 and 0.8).
 
 (SOS without a deadline) All nine cells re-run on seeds 1 to 72 after the SOS mission lost its deadline (see the
 changelog). Before: Easy 54 / 66 / 67, Normal 22 / 52 / 65, Hard 1 / 6 / 14; Easy is unchanged, as its longer clock never
@@ -484,6 +494,59 @@ average with auto crews against 74 % with the scripted player on all five (the a
 `DIFFICULTY` (err, cb, dmg, assault, time, ammo, sig, zero), the dispersion and calibration in `GUNS`, `SHELLS` radii, the CB
 cadence in `enemy.js` (one round per gun per 85 s / (cb * activity)), the breach penalty in `director.js` (0.5 of a sector per group in),
 the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or more; single games flip near the loss line.
+
+## Research and upgrades (the open battles)
+
+The career of the two research eras (1917 British, WW2 German; the WW1 German era stays an all-open sandbox).
+`src/research.js` is the data and the pure functions, `src/progression.js` the saved career, the menu's Hangar
+(`ui/menu.js` `hangarInfo`, `hangarMods`, `slotCards`; the 3D view `ui/hangar.js`) and Research screen (`researchView`)
+the screens; docs/PROGRESSION.md says it for players.
+
+- **Trees** (`TREES`): per era, `{ kind, tier, after, cost }` (RP). 1917: 6-inch (tier I) -> 60-pounder -> 18-inch
+  railway; 6-inch -> 9.2-inch -> 15-inch. WW2: leFH 18 -> sFH 18 / Nebelwerfer; sFH 18 -> Mörser 18 -> Karl;
+  sFH 18 -> K 18 -> Gustav. Costs 450 / 1,100 / 2,000 for tiers II / III / IV.
+- **Upgrades**: `levels = { guns, shells, barrel, breech, sights, camo, supply, crew }`. Every battery starts with one gun and
+  earns the rest of its pits (`maxGuns(kind)`, its open battle definition); each part has three levels (`PARTS[].fx`).
+  Bought with the battery's own points (`nextCost`). `modsOf(levels)` gives the sim's multipliers `{ dmg, disp, wear,
+  load, bias, lay, sig, ammo }`, all 1 for none.
+- **In the sim** (`sim.newGame({ loadout, opposition })`; without them nothing changes, the British, WW2 and WW1 tests
+  are bit-identical): `createUnits` mans the first `guns` pits (`render/guns.js` hides the rest; their pits stand empty)
+  and sets `unit.mods`; `piece.layK` (laying rates in `slew`), the loading steps (`beginStep`), the lay's first-round error
+  (`drawBias`), the dispersion and the calibration (`fireShell`, `createUnits`), the wear and the signature per round, the
+  stock and the resupply, and `shell.dmgK` (multiplies a burst's damage in `Targets.applyBurst`). `opposition(era,
+  levels)` weighs the lineup against the whole tree at full strength (each battery the same, times its guns' share, times
+  up to 1.3 for parts): `cb` (counter-battery fire and raids) moves half way toward it, `assault` a fifth, neither above 1.
+- **Pay**: `sim.credit(unitId, pts)` (never in attract or scripted): a quarter point per point of damage that counted and
+  the target's `TARGETS[kind].score` for a kill (`Targets.damagePart`), and a mission done shares its points among the
+  units by the rounds each fired on it while assigned (`mission.fired`, counted in `fireShell`; `Director.finish`, with
+  `mission.points` over `POINTS`). `battleReward(sim, { won })`: each battery's credit times `PAY[difficulty]` (0.8 / 1 /
+  1.35) as its points; RP = their sum + 4 a minute in action (up to 45) + 400 for a win. main pays once (`payOut`): at the
+  end card, when the page is left (`pagehide`) or the battle is given up for another (no win bonus then).
+- **Campaign missions** pay a one-off RP bonus on the first win (`missionBonus`: half the featured battery's research
+  cost, at least 500) and no longer grant a battery.
+- **Save** `drumfire.campaign.v3`: `{ completed, rp: { era }, researched, bp: { kind }, levels: { kind }, battles: { era },
+  dev, devSet }`; a v2 save is read once (its won missions stay won and their batteries researched). Dev mode
+  (`DEV_DEFAULT` on) lays every battery researched and at its top over the career in battle (`Progression.battle(era)`);
+  the career underneath still earns and the menu's screens show it.
+- **Measure** with `node tools/researchtest.mjs [seeds] [--era] [--lineup start|early|mid|full|max|part:<id>|all]`.
+  Normal, all auto, 24 seeds: 1917 start 0, early 1 to 3, mid 2 to 9, full 7 to 9, max 7 to 14 wins; WW2 start 0, early 1,
+  mid 17, full 5 to 10, max 2 to 6 (the WW2 counter-attack walks into its own short rounds: more guns kept firing means
+  more of them, see the changelog). A lost start battle pays about 200 RP, a full lineup's about 1,500, a maxed one's
+  about 2,200.
+
+### Missions for the heavy and the long guns
+
+`src/sim/specialists.js` `Specialists` (made in `Director.reset` and `DirectorWW2.reset`, stepped from
+`Director.missionsUpdate`): the theatre's sites with a `role` get `destroy` missions with `role`, `points: 90`, priority 6,
+a 1,500 s window and an aeroplane observer. **deep**: beyond every gun but the long guns (1917 `SITES` E1 to E3, 13 to
+16 km out: the 18-inch railway howitzer; WW2 Flanders W1 to W3, 11 to 15 km west of the gun area: the K 18 and the
+Gustav). **hard**: target kind `bunker` (three concrete shelters, `hardness: 'hard'`, 3 parts of 100; model
+`models/t/mebu.js` `buildBunker`; delay fuze by default), with `minHard: 40` so `Crews.canServe` keeps every gun whose
+`SHELLS[kind].hard.D` is under it off (1917 S1 to S3: the 9.2-inch, 15-inch and railway; WW2 V1 to V3: the Mörser 18,
+the Karl, the Gustav). One of each role at a time, by day, from phase 2, first at 360 to 480 s, the next 240 to 420 s after
+the last ended, sooner (120 s) when a battery that can serve one has had no mission for 90 s; never when no battery in the
+field can serve it. Their own random stream (`mulberry32(seed ^ 0x5eed5)`), so they never draw on `sim.rng`. The crews add
+10 to a role mission's score.
 
 ## Tutorial (phase 3)
 
@@ -935,7 +998,7 @@ other WW1 file) only on a WW1 page, sets `GUN_ERA.ww1` (`models/guns.js`: Bertha
 | 6 | `gamma` | 42 cm Gamma-Mörser on its bed | 1 | (11200, 1800), 265 | `special: 'gamma'` (the bed), `ready` |
 
 The units are ordered by calibre, smallest first (ties by shell weight): the ids, the keys 1 to 6 and the tab column
-follow it; the menu's roster (Your batteries) lists the battle's six and then the Paris Gun. Code finds a unit by its
+follow it; the menu's WW1 hangar (its batteries along the bottom) and Research screen list the battle's six and then the Paris Gun. Code finds a unit by its
 kind, never by its id.
 
 The Paris Gun's mission (op `paris`, kind `'paris'`, "Paris Gun" in the menu), built like the WW2 Gustav's and
@@ -1824,3 +1887,150 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   that series. The crews never range again on a task in fire for effect, so the British simtest (with the scripted
   players), `ww2test`, `ww1test --player` and `gunnertest` are bit-identical; `gunnertest --manual`, whose commander
   takes tasks other batteries hold, now gets those reports and plays out differently.
+- (career: research and upgrades) The campaign's unlock missions give way to research (section "Research and upgrades"):
+  `src/research.js` (trees, parts, costs, the sim's multipliers, the opposition, the pay), `progression.js` save v3 (RP per
+  era, researched, battery points, levels, battles; v2 read once), `sim.newGame({ loadout, opposition })`, `unit.mods`,
+  `piece.layK`, `shell.dmgK`, `sim.earned` and `sim.credit`, `mission.fired`, `mission.points`; `render/guns.js` hides
+  the guns a battery has not earned; main fields `career.battle(era)` in the two open battles and pays at the end card,
+  on `pagehide` or a new battle; the end card shows the RP and the battery points. The menu's "Your batteries" tab is now
+  Research (the tree, each battery's guns and parts); campaign missions pay a first-win RP bonus and grant nothing else.
+  Without a loadout the British, WW2 and WW1 tests are bit-identical. `tools/progressiontest.mjs` covers it;
+  `tools/researchtest.mjs` measures lineups. The tools that seed a dev save (`shot.mjs --dev`, `menushots.mjs`,
+  `voicetest.mjs`) write v3.
+- (sim: missions for the heavy and the long guns) `src/sim/specialists.js` (section "Missions for the heavy and the long
+  guns"); `sector.js` `SITES` gains E1 to E3 (deep: two dumps and a corps HQ, 13 to 16 km out) and S1 to S3 (hard), the
+  WW2 Flanders op W1 to W3 (an Allied supply depot, an airstrip, a corps HQ) and V1 to V3 (bunkers); `role` on a site;
+  the target kind `bunker` (`TARGETS`, `FFE` for the guns that serve it, `partLayout`, `models/t/mebu.js` `buildBunker`,
+  concrete ground in `terrainHeight.groundKindAt` and `sim.groundOf`); `addMission` takes `role`, `points`, `minHard`;
+  `Crews.canServe` checks `minHard`; the default fuze on a bunker is delay. The British balance table was re-run (see
+  Balance); WW2 Flanders all auto on seeds 1 to 24: Easy 22 / Normal 5 / Hard 4 before, 17 / 6 / 5 after (seeds 1 to 8:
+  8 / 1 / 1 before, 4 / 2 / 2 after); WW1 unchanged (no role sites).
+- (finding, not changed) In the WW2 open battle more of our guns surviving to the counter-attack means more short rounds
+  on our own infantry in the Feuerwalze (`stats.lossBy.short`): the camouflage and breech upgrades, each alone on every
+  battery, turn early defeats into failed counter-attacks. A fix would pace the Feuerwalze by a timetable rate rather than
+  by how fast the guns load; it would change the WW2 balance, so it waits for a decision.
+- (menu: a garage) The main menu is laid out as a tank game's garage (`ui/menu.js`, `menu.css`): a top bar with the era
+  and nation tabs, the screens Hangar and Research (`VIEWS`, the era's RP beside Research) and the mission chooser, a
+  dropdown (`.mn-drop`: the Battles, Campaign and Tutorials lists, the chosen entry's orders, the difficulty, the keys)
+  beside To battle. The Hangar shows the selected battery's gun in 3D (`ui/hangar.js` `createHangar(host, { onState })`
+  -> `{ show(kind, era), setActive(on) }`: three.js, OrbitControls and `models/guns.js` imported on first use, one cached
+  root per era and kind, drawn only while on screen, `GUN_ERA.ww1` for Bertha on the WW1 tab, the gun's still from
+  `public/menu` without WebGL), its figures (`hangarInfo`: range from the range table, shell, reload with the career's
+  breech, guns, crew, traverse), its modifications or research (`hangarMods`, sharing `modsBlock` and `researchBlock`
+  with the Research screen) and the era's batteries along the bottom (`slotCards`). The selected battery per era is
+  `memo.rs[era]`, shared by both screens; `drumfire.menu` gains `view`; `?view=research` opens that screen
+  (`menuHref(q, sel, view)`; the game's end card has a Research button when the battle or mission paid RP). The
+  "Your batteries"/Research list tab and the menu's two-column layout are gone; the dev switch is a class
+  (`.dev-unlock`), shown in both screens.
+- (menu: the parade ground; career: the gun detachment) The hangar (`ui/hangar.js`) draws the era's whole lineup up for
+  inspection instead of one gun: `show({ era, lineup: [{ kind, guns, men, own }], focus })` (menu.js `parade`, from
+  `Progression.lineupLevels`, so dev mode parades every battery at its best; a battery not in the lineup stands as one
+  unmanned gun), each battery's guns side by side in tree order, each gun's detachment in ranks in front of it
+  (`buildCrewman` standing, the No. 1 a pace ahead, at most 30 figures a gun; dress per era in `DRESS`), an inspecting
+  officer and sergeant moved to the battery in view, and the parade square round them (gravel inside whitewashed stones,
+  huts and tents from `world/props.js` through the `Mesher`, telegraph poles, shell stacks, crates, a wagon and a limber,
+  instanced poplars and trees, a sky dome and fog). The camera looks along the line from the right front and glides
+  between batteries. The world's textures and plain materials moved from `world/mats.js` to `world/textures.js`
+  (`plainWorldMats()`, no shader patches: `shaderlib.js` rewrites three's chunks for the whole page), which `mats.js`
+  patches as before. A seventh part, `crew` (Gun detachment, `PARTS`): `modsOf` gains `crew` (added: 0.25, 0.5, 0.75,
+  the share of the drill's number in reserve) and multiplies `load` with the breech's (0.97, 0.94, 0.9); `crewOf(kind,
+  levels, drill)`; in the sim a piece gets `crew = crewMax = round(drill * (1 + crew))` and `crewNeed` (the drill's
+  number), and `beginStep` and `needLoad` measure against `crewNeed ?? crewMax`, so the reserves soak up casualties.
+  Without a loadout nothing changes. The in-game crews still draw the drill's men only.
+- (menu: one battery on parade, a loading screen) The hangar shows the chosen battery only (`show({ era, battery:
+  { kind, name, guns, men, own } })`, menu.js `parade(career, era, kind)`), centred on the square, with the scenery
+  sized to it. A parade is assembled off the scene, compiled against the scene's lights and fog
+  (`renderer.compileAsync(staging, camera, scene)`), swapped in with its scenery and drawn once before it shows; the
+  battery before it stays in view meanwhile, and a veil (`.hg-veil`, step and bar) comes up if a change takes more than
+  350 ms. `createHangar(host, { onProgress(text, k), onReady() })`. The menu opens behind a loading screen
+  (`.mn-loading`: the brand, the era, a bar and the step) that lifts on the hangar's first `onReady` (or after a minute);
+  the hangar is loaded behind it even when the menu opens on Research.
+- (menu: real crews, the railway guns on their track, unlocked batteries only, the preview) `research.js` `DETACHMENT`
+  (each gun's minimal crew in action, sources in docs/HISTORY.md "Gun detachments", `est` for estimates),
+  `detachmentOf`, `crewOf` (the detachment and its reliefs), `menShown` (the guns card and the Paris Gun's card show the
+  sim's crew pool scaled to these men; the sim is unchanged). The part `crew` is now "Relief crews" (men to take turns;
+  fatigue is not modelled). The hangar parades the detachment plus reliefs, up to 600 men a gun: each dress baked once in
+  its standing pose (`applyBoneTransform` into a plain geometry) and drawn instanced; past 37 men in blocks of 36
+  (`formation`). The Gustav stands on its curved double track (`buildGustavSite`, its `track` group only), the 18-inch car
+  on a ballasted line (its root lifted to the rail head). The hangar lists only the batteries in the lineup
+  (`hangarKinds`: `career.unlocked`, every one in dev mode and in the WW1 sandbox); Research's "Preview the full battery"
+  opens any battery at full strength (every gun, the detachment without reliefs) with a "Back to research" bar.
+- (menu: the testing switches) Dev mode and a new **Unlimited points** switch sit stacked in the top bar's right corner
+  (`.mn-switches`, `[data-switch]`); the dev switch is no longer at the foot of the screens. `Progression.free`
+  (`setFree`, saved as `free`): `researchBlock` and `upgradeBlock` ignore the points and `research`/`upgrade` spend
+  nothing, the tree order still holds; the screens read "Unlimited". `tools/progressiontest.mjs` covers it.
+- (menu: the shells on parade; the railway guns' men off their track; the Karl's carrier) The hangar shows each gun's
+  shells beside it (`shellDisplay`: three standing on a timber stand, one in a cradle, `models/shells.js` `buildShell`
+  of `GUNS[kind].shell`), marked by the battery's Shells level (`battery.shells`, `SHELL_LOOK`): I a fresh, glossier coat
+  and a green filling band; II a white band and a taller brass nose fuze; III a pointed steel ballistic cap and a polished
+  driving band (game marks, not ordnance practice). A railway gun's detachment forms up in two halves either side of
+  its bed (`BED`: the Gustav's tracks from -6 to +11 m, the 18-inch's ballast), the inspecting party before the
+  right-hand half. `window.__menuHangar` (`hangar.three`) lets the headless tools aim the camera. `models/v/de/karl.js`:
+  two of the Munitionsschlepper's three stowed shells lay outside its bin, through the rear wall (z -3.37 and -2.77
+  against the wall at -2.65); all three now lie forward of the pick-up, 0.68 m apart, inside it.
+- (menu: the powder) Each gun's ammunition display adds its propellant to the right of the shells (`powder`, from
+  `models/shells.js` `buildCartridge` of the shell kind): brass cases stand on a plank with a pressed-board cap, bags (and
+  a bag ahead of its brass case) lie on a pallet; the Gustav and the M-Gerät add their brass main case
+  (`MAIN_CASE`: gustavc, m42c); none for the Nebelwerfer. The display is centred on its group (`shellDisplay` width and
+  depth include the powder).
+- (menu + battle: the upgrades made visible) `src/models/looks.js` `applyLook(rig, kind, era, levels)`: camouflage I+
+  swaps the gun's camo and paint materials for the era's disruptive scheme (`camoScheme`: 1917 earth / railcamo, WW1
+  bunt / earth, WW2 a new olive `upgreen` / dgelb, the first that is not the gun's own; `newRig` records `rig.scheme`),
+  barrel III a bright band at the muzzle anchor, breech III a brass band at the breech anchor (radii found by rays cast
+  at the barrel). Used by the hangar's templates (cached per look) and by main for the lineup's battle rigs
+  (`mods.looks`, research eras only). The hangar (`ui/hangar.js`) adds round each gun: the kit on a groundsheet
+  (`kitSheet`: Barrel I staves and bucket, II star gauge; Breech I rammer and tongs, II oil cans and chest), the
+  aiming posts (Sights I) and director (II), brushwood (Camouflage II) and a net drawn back (III), a second shell stack
+  (Supply I) and a wagon and limber (II); once a battery: the plotting table (Sights III) and a tramway with a truck
+  (Supply III); the relief crews as their own squad in working dress (`DRESS.relief`). `show` takes `battery.levels`
+  and `battery.base`; each part records a spot, and `lookAt(part)` glides the camera there with a pulsing ring (the
+  modifications rows call it on hover and focus: `modsBlock(..., onHover)`). The sim radios a relief taking a fallen
+  man's place (`guns.damagePiece`, crews with `crewNeed`, not within 20 s). The powder heap lost its tarpaulin's sides.
+  Not yet in battle: the shell marks on shells in flight and in the crews' hands, aiming posts and bigger ready-use
+  stacks in the pits, reliefs walking in to the gun.
+- (menu: ammunition supply as piles) The Ammunition supply upgrade now piles more of the gun's own shells (its model
+  and Shells marks, `shellPiles`, instanced) behind its display, one pyramid a level; the generic 15 cm `shellStack`, the
+  wagon and limber and the tramway are gone (a player read the oversized generic shells as foreign ammunition), and so
+  are the square's side shell stacks and wagons (crates stay).
+- (menu: the career reset) A Reset button beside the testing switches (`.mn-reset`, two clicks: the first arms it as
+  "Confirm?" for 4 s) calls `Progression.reset()`: the research, levels, RP, battery points, battles and campaign wins
+  cleared, the dev and unlimited points switches kept. `tools/progressiontest.mjs` covers it. The bar's wordmark now
+  drops below 1700 px so the mission chooser keeps its room.
+- (menu: the upgrade cameras) Each upgrade's spot carries the sides it is best seen from (`face`, azimuths) and heights
+  (`el`); `bestView` tries them in order and takes the first from which rays to the spot and points round it meet
+  nothing of the parade (else the clearest), cached per parade. The camera's distance fits the spot into the free gap
+  between the panels (about 37 % of a wide screen). The barrel (level III) is framed whole, in profile, from the right
+  of the line's first gun looking back toward the end of the line (only its own ammunition and open ground behind); the
+  breech from behind and above. The camouflage net and brushwood are built apart (`cover`) and hidden while any other
+  upgrade is looked at.
+- (menu: the upgrades reviewed on contact sheets) `tools/hangarsheet.mjs [--era] [--kind] [--parts] [--levels] [--jobs]`
+  drives the menu's hangar headless (`window.__menuHangar.show`, and the new `pose(part)`: the camera on a part at once,
+  standing still, one frame drawn; `park` for the parade's lot and spots) and writes a sheet per battery to
+  `shots/sheets/<era>-<kind>.png`: the overview with no upgrades and with all at their top, then each upgrade's hover
+  view at levels 1 to 3. What the review changed: the barrel and breech bands are gone (bright rings read as chrome
+  trim); `applyLook(rig, kind, era, levels, { parade })` now gives every gun the camouflage paint (battle and hangar)
+  and, on parade only, barrel III a canvas muzzle cover with its strap (on each tube of a launcher, `anchors.muzzles`)
+  and breech III the breech opened, its block and mechanism bright oiled steel, a round on the loading tray (`setShell
+  ('tray')`; the hangar adds a tray and round on `anchors.breech` for guns without one). The kit (`kitSheet`) lies on a
+  canvas groundsheet above the gravel: Barrel I sponge staves, bucket and oil tin, II the star gauge on trestles beside
+  its case; Breech I rammer and tongs, II the artificer's chest open with oil cans and a tool roll. Camouflage II is
+  hessian screens (`props.hessianScreen`) along the gun's right and back, III the net drawn back off the gun and hung
+  in folds from a back rail: both on the far sides from the overview's camera, so the gun stays in view. The overview
+  frames the line's first gun and its ranks (`lot.first`: the gun's box and the men's, projected and fitted into the gap
+  between the panels from the left front, the rest of the line receding behind); a detachment over 40 men (Bertha, the
+  Gamma, the Paris Gun) forms up in halves either side of the gun as the railway guns' do, two blocks wide at most, and
+  so do the relief crews. Sights: the aiming posts (now set out in line) and the director stand together on the left
+  flank of the gun's ranks (a railway gun's: on its bed between the halves), seen from the front; level III's view is
+  the plotting table, which moved to the far end of the line past the reliefs. The views were widened where the sheets
+  showed them too close: the muzzle cover (radius six calibres), the open breech (it takes in the round on the tray:
+  `template` records `loaded`), the supply piles (from above the display in front), the relief crews (from their front,
+  a big squad's front block). The sheet tool blocks Vite's hot reload as `tools/shot.mjs` does.
+- (menu: the hover before the first level; the powder with the supply) Every upgrade has its camera spot from level 0,
+  at the place its first level will stand, so hovering a part not yet bought shows where it will appear (the sheets'
+  level 0 column). The menu's parade passes `battery.next = { guns, reliefs }` (`maxGuns`, the men relief crews I bring)
+  for an upgradable battery: the hangar then keeps the kit's place on the gun's right before any is bought and the
+  reliefs' place at the line's end, and pegs and tapes out the next gun's place after the last gun (the Guns row's
+  spot, seen from beyond the line's end with the last gun behind it; with every gun in, the last gun). The line now
+  runs on from the first gun's cell (centred on x = 0) instead of being centred, so a gun bought stands on its place
+  and none of the others moves. The display's powder heap grows with Ammunition supply, as the piles do: its rows times
+  the root of 1 + the level (`powder(kind, supply)`, `shellDisplay(..., supply)`).
