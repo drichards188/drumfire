@@ -33,7 +33,7 @@ await page.addInitScript(() => {
   };
   try { localStorage.removeItem('drumfire.voices'); } catch {}
   // the career's dev mode (as tools/shot.mjs --dev): every battery plays in the open battle, not only the earned ones
-  try { localStorage.setItem('drumfire.campaign.v2', JSON.stringify({ completed: [], dev: true })); } catch {}
+  try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {}
 });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}] ${m.text()}`); });

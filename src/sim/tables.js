@@ -113,6 +113,8 @@ export const TARGETS = {
   dump: { hardness: 'soft', parts: 5, partHp: 24, spread: 30, observer: 'air', score: 45, priority: 4 },
   balloon: { hardness: 'soft', parts: 2, partHp: 14, spread: 0, observer: 'foo', score: 30, priority: 3 },
   hq: { hardness: 'soft', parts: 3, partHp: 40, spread: 0, observer: 'air', score: 50, priority: 5 },
+  // three concrete shelters together: only heavy shells break them (a heavy target, sim/specialists.js; both open battles)
+  bunker: { hardness: 'hard', parts: 3, partHp: 100, spread: 0, observer: 'air', score: 120, priority: 6 },
   crossroads: { hardness: 'soft', parts: 4, partHp: 18, spread: 55, observer: 'map', score: 35, priority: 4 },
   railyard: { hardness: 'soft', parts: 9, partHp: 18, spread: 90, observer: 'map', score: 60, priority: 5 },
 };
@@ -120,9 +122,9 @@ export const TARGETS = {
 // How many rounds per piece a fire for effect needs, by gun kind (what a sensible crew orders); the
 // rest is dispersion. Index by target kind.
 export const FFE = {
-  bl15: { battery: 3, mebu: 4, dump: 3, hq: 3, balloon: 2, crossroads: 2, railyard: 3, wire: 2, sos: 3 },
-  rail: { battery: 3, mebu: 4, dump: 3, hq: 3, balloon: 2, crossroads: 2, railyard: 4, wire: 2, sos: 3 },
-  bl92: { battery: 5, mebu: 7, dump: 4, hq: 5, balloon: 2, crossroads: 3, railyard: 4, wire: 3, sos: 4 },
+  bl15: { battery: 3, mebu: 4, bunker: 4, dump: 3, hq: 3, balloon: 2, crossroads: 2, railyard: 3, wire: 2, sos: 3 },
+  rail: { battery: 3, mebu: 4, bunker: 4, dump: 3, hq: 3, balloon: 2, crossroads: 2, railyard: 4, wire: 2, sos: 3 },
+  bl92: { battery: 5, mebu: 7, bunker: 6, dump: 4, hq: 5, balloon: 2, crossroads: 3, railyard: 4, wire: 3, sos: 4 },
   bl6: { battery: 8, mebu: 12, dump: 6, hq: 8, balloon: 3, crossroads: 4, railyard: 5, wire: 6, sos: 6 },
   bl60: { battery: 8, mebu: 14, dump: 6, hq: 8, balloon: 3, crossroads: 4, railyard: 5, wire: 5, sos: 6 },
 };

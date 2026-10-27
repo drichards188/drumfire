@@ -302,6 +302,7 @@ export function los(ax, ay, az, bx, by, bz, clearance = 0.5) {
  */
 export function groundKindAt(x, z, h = heightAt(x, z)) {
   for (const s of SITES) if (s.kind === 'mebu' && Math.abs(x - s.pos.x) < 9 && Math.abs(z - s.pos.z) < 9) return 'concrete';
+  for (const s of SITES) if (s.kind === 'bunker' && Math.abs(x - s.pos.x) < 20 && Math.abs(z - s.pos.z) < 11) return 'concrete';
   for (const p of PLACES) {
     if ((p.kind === 'village' || p.kind === 'town') && Math.hypot(x - p.pos.x, z - p.pos.z) < p.r * 0.75) return 'rubble';
   }

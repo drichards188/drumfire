@@ -6,6 +6,8 @@
 import { el, setText, setCls, setStyle, card, Lamp, Bar, Btn } from '../widgets.js';
 import { STEPS, stepIndex, KIND_SHORT } from './common.js';
 import { TH } from '../theatre.js';
+import { GUNS } from '../../sim/tables.js';
+import { menShown } from '../../research.js';
 
 const LAID_TOL = 0.004;   // radians: a piece within about a quarter of a degree of its ordered line and elevation is laid
 const SHORT = { shell: 'SHELL', ram: 'RAM', cartridge: 'BAGS', close: 'CLOSE', prime: 'PRIME', lay: 'LAY', ready: 'READY' };
@@ -81,7 +83,8 @@ export class GunsCard {
       const idx = stepIndex(p);
       setCls(w.r, 'dead', dead);
       setCls(w.r, 'hurt', !dead && p.hp < p.maxHp * 0.5);
-      setText(w.crew, `crew ${p.crew} of ${p.crewMax}`);
+      const cs = menShown(p.kind, p.crew, p.crewMax, GUNS[p.kind]?.crew ?? p.crewMax); // the real detachment's numbers (research.js)
+      setText(w.crew, `crew ${cs.men} of ${cs.of}`);
       const can = !!TH.mannable?.has(unit.kind) && !dead && !!this.onMan;
       setCls(w.man, 'show', can);
       setCls(w.r, 'manned', !!p.manned);

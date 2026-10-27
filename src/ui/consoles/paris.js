@@ -18,6 +18,8 @@ import { el, setText, setCls, card, Btn, Bar } from '../widgets.js';
 import { mmss, commas } from './common.js';
 import { DEG } from '../../sector.js';
 import { nextFall, correction } from '../../ww1/paris.js';
+import { GUNS } from '../../sim/tables.js';
+import { menShown } from '../../research.js';
 
 const STEP_LINE = 0.5, STEP_RANGE = 100; // Strich, metres (Shift: ten times)
 const LOAD_WORDS = { depress: 'barrel down', open: 'breech open', shell: 'shell on the crane', ram: 'ramming', cartridge: 'the charges', close: 'breech closed', prime: 'primer', lay: 'raising, laying' };
@@ -195,7 +197,8 @@ class ParisDrill {
     setCls(this.drill, 'hide', setup);
     if (setup) this.updateSetup(u, st);
     else this.updateDrill(u, st, sim, p);
-    const crewTxt = p ? `Crew ${p.crew} of ${p.crewMax} · gun ${Math.round((p.hp / (p.maxHp || 1)) * 100)}% · ${u.ammo?.he ?? 0} shells${p.loaded ? ' + 1 loaded' : ''}` : '';
+    const cs = p ? menShown(p.kind, p.crew, p.crewMax, GUNS[p.kind]?.crew ?? p.crewMax) : null; // the real detachment (research.js)
+    const crewTxt = p ? `Crew ${cs.men} of ${cs.of} · gun ${Math.round((p.hp / (p.maxHp || 1)) * 100)}% · ${u.ammo?.he ?? 0} shells${p.loaded ? ' + 1 loaded' : ''}` : '';
     const site = st.stage?.camo >= 1 ? 'nets and flak up' : 'no nets or flak yet';
     setText(this.crew, `${crewTxt} · ${site}`);
     const ref = st.refused && sim && sim.time - st.refused.t < 6 ? st.refused.text : '';

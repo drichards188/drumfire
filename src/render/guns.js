@@ -105,13 +105,15 @@ export class GunViews {
   }
 
   reset(sim) {
-    // Unavailable batteries have neither a simulation unit nor a visible gun/crew.
+    // Unavailable batteries, and the guns a battery has not yet earned (research.js: it starts with one), have neither
+    // a simulation piece nor a visible gun or crew: their pits stand empty.
+    const has = (v) => !!sim.unitById(v.unit.id)?.pieces[v.piece.i];
     for (const v of this.allViews) {
-      const active = !!sim.unitById(v.unit.id);
+      const active = has(v);
       v.rig.root.visible = active;
       if (!active) v.crew?.setLevel(0);
     }
-    this.views = this.allViews.filter(v => sim.unitById(v.unit.id));
+    this.views = this.allViews.filter(has);
     this.byKey = new Map(this.views.map(v => [v.key, v]));
     for (const v of this.views) {
       const u = sim.unitById(v.unit.id);

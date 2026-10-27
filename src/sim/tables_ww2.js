@@ -189,9 +189,9 @@ export const FFE_WW2 = {
   lefh18: T({ abattery: 8, amedium: 8, tanks: 10, adump: 6, aconvoy: 4, aop: 4, hq: 8, railyard: 5, sbattery: 8, citadel: 12, gate: 12, eastfort: 12, fort: 12, turret: 12, magazine: 1, sos: 6 }),
   sfh18: T({ abattery: 6, amedium: 6, tanks: 7, adump: 5, aconvoy: 4, aop: 3, hq: 6, railyard: 5, sbattery: 6, citadel: 8, gate: 8, eastfort: 8, fort: 8, turret: 8, magazine: 1, sos: 5 }),
   k18: T({ abattery: 5, amedium: 5, tanks: 6, adump: 4, aconvoy: 3, aop: 3, hq: 5, railyard: 4, sbattery: 5, citadel: 6, gate: 6, eastfort: 6, fort: 6, turret: 6, magazine: 1, sos: 4 }),
-  mrs18: T({ abattery: 4, amedium: 4, tanks: 5, adump: 3, aconvoy: 3, aop: 2, hq: 4, railyard: 3, sbattery: 4, citadel: 5, gate: 4, eastfort: 5, fort: 5, turret: 5, magazine: 1, sos: 4 }),
+  mrs18: T({ bunker: 5, abattery: 4, amedium: 4, tanks: 5, adump: 3, aconvoy: 3, aop: 2, hq: 4, railyard: 3, sbattery: 4, citadel: 5, gate: 4, eastfort: 5, fort: 5, turret: 5, magazine: 1, sos: 4 }),
   nbw41: T({ abattery: 2, amedium: 2, tanks: 2, adump: 2, aconvoy: 1, aop: 1, hq: 2, railyard: 2, sbattery: 2, citadel: 2, gate: 2, eastfort: 2, fort: 2, turret: 2, magazine: 1, sos: 3 }),
-  gustav: T({ abattery: 1, amedium: 1, tanks: 1, adump: 1, aconvoy: 1, aop: 1, hq: 1, railyard: 1, sbattery: 1, citadel: 1, gate: 1, eastfort: 1, fort: 1, turret: 1, magazine: 1, sos: 1 }),
+  gustav: T({ bunker: 1, abattery: 1, amedium: 1, tanks: 1, adump: 1, aconvoy: 1, aop: 1, hq: 1, railyard: 1, sbattery: 1, citadel: 1, gate: 1, eastfort: 1, fort: 1, turret: 1, magazine: 1, sos: 1 }),
   bertha: T({ abattery: 2, amedium: 2, tanks: 2, adump: 2, aconvoy: 1, aop: 1, hq: 2, railyard: 2, sbattery: 2, citadel: 2, gate: 2, eastfort: 2, fort: 2, turret: 2, magazine: 1, sos: 2 }),
-  karl: T({ abattery: 1, amedium: 1, tanks: 1, adump: 1, aconvoy: 1, aop: 1, hq: 1, railyard: 1, sbattery: 1, citadel: 1, gate: 1, eastfort: 1, fort: 1, turret: 1, magazine: 1, sos: 1 }),
+  karl: T({ bunker: 1, abattery: 1, amedium: 1, tanks: 1, adump: 1, aconvoy: 1, aop: 1, hq: 1, railyard: 1, sbattery: 1, citadel: 1, gate: 1, eastfort: 1, fort: 1, turret: 1, magazine: 1, sos: 1 }),
 };

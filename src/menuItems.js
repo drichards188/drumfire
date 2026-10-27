@@ -3,6 +3,7 @@ import { BATTERIES, CAMPAIGN, rosterFor } from './campaign-data.js';
 import { TUTORIALS } from './tutorial.js';
 import { WW2_TUTORIALS } from './ww2/tutorial.js';
 import { OPS as OPS_WW1 } from './ww1/ops.js';
+import { maxGuns, missionBonus } from './research.js';
 
 // The menu's entries and the game pages they open (plain data, Node-safe). The menu (ui/menu.js) builds none of
 // the battlefield: a game page is a URL with play, tutorial or sandbox (src/boot.js), and its loading screen
@@ -38,10 +39,13 @@ const pad = (n) => String(n).padStart(2, '0');
 const battery = (kind) => BATTERIES.find((b) => b.kind === kind);
 const missionsOf = (era) => CAMPAIGN.filter((m) => m.era === era);
 const numberOf = (m) => missionsOf(m.era).indexOf(m) + 1;
+// the open battle's lineup: the batteries researched (all in dev mode), each with the guns it has earned
 const earned = (career, era, ok = () => true) => {
-  const list = rosterFor(era).filter((b) => (!career || career.unlocked(b.kind)) && ok(b)).map((b) => b.name);
-  return `Your batteries: ${list.join(', ')}${list.length < rosterFor(era).length ? '. The campaign earns the rest.' : '.'}`;
+  const all = rosterFor(era).filter(ok), list = all.filter((b) => !career || career.unlocked(b.kind));
+  const guns = (b) => (career && maxGuns(b.kind) > 1 ? ` (${career.level(b.kind, 'guns')} of ${maxGuns(b.kind)} guns)` : '');
+  return `Your batteries: ${list.map((b) => b.name + guns(b)).join(', ')}${list.length < all.length ? '. Research earns the rest.' : '.'}`;
 };
+const PAYS = 'Every battle pays research points, won or lost, and each battery its own points for its upgrades.';
 const forceLine = (k) => {
   const b = battery(k);
   return `${b.name}: ${b.role}${b.fuze ? ` (${b.fuze} fuze, ${Math.round(b.damage * 100)}% effective target damage, ${b.rounds}+ ${b.rounds === 1 ? 'round' : 'rounds'})` : ' (bearing ±1°, range ±1%, no oxygen shortfall)'}.`;
@@ -55,7 +59,7 @@ export function menuItems(career = null, lessons = {}) {
     key: 'battle:ypres', era: '1917', tab: 'battles', title: 'Ypres salient', side: 'Heavy Artillery Group',
     kicker: 'Battle · 1917 British', sub: 'Heavy artillery, Ypres salient, 1917',
     blurb: 'A Heavy Artillery Group in the mud before Passchendaele: a 15-inch howitzer, 9.2s, 6-inch howitzers, 60-pounders and an 18-inch railway gun. Lay the guns from the board, read the observers, walk the shells onto pillboxes, batteries and dumps, and hold the line when the counter-attack comes.',
-    lines: [earned(career, '1917')], query: { play: 1 }, difficulty: true, still: 'bl15',
+    lines: [earned(career, '1917'), PAYS], query: { play: 1 }, difficulty: true, still: 'bl15',
   });
   for (const id of OP_IDS) {
     // the special weapons' operations are open from the start, with their whole roster (only the open battle's
@@ -64,7 +68,7 @@ export function menuItems(career = null, lessons = {}) {
     items.push(wip({
       key: `op:${id}`, era: 'ww2', tab: 'battles', title: op.short, side: id === 'flanders' ? 'Your batteries' : b.name,
       kicker: 'Battle · WW2 German', sub: `German artillery, ${op.title}`, blurb: op.blurb,
-      lines: id === 'flanders' ? [earned(career, 'ww2', (q) => q.sandbox !== false)] : [], query: { mode: 'ww2', op: id, play: 1 }, difficulty: true,
+      lines: id === 'flanders' ? [earned(career, 'ww2', (q) => q.sandbox !== false), PAYS] : [], query: { mode: 'ww2', op: id, play: 1 }, difficulty: true,
       still: id === 'flanders' ? 'nbw41' : stillFor(op.units[0].kind),
     }, id !== 'flanders' && WIP_KINDS.has(op.units[0].kind)));
   }
@@ -88,8 +92,8 @@ export function menuItems(career = null, lessons = {}) {
     const n = numberOf(m), b = battery(m.reward), done = !!career?.completed.has(m.id);
     items.push(wip({
       key: `campaign:${m.id}`, era: m.era, tab: 'campaign', n: done ? '✓' : pad(n), done, title: m.title, side: b.name,
-      kicker: `Campaign · mission ${pad(n)}`, sub: `Earn the ${b.name}`, blurb: m.briefing,
-      lines: [`Loaned battery: ${b.name}. Win to keep it.`, ...m.roster.map(forceLine)],
+      kicker: `Campaign · mission ${pad(n)}`, sub: `A challenge for the ${b.name}`, blurb: m.briefing,
+      lines: [`Loaned battery: ${b.name}. ${done ? 'Won: its research bonus is paid.' : `First win: +${missionBonus(m).toLocaleString('en-US')} research points.`}`, ...m.roster.map(forceLine)],
       query: { ...(m.era === 'ww2' ? { mode: 'ww2' } : {}), campaign: m.id, play: 1 }, difficulty: true, still: stillFor(m.reward),
     }, WIP_KINDS.has(m.reward)));
   }
@@ -125,11 +129,13 @@ export function itemForQuery(q, items) {
   return find('battle:ypres');
 }
 
-// back to the menu from a game: its era, with the entry just played selected (and the menu's settings kept)
-export function menuHref(q, sel = null) {
+// back to the menu from a game: its era, with the entry just played selected (and the menu's settings kept); `view`
+// opens a screen of the menu ('research')
+export function menuHref(q, sel = null, view = null) {
   const p = new URLSearchParams();
   if (eraOf(q) !== '1917') p.set('mode', eraOf(q));
   if (sel) p.set('sel', sel);
+  if (view) p.set('view', view);
   for (const k of PASS) if (q.get(k)) p.set(k, q.get(k));
   const s = p.toString();
   return s ? `index.html?${s}` : 'index.html';

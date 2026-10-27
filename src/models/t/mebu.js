@@ -3,6 +3,7 @@ import { box, sphere, rod, V, topProfile, xTube, yTube } from '../kit.js';
 import { FParts } from './mats.js';
 import { damageable, finishTarget } from './damage.js';
 import { rng } from './props.js';
+import { partLayout } from './layout.js';
 
 // A German Mebu (Mannschafts-Eisenbeton-Unterstand) at Passchendaele: a low rough-cast concrete
 // block about 7 x 5 m and 2.4 m high, a roof slab with steel joists and brush on it, a firing slit
@@ -12,9 +13,25 @@ import { rng } from './props.js';
 // tips the whole block into the mud.
 
 export function buildMebu() {
-  const root = new THREE.Group(), r = rng(11);
-  const part = new THREE.Group();
+  const root = new THREE.Group(), part = mebuPart(11);
   root.add(part);
+  return finishTarget(root, [part]);
+}
+
+// The heavy target 'bunker' (sim/specialists.js): three larger concrete shelters, a Mebu block at 1.3 times its size at
+// each part of the layout, each with its own damage. Both open battles use it (the WW2 one as old bunkers the Allies
+// use as command posts).
+export function buildBunker() {
+  const root = new THREE.Group();
+  const parts = partLayout('bunker').map((o, i) => mebuPart(23 + i * 7, { at: [o.x, -0.45, o.z], scale: 1.3, ry: (i - 1) * 0.12 }));
+  root.add(...parts);
+  return finishTarget(root, parts);
+}
+
+// one block, sunk in the mud at `at`, its damage on the part (damage.js)
+function mebuPart(seed, { at = [0, -0.35, 0], scale = 1, ry = 0 } = {}) {
+  const r = rng(seed);
+  const part = new THREE.Group();
   const body = new THREE.Group(), roof = new THREE.Group(), front = new THREE.Group(), chunk = new THREE.Group();
   part.add(body, roof, front, chunk);
 
@@ -58,13 +75,14 @@ export function buildMebu() {
   M.add('wood', box(0.5, 0.05, 3.2, 1.0, 0.05, 5.2));
   M.build(part, { dirt: 0.5, shadow: false });
 
-  part.position.y = -0.35; // partly sunk
+  part.scale.setScalar(scale);
   damageable(part, {
+    at, ry, // partly sunk
     scorch: 8, char: 0.55, sink: 0.45, tilt: [0.05, 0, -0.1],
     bits: [
       { obj: roof, k0: 0.2, k1: 0.9, pos: [0.8, 0.1, 0.5], rot: [0.12, 0.2, -0.28] },
       { obj: front, k0: 0.4, k1: 1, pos: [-0.5, -0.5, -1.2], rot: [-0.3, 0.1, 0.15] },
     ],
   });
-  return finishTarget(root, [part]);
+  return part;
 }

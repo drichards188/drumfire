@@ -14,7 +14,8 @@ import { FX } from './fx.js';
 import { Flares } from './flares.js';
 import { HUD } from './hud.js';
 import { Progression } from './progression.js';
-import { BATTERIES, missionById } from './campaign-data.js';
+import { battleReward } from './research.js';
+import { missionById } from './campaign-data.js';
 import { setUiTheatre } from './ui/theatre.js';
 import { campaignTheatre, sandboxTheatre } from './campaign.js';
 import { mountCampaignObjectives } from './ui/progression.js';
@@ -30,7 +31,7 @@ import { warmUp } from './render/warmup.js';
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
 // always boots (import.meta.glob also bundles whichever exist).
-const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
+const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './audio.js', './models/guns.js', './models/looks.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
   './ww2/voices.js', // the German crew voices (only the WW2 open battle's, the Karl's and the WW1 open battle's pages build them)
   './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js']);
 const optional = async (path) => {
@@ -77,6 +78,9 @@ const MISPLACED = !query.get('tutorial') && !SANDBOX && !!requestedMission && !C
 // a WW2 special weapon's own operation (the Gustav siege, the Karl, the V-1, the V-2): its whole roster is the player's,
 // earned or not, as a campaign mission's is; only the open battle's batteries are earned
 const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
+// the open battles of the two research eras (src/research.js): the career's researched lineup takes the field, with its
+// guns and upgrades, and the battle pays RP and battery points (null: everything else, which pays nothing)
+const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || WW1 || SANDBOX ? null : WW2 ? 'ww2' : '1917';
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -157,6 +161,7 @@ async function init() {
     panel: await optional('./ui/panel.js'),
     audio: await optional('./audio.js'),
     guns: await optional('./models/guns.js'),
+    looks: RESEARCH_ERA ? await optional('./models/looks.js') : null, // the lineup's upgrades on its guns (research.js)
     world: await optional('./world/index.js'),
     craters: await optional('./craters.js'),
     render: await optional('./render/index.js'),
@@ -214,6 +219,9 @@ async function init() {
         rig.setElevation?.(0.5);
         scene.add(rig.root);
         rig.rec = 0;
+        // the career's upgrades on the lineup's guns, as the hangar shows them: the paint, the relined barrel, the
+        // polished breech (models/looks.js); the battle's lineup is the career's, fixed for the page
+        if (mods.looks && RESEARCH_ERA) mods.looks.applyLook(rig, p.kind, RESEARCH_ERA, career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {});
         rigs.set(`${u.id}:${p.i}`, rig);
       } catch (e) {
         console.warn(`buildGun(${p.kind}) failed: ${e.message}`);
@@ -497,7 +505,7 @@ async function init() {
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
-      hud.hint(`Earn ${UNITS[i].name} in its campaign mission first.`, 2500);
+      hud.hint(`Research the ${UNITS[i].name} first (main menu, Research).`, 2500);
       return;
     }
     selected = i;
@@ -650,6 +658,8 @@ async function init() {
 
   const start = () => {
     if (!UNITS.some(u => canCommand(u.id))) return;
+    payOut(false); // a battle given up for a new one pays what it had earned
+    paid = false;
     state = 'playing';
     if (!canCommand(UNITS[selected].id)) selected = UNITS.findIndex(u => canCommand(u.id));
     hud.hideEnd();
@@ -658,7 +668,7 @@ async function init() {
     chase.cine(false);
     following = false;
     newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
-      allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : WW1 || OPERATION ? null : BATTERIES.filter(b => career.unlocked(b.kind)).map(b => b.kind) });
+      ...(RESEARCH_ERA ? career.battle(RESEARCH_ERA) : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
@@ -679,6 +689,10 @@ async function init() {
 
   // the way back to the menu (src/ui/menu.js): the game page is left, the menu builds nothing of the battlefield
   const toMenu = () => { location.href = MENU; };
+  // the end card's Research: the menu's Research screen of this era, to spend what the battle paid
+  document.getElementById('end-research')?.addEventListener('click', () => {
+    location.href = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : WW2 ? `op:${TH.opId}` : 'battle:ypres', 'research');
+  });
   const returnMenu = document.createElement('button');
   returnMenu.id = 'return-menu'; returnMenu.type = 'button'; returnMenu.textContent = 'Main menu';
   returnMenu.addEventListener('click', toMenu);
@@ -996,21 +1010,38 @@ async function init() {
     const sc = sim?.score;
     hud.setScore(typeof sc === 'number' ? sc : sc?.points ?? 0);
   };
+  // An open battle's pay (research.js battleReward) goes into the career once: at its end, or when it is left or given up
+  // for a new one (what it had earned, without the bonus for the day). Returns the reward, or null.
+  let paid = true;
+  const payOut = (won) => {
+    if (paid || !RESEARCH_ERA || state !== 'playing' || !sim || sim.attract || sim.scripted) return null;
+    paid = true;
+    const r = battleReward(sim, { won });
+    career.reward(RESEARCH_ERA, r);
+    return r;
+  };
+  addEventListener('pagehide', () => payOut(false));
   const endGame = (s) => {
     if (sim.gunner?.st) sim.command(sim.gunner.st.unitId, 'unman');
     const sc = sim.score;
-    if (CAMPAIGN_MISSION && s === 'victory' && !sim.attract && !sim.scripted) {
-      career.complete(CAMPAIGN_MISSION.id);
-    }
-    state = 'ended';
     const win = s === 'victory';
+    let bonus = 0;
+    if (CAMPAIGN_MISSION && win && !sim.attract && !sim.scripted) bonus = career.complete(CAMPAIGN_MISSION.id);
+    const pay = payOut(win);
+    state = 'ended';
+    const research = document.getElementById('end-research');
+    if (research) research.hidden = !(pay || bonus);
+    const names = Object.fromEntries(sim.units.map((u) => [u.kind, u.name]));
+    const rpLine = (n, why) => ['Research points', `+${n.toLocaleString('en-US')}`, `${why}; ${career.rp[RESEARCH_ERA ?? CAMPAIGN_MISSION?.era].toLocaleString('en-US')} to spend`];
     hud.showEnd(
       {
         title: sim.over?.title ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The attack goes through' : 'The line is lost') : TH ? (win ? 'Operation successful' : 'Operation failed') : win ? 'Objectives taken' : 'The line is lost'),
         sub: sim.over?.sub ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The Feuerwalze carried our infantry onto their objectives. The Gruppe has done its work.' : 'The British are through our front. Stellungswechsel: the Gruppe falls back.') : TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
         victory: win,
         stats: [
-          ...(CAMPAIGN_MISSION ? [['Battery reward', s === 'victory' ? BATTERIES.find(b => b.kind === CAMPAIGN_MISSION.reward).name : 'Not yet earned']] : []),
+          ...(CAMPAIGN_MISSION ? [win && bonus ? rpLine(bonus, 'first win of this mission') : ['Research points', win ? 'none' : 'not yet', win ? 'the bonus is paid on the first win only' : 'win the mission for its one-off bonus']] : []),
+          ...(pay ? [rpLine(pay.rp, `${pay.fought.toLocaleString('en-US')} from the batteries, ${pay.time} for the time in action${pay.win ? `, ${pay.win} for the day won` : ''}`),
+            ['Battery points', Object.values(pay.batteries).reduce((a, b) => a + b, 0).toLocaleString('en-US'), Object.entries(pay.batteries).map(([k, v]) => `${names[k]} +${v}`).join(', ')]] : []),
           ['Score', (typeof sc === 'number' ? sc : sc?.points ?? 0).toLocaleString('en-US')],
           ...Object.entries(sc && typeof sc === 'object' ? sc : {}).filter(([k, v]) => k !== 'points' && typeof v === 'number').slice(0, 5).map(([k, v]) => [k, Math.round(v)]),
           ['Pieces serving', `${sim.units.reduce((n, u) => n + u.pieces.filter((p) => p.state !== 'dead').length, 0)}`],

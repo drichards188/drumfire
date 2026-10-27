@@ -3,7 +3,7 @@
 // sometimes read a correction the wrong way round, waste rounds, give up early and keep firing under
 // counter-battery fire for too long.
 import { bearingOf, YARD } from '../sector.js';
-import { FFE } from './tables.js';
+import { FFE, SHELLS } from './tables.js';
 import { autoCharge } from './shells.js';
 import { wrapPi } from './guns.js';
 
@@ -33,6 +33,8 @@ export class Crews {
   }
 
   canServe(u, m) {
+    // concrete that only heavy shells break (a heavy target, sim/specialists.js): the light guns leave it alone
+    if (m.minHard && (SHELLS[u.kind]?.hard?.D ?? 0) < m.minHard) return false;
     if (!this.suits(u, m)) return false;
     const D = Math.hypot(m.x - u.pos.x, m.z - u.pos.z);
     if (autoCharge(u.kind, D) < 0) return false;
@@ -53,6 +55,7 @@ export class Crews {
     if (t?.kind === 'crossroads') s += heavy ? -6 : 6;
     if (t?.kind === 'balloon') s += u.kind === 'bl60' ? 20 : -10;
     if (m.kind === 'barrage') s += u.kind === 'bl15' ? -10 : 6;
+    if (m.role) s += 10; // a deep or heavy target: only the guns made for it can serve it, and it is theirs
     return s;
   }
 

@@ -7,6 +7,7 @@
 import { SECTORS, LINES, lineX, DEG } from '../sector.js';
 import { TARGETS } from '../sim/tables.js';
 import { Director } from '../sim/director.js';
+import { Specialists } from '../sim/specialists.js';
 import { ENEMY_BATTERIES } from './targets.js';
 
 const PRIORITY = { sos: 10, barrage: 9, cb: 8, harass: 6, destroy: 5, wire: 4 };
@@ -39,6 +40,7 @@ export class DirectorWW2 extends Director {
     this.phaseSent = 0;
     this.endAt = 0;
     sim.front = this.op.kind === 'battle' ? { A: 1, B: 1, C: 1, D: 1 } : {};
+    this.specialists = new Specialists(sim); // the heavy and long guns' missions on the op's role sites (sim/specialists.js)
   }
 
   addMission(spec) {
@@ -51,7 +53,9 @@ export class DirectorWW2 extends Director {
       t0: sim.time, deadline: dl == null ? null : sim.time + dl, unitId: null, state: 'open', reports: [],
       units: [], obsName: spec.obsName ?? this.obsName(spec.observer), rounds: 0, alt: spec.alt ?? 0,
       lift: 0, sector: spec.sector ?? null, wireId: null, assault: spec.assault ?? null, convoy: spec.convoy ?? null,
-      hint: spec.hint ?? '', metric: true,
+      hint: spec.hint ?? '',
+      // a heavy or long guns' mission (specialists.js): its role, its points, the hard shell it needs
+      role: spec.role ?? null, points: spec.points ?? null, minHard: spec.minHard ?? 0, metric: true,
     };
     sim.missions.push(m);
     sim.stats.missions[m.kind] = sim.stats.missions[m.kind] ?? { new: 0, done: 0, failed: 0 };

@@ -53,6 +53,7 @@ export class CrewsWW2 extends Crews {
     if (t?.kind === 'tanks') s += u.kind === 'nbw41' || u.kind === 'sfh18' ? 10 : 0;
     if (t?.kind === 'aconvoy') s += u.kind === 'lefh18' ? 8 : HEAVY.has(u.kind) ? -8 : 0;
     if (m.kind === 'barrage') s += u.kind === 'lefh18' || u.kind === 'sfh18' ? 8 : 0;
+    if (m.role) s += 10; // a deep or heavy target (sim/specialists.js): only the guns made for it can serve it
     return s;
   }
 }

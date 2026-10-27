@@ -34,7 +34,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 // No hot reload: another agent's save would otherwise reload the page in the middle of a capture.
-if (dev) await page.addInitScript(() => { try { localStorage.setItem('drumfire.campaign.v2', JSON.stringify({ completed: [], dev: true })); } catch {} });
+if (dev) await page.addInitScript(() => { try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {} });
 await page.addInitScript(() => {
   const Orig = window.WebSocket;
   window.WebSocket = function (url, proto) {

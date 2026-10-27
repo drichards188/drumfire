@@ -102,7 +102,7 @@ const HIDE = '#panel, #hud, #loading, #tut-card, #gear, #return-menu, #campaign-
 for (const s of SHOTS.filter((x) => !want.length || want.includes(x.id))) {
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
   await page.addInitScript(() => {
-    try { localStorage.setItem('drumfire.campaign.v2', JSON.stringify({ completed: [], dev: true })); } catch {}
+    try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {}
     const Orig = window.WebSocket;
     window.WebSocket = function (url, proto) {
       if (proto === 'vite-hmr') return { send() {}, close() {}, addEventListener() {}, removeEventListener() {}, readyState: 1 };

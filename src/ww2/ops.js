@@ -78,6 +78,15 @@ export const OPS = {
       { id: 'H1', kind: 'hq', name: 'Brigade HQ, Ypres ramparts', pos: P(-1300, 2200), bearing: 80 * DEG, r: 40 },
       { id: 'X1', kind: 'aconvoy', name: 'Hellfire Corner', pos: P(1500, 300), bearing: 0, r: 30 },
       { id: 'R1', kind: 'railyard', name: 'Railhead, Vlamertinghe line', pos: P(-3430, -2700), bearing: 0, r: 120 },
+      // the heavy and long guns' targets (`role`, sim/specialists.js: only offered while a battery that can serve them
+      // is in the field). Deep, 11 to 15 km west of the gun area, past every gun's reach but the K 18's and the Gustav's.
+      { id: 'W1', kind: 'adump', name: 'Corps supply depot', pos: P(-12500, -2000), bearing: 20 * DEG, r: 45, role: 'deep' },
+      { id: 'W2', kind: 'aop', name: 'Forward airstrip', pos: P(-14500, 2500), bearing: 0, r: 40, role: 'deep' },
+      { id: 'W3', kind: 'hq', name: 'Corps HQ', pos: P(-11000, 4500), bearing: 80 * DEG, r: 40, role: 'deep' },
+      // hard: old concrete bunkers the Allies use as command posts, which only the Mörser, the Karl and the Gustav break
+      { id: 'V1', kind: 'bunker', name: 'Bunker command post, Potijze', pos: P(-900, -1800), bearing: 90 * DEG, r: 30, role: 'hard' },
+      { id: 'V2', kind: 'bunker', name: 'Bunker command post, Zillebeke', pos: P(300, 3300), bearing: 85 * DEG, r: 30, role: 'hard' },
+      { id: 'V3', kind: 'bunker', name: 'Bunker command post, Ypres', pos: P(-2600, 1200), bearing: 95 * DEG, r: 30, role: 'hard' },
     ],
     phases: [
       { n: 1, t0: 0, title: 'Einschießen', sub: 'Dawn. Register the batteries on the first targets.' },

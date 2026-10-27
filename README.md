@@ -11,7 +11,7 @@
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
 - **Three eras.** 1917 British heavies; WW1 German in 1918, with the Paris Gun; WW2 German, with the Gustav, the Karl-Gerät, the V-1 and the V-2.
-- **Campaigns.** In 1917 and WW2 you start with one battery and earn the rest, in missions you can play in any order.
+- **Research and upgrades.** In 1917 and WW2 you start with one gun. Every battle pays research points for new batteries and battery points for more guns and better shells, barrels, breeches and sights.
 - **Tutorials.** Six guided lessons each for 1917 and WW2.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or on the Big Bertha demo's 42 cm howitzer.
 
@@ -43,12 +43,12 @@ Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#con
 
 ## Status
 
-**Playable:** all three eras, both campaigns, twelve lessons and the Big Bertha demo. The Gustav, the Paris Gun and the demo are work in progress (marked WIP).
+**Playable:** all three eras, research and upgrades, both campaigns, twelve lessons and the Big Bertha demo. The Gustav, the Paris Gun and the demo are work in progress (marked WIP).
 
 **Not done yet:**
 
 - Lessons for the WW1 German era.
-- Playtesting the campaigns' difficulty and pacing.
+- Playtesting the research pace, the upgrades and the campaigns' difficulty.
 - Relaying Bertha's or the Gamma's bed is instant; the 100 s it took is to come back.
 - Planned for WW2: V-1 and V-2 skill moments, V-2 shoot and scoot, the Karl's crew on the move.
 - Three of the Paris Gun's four target effects are inactive.

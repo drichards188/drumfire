@@ -143,6 +143,7 @@ export class Targets {
         else if (air) d = Math.hypot(d, Math.max(0, p.y - sim.heightAt(part.x, part.z)));
         let dmg = this.partDamage(sc, f, hard, d, shr, sim.rng);
         if (!dmg) return;
+        if (shell.dmgK) dmg *= shell.dmgK; // the battery's shells upgrade (research.js)
         if (i === 0 && t.kind === 'balloon' && shr) dmg = 12 * Math.max(0, 1 - d / 55);
         if (dmg <= 0) return;
         total += dmg;
@@ -167,6 +168,8 @@ export class Targets {
   damagePart(t, i, dmg, by) {
     const sim = this.sim, part = t.parts[i];
     if (!part.alive) return;
+    // the battle's pay (sim.credit): a quarter point for each point of damage that counted, the target's score for the kill
+    sim.credit(by, Math.min(part.hp, dmg) * 0.25);
     part.hp -= dmg;
     t.hp = Math.max(0, t.hp - dmg);
     t.damage = 1 - t.hp / t.maxHp;
@@ -188,7 +191,9 @@ export class Targets {
     } else if (t.kind === 'hq') {
       sim.events.secondary?.(pos, 2);
     }
+    const was = t.alive;
     this.checkDead(t, by);
+    if (was && !t.alive) sim.credit(by, TARGETS[t.kind].score);
   }
 
   checkDead(t, by) {

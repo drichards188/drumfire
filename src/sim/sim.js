@@ -45,8 +45,13 @@ export class Sim {
 
   // scripted: the tutorial range (no phases, spawns or German fire unless sim.script asks, our pieces take no damage,
   // every unit on hold, daylight only); see script.js
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null } = {}) {
-    this.allowedKinds = allowedKinds == null ? null : new Set(allowedKinds);
+  // allowedKinds: the kinds that take the field (null: all). loadout (the open battles' researched lineup,
+  // research.js loadoutOf): { kind: { guns, mods } }, the kinds that take the field with how many of their guns and their
+  // upgrades (guns.js). opposition ({ cb, assault }): the lineup's scale on the enemy's counter-battery fire and raids
+  // and on the assaults (research.js opposition). Without them everything is as before.
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null } = {}) {
+    this.loadout = loadout;
+    this.allowedKinds = allowedKinds != null ? new Set(allowedKinds) : loadout ? new Set(Object.keys(loadout)) : null;
     this.seed = seed;
     this.scripted = scripted;
     this.invulnerable = scripted;
@@ -56,6 +61,10 @@ export class Sim {
     this.over = null; // the WW2 mode: { title, sub, stats } the end card shows
     this.attract = attract;
     if (attract) Object.assign(this.difficulty, { err: 0.5, dmg: 0, ammo: 3 });
+    else if (opposition) {
+      this.difficulty.cb *= opposition.cb;
+      this.difficulty.assault *= opposition.assault;
+    }
     this.time = 0;
     this.acc = 0;
     this.alpha = 0;
@@ -65,6 +74,7 @@ export class Sim {
     this.missions = [];
     this.reports = [];
     this.score = { points: 0, kills: 0, missions: 0, failed: 0 };
+    this.earned = {}; // unit id -> credit (credit below)
     this.stats = { rounds: 0, cbRounds: 0, piecesLost: 0, menKilled: 0, britishLost: 0, sectorsLost: 0, lossBy: { mebu: 0, open: 0, wire: 0, short: 0 }, missions: {}, sos: [], ranging: [] };
     this.phase = 1;
     this.clock = clockAt(0);
@@ -94,6 +104,12 @@ export class Sim {
   }
   gauss() {
     return (this.rng() + this.rng() + this.rng() - 1.5) * 2;
+  }
+  // a unit's share of the battle's pay (research.js battleReward): missions done, damage done, targets destroyed; never in
+  // the demonstration or on the lesson range
+  credit(id, pts) {
+    if (id == null || this.attract || this.scripted || !(pts > 0)) return;
+    this.earned[id] = (this.earned[id] ?? 0) + pts;
   }
   radio(text, kind = 'info') {
     this.events.radio?.(text, kind);
@@ -230,7 +246,7 @@ export class Sim {
 
   groundOf(x, z, kind) {
     if (this.groundAt) return this.groundAt(x, z);
-    for (const s of SITES) if (s.kind === 'mebu' && Math.hypot(x - s.pos.x, z - s.pos.z) < 14) return 'concrete';
+    for (const s of SITES) if ((s.kind === 'mebu' || s.kind === 'bunker') && Math.hypot(x - s.pos.x, z - s.pos.z) < (s.kind === 'bunker' ? 20 : 14)) return 'concrete';
     for (const p of PLACES) if (p.kind !== 'wood' && Math.hypot(x - p.pos.x, z - p.pos.z) < p.r) return 'rubble';
     if (x > ZONE.from) {
       // deterministic puddles in the wasteland

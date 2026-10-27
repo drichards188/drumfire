@@ -3,6 +3,7 @@
 // are served by the units, by the player's commands or by the AI crews.
 import { SITES, SECTORS, LINES, lineX, gridRef, YARD, DEG } from '../sector.js';
 import { PHASES, CLOCK_KEYS, TARGETS } from './tables.js';
+import { Specialists } from './specialists.js';
 
 const OBS_AIR = ['AB', 'KT', 'PQ', 'WD', 'RX'];
 const PRIORITY = { sos: 10, barrage: 9, cb: 8, harass: 6, destroy: 5, wire: 4 };
@@ -37,6 +38,7 @@ export class Director {
     this.phaseSent = 0;
     this.endAt = 0;
     sim.front = { A: 1, B: 1, C: 1, D: 1 };
+    this.specialists = new Specialists(sim); // the heavy and long guns' missions (specialists.js)
     // wire belts in front of the German line, in the lanes the attack will use
     for (const sec of ['B', 'C']) {
       const z = laneOf(sec);
@@ -56,6 +58,8 @@ export class Director {
       units: [], obsName: spec.obsName ?? this.obsName(spec.observer), rounds: 0, alt: spec.alt ?? 0,
       lift: 0, sector: spec.sector ?? null, wireId: spec.wireId ?? null, assault: spec.assault ?? null, convoy: spec.convoy ?? null,
       hint: spec.hint ?? '',
+      // a heavy or long guns' mission (specialists.js): its role, its points, the hard shell it needs
+      role: spec.role ?? null, points: spec.points ?? null, minHard: spec.minHard ?? 0,
     };
     sim.missions.push(m);
     sim.stats.missions[m.kind] = sim.stats.missions[m.kind] ?? { new: 0, done: 0, failed: 0 };
@@ -101,7 +105,7 @@ export class Director {
     const t = m.targetId ? this.sim.targetById(m.targetId) : null;
     if (m.kind === 'wire' || m.kind === 'sos' || m.kind === 'barrage' || m.kind === 'harass' || m.kind === 'cb') return 'instant';
     if (t && t.kind === 'balloon') return u.kind === 'bl60' ? 'shrapnel' : 'instant';
-    if (t && (t.kind === 'mebu' || t.kind === 'dump' || t.kind === 'hq')) return 'delay';
+    if (t && (t.kind === 'mebu' || t.kind === 'bunker' || t.kind === 'dump' || t.kind === 'hq')) return 'delay';
     return 'instant';
   }
 
@@ -131,8 +135,14 @@ export class Director {
     m.units = [];
     m.unitId = null;
     if (st) st[ok ? 'done' : 'failed']++;
+    // the battle's pay (sim.credit): a mission done shares its points among the units that fired on it, by their rounds
+    if (ok && m.fired) {
+      const all = Object.values(m.fired).reduce((a, n) => a + n, 0);
+      for (const [id, n] of Object.entries(m.fired)) sim.credit(Number(id), ((m.points ?? POINTS[m.kind] ?? 30) * n) / all);
+    }
     if (!sim.attract) {
-      if (ok) sim.score.points += POINTS[m.kind] ?? 30; else sim.score.points -= Math.round((POINTS[m.kind] ?? 30) / 3);
+      const pts = m.points ?? POINTS[m.kind] ?? 30;
+      if (ok) sim.score.points += pts; else sim.score.points -= Math.round(pts / 3);
       sim.score[ok ? 'missions' : 'failed']++;
     }
     sim.events.mission?.(m, ok ? 'done' : 'failed');
@@ -407,6 +417,7 @@ export class Director {
 
   missionsUpdate() {
     const sim = this.sim, now = sim.time;
+    this.specialists?.update();
     for (const m of sim.missions) {
       if (m.state === 'done' || m.state === 'failed') continue;
       const t = m.targetId ? sim.targetById(m.targetId) : null;

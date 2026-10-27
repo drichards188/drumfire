@@ -130,6 +130,15 @@ export const SITES = [
   { id: 'H1', kind: 'hq', name: 'Chateau HQ', pos: { x: 10500, z: 3000 }, bearing: 250 * DEG, r: 40 },
   { id: 'X1', kind: 'crossroads', name: 'Crossroads', pos: { x: 8500, z: -100 }, bearing: 0, r: 30 },
   { id: 'R1', kind: 'railyard', name: 'Railhead', pos: { x: 11500, z: -1500 }, bearing: 15 * DEG, r: 120 },
+  // The heavy and long guns' targets (`role`, sim/specialists.js: only offered while a battery that can serve them is in
+  // the field). Deep, 13 to 16 km out, past every gun's reach but the 18-inch railway howitzer's: depots and a corps HQ.
+  { id: 'E1', kind: 'dump', name: 'Corps ammunition depot', pos: { x: 14200, z: -2600 }, bearing: 10 * DEG, r: 45, role: 'deep' },
+  { id: 'E2', kind: 'hq', name: 'Corps headquarters', pos: { x: 15200, z: 2400 }, bearing: 260 * DEG, r: 40, role: 'deep' },
+  { id: 'E3', kind: 'dump', name: 'Railhead depot', pos: { x: 13400, z: 4600 }, bearing: 40 * DEG, r: 45, role: 'deep' },
+  // Hard, in the German support line: groups of concrete shelters only the 9.2-inch and heavier break.
+  { id: 'S1', kind: 'bunker', name: 'Concrete shelters, Zonnebeke spur', pos: { x: 6300, z: -2300 }, bearing: 270 * DEG, r: 30, role: 'hard' },
+  { id: 'S2', kind: 'bunker', name: 'Blockhouse group, Polygon', pos: { x: 6500, z: 3200 }, bearing: 265 * DEG, r: 30, role: 'hard' },
+  { id: 'S3', kind: 'bunker', name: 'Concrete shelters, Frezenberg', pos: { x: 5900, z: -4700 }, bearing: 275 * DEG, r: 30, role: 'hard' },
 ];
 
 // Places for the world builder (ruins, shattered woods) and for the map board's lettering.

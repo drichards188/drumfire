@@ -28,36 +28,41 @@ export function pickGuns(u, guns) {
   return live.map((p, k) => ({ p, k })).sort((a, b) => rank(a.p) - rank(b.p) || a.k - b.k).slice(0, n).map((x) => x.p).sort((a, b) => a.i - b.i);
 }
 
+// A lineup's battery (sim.loadout, research.js) takes the field with its first `guns` pits manned and its upgrades as
+// `u.mods`, multipliers on the gun tables (none: the tables as they are).
 export function createUnits(sim) {
   const diff = sim.difficulty;
   return (sim.theatre?.units ?? UNITS).filter(def => !sim.allowedKinds || sim.allowedKinds.has(def.kind)).map((def) => {
-    const g0 = GUNS[def.kind];
-    const pieces = piecePlacements(def).map((pl) => {
+    const g0 = GUNS[def.kind], lo = sim.loadout?.[def.kind], mods = lo?.mods ?? null, dk = mods ? mods.disp : 1;
+    const places = piecePlacements(def);
+    const pieces = (lo ? places.slice(0, Math.max(1, lo.guns)) : places).map((pl) => {
       const g = GUNS[pl.kind];
       const y = sim.heightAt(pl.x, pl.z);
+      // the detachment upgrade's reserves: more men than the drill needs (crewNeed), so casualties slow the gun later
+      const men = mods?.crew ? Math.round(g.crew * (1 + mods.crew)) : g.crew;
       return {
         i: pl.i, kind: pl.kind, pos: { x: pl.x, y, z: pl.z }, bearing: pl.bearing, az: 0, el: g.restEl,
         cmd: { az: 0, el: g.restEl, tof: 0, ok: false }, state: 'idle', job: null, recoil: 0, breech: 0,
-        loaded: false, crew: g.crew, crewMax: g.crew, hp: g.hp, maxHp: g.hp, wear: 0, firedAt: -999,
+        loaded: false, crew: men, crewMax: men, hp: g.hp, maxHp: g.hp, wear: 0, firedAt: -999, ...(men > g.crew ? { crewNeed: g.crew } : {}),
         // internal
-        ji: 0, rounds: 0, fireAt: 0, blocked: false, shown: 0,
-        calib: { v: sim.gauss() * g.calib.v, line: sim.gauss() * g.calib.line },
+        ji: 0, rounds: 0, fireAt: 0, blocked: false, shown: 0, layK: mods ? mods.lay : 1,
+        calib: { v: sim.gauss() * g.calib.v * dk, line: sim.gauss() * g.calib.line * dk },
       };
     });
-    const n = pieces.length;
+    const n = pieces.length, ak = mods ? mods.ammo : 1;
+    const stock = { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo) * ak), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo * ak) };
     return {
       id: def.id, kind: def.kind, name: def.name, callsign: def.callsign, battery: def.battery,
       pos: { x: def.pos.x, y: sim.heightAt(def.pos.x, def.pos.z), z: def.pos.z }, zero: def.zero, alive: true,
       mode: 'auto', pieces, missionId: null, charges: g0.charges.length, arc: def.arc ?? g0.traverse,
-      ammo: { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo)), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
-      signature: 0, def, gate: def.special ? 'not ready' : null,
+      ammo: { ...stock }, signature: 0, def, gate: def.special ? 'not ready' : null, mods,
       order: {
         x: def.pos.x, z: def.pos.z, line: def.zero, range: 0, charge: -1, el: g0.restEl, tof: 0, fuze: 'instant',
         rounds: 1, adj: { add: 0, right: 0 }, target: null, ok: false, reason: '', chargeAuto: true, h: 0, sheaf: null, shift: 0,
       },
       stats: { rounds: 0, hits: 0, kills: 0 },
       // internal
-      bias: null, firing: false, underFire: -999, lastShot: -999, ammoMax: { he: Math.round((def.ammo ?? g0.ammo.he * n) * (def.ammo ? 1 : diff.ammo)), shrapnel: Math.round(g0.ammo.shrapnel * n * diff.ammo) },
+      bias: null, firing: false, underFire: -999, lastShot: -999, ammoMax: { ...stock },
       ai: null, hits: 0, lost: 0,
     };
   });
@@ -97,7 +102,7 @@ export class Guns {
 
   drawBias(u, x, z, scale = 1) {
     const sim = this.sim, d = sim.difficulty;
-    const mag = (50 + sim.rng() * 350) * d.err * scale;
+    const mag = (50 + sim.rng() * 350) * d.err * scale * (u.mods ? u.mods.bias : 1);
     const a = sim.rng() * TAU;
     return { over: mag * Math.cos(a), right: mag * Math.sin(a) * 0.6, x, z };
   }
@@ -300,8 +305,8 @@ export class Guns {
     const sim = this.sim, g = GUNS[p.kind];
     const st = g.load[p.ji];
     // crews short of men are slower; a gun in a hurry (attract) is quicker
-    const crewK = clamp(p.crewMax / Math.max(1, p.crew), 1, 2.6) * (sim.attract ? 0.6 : 1);
-    let dur = st.dur * crewK;
+    const crewK = clamp((p.crewNeed ?? p.crewMax) / Math.max(1, p.crew), 1, 2.6) * (sim.attract ? 0.6 : 1);
+    let dur = st.dur * crewK * (u.mods ? u.mods.load : 1);
     if (st.step === 'depress') dur = Math.max(dur, Math.abs(p.el - g.loadEl) / g.elRate);
     p.job = { step: st.step, t: 0, dur, i: p.ji, n: g.load.length };
     sim.events.load?.(u, p, st.step);
@@ -312,7 +317,7 @@ export class Guns {
     // crew load while the unit is gated or the line is out of arc, as the other guns load while they traverse
     if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold' || (u.gate && !u.loadThrough)) return false;
     if (!u.order.target || ((p.blocked || !p.cmd.ok) && !(u.loadThrough && u.order.why === 'out of arc'))) return false;
-    if (p.crew < Math.ceil(p.crewMax * 0.3)) return false;
+    if (p.crew < Math.ceil((p.crewNeed ?? p.crewMax) * 0.3)) return false;
     const sh = u.order.fuze === 'shrapnel';
     return (sh ? u.ammo.shrapnel : u.ammo.he) > 0;
   }
@@ -327,7 +332,7 @@ export class Guns {
       // supplies and replacements
       const quiet = sim.time - u.underFire > 40;
       for (const k of ['he', 'shrapnel']) if (u.ammo[k] < u.ammoMax[k]) {
-        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length * (u.def?.resupply ?? (u.def?.special ? 0 : 1));
+        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length * (u.def?.resupply ?? (u.def?.special ? 0 : 1)) * (u.mods ? u.mods.ammo : 1);
         if (u._ac >= 1) {
           u._ac -= 1;
           u.ammo[k]++;
@@ -360,7 +365,7 @@ export class Guns {
     if (p.fixed) return; // a controller holds the piece where it is (the Gustav while it is still being assembled)
     const g = GUNS[p.kind];
     const da = azTarget - p.az, de = elTarget - p.el;
-    const ma = g.azRate * dt, me = g.elRate * dt;
+    const lk = p.layK ?? 1, ma = g.azRate * dt * lk, me = g.elRate * dt * lk;
     p.az += Math.abs(da) <= ma ? da : Math.sign(da) * ma;
     p.el += Math.abs(de) <= me ? de : Math.sign(de) * me;
   }
@@ -510,7 +515,7 @@ export class Guns {
   fireShell(u, p) {
     const sim = this.sim, g = GUNS[p.kind], o = u.order;
     const ch = g.charges[o.charge];
-    const wearK = 1 + p.wear * 1.5;
+    const wearK = 1 + p.wear * 1.5, dk = u.mods ? u.mods.disp : 1;
     const bias = u.bias ?? { over: 0, right: 0 };
     const D = Math.max(500, Math.hypot(o.x - p.pos.x, o.z - p.pos.z));
     // hidden terms: calibration, wear, the lay's map error, dispersion
@@ -518,9 +523,9 @@ export class Guns {
     // over/right of the aim point); later rounds of the lay carry it too, plus only the normal dispersion
     const sl = sim.scripted ? this.scriptLay(u, p) : null;
     const cv = sl ? 0 : p.calib.v, cl = sl ? 0 : p.calib.line, bo = sl ? 0 : bias.over, br = sl ? 0 : bias.right;
-    let v = ch.v * (1 + cv - 0.05 * p.wear + sim.gauss() * g.disp.r * wearK / 2);
+    let v = ch.v * (1 + cv - 0.05 * p.wear + sim.gauss() * g.disp.r * dk * wearK / 2);
     const slope = elSlope(p.kind, o.charge, D);
-    let brg = p.bearing - p.az + cl + br / D + sim.gauss() * g.disp.l * wearK;
+    let brg = p.bearing - p.az + cl + br / D + sim.gauss() * g.disp.l * dk * wearK;
     let el = p.el + slope * bo + sim.gauss() * 0.00015;
     if (sl && o.fuze !== 'shrapnel') {
       const s = solveLanding(sim, p, ch, shellK(p.kind), slope, D, p.el, p.bearing - p.az, sl.at);
@@ -545,6 +550,10 @@ export class Guns {
       plane: Math.hypot(o.x - p.pos.x, o.z - p.pos.z), pbx: dirx, pbz: dirz, ox: p.pos.x, oz: p.pos.z,
       fuzeErr: sim.gauss() * 22, volley: p.volley ?? null, ranging: !!p.ranging,
     };
+    if (u.mods) shell.dmgK = u.mods.dmg;
+    // the rounds each unit fires on a mission share its points when it is done (director.finish, sim.credit)
+    const m = u.missionId != null ? sim.missionById(u.missionId) : null;
+    if (m) (m.fired ??= {})[u.id] = (m.fired[u.id] ?? 0) + 1;
     sim.shells.push(shell);
     if (g.salvo) {
       // one round of a launcher is a ripple: the first rocket starts it, recoil (above) fires the rest
@@ -565,13 +574,13 @@ export class Guns {
     p.rounds = Math.max(0, p.rounds - 1);
     p.state = 'recoil';
     p.firedAt = sim.time;
-    p.wear = Math.min(1, p.wear + g.wearPerRound);
+    p.wear = Math.min(1, p.wear + g.wearPerRound * (u.mods ? u.mods.wear : 1));
     u.stats.rounds++;
     u.lastShot = sim.time;
     // the enemy locates a battery by its flashes and its noise
     const night = sim.night ? 1.45 : 1;
     const balloon = sim.balloonUp() ? 1.35 : 1;
-    u.signature = Math.min(1, u.signature + g.sig * night * balloon * sim.difficulty.sig);
+    u.signature = Math.min(1, u.signature + g.sig * night * balloon * sim.difficulty.sig * (u.mods ? u.mods.sig : 1));
     sim.stats.rounds++;
     sim.director.onFire?.(u, p, shell);
     sim.events.fire?.(u, p, shell);
@@ -593,6 +602,11 @@ export class Guns {
     if (p.crew > 0 && sim.rng() < (direct ? 0.9 : 0.35 + dmg / 120)) {
       p.crew = Math.max(0, p.crew - (1 + (sim.rng() < 0.4 ? 1 : 0)));
       sim.events.casualty?.(u, p);
+      // the relief crews' payoff, named: a man down and the gun's pace held by a relief (not repeated within 20 s)
+      if (p.crewNeed && p.crew >= p.crewNeed && sim.time - (u.reliefTold ?? -99) > 20) {
+        u.reliefTold = sim.time;
+        sim.radio(`${u.callsign}: gun ${p.i + 1} has casualties; a relief takes his place, the gun keeps its pace.`, 'info');
+      }
     }
     if (p.hp <= 0) {
       p.hp = 0;
