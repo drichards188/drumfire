@@ -35,6 +35,26 @@ export function rangeSpan(sim, kind, charge) {
   return t.length ? { min: t[0].range, max: t[t.length - 1].range } : { min: 0, max: 0 };
 }
 
+// the farthest a unit's guns reach, with any of its charges (the leFH 18 has six)
+export const maxReach = (sim, unit) => Math.max(0, ...Array.from({ length: Math.max(1, unit.charges || 4) }, (_, c) => rangeSpan(sim, unit.kind, c).max));
+// The board's FIT on a battery's reach: the unit (700 m behind it) and as far along its zero line as its guns reach
+// with their biggest charge, or to the furthest target on the map past it for a very long gun; across, half that or
+// 8 km at least. { cx, cz, w, h } for a theatre's TH.fit (the British fit, below, does the same along x)
+export function reachFit(sim, unit) {
+  const reach = maxReach(sim, unit) || 11000;
+  const b = unit.zero ?? 0, ux = Math.sin(b), uz = -Math.cos(b);
+  let far = 0;
+  for (const t of sim.targets) if (!t.offmap) far = Math.max(far, (t.pos.x - unit.pos.x) * ux + (t.pos.z - unit.pos.z) * uz);
+  const len = Math.min(reach * 1.02, far + 1500), half = Math.max(4000, len * 0.28);
+  // the oriented box's corners, and their bounds
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const a of [-700, len]) for (const c of [-half, half]) {
+    const x = unit.pos.x + ux * a - uz * c, z = unit.pos.z + uz * a + ux * c;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z);
+  }
+  return { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0, h: z1 - z0 };
+}
+
 // aged paper, made once: specks and fibres over a warm base
 let paperTex = null;
 function paper() {
@@ -116,7 +136,7 @@ export class Board {
       return;
     }
     const cfg = KINDS[unit.kind] || {};
-    const reach = Math.max(rangeSpan(sim, unit.kind, 0).max, ...[1, 2, 3].map((c) => rangeSpan(sim, unit.kind, c).max)) || 11000;
+    const reach = maxReach(sim, unit) || 11000;
     const x0 = Math.min(unit.pos.x - 700, 2600), x1 = Math.min(unit.pos.x + reach * 1.02, cfg.deep ? 18500 : 14000);
     const zc = Math.max(-1500, Math.min(1500, unit.pos.z * 0.35));
     const mpp = Math.max(MPP_MIN, Math.min(mppMax(), Math.max((x1 - x0) / this.W, 8000 / this.H) * 1.04));
@@ -628,7 +648,7 @@ export class Board {
 
   drawTargets(g, sim, unit, missions, cur, cursorId, T) {
     const span = rangeSpan(sim, unit.kind, unit.order ? unit.order.charge || 0 : 0);
-    const reach = KINDS[unit.kind] && KINDS[unit.kind].deep ? Infinity : Math.max(span.max, ...[0, 1, 2, 3].map((c) => rangeSpan(sim, unit.kind, c).max));
+    const reach = KINDS[unit.kind] && KINDS[unit.kind].deep ? Infinity : Math.max(span.max, maxReach(sim, unit));
     g.textBaseline = 'top'; g.textAlign = 'center';
     const lbl = [];
     for (const t of sim.targets || []) {

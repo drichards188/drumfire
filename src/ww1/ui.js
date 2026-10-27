@@ -4,6 +4,7 @@
 // the board's lines turned round (ours are the German trenches of 1917). Also the console's rows for the WW1 kinds
 // (common.js KINDS and KIND_SHORT), which only this mode's pages use.
 import { setUiTheatre } from '../ui/theatre.js';
+import { reachFit } from '../ui/board.js';
 import { MISSION_NAME, OBSERVER, FUZE, KINDS, KIND_SHORT } from '../ui/consoles/common.js';
 import { LINES, lineX } from '../sector.js';
 import { ww1Ref, WW1_REF_HINT } from './grid.js';
@@ -57,8 +58,10 @@ export function ww1Ui(th) {
       foo: 'V.B., B-Stelle', air: 'Artillerieflieger (Funk)', balloon: 'Fesselballon (Fernsprecher)', sound: 'Schallmeßtrupp',
       flash: 'Lichtmeßtrupp', map: 'Arko', railspot: 'Bahnbeobachter',
     },
-    // FIT: every unit and every site, with a margin; for the Paris Gun its targets 120 km west too
+    // FIT: the selected battery and its reach (board.js reachFit); for the Paris Gun every unit and site, with its
+    // targets 120 km west
     fit: (sim, unit) => {
+      if (unit && unit.kind !== 'paris') return reachFit(sim, unit);
       const pts = [...sim.units.map((u) => u.pos), ...sim.targets.filter((t) => !t.offmap).map((t) => t.pos)];
       if (unit?.kind === 'paris') for (const T of unit.special?.targets ?? []) pts.push({ x: T.x, z: T.z });
       let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;

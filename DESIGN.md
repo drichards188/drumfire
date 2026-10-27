@@ -2034,3 +2034,10 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   runs on from the first gun's cell (centred on x = 0) instead of being centred, so a gun bought stands on its place
   and none of the others moves. The display's powder heap grows with Ammunition supply, as the piles do: its rows times
   the root of 1 + the level (`powder(kind, supply)`, `shellDisplay(..., supply)`).
+- (console: the board fits the battery's reach) The WW2 and WW1 boards' first view and FIT now frame the selected
+  battery and its reach (`board.js` `reachFit`: from 700 m behind the unit along its zero line to its longest range,
+  or to the furthest target on the map past it, half that or 8 km across), as the British board already did; they used
+  to show the whole operation for every gun. The V-1 and V-2 sites and the Paris Gun keep their strategic fits (the
+  Flanders battle carries the V-weapons' `op.target`, which had sent every battery there down the strategic branch).
+  The reach now counts each unit's own charges (`maxReach`; the leFH 18 has six, the sFH 18 five), which also fixes the
+  board's out-of-range mark for those two.

@@ -1,5 +1,6 @@
 // The console's words and measures for the WW2 mode (ui/theatre.js), set once before the panel is built.
 import { setUiTheatre } from '../ui/theatre.js';
+import { reachFit } from '../ui/board.js';
 import { MISSION_NAME, OBSERVER, FUZE } from '../ui/consoles/common.js';
 import { LINES, lineX } from '../sector.js';
 import { ww2Ref } from './theatre.js';
@@ -28,8 +29,10 @@ export function ww2Ui(th) {
     mannable: MANNABLE, // the guns the player can serve in person (gunner.js): MAN on the guns card
     hq: 'Arko (artillery commander)',
     observerFrom: { foo: 'VB, forward post', air: 'Storch (wireless)', sound: 'Schallmeßtrupp', map: 'Arko', railspot: 'Bahnbeobachter' },
-    // FIT: every unit and every site of the operation, with a margin
+    // FIT: the selected battery and its reach (board.js reachFit); a V-1 or V-2 site's (its strategic target off the
+    // map): every unit and site of the operation and 12 km of the way out
     fit: (sim, unit) => {
+      if (unit && !(op.target && (unit.kind === 'v1' || unit.kind === 'v2'))) return reachFit(sim, unit);
       const pts = [...sim.units.map((u) => u.pos), ...sim.targets.map((t) => t.pos), ...(op.positions ?? []).map((q) => q.pos)];
       if (op.target) {
         // the strategic missions: the site and 12 km of the way out
