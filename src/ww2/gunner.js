@@ -548,8 +548,8 @@ export class Gunner {
     if (p.state === 'laying') return this.laidTo(p, st.ack) ? J('lay', null, 'the lay is checked', true) : lay();
     if (p.state === 'ready') {
       const why = this.cannotFire(u, p);
-      const n = p.rounds > 0 ? p.rounds : u.order.rounds;
-      if (!why) return J('fire', 'E', `pull the lanyard: Feuer! (${n} round${n > 1 ? 's' : ''}${p.rounds > 0 ? '' : ', you command the battery'})`);
+      // (the rounds are on the page's FEUER chip)
+      if (!why) return J('fire', 'E', 'pull the lanyard: Feuer!');
       return J('fire', null, `loaded and laid: ${why}`, true);
     }
     const no = this.canLoad(u, p);

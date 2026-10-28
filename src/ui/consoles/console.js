@@ -98,8 +98,9 @@ export function mountConsole(ctx) {
   const root = el('div', 'con');
   const hdr = el('header', 'hdr');
   const hid = el('div', 'hid');
-  const callEl = el('b', 'call'), nameEl = el('i', 'uname');
-  hid.append(callEl, nameEl);
+  // the call sign, then the gun and the battery on lines of their own (one line cut them both short)
+  const callEl = el('b', 'call'), nameEl = el('i', 'uname'), batEl = el('i', 'uname');
+  hid.append(callEl, nameEl, batEl);
   const hstat = el('div', 'hstat');
   const statEl = el('div', 'stat'), noteEl = el('div', 'snote2');
   hstat.append(statEl, noteEl);
@@ -113,7 +114,7 @@ export function mountConsole(ctx) {
   });
   const sosBox = el('div', 'sosbox');
   const sosChips = TH.sectors.map((s) => {
-    const b = new Btn({ main: s.id, sub: s.name.slice(0, 7), cls: 'sos', onClick: () => act('sos', s.id), tip: `Call ${TH.sos} on ${s.name} (S)` });
+    const b = new Btn({ main: s.id, sub: s.name.split(' ')[0], cls: 'sos', onClick: () => act('sos', s.id), tip: `Call ${TH.sos} on ${s.name} (S)` });
     const strength = new Bar({ cls: 'mini' });
     const w = el('div', 'sosc');
     w.append(b.el, strength.el);
@@ -158,6 +159,8 @@ export function mountConsole(ctx) {
   // its `top` (the Paris Gun's firing data) in the fire order card's
   if (special && !special.bottom) right.append(order.el, special.el);
   else right.append(special?.top ?? order.el, special?.aside ?? rtab.el);
+  // (the plain console: the fire order keeps its height and the range table takes any room to spare, panel.css)
+  if (!special) right.classList.add('plain');
   top.append(board.el, right);
   const bot = el('div', 'botrow');
   bot.append(special?.left ?? guns.el, special?.bottom ? special.el : missions.el, pad.el);
@@ -170,7 +173,8 @@ export function mountConsole(ctx) {
     const sim = view.sim, cfg = cfgOf(unit), o = unit.order || {};
     const now = performance.now();
     setText(callEl, (unit.callsign || '').toUpperCase());
-    setText(nameEl, `${unit.name}  ·  ${unit.battery || ''}`);
+    setText(nameEl, unit.name || '');
+    setText(batEl, unit.battery || '');
     mode.set(unit.mode);
     const dead = unit.alive === false;
     const ps = unit.pieces || [];

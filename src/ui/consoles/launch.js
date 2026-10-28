@@ -380,8 +380,8 @@ export function mountLaunchConsole(ctx) {
   const root = el('div', 'con launch');
   const hdr = el('header', 'hdr');
   const hid = el('div', 'hid');
-  const callEl = el('b', 'call'), nameEl = el('i', 'uname');
-  hid.append(callEl, nameEl);
+  const callEl = el('b', 'call'), nameEl = el('i', 'uname'), batEl = el('i', 'uname');
+  hid.append(callEl, nameEl, batEl);
   const hstat = el('div', 'hstat');
   const statEl = el('div', 'stat');
   hstat.append(statEl);
@@ -410,7 +410,8 @@ export function mountLaunchConsole(ctx) {
     U = unit; SIM = view.sim;
     const st = unit.special, now = performance.now();
     setText(callEl, (unit.callsign || '').toUpperCase());
-    setText(nameEl, `${unit.name}  ·  ${unit.battery || ''}`);
+    setText(nameEl, unit.name || '');
+    setText(batEl, unit.battery || '');
     mode.set(unit.mode);
     if (!st) return;
     // a refused order (from a key, a button or a lesson) shows in the status line for a few seconds

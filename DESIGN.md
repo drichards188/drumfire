@@ -2106,3 +2106,17 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   `newBattle` after `sim.newGame`, now puts each anchor at the centre of the sim's pieces and sets `unitDist[id]`: the
   battery's distance with every gun in, else the larger of 14 m, 2.2 times the gun rig's size and 1.6 times the spread
   of the guns fielded (a lone leFH 18 18 m, a 6-inch 14 m, a K 18 31 m). Battles with every gun are unchanged.
+- (ui: the console fitted to its screen and nothing cut short) The console's design box is 800 x 840, but most screens
+  are relatively taller (16:9 gives about 1,080), and all the spare height went to the bottom row, mostly empty, while
+  the board stayed square. The top and bottom rows now share it (`panel.css` `.toprow` / `.botrow` flex bases 452 and
+  300; the launch and Paris Gun consoles keep the old split); the plain console's fire order keeps its height and the
+  range table shows up to nine rows when it has room (`rangeTable.js`, a ResizeObserver). Text no longer ellipsized:
+  the header names the gun and the battery on two lines, the status line has three, the sector keys the whole first
+  word of the sector's name, a card's heading never gives way to its note (the guns card's note, the header's repeat,
+  is gone), a gun's state has its own room (the bars go down a line instead; the commonest states in fewer words:
+  "ready to fire"), a mission's observer and a report's task wrap. The guns card's rows sit at the top with the
+  ammunition and the signature right under them. The board's bar has two lines (the reference or the hover readout,
+  then the hint), and its live labels keep off each other and off the symbols, keys and bar (`Board.free`, `boxes`): a
+  range ring's label moves a little round its ring to a free spot or is left out (the charge laid always shows), a
+  target's goes below, above, right or left of its symbol, inside the board (a far one with no room left out, one a
+  place name already gives not repeated), and the battery names stay inside the board.

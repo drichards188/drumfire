@@ -93,9 +93,10 @@ export class Board {
     this.lg = this.layer.getContext('2d');
     this.bar = el('div', 'bbar');
     this.refEl = el('span', 'bref', '');
-    this.hint = el('span', 'bhint', TH.boardHint ?? 'click: lay the guns here   click a target: take its mission   drag: pan   wheel: zoom');
+    // (a second line of the bar, so neither it nor the grid reference above it is cut short; its gaps as dots)
+    this.hint = el('span', 'bhint', (TH.boardHint ?? 'click: lay the guns here   click a target: take its mission   drag: pan   wheel: zoom').replace(/ {2,}/g, '  ·  '));
     this.bar.append(this.refEl, this.hint);
-    const tools = el('div', 'btools');
+    const tools = this.tools = el('div', 'btools');
     const mk = (t, tip, fn) => { const b = new Btn({ main: t, cls: 'mini', onClick: fn, tip }); tools.append(b.el); return b; };
     mk('+', 'Zoom in', () => this.zoom(1 / 1.4));
     mk('−', 'Zoom out', () => this.zoom(1.4));
@@ -311,16 +312,28 @@ export class Board {
     }
     // trenches
     this.drawTrenches(g, z0, z1);
-    // names last, over everything static
+    // names last, over everything static; their boxes keep the live labels off them (drawTargets)
+    this.placeBoxes = [];
+    const name = (t, x, y, f, sp = 0) => {
+      const w = g.measureText(t).width + sp * (t.length - 1);
+      if (sp) this.spaced(g, t, x, y, sp); else this.halo(g, t, x, y);
+      this.placeBoxes.push([x - w / 2, y - f / 2, x + w / 2, y + f / 2, t]);
+    };
     for (const p of PLACES) {
       const R = p.r * px, cx = this.sx(p.pos.x), cz = this.sz(p.pos.z);
       if (cx < -100 || cx > W + 100 || cz < -50 || cz > H + 50) continue;
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      if (p.kind === 'town') { g.font = `${Math.round(12 + Math.min(R, 40) * 0.12)}px ${SERIF}`; g.fillStyle = INK; this.spaced(g, 'YPRES', cx, cz - Math.max(R, 10) * 0.8 - 8, 3); }
-      else if (p.kind === 'wood') { g.font = `italic ${Math.round(Math.max(10, Math.min(15, 9 + R * 0.04)))}px ${SERIF}`; g.fillStyle = GREEN; this.halo(g, p.name, cx, cz); }
-      else if (p.kind === 'crossroads') { g.font = `italic 10px ${SERIF}`; g.fillStyle = INK; this.halo(g, p.name, cx, cz - 11); }
-      else { g.font = `italic 11px ${SERIF}`; g.fillStyle = INK; this.halo(g, p.name, cx, cz + Math.max(R, 8) * 0.7 + 9); }
+      if (p.kind === 'town') { const f = Math.round(12 + Math.min(R, 40) * 0.12); g.font = `${f}px ${SERIF}`; g.fillStyle = INK; name('YPRES', cx, cz - Math.max(R, 10) * 0.8 - 8, f, 3); }
+      else if (p.kind === 'wood') { const f = Math.round(Math.max(10, Math.min(15, 9 + R * 0.04))); g.font = `italic ${f}px ${SERIF}`; g.fillStyle = GREEN; name(p.name, cx, cz, f); }
+      else if (p.kind === 'crossroads') { g.font = `italic 10px ${SERIF}`; g.fillStyle = INK; name(p.name, cx, cz - 11, 10); }
+      else { g.font = `italic 11px ${SERIF}`; g.fillStyle = INK; name(p.name, cx, cz + Math.max(R, 8) * 0.7 + 9, 11); }
     }
+  }
+
+  // a label's box [x0, y0, x1, y1] is free of the labels placed this frame (place names, rings, targets)
+  free(b) {
+    for (const o of this.boxes) if (b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]) return false;
+    return true;
   }
 
   halo(g, t, x, y) {
@@ -498,6 +511,15 @@ export class Board {
     g.setTransform(d, 0, 0, d, 0, 0);
     g.clearRect(0, 0, this.W, this.H);
     g.drawImage(this.layer, 0, 0, this.W, this.H);
+    // (and what lies over the map: the tool keys, the north arrow, the scale and the bar along the foot)
+    const W = this.W, H = this.H, bh = this.bar.offsetHeight + 2;
+    this.boxes = [...(this.placeBoxes ?? []), [0, 0, this.tools.offsetWidth + 8, this.tools.offsetHeight + 8], [W - 64, 18, W, 82], [10, H - 58, 168, H - 37], [0, H - bh, W, H]];
+    // the targets' symbols too (drawn after the range rings, which would have their labels under them)
+    for (const t of sim.targets || []) {
+      if (!t.known || t.alive === false) continue;
+      const X = this.sx(t.pos.x), Z = this.sz(t.pos.z), s = Math.max(5, Math.min(11, 5 + t.r / v.mpp * 0.5)) + 2;
+      if (X > -20 && X < W + 20 && Z > -20 && Z < H + 20) this.boxes.push([X - s, Z - s, X + s, Z + s]);
+    }
 
     const sx = (x) => this.sx(x), sz = (z) => this.sz(z);
     const T = now / 1000;
@@ -576,6 +598,7 @@ export class Board {
       g.closePath();
       g.fillStyle = 'rgba(40,80,150,.08)'; g.fill();
     }
+    const tags = [];
     for (let c = 0; c < n; c++) {
       const sp = rangeSpan(sim, unit.kind, c);
       if (!sp.max) continue;
@@ -583,13 +606,27 @@ export class Board {
       g.beginPath(); g.arc(cx, cz, R, 0, TAU);
       g.strokeStyle = on ? 'rgba(25,55,140,.85)' : 'rgba(25,55,140,.3)';
       g.lineWidth = on ? 1.5 : 0.8; g.setLineDash(on ? [9, 4] : [3, 5]); g.stroke(); g.setLineDash([]);
-      // label the ring where it crosses the line of the guns
-      const lx = cx + Math.sin(mid + 0.0) * R, lz = cz - Math.cos(mid) * R;
-      if (lx > 10 && lx < this.W - 24 && lz > 8 && lz < this.H - 8) {
-        g.font = `${on ? 'bold ' : ''}9px ${TYPE}`; g.textAlign = 'left'; g.textBaseline = 'bottom';
-        g.fillStyle = on ? '#142e7a' : 'rgba(25,55,140,.6)';
-        this.halo(g, `C${c + 1} ${yd(sp.max)}`, lx + 3, lz - 2);
+      tags[on ? 'unshift' : 'push']([`C${c + 1} ${yd(sp.max)}`, R, on]);
+    }
+    // label each ring where it crosses the line of the guns, or a little round it where that spot is taken (close
+    // rings ran their labels together); the charge laid first and always, the others only where they cover nothing
+    g.textAlign = 'left'; g.textBaseline = 'bottom';
+    for (const [t, R, on] of tags) {
+      g.font = `${on ? 'bold ' : ''}9px ${TYPE}`;
+      const w = g.measureText(t).width;
+      let b = null, first = null;
+      for (const da of [0, -0.07, 0.07, -0.14, 0.14, -0.21, 0.21]) {
+        const x = cx + Math.sin(mid + da) * R + 3, y = cz - Math.cos(mid + da) * R - 2;
+        if (x < 13 || x + w > this.W - 4 || y < 6 || y > this.H - 10) continue;
+        const q = [x - 2, y - 10, x + w + 2, y + 1];
+        first ??= q;
+        if (this.free(q)) { b = q; break; }
       }
+      if (!b && on) b = first;
+      if (!b) continue;
+      this.boxes.push(b);
+      g.fillStyle = on ? '#142e7a' : 'rgba(25,55,140,.6)';
+      this.halo(g, t, b[0] + 2, b[3] - 1);
     }
     if (cur.min && cur.min / v.mpp > 6) {
       g.beginPath(); g.arc(cx, cz, cur.min / v.mpp, 0, TAU);
@@ -670,11 +707,27 @@ export class Board {
         }
       }
       g.globalAlpha = 1;
-      if (!dead) lbl.push([t.name, X, Z + s + (t.maxHp && t.hp < t.maxHp ? 8 : 3), far]);
+      if (!dead) lbl.push([t.name, X, Z, s, s + (t.maxHp && t.hp < t.maxHp ? 8 : 3), far]);
     }
-    g.font = `italic 9.5px ${SERIF}`; g.fillStyle = '#6e1810';
-    for (const [n, X, Z, far] of lbl) { g.globalAlpha = far ? 0.6 : 1; this.halo(g, n, X, Z); }
-    g.globalAlpha = 1;
+    // each label below its symbol, else above, right or left, kept inside the board; one that finds no room is drawn
+    // below anyway, or left out if it is out of reach (the cursor names it), and a place name already on the map is not
+    // repeated
+    g.font = `italic 9.5px ${SERIF}`; g.fillStyle = '#6e1810'; g.textAlign = 'left';
+    lbl.sort((a, b) => a[5] - b[5]);
+    for (const m of missions) if (m.state !== 'done' && m.state !== 'failed') { const X = this.sx(m.x), Z = this.sz(m.z); this.boxes.push([X + 8, Z - 22, X + 28, Z - 7]); } // (their flags, below)
+    const inside = (b) => { const d = b[0] < 2 ? 2 - b[0] : b[2] > this.W - 2 ? this.W - 2 - b[2] : 0; b[0] += d; b[2] += d; return b; };
+    for (const [n, X, Z, s, below, far] of lbl) {
+      if (this.placeBoxes?.some((p) => p[4] === n && Math.abs((p[0] + p[2]) / 2 - X) < 60 && Math.abs((p[1] + p[3]) / 2 - Z) < 30)) continue;
+      const w = g.measureText(n).width, h = 11;
+      const at = [[X - w / 2, Z + below], [X - w / 2, Z - s - 3 - h], [X + s + 4, Z - h / 2], [X - s - 4 - w, Z - h / 2]]
+        .map(([x, y]) => inside([x, y, x + w, y + h]));
+      let b = at.find((q) => this.free(q));
+      if (!b) { if (far) continue; b = at[0]; }
+      this.boxes.push(b);
+      g.globalAlpha = far ? 0.6 : 1;
+      this.halo(g, n, b[0], b[1]);
+    }
+    g.globalAlpha = 1; g.textAlign = 'center';
     // mission tags: a small numbered flag at the point; the cursor one pulses, the taken one is bracketed
     for (const m of missions) {
       if (m.state === 'done' || m.state === 'failed') continue;
@@ -779,7 +832,8 @@ export class Board {
       for (const p of u.pieces || []) if (p.firedAt != null && now - p.firedAt < 0.9) fired = Math.max(fired, 1 - (now - p.firedAt) / 0.9);
       if (fired > 0) { g.strokeStyle = `rgba(255,170,40,${fired})`; g.lineWidth = 2.5; g.beginPath(); g.arc(X, Z, s + 4 + (1 - fired) * 16, 0, TAU); g.stroke(); }
       g.font = `${isSel ? 'bold ' : ''}italic ${isSel ? 11 : 10}px ${SERIF}`; g.fillStyle = dead ? '#555' : '#10286e'; g.textAlign = 'center'; g.textBaseline = 'top';
-      this.halo(g, `${u.id} ${u.callsign}`, X, Z + s + 3);
+      const t = `${u.id} ${u.callsign}`, hw = g.measureText(t).width / 2 + 2; // (kept inside the board)
+      this.halo(g, t, Math.max(hw, Math.min(this.W - hw, X)), Z + s + 3);
     }
   }
 
@@ -865,7 +919,7 @@ export class Board {
     // scale bar in thousands of yards
     const yardPx = lenU() / this.view.mpp;
     let bar = 1000; while (bar * yardPx > 150) bar /= 2; while (bar * yardPx < 60) bar *= 2;
-    const bx = 14, bz = H - 34;
+    const bx = 14, bz = H - 44; // (above the two lines of the bar)
     g.fillStyle = INK; g.fillRect(bx, bz, bar * yardPx, 3);
     g.fillRect(bx, bz - 3, 1.2, 9); g.fillRect(bx + bar * yardPx - 1, bz - 3, 1.2, 9);
     g.font = `9px ${TYPE}`; g.textAlign = 'left'; g.textBaseline = 'bottom'; this.halo(g, `${commasInt(bar)} ${lenShort()}`, bx, bz - 4);

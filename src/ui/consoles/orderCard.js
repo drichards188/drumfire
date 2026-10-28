@@ -41,7 +41,8 @@ export class OrderCard {
     this.tName = el('div', 'tname', 'No target laid');
     const stamp = el('div', 'tstamp', TH.orderStamp);
     this.target.append(el('i', 'ftitle', 'TARGET'), this.tRef, this.tName, stamp);
-    this.line = field('LINE'); this.range = field('RANGE', 'wide'); this.el_ = field('ELEVATION');
+    // (the range's figures are short; the line and the elevation have the long notes: "Strich, on the line")
+    this.line = field('LINE'); this.range = field('RANGE', 'narrow'); this.el_ = field('ELEVATION');
     const r2 = el('div', 'frow3');
     r2.append(this.line.el, this.range.el, this.el_.el);
     this.charge = stepper('CHARGE', () => this.act('charge', -1), () => this.act('charge', 1));

@@ -4,7 +4,7 @@
 // the handwheels give, and the key that relays it onto the ordered target's line (T), with its progress. In the WW2
 // mode a gun that can be served in person has MAN on its row (LEAVE while the player is at it: src/ww2/gunner.js).
 import { el, setText, setCls, setStyle, card, Lamp, Bar, Btn } from '../widgets.js';
-import { STEPS, stepIndex, KIND_SHORT } from './common.js';
+import { STEPS, stepIndex } from './common.js';
 import { TH } from '../theatre.js';
 import { GUNS } from '../../sim/tables.js';
 import { menShown } from '../../research.js';
@@ -19,10 +19,9 @@ const span = (s, long) => (s < 120 ? `${Math.ceil(s)}${long ? ' seconds' : ' s'}
 export class GunsCard {
   constructor({ onBed = null, onMan = null } = {}) {
     this.onMan = onMan;
+    // (no subtitle: the header above names the gun and the battery)
     const c = card('THE GUNS', '', 'guns');
     this.el = c.el;
-    this.sub = el('i', null, '');
-    c.head.append(this.sub);
     this.list = el('div', 'glist');
     this.ammo = el('div', 'gammo');
     this.he = el('b', null, ''); this.sh = el('b', null, '');
@@ -47,7 +46,7 @@ export class GunsCard {
       const head = el('div', 'ghead');
       const name = el('div', 'gname');
       const no = el('b', null, `No. ${i + 1}`);
-      const crew = el('i', null, '');
+      const crew = el('i', 'gcrew', '');
       const man = el('button', 'gman', 'MAN');
       man.type = 'button';
       man.addEventListener('click', () => this.onMan?.(i, man.dataset.on === '1'));
@@ -61,11 +60,14 @@ export class GunsCard {
       const cells = STEPS.map((s) => { const x = el('span', 'pc', SHORT[s.k]); pipe.append(x); return x; });
       const prog = el('i', 'pprog');
       pipe.append(prog);
-      const line = el('div', 'gline');
+      // what the gun is doing (or why it cannot), then its health, barrel wear and MAN; the bars go down a line
+      // rather than cut the reason short (panel.css .gline wraps)
       const state = el('div', 'gstate', '');
+      const line = el('div', 'gline'), cond = el('div', 'gcond');
       const hp = new Bar(), wear = new Bar({ invert: true });
       hp.el.title = 'Health of the piece'; wear.el.title = 'Barrel wear';
-      line.append(state, el('span', null, 'HP'), hp.el, el('span', null, 'WEAR'), wear.el, man);
+      cond.append(el('span', null, 'HP'), hp.el, el('span', null, 'WEAR'), wear.el, man);
+      line.append(state, cond);
       r.append(head, dots, pipe, line);
       this.list.append(r);
       this.rows.push({ r, no, crew, man, dots, laid, loaded, ready, cells, prog, hp, wear, state });
@@ -76,7 +78,6 @@ export class GunsCard {
     const ps = unit.pieces || [];
     if (ps.length !== this.n) this.build(ps.length);
     setCls(this.el, 'few', ps.length <= 2);
-    setText(this.sub, `${KIND_SHORT[unit.kind] || unit.kind} · ${unit.battery || ''}`);
     ps.forEach((p, i) => {
       const w = this.rows[i];
       const dead = p.state === 'dead';
@@ -111,9 +112,10 @@ export class GunsCard {
       let st;
       if (dead) st = 'KNOCKED OUT';
       else if (p.state === 'recoil') st = 'in recoil';
-      else if (p.state === 'ready') st = laid ? 'laid and loaded: ready to fire' : 'loaded; laying';
-      else if (p.state === 'laying') st = 'laying on the ordered line';
-      else if (p.job) st = (p.job.step === 'depress' ? 'run out to loading elevation' : p.job.step === 'open' ? 'opening the breech' : p.job.step === 'lay' && unit.gate ? `loaded; waiting: ${unit.gate}` : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
+      // (the commonest states in few words: the lamps beside them say laid and loaded)
+      else if (p.state === 'ready') st = laid ? 'ready to fire' : 'loaded; laying';
+      else if (p.state === 'laying') st = 'laying on the line';
+      else if (p.job) st = (p.job.step === 'depress' ? 'to the loading angle' : p.job.step === 'open' ? 'opening the breech' : p.job.step === 'lay' && unit.gate ? `loaded; waiting: ${unit.gate}` : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
       // a special weapon's controller holding the unit (the Karl's hull turning): say what it is doing, not idle
       else if (unit.gate && unit.special) st = (p.loaded ? `loaded; ${unit.gate}` : unit.gate).toLowerCase();
       // a gun that cannot carry out the order says why (the status line has the whole reason)

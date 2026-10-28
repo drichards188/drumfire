@@ -41,8 +41,12 @@ const FOV = 62, FOV_MIN = 12, FOV_MAX = 75;
 // (Q goes with E: the console's charge keys stay off together; R, Z, X and the rest stay the console's)
 const GUN_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'KeyC', 'KeyN', 'ShiftLeft', 'ShiftRight']);
 const STEP_SHORT = { depress: 'DOWN', open: 'OPEN', shell: 'SHELL', ram: 'RAM', cartridge: 'CART.', close: 'CLOSE', prime: 'PRIME', lay: 'LAY' };
+const POST_SHORT = { cmd: 'Commander', lay: 'Layer', load: 'Loader', fire: 'Firer' };
+const FUZE = { delay: 'AZ m.V.', shrapnel: 'ZEITZ.', instant: 'AZ o.V.' };
+const K = (...k) => k.map((x) => `<kbd>${x}</kbd>`).join('');
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const st2 = (r) => Math.round(r / STRICH);
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : '');
 const _eye = new THREE.Vector3(), _poi = new THREE.Vector3(), _d = new THREE.Vector3(), _goal = new THREE.Vector3();
 const _e = new THREE.Euler(0, 0, 0, 'YXZ'), _q = new THREE.Quaternion();
 
@@ -109,52 +113,76 @@ export class GunnerView {
     b.addEventListener('pointerdown', (e) => e.stopPropagation());
     b.addEventListener('click', () => onButton?.());
     root.append(b);
+    // Top to bottom: which gun, the four posts (the player's lit), the one thing to do now (its key and how far the hold
+    // has got), the fire command against the gun's lay, the drill, and the keys of the post the player is at
     const c = this.card = el('div');
     c.id = 'gunner';
     c.addEventListener('pointerdown', (e) => e.stopPropagation()); // no look drag from the card
     const head = el('div', 'g-head');
+    const name = el('div', 'g-title');
+    this.eyebrow = el('i', null, '');
     this.title = el('b', null, '');
-    this.assistB = el('button', 'g-assist', '');
+    name.append(this.eyebrow, this.title);
+    this.assistB = el('button', 'g-assist');
     this.assistB.type = 'button';
-    this.assistB.title = 'Crew help (C): the men at the other posts do their work; off, nothing at another post moves until you go there';
+    this.assistB.title = 'Crew help (C): on, the men at the other posts do their work; off, nothing at another post moves until you go there';
+    this.assistOn = el('b', null, '');
+    this.assistB.append(el('span', null, 'Crew help'), this.assistOn, el('kbd', null, 'C'));
     this.assistB.addEventListener('click', () => this.send('assist', {}));
-    head.append(this.title, this.assistB);
+    head.append(name, this.assistB);
+    // the posts: each one's colour is its steps' colour in the drill below
     const posts = el('div', 'g-posts');
     this.postB = POSTS.map((q) => {
-      const x = el('button', 'g-post');
+      const x = el('button', `g-post p-${q.id}`);
       x.type = 'button';
-      const sub = el('i');
-      sub.append(el('kbd', null, String(q.key)), q.en);
-      x.append(el('b', null, q.name), sub);
-      x.title = `${q.name} (${q.en}): key ${q.key}`;
+      const top = el('span');
+      top.append(el('kbd', null, String(q.key)), el('b', null, POST_SHORT[q.id]));
+      x.append(top, el('i', null, q.name));
+      x.title = `${q.name}, the ${q.en} (key ${q.key})`;
       x.addEventListener('click', () => this.send('post', { post: q.id }));
       posts.append(x);
       return x;
     });
-    const order = el('div', 'g-order');
-    this.orderHead = el('b', null, '');
-    this.orderLine = el('span', null, '');
-    this.fireLine = el('i', null, '');
-    order.append(this.orderHead, this.orderLine, this.fireLine);
-    const gun = el('div', 'g-gun');
-    this.seite = el('span', null, '');
-    this.hoehe = el('span', null, '');
-    this.laid = el('em', null, 'LAID');
-    gun.append(el('i', null, 'GUN'), this.seite, this.hoehe, this.laid);
-    this.drill = el('div', 'g-drill');
-    this.cells = [];
     this.prompt = el('div', 'g-prompt');
     this.pKey = el('kbd', null, '');
-    this.pText = el('span', null, '');
+    const pt = el('div', 'g-ptext');
+    this.pText = el('b', null, '');
+    this.pSub = el('i', null, '');
+    pt.append(this.pText, this.pSub);
     this.pBar = el('i', 'g-bar');
     this.pFill = el('b');
     this.pBar.append(this.pFill);
-    this.prompt.append(this.pKey, this.pText, this.pBar);
-    this.why = el('div', 'g-why', '');
+    this.prompt.append(this.pKey, pt, this.pBar);
+    // the command and the gun side by side: what was ordered, where the gun is, what is left to lay
+    const cmd = el('div', 'g-cmd');
+    const ch = el('div', 'g-cmd-head');
+    this.orderHead = el('b', null, '');
+    this.ackChip = el('em', 'g-chip', '');
+    this.fireChip = el('em', 'g-chip', '');
+    ch.append(this.orderHead, this.ackChip, this.fireChip);
+    this.orderNote = el('div', 'g-note', '');
+    const lay = el('div', 'g-lay');
+    lay.append(el('i'), ...['ORDER', 'GUN', 'TO LAY'].map((t) => el('i', 'g-th', t)));
+    this.rows = ['Seite', 'Erhöhung'].map((t) => {
+      const r = { row: el('div', 'g-row'), order: el('span', 'g-ord'), gun: el('span'), go: el('span', 'g-go'), goText: el('span'), goKey: el('kbd') };
+      r.go.append(r.goText, r.goKey);
+      r.row.append(el('span', 'g-rl', t), r.order, r.gun, r.go);
+      lay.append(r.row);
+      return r;
+    });
+    this.loadLine = el('div', 'g-cmd-foot', '');
+    cmd.append(ch, this.orderNote, lay, this.loadLine);
+    this.drill = el('div', 'g-drill');
+    this.cells = [];
     this.keys = el('div', 'g-keys');
-    this.keysKind = null;
-    c.append(head, posts, order, gun, this.drill, this.prompt, this.why, this.keys);
+    this.keysPost = el('div', 'g-keys-post');
+    this.keysAll = el('div', 'g-keys-all');
+    this.keys.append(this.keysPost, this.keysAll);
+    this.keysFor = null;
+    c.append(head, posts, this.prompt, cmd, this.drill, this.keys);
     root.append(c);
+    // the card's height for the subtitles that sit above it (gunner.css), whenever it changes
+    new ResizeObserver(() => { if (c.offsetHeight) document.body.style.setProperty('--gunner-h', `${c.offsetHeight}px`); }).observe(c);
   }
 
   // the button: shown on a WW2 battle page for a gun that can be served in person (or while at one)
@@ -164,13 +192,14 @@ export class GunnerView {
     cls(this.button, 'on', active);
   }
 
-  // a word under the prompt (a key that cannot act here, a pull refused)
+  // a word in the prompt's second line for a moment (a key that cannot act here, a pull refused)
   flash(text) {
-    set(this.why, text);
+    this.flashText = text;
     this.flashT = performance.now();
-    cls(this.why, 'flash', false);
-    void this.why.offsetWidth;
-    cls(this.why, 'flash', true);
+    set(this.pSub, text);
+    cls(this.pSub, 'flash', false);
+    void this.pSub.offsetWidth;
+    cls(this.pSub, 'flash', true);
   }
 
   // ------------------------------------------------------------------ in and out
@@ -308,41 +337,88 @@ export class GunnerView {
     if (!this.active || !st) return;
     const u = sim.unitById(st.unitId), p = u?.pieces[st.pi];
     if (!u || !p) return;
-    const g = GUNS[p.kind], n = st.next;
-    if (this.keysKind !== p.kind) {
-      this.keysKind = p.kind;
-      const lay = DRIVEN.has(p.kind)
-        ? '<kbd>W</kbd><kbd>S</kbd><kbd>A</kbd><kbd>D</kbd>tap: the laying drive (<kbd>Shift</kbd> held: hand wheel) '
-        : '<kbd>W</kbd><kbd>S</kbd>elevation <kbd>A</kbd><kbd>D</kbd>traverse <kbd>Shift</kbd>fine ';
-      this.keys.innerHTML = `${lay}<kbd>E</kbd>work (hold) <kbd>1</kbd>-<kbd>4</kbd>post <kbd>C</kbd>crew help `
-        + `${u.pieces.length > 1 ? '<kbd>N</kbd>next gun ' : ''}${p.kind === 'karl' ? '<kbd>L</kbd>hull <kbd>T</kbd>turn <kbd>Y</kbd>carrier ' : ''}`
-        + '<kbd>F</kbd>ride the shell <kbd>P</kbd>leave · drag to look, wheel to zoom';
+    const g = GUNS[p.kind], n = st.next, driven = DRIVEN.has(p.kind), post = (id) => POSTS.find((q) => q.id === id);
+    // the keys: the post's own first, then the ones that work anywhere at the gun
+    const kf = `${p.kind}:${st.post}:${u.pieces.length > 1}`;
+    if (this.keysFor !== kf) {
+      this.keysFor = kf;
+      // each key with its word kept on one line, so a line wraps between them
+      const G = (...g) => g.map((x) => `<span>${x}</span>`).join('');
+      this.keysPost.innerHTML = {
+        cmd: G(`${K('E')}hold: read back the fire command`),
+        lay: driven ? G(`${K('W', 'S', 'A', 'D')}tap: start or stop the drive`, `${K('Shift')}held: hand wheel`)
+          : G(`${K('W', 'S')}elevation`, `${K('A', 'D')}traverse`, `${K('Shift')}fine`),
+        load: G(`${K('E')}hold: open, load, ram and close`),
+        fire: G(`${K('E')}hold: fit the primer, pull the lanyard`),
+      }[st.post] ?? '';
+      this.keysAll.innerHTML = G(`${K('1')}-${K('4')}post`, `${K('C')}crew help`, ...(u.pieces.length > 1 ? [`${K('N')}next gun`] : []),
+        ...(p.kind === 'karl' ? [`${K('L')}hull`, `${K('T')}turn`, `${K('Y')}carrier`] : []),
+        `${K('F')}ride the shell`, `${K('P')}leave`, 'drag: look', 'wheel: zoom');
     }
-    set(this.title, `AM GESCHÜTZ · No. ${p.i + 1} gun · ${g.name} "${u.callsign}"`);
-    set(this.assistB, st.assist ? 'CREW HELPS (C)' : 'ALONE (C)');
+    set(this.eyebrow, `AM GESCHÜTZ · No. ${p.i + 1} gun`);
+    set(this.title, `${g.name} "${u.callsign}"`);
+    set(this.assistOn, st.assist ? 'ON' : 'OFF');
     cls(this.assistB, 'on', st.assist);
+    // the next job: the player's own, at another post (the crew's when it helps; the manual pull is always the
+    // player's), or dead time
+    const mine = !!n && !n.wait && n.post === st.post;
+    const away = !!n && !n.wait && n.post !== st.post;
+    const crewDoes = away && st.assist && p.crew >= Math.ceil(p.crewMax * 0.3) && !(n.post === 'fire' && !(p.rounds > 0));
     POSTS.forEach((q, i) => {
       cls(this.postB[i], 'me', st.post === q.id);
-      cls(this.postB[i], 'next', !!n && !n.wait && n.post === q.id && st.post !== q.id);
+      cls(this.postB[i], 'next', away && n.post === q.id);
+      cls(this.postB[i], 'g-want', away && !crewDoes && n.post === q.id);
     });
-    // the fire command for this gun
+    const np = n && post(n.post);
+    set(this.pKey, mine ? n.key ?? '' : away ? String(np.key) : n ? '…' : '');
+    set(this.pText, cap(n?.text ?? ''));
+    let sub = '';
+    if (mine && n.key) sub = n.key === 'E' ? 'Hold E' : driven ? `Tap ${n.key}: the drive runs on to the mark` : `Hold ${n.key} (Shift: fine)`;
+    else if (away) sub = crewDoes ? `The ${np.en}'s job: the crew is on it, or take post ${np.key}` : `The ${np.en}'s job: press ${np.key} to go to that post`;
+    if (performance.now() - this.flashT > 2600) { set(this.pSub, sub); cls(this.pSub, 'flash', false); }
+    cls(this.prompt, 'mine', mine);
+    cls(this.prompt, 'go', away && !crewDoes);
+    cls(this.prompt, 'g-by-crew', crewDoes);
+    cls(this.prompt, 'wait', !!n?.wait);
+    let f = 0;
+    if (st.hold && st.hold.dur) f = st.hold.t / st.hold.dur;
+    else if (mine && p.job) f = p.job.t / Math.max(0.01, p.job.dur);
+    this.pFill.style.width = `${Math.round(Math.min(1, f) * 100)}%`;
+    // the fire command for this gun: read back or not, and whether the battery has said Feuer
     const o = st.order;
-    if (!o) {
-      set(this.orderHead, 'NO FIRE COMMAND');
-      set(this.orderLine, u.mode === 'manual' ? 'Lay the battery from the console (the board, or a mission).' : 'The battery commander has none for this gun yet.');
-    } else {
-      set(this.orderHead, `FEUERKOMMANDO ${o.n}${o.ok ? (o.acked ? ' · read back' : ' · READ BACK (1)') : ' · CANNOT BE LAID'}`);
-      set(this.orderLine, o.ok ? `Seite ${fmtSeite(o.az)} · Erhöhung ${st2(o.el)} · ${g.charges[o.charge]?.name ?? '-'} · ${o.fuze === 'delay' ? 'AZ m.V.' : o.fuze === 'shrapnel' ? 'ZEITZ.' : 'AZ o.V.'}` : `${o.why || 'out of reach'}`);
-    }
-    cls(this.orderHead, 'ring', !!o && o.ok && !o.acked);
-    set(this.fireLine, p.rounds > 0 ? `FEUER: ${p.rounds} round${p.rounds > 1 ? 's' : ''}` : u.mode === 'manual' ? `no order to fire: your pull fires this gun (${u.order.rounds} round${u.order.rounds > 1 ? 's' : ''}, R on the console)` : 'no order to fire');
-    cls(this.fireLine, 'go', p.rounds > 0);
-    // the gun as it stands, against the command read back
-    const c = st.ack, heavyDown = g.load[0]?.step === 'depress' && p.state === 'loading' && ['depress', 'open', 'shell', 'ram', 'cartridge', 'close', 'prime'].includes(p.job?.step);
+    set(this.orderHead, o ? `FEUERKOMMANDO ${o.n}` : 'NO FIRE COMMAND');
+    set(this.ackChip, !o ? '' : !o.ok ? 'CANNOT BE LAID' : o.acked ? 'read back' : 'NOT READ BACK');
+    cls(this.ackChip, 'ok', !!o?.ok && o.acked);
+    cls(this.ackChip, 'ring', !!o?.ok && !o.acked);
+    cls(this.ackChip, 'bad', !!o && !o.ok);
+    const rd = (k) => `${k} round${k > 1 ? 's' : ''}`;
+    set(this.fireChip, p.rounds > 0 ? `FEUER: ${rd(p.rounds)}` : u.mode === 'manual' ? `on your pull: ${rd(u.order.rounds)}` : 'no Feuer yet');
+    this.fireChip.title = p.rounds > 0 ? 'The battery has ordered Feuer for this gun' : u.mode === 'manual'
+      ? 'The battery is on manual: the firer\'s pull is the order to fire for this gun (rounds per gun: R on the console)'
+      : 'The battery commander has not given Feuer for this gun yet';
+    cls(this.fireChip, 'fire', p.rounds > 0);
+    set(this.orderNote, !o ? (u.mode === 'manual' ? 'Lay the battery from the console: click the board, or take a mission.' : 'The battery commander has none for this gun yet.')
+      : !o.ok ? cap(o.why || 'out of reach') : '');
+    set(this.loadLine, o?.ok ? `${g.charges[o.charge]?.name ?? '-'} · ${FUZE[o.fuze] ?? FUZE.instant}` : '');
+    // the gun as it stands against the marks read back (a command not read back has none yet); the heavies' barrel
+    // runs down to its loading angle first
+    const c = o?.acked ? st.ack : null, heavyDown = g.load[0]?.step === 'depress' && p.state === 'loading' && ['depress', 'open', 'shell', 'ram', 'cartridge', 'close', 'prime'].includes(p.job?.step);
     const dA = c ? st2(c.az - p.az) : 0, dE = heavyDown ? st2(g.loadEl - p.el) : c ? st2(c.el - p.el) : 0;
-    set(this.seite, `Seite ${fmtSeite(p.az)}${c && dA ? ` (${Math.abs(dA)} ${dA > 0 ? 'left' : 'right'})` : ''}`);
-    set(this.hoehe, `Erhöhung ${st2(p.el)}${heavyDown ? ` (loading angle ${st2(g.loadEl)})` : c && dE ? ` (${Math.abs(dE)} ${dE > 0 ? 'up' : 'down'})` : ''}`);
-    cls(this.laid, 'on', !!c && !dA && !dE && !heavyDown);
+    const [rs, re] = this.rows;
+    set(rs.order, o?.ok ? fmtSeite(o.az) : '-');
+    set(rs.gun, fmtSeite(p.az));
+    set(re.order, o?.ok ? String(st2(o.el)) : '-');
+    set(re.gun, String(st2(p.el)));
+    // what is left to lay, and the key that lays it (none while a drive runs the right way)
+    const togo = (r, on, d, words, keys, ax, zero = 'on') => {
+      const run = driven && st.drive[ax] === Math.sign(d);
+      set(r.goText, !on ? '-' : d === 0 ? zero : `${Math.abs(d)} ${d > 0 ? words[0] : words[1]}${run ? ', driving' : ''}`);
+      set(r.goKey, on && d !== 0 && !run ? (d > 0 ? keys[0] : keys[1]) : '');
+      cls(r.row, 'ok', on && d === 0);
+      cls(r.row, 'g-none', !on);
+    };
+    togo(rs, !!c, dA, ['left', 'right'], ['A', 'D'], 'az');
+    togo(re, !!c || heavyDown, dE, heavyDown ? ['to load', 'to load'] : ['up', 'down'], ['W', 'S'], 'el', heavyDown ? 'load angle' : 'on');
     // the drill: the steps of the cycle, the one being worked, whose it is
     if (this.cells.length !== g.load.length) {
       this.drill.replaceChildren();
@@ -366,17 +442,6 @@ export class GunnerView {
       const f = idx === i && p.job && i < g.load.length ? Math.min(1, p.job.t / Math.max(0.01, p.job.dur)) : idx === i && st.hold?.what === 'pull' ? st.hold.t / st.hold.dur : 0;
       fill.style.width = `${Math.round(f * 100)}%`;
     });
-    // the prompt: the next job, its key, the progress of what is being held
-    const mine = n && n.post === st.post && !n.wait;
-    set(this.pKey, mine && n.key ? n.key : n?.wait ? '…' : n ? String(POSTS.find((q) => q.id === n.post)?.key ?? '') : '');
-    set(this.pText, n ? (mine ? (n.key === 'E' ? `hold: ${n.text}` : n.text) : n.wait ? n.text : `next: ${n.text} (${POSTS.find((q) => q.id === n.post)?.en})`) : '');
-    cls(this.prompt, 'mine', !!mine);
-    cls(this.prompt, 'wait', !!n?.wait);
-    let f = 0;
-    if (st.hold && st.hold.dur) f = st.hold.t / st.hold.dur;
-    else if (mine && p.job) f = p.job.t / Math.max(0.01, p.job.dur);
-    this.pFill.style.width = `${Math.round(Math.min(1, f) * 100)}%`;
-    if (performance.now() - this.flashT > 2600) set(this.why, st.why || '');
   }
 }
 
