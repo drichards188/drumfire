@@ -135,6 +135,8 @@ export const TARGETS_WW1 = {
 // rounds per piece a sensible German crew orders for effect, by target kind (and 'sos' for the Sperrfeuer).
 // bertha's row is merged into the WW2 one (tables.js), not replaced.
 const ALL = (n) => ({ bgun15: n, bgun92: n, bgun6: n, bgun60: n, bgunrail: n, bfield: n, btanks: n, bballoon: n, bdump: n, bconvoy: n, hq: n, railyard: n, sos: n });
+// (the British side's kinds alone, and the concrete shelters of the career's battle: for the WW2 rows below)
+const BRIT = (n) => ({ bgun15: n, bgun92: n, bgun6: n, bgun60: n, bgunrail: n, bfield: n, btanks: n, bballoon: n, bdump: n, bconvoy: n, mebu: n });
 export const FFE_WW1 = {
   sfh13: { ...ALL(6), btanks: 7, bconvoy: 4, bballoon: 3, sos: 5 },
   m16: { ...ALL(4), bconvoy: 3, bballoon: 2, sos: 4 },
@@ -143,4 +145,13 @@ export const FFE_WW1 = {
   max38: ALL(1),
   gamma: ALL(1),
   paris: ALL(1),
+  // the German career's WW2 batteries on the ridge (src/ww1/ops.js RIDGE_WW2), as their WW2 rows; merged into those
+  // (tables.js), so without 'sos', 'hq' and 'railyard', which the WW2 rows give for both battles
+  lefh18: { ...BRIT(8), btanks: 10, bdump: 6, bconvoy: 4, bballoon: 4 },
+  sfh18: { ...BRIT(6), btanks: 7, bdump: 5, bconvoy: 4, bballoon: 3 },
+  k18: { ...BRIT(5), btanks: 6, bdump: 4, bconvoy: 3, bballoon: 3 },
+  mrs18: { ...BRIT(4), btanks: 5, bdump: 3, bconvoy: 3, bballoon: 2, mebu: 5 },
+  nbw41: { ...BRIT(2), bconvoy: 1, bballoon: 1 },
+  karl: BRIT(1),
+  gustav: BRIT(1),
 };

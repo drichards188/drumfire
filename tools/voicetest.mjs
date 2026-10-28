@@ -21,7 +21,8 @@ const op = opt('--op', 'flanders'), unit = Number(opt('--unit', 1)), seconds = N
 const then = (opt('--then', '') || '').split(',').filter(Boolean).map((s) => s.split(':').map(Number));
 const player = args.includes('--player');
 const WW1 = op === 'ridge' || op === 'paris', mode = WW1 ? 'ww1' : 'ww2';
-const exe = ['chromium-1247', 'chromium-1217'].map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
+// (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
+const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247', 'chromium-1217'].map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
   .concat(process.env.PLAYWRIGHT_BROWSERS_PATH ? [`${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium`] : []).find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
@@ -33,7 +34,7 @@ await page.addInitScript(() => {
   };
   try { localStorage.removeItem('drumfire.voices'); } catch {}
   // the career's dev mode (as tools/shot.mjs --dev): every battery plays in the open battle, not only the earned ones
-  try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {}
+  try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {}
 });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); if (m.type() === 'error' || m.type() === 'warning') console.log(`[console.${m.type()}] ${m.text()}`); });

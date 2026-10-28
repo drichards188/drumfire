@@ -107,7 +107,11 @@ Page-local viewers (dev server only):
 - **Bed relaying.** Relaying Bertha's or the Gamma's bed is instant for now; the 100 s it took is to come back (`src/ww1/special.js`).
 - **WW1 German lessons.** The era has none yet.
 - **Progression playtesting.** The research pace, the upgrade costs and the campaigns' difficulty come from the headless auto crews and need human playtesting; the tests check the rules only ([PROGRESSION.md](PROGRESSION.md)).
-- **Missions from the lineup.** Only the heavy and long guns' missions follow the batteries fielded; the rest of the open battle's day is fixed ([PROGRESSION.md](PROGRESSION.md#still-to-do)).
+- **The career and the threat levels.** Levels 6 to 10 on the WW2 map, tanks with the British attacks, the neighbouring Gruppe's fire, a scripted ridge player, playtesting the new pay, off-map support for the auto crews, the light guns' drill speed, Britain's return: [PROGRESSION.md, "Still to do"](PROGRESSION.md#still-to-do).
+- **The test range on the ridge.** It offers only the 1918 guns, not the WW2 ones the career can field there.
+- **The consoles.** The Karl's and the Gustav's fire order card is squeezed under the procedure card at the smallest height, and the line-of-fire label on the board is not part of the label avoidance.
+- **The hangar's dress.** On the battle page every crew dresses by its own gun's era; the hangar should be checked against the same rule.
+- **Headless Chromium.** On 2026-10-28 the chromium-1247 build stopped drawing 2D canvases (a plain `fillRect` hangs), so every page looked frozen in the headless tools. Run them with `CHROME=chromium-1217` until it is reinstalled or the cause is found.
 - **Planned for the WW2 mode**, not built yet ([WW2.md, "Planned improvements"](WW2.md#d-planned-improvements-not-built-yet)): short skill moments at the key steps of the V-1 and V-2 launches; shoot and scoot for the A4 (several firing points, the convoy driving between them); and the Karl's crew, who slide along in their standing poses while it drives between positions.
 - **The Paris Gun's target effects.** Its effects on the railway junction, the tank depot and the reserve camp are written but inactive: they need the gun in the open battle, which no operation has. Only the aerodrome's (fewer raids on the gun) works.
 - **Blast-flattened grass.** Grass flattened by a muzzle blast (`fx.onGust`) is written but not switched on.

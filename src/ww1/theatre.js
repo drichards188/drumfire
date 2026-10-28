@@ -1,11 +1,12 @@
 // The WW1 German theatre: what `new Sim({ theatre })` and the page need for one operation (src/ww1/ops.js: the open
 // battle 'ridge', the Paris Gun's mission 'paris'). Node-safe. The shape is ww2Theatre's:
 //   const th = ww1Theatre('ridge');   // before the terrain is first sampled (it adds every op's positions' pads)
+//   const th = ww1Theatre('ridge', { kinds });   // the German career's battle: its lineup's kinds (ops.js RIDGE_WW2)
 //   new Sim({ heightAt, ..., theatre: th });
 // th: { id: 'ww1', op, opId, units, sites, sectors, modules, bounds, ref(x, z), sosCommand(sim, sector), metric: true,
 //       side: 'german', era: 'ww1' }
 import { PAD_EXTRA, SECTORS, LINES, lineX } from '../sector.js';
-import { OPS, OP_IDS, ww1Pads, SUPER_WW1 } from './ops.js';
+import { OPS, OP_IDS, ww1Pads, SUPER_WW1, RIDGE_WW2, RIDGE_POSITIONS, RIDGE_ROLE_SITES, ridgeWW2Pads } from './ops.js';
 import { ww1Ref } from './grid.js';
 import { TargetsWW1 } from './targets.js';
 import { ObserversWW1 } from './observers.js';
@@ -16,12 +17,23 @@ import { DirectorWW1 } from './director.js';
 import { SpecialWW1 } from './special.js';
 
 let padded = false;
+const paddedWW2 = new Set(); // the career's WW2 batteries whose ground is levelled (once each)
 
-export function ww1Theatre(opId = 'ridge') {
-  const op = OPS[opId] ?? OPS.ridge;
+// `kinds` (the German career's open battle, a lineup's kinds): the ridge with the career's WW2 batteries that the
+// lineup names (ops.js RIDGE_WW2), the Karl's stops and the heavy and long guns' role sites. Without it (the sandbox,
+// the tests) the operation is as it stands.
+export function ww1Theatre(opId = 'ridge', { kinds = null } = {}) {
+  let op = OPS[opId] ?? OPS.ridge;
   if (!padded) {
     PAD_EXTRA.push(...ww1Pads());
     padded = true;
+  }
+  if (kinds && op.kind === 'battle') {
+    const want = new Set(kinds), extra = RIDGE_WW2.filter((u) => want.has(u.kind));
+    const fresh = extra.filter((u) => !paddedWW2.has(u.kind));
+    PAD_EXTRA.push(...ridgeWW2Pads(fresh));
+    for (const u of fresh) paddedWW2.add(u.kind);
+    op = { ...op, units: [...op.units, ...extra], sites: [...op.sites, ...RIDGE_ROLE_SITES], positions: RIDGE_POSITIONS, career: true };
   }
   return {
     id: 'ww1', op, opId: op.id, metric: true, side: 'german', era: 'ww1',

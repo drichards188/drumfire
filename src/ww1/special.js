@@ -10,6 +10,8 @@
 //          for each round, the shot flown off the map and reported, the Armee's orders).
 import { DEG, bearingOf } from '../sector.js';
 import { ParisCtl } from './paris.js';
+import { GustavCtl, KarlCtl } from '../ww2/special.js';
+import { Gunner, GUNNER_CMDS } from '../ww2/gunner.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -105,15 +107,20 @@ class BedCtl {
 }
 
 // ------------------------------------------------------------------------------------------------ the module
-const CTL = { bertha: BedCtl, gamma: BedCtl, paris: ParisCtl };
+// (the German career's battle fields the WW2 Gustav, assembled on its curve, and the set-up Karl too: ops.js RIDGE_WW2)
+const CTL = { bertha: BedCtl, gamma: BedCtl, paris: ParisCtl, gustav: GustavCtl, karl: KarlCtl };
 
 export class SpecialWW1 {
   constructor(sim) {
     this.sim = sim;
     this.ctl = [];
+    // the player in person at a gun (ww2/gunner.js, as SpecialWW2 has it): sim/guns.js hands it the manned piece's steps
+    this.gunner = sim.gunner = new Gunner(sim);
   }
 
   reset() {
+    this.gunner.reset();
+    for (const u of this.sim.units) for (const p of u.pieces) p.manned = false;
     this.ctl = [];
     for (const u of this.sim.units) {
       const C = CTL[u.def?.special];
@@ -130,9 +137,11 @@ export class SpecialWW1 {
 
   update(dt) {
     for (const c of this.ctl) c.update(dt);
+    this.gunner.check();
   }
 
   command(u, name, args) {
+    if (GUNNER_CMDS.has(name)) return this.gunner.command(u, name, args ?? {});
     return this.of(u)?.command(name, args ?? {}) ?? false;
   }
 

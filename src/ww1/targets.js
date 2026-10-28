@@ -69,7 +69,8 @@ export class TargetsWW1 extends TargetsWW2 {
       t.heavy = s.kind !== 'bfield';
     }
     // the dumps, laagers, the HQ and the balloon are on the map; the batteries are found by ranging and sound
-    t.known = !BRIT_BATTERIES.has(s.kind) && s.kind !== 'bconvoy' && s.kind !== 'railyard';
+    // (a threat level's poor intelligence: nothing known until an observer reports on it, ww1/director.js)
+    t.known = !BRIT_BATTERIES.has(s.kind) && s.kind !== 'bconvoy' && s.kind !== 'railyard' && !this.sim.modifiers?.has('intel');
     return t;
   }
 

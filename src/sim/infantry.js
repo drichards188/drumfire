@@ -227,7 +227,7 @@ export class Infantry {
     const sim = this.sim, sc = SHELLS[shell.kind], f = FUZE[shell.fuze] ?? FUZE.instant;
     const shr = shell.fuze === 'shrapnel';
     const R = shr ? 30 : sc.lethal * (shell.fuze === 'delay' ? 0.8 : 1);
-    let killed = 0;
+    let killed = 0, foes = 0;
     for (const g of sim.infantry) {
       if (g.n <= 0 || Math.abs(g.pos.z - pos.z) > 70 + R || Math.abs(g.pos.x - pos.x) > 40 + R) continue;
       const cover = g.state === 'forming' ? 0.4 : g.state === 'assault' || g.state === 'in' ? 0.6 : 1;
@@ -245,7 +245,7 @@ export class Infantry {
           if (g.side === 'british') {
             sim.stats.britishLost++;
             sim.stats.lossBy.short++;
-          }
+          } else foes++;
         }
       }
     }
@@ -254,6 +254,9 @@ export class Infantry {
       const u = sim.unitById(shell.unitId);
       if (u) u.stats.kills += 0;
     }
+    // the battle's pay (sim.credit): half a point for each of the enemy's men the burst killed (the base's 'british'
+    // side is always the player's own: the WW1 and WW2 modes turn the sides round for this)
+    if (foes) sim.credit(shell.unitId ?? (shell.support ? `support:${shell.support}` : null), foes * 0.5, { act: 'men', n: foes });
     return killed;
   }
 }

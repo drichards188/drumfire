@@ -35,6 +35,8 @@ export const SHOTS = [
   { id: 'max38', url: BWW1, hour: 8.5, kind: 'max38', ff: 30, cam: [0.8, 0.3, 42], after: 8 },
   { id: 'gamma', url: BWW1, hour: 9.5, kind: 'gamma', ff: 30, cam: [0.8, 0.32, 30], after: 8 },
   { id: 'm16', url: BWW1, hour: 10, kind: 'm16', ff: 30, cam: [0.8, 0.34, 20] },
+  { id: 'sfh13', url: BWW1, hour: 9.5, kind: 'sfh13', ff: 30, cam: [0.8, 0.36, 16] },
+  { id: 'k17', url: BWW1, hour: 10.5, kind: 'k17', ff: 30, cam: [0.8, 0.34, 16] },
   { id: 'paris', url: '/?mode=ww1&op=paris&play=1', hour: 9, kind: 'paris', ff: 300, wait: 900, cam: [0.9, 0.22, 75], after: 10 },
   { id: 'bertha-demo', bertha: true, hour: 9 },
   // WW2 German
@@ -91,24 +93,26 @@ async function gunShot(page, s) {
   }, s);
 }
 
-const exe = ['chromium-1247', 'chromium-1217']
+// (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
+const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247', 'chromium-1217']
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
   .concat(process.env.PLAYWRIGHT_BROWSERS_PATH ? [`${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium`] : [])
   .find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 fs.mkdirSync(OUT, { recursive: true });
 const want = args.filter((a) => !a.startsWith('--'));
-const HIDE = '#panel, #hud, #loading, #tut-card, #gear, #return-menu, #campaign-objectives, #end, .lil-gui { display: none !important; } #view { flex: 1 1 100% !important; width: 100% !important; }';
+const HIDE = '#panel, #hud, #loading, #tut-card, #gear, #return-menu, #campaign-objectives, #end, .lil-gui, #voice-sub, #voice-btn, #man-gun, #gunner, .rw-feed, .rw-total, .sm-page { display: none !important; } #view { flex: 1 1 100% !important; width: 100% !important; }';
 for (const s of SHOTS.filter((x) => !want.length || want.includes(x.id))) {
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
-  await page.addInitScript(() => {
-    try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {}
+  // (dev mode, and the career battle's lineup: the gun of the shot, so it takes the field on the ridge)
+  await page.addInitScript((kind) => {
+    try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true, lineup: { de: [kind] } })); } catch {}
     const Orig = window.WebSocket;
     window.WebSocket = function (url, proto) {
       if (proto === 'vite-hmr') return { send() {}, close() {}, addEventListener() {}, removeEventListener() {}, readyState: 1 };
       return new Orig(url, proto);
     };
-  });
+  }, s.kind);
   page.on('pageerror', (e) => console.log(`  [pageerror] ${e.message}`));
   const t = Date.now();
   let r;

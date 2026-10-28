@@ -152,7 +152,9 @@ class Man {
 }
 
 function crewOutfit(role, i, kind) {
-  if (GUNS[kind]?.era === 'ww1' || (CREW_ERA.ww1 && GUNS[kind]?.side === 'german')) return crewForRoleWW1(role, i); // 1917 dress (crews_ww1.js)
+  // 1917 dress (crews_ww1.js): the 1918 guns, and on a WW1 page Bertha (the kind shared with the WW2 mode); the WW2 guns
+  // keep their own dress there (the German career's ridge fields them beside the 1918 ones)
+  if (GUNS[kind]?.era === 'ww1' || (CREW_ERA.ww1 && kind === 'bertha')) return crewForRoleWW1(role, i);
   if (GUNS[kind]?.side === 'german') return crewForRoleDE(role, i); // the WW2 German crews (crew.js german44)
   if (/sergeant|officer/.test(role)) return { outfit: 'officer', skin: i % 4 };
   const o = (i % 3 === 2) ? 'gunner-tunic' : 'gunner';

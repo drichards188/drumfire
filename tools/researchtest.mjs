@@ -1,16 +1,21 @@
-// Headless open battles with researched lineups: node tools/researchtest.mjs [seeds] [--era 1917|ww2|all]
+// Headless open battles with researched lineups: node tools/researchtest.mjs [seeds] [--era 1917|de|all]
 //   [--lineup start|early|mid|full|max|all] [--difficulty Easy|Normal|Hard|all] [--jobs N]
 // Every crew on auto, as tools/simtest.mjs, but the battle is fielded the way a career fields it (src/research.js:
 // the lineup's guns and upgrades, the opposition scaled to it) and prints per lineup the games won, the minutes, the
 // opposition and what the battle paid: the RP and each battery's points. The lineups: start (the tier I battery with
 // one gun), early (tier I with all its guns, both tier II with one), mid (tiers I and II with all their guns and a
 // level of each part), full (every battery, every gun, no parts: the old open battle), max (dev mode: all at the top).
+// The German tree ('de', research.js TREES.de) fights the career's battle: the 1918 ridge with the lineup's WW2
+// batteries beside the 1918 ones (src/ww1/theatre.js { kinds }); each era's games run in workers of their own, so the
+// ridge's pads never reach the 1917 ground.
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Sim } from '../src/sim/sim.js';
 import { TREES, PARTS, maxGuns, maxedLevels, loadoutOf, opposition, battleReward, nextCost } from '../src/research.js';
 import { sandboxTheatre } from '../src/campaign.js';
+import { ww1Theatre } from '../src/ww1/theatre.js';
+import { RIDGE_WW2 } from '../src/ww1/ops.js';
 
 const LINEUPS = {
   start: (tree) => ({ [tree[0].kind]: { guns: 1 } }),
@@ -23,14 +28,17 @@ const LINEUPS = {
 for (const p of PARTS) LINEUPS[`part:${p.id}`] = (tree) => Object.fromEntries(tree.map((n) => [n.kind, { guns: maxGuns(n.kind), [p.id]: 3 }]));
 
 let heightAt, groundKindAt, flanders;
-async function stage() {
-  flanders ??= sandboxTheatre('flanders'); // its pads go into the ground before the terrain is first sampled
+// the era's pads go into the ground before the terrain is first sampled: the German tree's every WW2 battery on the
+// ridge (a lineup fields some of them); the 1917 tree's as before (the WW2 battle's, which it does not use)
+async function stage(era) {
+  if (era === 'de') ww1Theatre('ridge', { kinds: RIDGE_WW2.map((u) => u.kind) });
+  else flanders ??= sandboxTheatre('flanders');
   ({ heightAt, groundKindAt } = await import('../src/terrainHeight.js'));
 }
 
 function run({ seed, era, lineup, difficulty }) {
   const levels = LINEUPS[lineup](TREES[era]);
-  const th = era === 'ww2' ? flanders : null;
+  const th = era === 'de' ? ww1Theatre('ridge', { kinds: Object.keys(levels) }) : era === 'ww2' ? flanders : null;
   const sim = new Sim({ heightAt, groundAt: th ? groundKindAt : null, seed, theatre: th });
   const opp = opposition(era, levels);
   sim.newGame({ difficulty, seed, loadout: loadoutOf(levels), opposition: opp });
@@ -50,7 +58,7 @@ function run({ seed, era, lineup, difficulty }) {
 }
 
 if (!isMainThread) {
-  await stage();
+  await stage(workerData?.era);
   parentPort.on('message', (job) => parentPort.postMessage(job ? run(job) : null));
 } else {
   const args = process.argv.slice(2);
@@ -63,21 +71,25 @@ if (!isMainThread) {
   const diffs = all(opt('--difficulty', 'Normal'), ['Easy', 'Normal', 'Hard']);
   const jobs = [];
   for (const era of eras) for (const lineup of lineups) for (const difficulty of diffs) for (const seed of seeds) jobs.push({ seed, era, lineup, difficulty });
-  const n = Math.max(1, Math.min(jobs.length, +opt('--jobs', Math.max(1, os.cpus().length - 1))));
   const results = [];
-  await new Promise((done) => {
-    let next = 0, live = n;
-    for (let w = 0; w < n; w++) {
-      const worker = new Worker(fileURLToPath(import.meta.url));
-      worker.on('message', (r) => {
-        if (r) results.push(r);
-        if (next < jobs.length) worker.postMessage(jobs[next++]);
-        else { worker.terminate(); if (--live === 0) done(); }
-      });
-      worker.on('error', (e) => { console.error(e); process.exitCode = 1; });
-      worker.postMessage(jobs[next++] ?? null);
-    }
-  });
+  // one pool of workers for each era (their ground differs: stage)
+  for (const era of eras) {
+    const mine = jobs.filter((j) => j.era === era);
+    const n = Math.max(1, Math.min(mine.length, +opt('--jobs', Math.max(1, os.cpus().length - 1))));
+    await new Promise((done) => {
+      let next = 0, live = n;
+      for (let w = 0; w < n; w++) {
+        const worker = new Worker(fileURLToPath(import.meta.url), { workerData: { era } });
+        worker.on('message', (r) => {
+          if (r) results.push(r);
+          if (next < mine.length) worker.postMessage(mine[next++]);
+          else { worker.terminate(); if (--live === 0) done(); }
+        });
+        worker.on('error', (e) => { console.error(e); process.exitCode = 1; });
+        worker.postMessage(mine[next++] ?? null);
+      }
+    });
+  }
   const mean = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
   for (const era of eras) for (const lineup of lineups) for (const difficulty of diffs) {
     const rs = results.filter((r) => r.era === era && r.lineup === lineup && r.difficulty === difficulty);

@@ -48,7 +48,7 @@ function flakCover(st, k) {
   st.flakSpoil = 0.3 * heavy;
 }
 
-class GustavCtl {
+export class GustavCtl {
   constructor(sim, u) {
     this.sim = sim;
     this.u = u;
@@ -194,7 +194,7 @@ class GustavCtl {
 }
 
 // ------------------------------------------------------------------------------------------------ Karl
-class KarlCtl {
+export class KarlCtl {
   constructor(sim, u) {
     this.sim = sim;
     this.u = u;

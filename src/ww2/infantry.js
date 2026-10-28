@@ -130,11 +130,16 @@ export class InfantryWW2 extends Infantry {
     if (g.state !== 'advancing') return;
     const bx = b.xAt(g.pos.z);
     const want = b.k >= b.kMax ? g.goal : bx + 85;
-    if (g.pos.x > want) g.pos.x = Math.max(want, g.pos.x - 2.1 * dt);
+    // (a threat level's assault keeps pace with the lifts, 100 m in 40 s, so what it loses is the guns' doing: the
+    // batteries still firing, as many as the level's counter-battery rate, and the garrison, ww1/infantry.js)
+    const L = sim.level;
+    if (g.pos.x > want) g.pos.x = Math.max(want, g.pos.x - (L ? 2.6 : 2.1) * dt);
     // losses: Allied batteries that still fire, men outrunning the barrage's cover, a barrage left behind
     let loss = 0;
-    const firing = sim.targets.filter((t) => t.battery && t.alive && sim.time - t.firedAt < 40).length;
-    loss += 0.003 * firing;
+    // (on a level every battery not silenced fires on the assault: the counter-battery work before X-Zeit pays)
+    const firing = L ? sim.targets.filter((t) => t.battery && t.alive && !sim.targetAI.silenced(t) && sim.targetAI.alivePartCount(t) * 2 > t.parts.length).length
+      : sim.targets.filter((t) => t.battery && t.alive && sim.time - t.firedAt < 40).length;
+    loss += 0.003 * firing * (L ? L.cb : 1);
     if (g.pos.x - bx > 170) { loss += 0.025; sim.stats.lossBy.open += 0.025 * dt; }
     if (b.k === 0 && g.pos.x < lineX(LINES.germanFront, g.pos.z) - 80 && g.pos.x - bx > 100) loss += 0.02;
     g.lossAcc = (g.lossAcc ?? 0) + loss * dt;

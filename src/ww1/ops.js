@@ -8,11 +8,12 @@
 // The map is the game's one stage with the sides turned round, as the WW2 Flanders battle does it: the German front
 // line of 1917 is ours, the British trenches and the country behind them to Ypres are theirs. The history and the
 // sources stay in `history` here and in docs/WW1.md; the game's text makes no claims about real events.
-import { DEG, UNITS } from '../sector.js';
+import { DEG, UNITS, headingFor } from '../sector.js';
+import { gustavLayout } from '../ww2/gustav_layout.js';
 
 const P = (x, z) => ({ x, z });
-// the guns that never answer the Sperrfeuer (too slow, too few shells, or off the map)
-export const SUPER_WW1 = new Set(['bertha', 'max38', 'gamma', 'paris']);
+// the guns that never answer the Sperrfeuer (too slow, too few shells, or off the map; the career's Gustav and Karl too)
+export const SUPER_WW1 = new Set(['bertha', 'max38', 'gamma', 'paris', 'gustav', 'karl', 'v1', 'v2']);
 const BRIT = Object.fromEntries(UNITS.map((u) => [u.kind, u]));
 
 // unit definitions follow sector.js UNITS (id, kind, name, callsign, battery, pos, zero, pieces [{ kind, dx, dz }])
@@ -139,6 +140,85 @@ export const OPS = {
 };
 
 export const OP_IDS = ['ridge', 'paris'];
+
+// The German career's open battle is the ridge (research.js TREES.de: the 1918 and the WW2 guns in one tree). Its WW2
+// batteries take the field only when the lineup names them (ww1Theatre({ kinds })); without a lineup the ridge is the
+// 1918 sandbox above, unchanged. They stand where the WW2 Flanders battle has them, but for the three whose spot is a
+// 1918 battery's (the leFH 18 on the sFH 13's, the K 18 on the K 17's, the Mörser 18 on the Mörser 16's): those stand
+// 1.3 to 1.5 km off, clear of the villages and woods. The Karl arrives set up (`ready`) at its first prepared stop, as
+// in the sandbox Flanders battle (campaign.js sandboxTheatre); the Gustav stands assembled on its curve.
+export const RIDGE_WW2 = [
+  {
+    id: 7, kind: 'lefh18', name: '10.5 cm leFH 18', callsign: 'Ludwig', battery: '1. Batterie, leichte Abteilung', pos: P(6400, -3600), zero: 268 * DEG,
+    pieces: [{ kind: 'lefh18', dx: 0, dz: -45 }, { kind: 'lefh18', dx: 4, dz: -15 }, { kind: 'lefh18', dx: 2, dz: 15 }, { kind: 'lefh18', dx: -3, dz: 45 }],
+    role: 'Field howitzers: quick, plentiful, the support fire and the Sperrfeuer; shrapnel over infantry.',
+  },
+  {
+    id: 8, kind: 'nbw41', name: '15 cm Nebelwerfer 41', callsign: 'Fritz', battery: 'Werfer-Batterie', pos: P(5700, -500), zero: 270 * DEG,
+    pieces: [{ kind: 'nbw41', dx: 0, dz: -22 }, { kind: 'nbw41', dx: 2, dz: 0 }, { kind: 'nbw41', dx: -1, dz: 22 }],
+    role: 'Rocket launchers: six-rocket ripples that drench an area. Short range, slow to reload, and the smoke gives the battery away.',
+  },
+  {
+    id: 9, kind: 'sfh18', name: '15 cm sFH 18', callsign: 'Bruno', battery: '4. Batterie, schwere Abteilung', pos: P(8100, 1500), zero: 265 * DEG,
+    pieces: [{ kind: 'sfh18', dx: 0, dz: -54 }, { kind: 'sfh18', dx: 5, dz: -18 }, { kind: 'sfh18', dx: 2, dz: 18 }, { kind: 'sfh18', dx: -4, dz: 54 }],
+    role: 'Heavy howitzers, the backbone: batteries, tank laagers, dumps, strongpoints.',
+  },
+  {
+    id: 10, kind: 'k18', name: '17 cm K 18', callsign: 'Heinrich', battery: 'schwere Artillerie-Abteilung (mot.)', pos: P(10400, 400), zero: 270 * DEG,
+    pieces: [{ kind: 'k18', dx: 0, dz: -32 }, { kind: 'k18', dx: 3, dz: 32 }],
+    role: 'Long-range guns: counter-battery against the British heavies, the railhead, the HQ and the depots far behind.',
+  },
+  {
+    id: 11, kind: 'mrs18', name: '21 cm Mrs 18', callsign: 'Julius', battery: 'schwere Artillerie-Abteilung (mot.)', pos: P(8900, 3300), zero: 263 * DEG,
+    pieces: [{ kind: 'mrs18', dx: 0, dz: -30 }, { kind: 'mrs18', dx: 3, dz: 30 }],
+    role: 'Heavy mortars: plunging 113 kg shells against concrete, HQs and deep dugouts.',
+  },
+  {
+    id: 12, kind: 'karl', name: '60 cm Karl-Gerät "Thor"', callsign: 'Thor', battery: 'schwere Artillerie-Abteilung 833', pos: P(6000, 1800), zero: 270 * DEG,
+    pieces: [{ kind: 'karl', dx: 0, dz: 0 }], special: 'karl', ammo: 12, ready: true, mode: 'auto',
+    role: 'Siege mortar: 2.2 t shells at 3 to 6.5 km, 4 degrees of traverse; the vehicle turns onto the target.',
+  },
+  {
+    id: 13, kind: 'gustav', name: '80 cm Schwerer Gustav', callsign: 'Gustav', battery: 'schwere Artillerie-Abteilung (E) 672', pos: P(13500, 600), zero: 272 * DEG, arc: 18 * DEG,
+    pieces: [{ kind: 'gustav', dx: 0, dz: 0 }], special: 'gustav', ammo: 8,
+    role: 'The railway gun: a 1,350 t gun assembled on its curved track, with a handful of 4.8 t shells.',
+  },
+];
+// the Karl's prepared stops (its controller, ww2/special.js KarlCtl: set up in the first)
+export const RIDGE_POSITIONS = [
+  { id: 'a', name: 'Stellung A, northern approach', pos: P(5700, 1800), cover: 0.7 },
+  { id: 'b', name: 'Stellung B, central approach', pos: P(4500, -1300), cover: 0.8 },
+];
+// the heavy and the long guns' targets in the career's battle (`role`, sim/specialists.js: offered only while a battery
+// that can serve them is in the field), as WW2 Flanders has them: deep, 11 to 15 km west, past every gun's reach but
+// the long ones'; hard, concrete shelters behind the British line that only the heavy shells break
+export const RIDGE_ROLE_SITES = [
+  { id: 'W1', kind: 'bdump', name: 'Corps ammunition depot', pos: P(-12500, -2000), bearing: 20 * DEG, r: 45, role: 'deep' },
+  { id: 'W2', kind: 'bdump', name: 'Army supply depot', pos: P(-14500, 2500), bearing: 0, r: 45, role: 'deep' },
+  { id: 'W3', kind: 'hq', name: 'Corps HQ', pos: P(-11000, 4500), bearing: 80 * DEG, r: 40, role: 'deep' },
+  { id: 'V1', kind: 'mebu', name: 'Concrete shelter, Potijze', pos: P(-900, -1800), bearing: 90 * DEG, r: 30, role: 'hard' },
+  { id: 'V2', kind: 'mebu', name: 'Concrete shelter, Zillebeke', pos: P(300, 3300), bearing: 85 * DEG, r: 30, role: 'hard' },
+  { id: 'V3', kind: 'mebu', name: 'Concrete shelter, Ypres', pos: P(-2600, 1200), bearing: 95 * DEG, r: 30, role: 'hard' },
+];
+
+// the levelled ground under the career's WW2 batteries (sizes as ww2Pads; the Karl's arrival and its stops as
+// sandboxTheatre's), for those in the field only
+export function ridgeWW2Pads(units) {
+  const pads = [];
+  const size = { gustav: [55, 190], karl: [40, 50], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6] };
+  for (const u of units) {
+    const big = size[u.kind] ?? [8, 8];
+    for (const p of u.pieces) pads.push({ x: u.pos.x + p.dx, z: u.pos.z + p.dz, rx: big[0], rz: big[1], heading: -(p.bearing ?? u.zero), blend: u.kind === 'karl' ? 25 : 20 });
+    if (u.kind === 'gustav') {
+      // the straight behind the firing curve, level with the station (gustav_layout.js, as ww2Pads)
+      const L = gustavLayout({ arc: u.arc, yard: false }), th = headingFor(u.zero), c = Math.cos(th), s = Math.sin(th);
+      const m = L.onStraight(L.RUN / 2, 2);
+      pads.push({ x: u.pos.x + m.x * c + m.z * s, z: u.pos.z - m.x * s + m.z * c, rx: 35, rz: L.RUN / 2 + 12, heading: th + L.A0, blend: 25, ref: { x: u.pos.x, z: u.pos.z } });
+    }
+    if (u.kind === 'karl') for (const q of RIDGE_POSITIONS) pads.push({ x: q.pos.x, z: q.pos.z, rx: 12, rz: 16, heading: -u.zero, blend: 20 });
+  }
+  return pads;
+}
 
 // Every WW1 German position levels its ground (sector.js flatPads reads PAD_EXTRA). The British sites stand on the
 // British game's own pits and ground.

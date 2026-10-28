@@ -26,7 +26,7 @@ export class InfantryWW1 extends InfantryWW2 {
     const l = b.lanes.find((q) => q.sector === g.lane.sector) ?? g.lane;
     const hits = l.hits ?? [];
     while (hits.length && hits[0] < sim.time - 20) hits.shift();
-    const cover = Math.min(1, hits.length / COVER);
+    const cover = Math.min(1, hits.length / (sim.level?.cover ?? COVER)); // (a threat level's garrison: its own `cover`)
     l.cover = cover;
     g.mgAcc = (g.mgAcc ?? 0) + MG * (1 - cover) * dt;
     while (g.mgAcc >= 1) {

@@ -4,4 +4,9 @@
 // Kartenschießen ('map') give no reports. The director (director.js obsName) names them.
 import { ObserversWW2 } from '../ww2/observers.js';
 
-export class ObserversWW1 extends ObserversWW2 {}
+export class ObserversWW1 extends ObserversWW2 {
+  // a threat level's tank laager: the observer reads the burst against the tank the guns are laid on (director.js)
+  refPoint(m) {
+    return m.aimPart ? { x: m.aimPart.x, z: m.aimPart.z } : super.refPoint(m);
+  }
+}

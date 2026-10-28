@@ -10,9 +10,9 @@
 
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
-- **Three eras.** 1917 British heavies; WW1 German in 1918, with the Paris Gun; WW2 German, with the Gustav, the Karl-Gerät, the V-1 and the V-2.
-- **Research and upgrades.** In 1917 and WW2 you start with one gun. Every battle pays research points for new batteries and battery points for more guns and better shells, barrels, breeches and sights.
-- **Tutorials.** Six guided lessons each for 1917 and WW2.
+- **One German career.** The guns of 1918 and of the Second World War in one research tree, five lines from the 10 cm K 17 to the Gustav, with the V-1, V-2 and Paris Gun as off-map support.
+- **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
+- **Tutorials.** Six guided lessons for the WW2 guns and special weapons.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or on the Big Bertha demo's 42 cm howitzer.
 
 ## Play it
@@ -43,15 +43,15 @@ Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#con
 
 ## Status
 
-**Playable:** all three eras, research and upgrades, both campaigns, twelve lessons and the Big Bertha demo. The Gustav, the Paris Gun and the demo are work in progress (marked WIP).
+**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels), the WW2 special weapons, the campaign, the lessons and the Big Bertha demo; the British 1917 game is hidden from the menu for now. The Gustav, the Paris Gun and the demo are work in progress (marked WIP).
 
 **Not done yet:**
 
-- Lessons for the WW1 German era.
-- Playtesting the research pace, the upgrades and the campaigns' difficulty.
+- Threat levels 6 to 10 on the WW2 map, and tanks moving with the British attacks.
+- Playtesting the research pace, the pay, the upgrades and the ten levels.
+- Britain's return, with its own tree.
+- Lessons for the 1918 guns, now the career's start.
 - Relaying Bertha's or the Gamma's bed is instant; the 100 s it took is to come back.
-- Planned for WW2: V-1 and V-2 skill moments, V-2 shoot and scoot, the Karl's crew on the move.
-- Three of the Paris Gun's four target effects are inactive.
 
 Full list: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#not-done-yet).
 

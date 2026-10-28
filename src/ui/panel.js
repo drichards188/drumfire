@@ -13,6 +13,7 @@ import { mountConsole } from './consoles/console.js';
 import { KIND_SHORT, clockStr, KINDS } from './consoles/common.js';
 import { TH } from './theatre.js';
 import { GUNS } from '../sim/tables.js';
+import { SupportTiles } from './support.js';
 
 // the roster's short form of an order the battery cannot carry out (sim/guns.js problem); '' for none or for the
 // states the tile does not flag (holding, a special weapon's preparation)
@@ -71,6 +72,8 @@ export class Panel {
     this.mounted = null;
     this.memo = {};
     this.shared = { cursor: null };
+    // the weapons off the map (ui/support.js): their tiles under the battery tabs; their orders have no unit
+    this.support = new SupportTiles({ shared: this.shared, send: (args) => this._send(null, 'support', args) });
     this.tracker = new Tracker();
     this.mail = new Mail((s) => snd(s.kind === 'wireless' || s.kind === 'sound' ? 'wireless' : s.kind === 'phone' ? 'phone' : 'paper'));
     this.view = null;
@@ -108,7 +111,7 @@ export class Panel {
 
   // new game: forget slips, fall of shot and per-unit view memory
   reset() {
-    this.tracker.reset(); this.mail.reset(); this.memo = {}; this.shared.cursor = null;
+    this.tracker.reset(); this.mail.reset(); this.memo = {}; this.shared.cursor = null; this.support.reset();
     if (this.mounted) { this.mounted.con.dispose && this.mounted.con.dispose(); this.mounted = null; this.host.replaceChildren(); }
   }
   radio(text, kind) { if (this.view) this.mail.radio(text, kind, this.view.sim); }
@@ -208,6 +211,7 @@ export class Panel {
     }
     this.allEl.dataset.tut = 'allmode';
     this.status.after(this.allEl);
+    this.tabsEl.append(this.support.el);
     applyHighlight();
   }
 
@@ -286,6 +290,7 @@ export class Panel {
     }
     // the ALL pair: lit on the mode every battery is in; not on the lesson range, nor with a single battery
     this.allEl.hidden = !!sim.scripted || this._allUnits().length < 2;
+    this.support.update(sim);
     if (!this.allEl.hidden) for (const [mode, b] of Object.entries(this.allBtns)) setCls(b, 'on', this._allIn(mode));
     setText(this.stClock, `${clockStr(sim.clock)} hrs`);
     setText(this.stState, sim.state ? String(sim.state).toUpperCase() : '');

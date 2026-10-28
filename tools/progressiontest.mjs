@@ -1,92 +1,81 @@
 import assert from 'node:assert/strict';
-import { Progression, SAVE_KEY, OLD_KEY } from '../src/progression.js';
-import { TREES, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus } from '../src/research.js';
+import { Progression, SAVE_KEY } from '../src/progression.js';
+import { TREES, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus, isOffmap } from '../src/research.js';
+import { SLOTS, MAX_LEVEL, threatOf } from '../src/threat.js';
 import { GUNS } from '../src/sim/tables.js';
 import { BATTERIES, CAMPAIGN } from '../src/campaign-data.js';
 import { campaignTheatre } from '../src/campaign.js';
 import { Sim } from '../src/sim/sim.js';
 import { ww2Theatre } from '../src/ww2/theatre.js';
 import { menuItems } from '../src/menuItems.js';
-const storage = { data: new Map(), getItem(k) { return this.data.get(k); }, setItem(k,v) { this.data.set(k,v); } };
+const mk = (init = []) => ({ data: new Map(init), getItem(k) { return this.data.get(k) ?? null; }, setItem(k,v) { this.data.set(k,v); } });
+const storage = mk();
+const DE = TREES.de.map(n=>n.kind);
 const career = new Progression(storage);
 assert.equal(career.dev, true, 'Dev mode is on by default');
-assert.ok(BATTERIES.every(b=>career.unlocked(b.kind)), 'Dev mode by default fields every battery');
+assert.ok(DE.every(k=>career.unlocked(k)), 'Dev mode by default fields every battery of the German tree');
 career.setDev(false);
 assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must survive a reload');
-assert.deepEqual(BATTERIES.filter(b=>career.unlocked(b.kind)).map(b=>b.kind), ['bl6','lefh18']);
+assert.deepEqual(DE.filter(k=>career.unlocked(k)), ['k17'], 'A new career owns the K 17 alone');
+assert.equal(career.targetOf('de'), 'sfh13', 'A new career researches the cheapest open battery');
+assert.equal(career.targetOf('ww1'), 'sfh13', 'The 1918 and the WW2 eras share the German tree');
 // every mission, operation and lesson is open from the start, in any order
 assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
 assert.equal(career.canPlay('earn-nothing'), false);
 assert.ok(menuItems(career).every(i=>!i.locked), 'No menu entry may be locked');
-// a campaign mission is a one-off RP challenge: its first win pays, it grants no battery
-assert.equal(career.complete('earn-rail'), missionBonus(CAMPAIGN.find(m=>m.id==='earn-rail')), 'A later mission may be won first');
-assert.equal(career.unlocked('rail'), false, 'A mission win no longer grants its battery');
-assert.equal(career.complete('earn-bl60'), 500);
-assert.equal(career.complete('earn-bl60'), 0, 'Only the first win pays');
-assert.equal(career.rp['1917'], 1500);
-assert.equal(new Progression(storage).completed.has('earn-rail'), true, 'Wins out of order must survive a reload');
-assert.equal(new Progression(storage).rp['1917'], 1500, 'RP must survive a reload');
-// research: in tree order, paid in RP
-assert.match(career.researchBlock('bl15'), /9\.2-inch howitzers first/);
-assert.match(career.researchBlock('rail'), /60-pounders first/);
-assert.equal(career.research('bl15'), false);
-assert.equal(career.research('bl92'), true);
-assert.equal(career.rp['1917'], 1500 - 450);
-assert.match(career.researchBlock('bl15'), /RP short/);
-assert.equal(career.research('bl15'), false, 'Research needs the RP');
-assert.equal(career.unlocked('bl92'), true);
-assert.equal(career.research('bl92'), false, 'Nothing is researched twice');
+// a campaign mission is a one-off RP challenge: its first win pays the research target, the RP over a battery's cost
+// going on down its line
+assert.equal(career.complete('earn-v1'), 1500);
+assert.deepEqual([...career.researched].sort(), ['lefh18','sfh13'], '1,500 RP research the sFH 13 (450) and the leFH 18 (600)');
+assert.equal(career.targetOf('de'), 'sfh18', 'The rest goes on down the line');
+assert.equal(career.costLeft('sfh18'), 1100 - 450);
+assert.equal(career.complete('earn-v1'), 0, 'Only the first win pays');
+assert.equal(career.unlocked('v1'), false, 'A mission win grants no battery');
+// research: in line order, anywhere in the tree, the target picked on the Research screen
+assert.match(career.researchBlock('mrs18'), /21 cm Mörser 16 first/);
+assert.equal(career.setTarget('mrs18'), false, 'Only a battery that can be researched now');
+assert.equal(career.setTarget('k17'), false, 'Nor one already researched');
+assert.equal(career.setTarget('m16'), true, 'The first of any line is open');
+assert.equal(career.research('m16'), false, 'Research takes the RP (unless points are unlimited)');
+assert.equal(career.reward('ww1', { rp: 300, batteries: { k17: 1000, m16: 50 } }), true);
+assert.equal(career.costLeft('m16'), 900 - 300);
+assert.equal(career.costLeft('sfh18'), 650, 'Progress on a battery left for another is kept');
+assert.equal(career.bp.k17, 1000);
+assert.equal(career.bp.m16, 50, 'Points of a battery not yet researched are kept for it');
+assert.equal(career.battles.de, 1);
 // upgrades: paid in the battery's own points, in any order
-assert.equal(career.level('bl6','guns'), 1, 'A battery starts with one gun');
-assert.match(career.upgradeBlock('bl6','guns'), /points short/);
-assert.equal(career.reward('1917', { rp: 300, batteries: { bl6: 1000, bl92: 50, rail: 999 } }), true);
-assert.equal(career.rp['1917'], 1050 + 300);
-assert.equal(career.bp.bl6, 1000);
-assert.equal(career.bp.rail, 999, 'Points of a battery not yet researched are kept for it');
-assert.equal(career.upgrade('bl6','shells'), true);
-assert.equal(career.upgrade('bl6','guns'), true);
-assert.equal(career.upgrade('bl6','guns'), true);
-assert.equal(career.level('bl6','guns'), 3);
-assert.equal(career.level('bl6','shells'), 1);
-assert.equal(career.bp.bl6, 1000 - 80 - 120 - 240);
-assert.equal(career.upgrade('rail','shells'), false, 'An unresearched battery cannot be upgraded');
+assert.equal(career.level('k17','guns'), 1, 'A battery starts with one gun');
+assert.equal(career.upgrade('k17','shells'), true);
+assert.equal(career.upgrade('k17','guns'), true);
+assert.equal(career.upgrade('k17','guns'), false, 'The K 17 has two pits');
+assert.equal(career.upgradeBlock('k17','guns'), 'at its best');
+assert.equal(career.bp.k17, 1000 - 80 - 120);
+assert.equal(career.upgrade('m16','shells'), false, 'An unresearched battery cannot be upgraded');
 const reread = new Progression(storage);
-assert.equal(reread.level('bl6','guns'), 3, 'Levels survive a reload');
-assert.equal(reread.bp.bl6, 560);
-assert.equal(reread.researched.has('bl92'), true);
-for (let i = 0; i < 4; i++) assert.equal(reread.upgrade('bl6','barrel'), i < 3, 'Three barrel levels (80 + 170 + 300), then at its best');
-assert.equal(reread.bp.bl6, 10);
-assert.equal(reread.upgradeBlock('bl6','barrel'), 'at its best');
-assert.equal(reread.upgradeCost('bl6','guns'), 360);
+assert.deepEqual([reread.level('k17','guns'), reread.bp.k17, reread.targetOf('de'), reread.costLeft('m16')], [2, 800, 'm16', 600], 'Levels, points, target and progress survive a reload');
+for (let i = 0; i < 4; i++) assert.equal(reread.upgrade('k17','barrel'), i < 3, 'Three barrel levels (80 + 170 + 300), then at its best');
+assert.equal(reread.bp.k17, 800 - 550);
 // the open battle's lineup: the researched batteries with their levels
-const b1917 = reread.battle('1917');
-assert.deepEqual(Object.keys(b1917.loadout).sort(), ['bl6','bl92']);
-assert.equal(b1917.loadout.bl6.guns, 3);
-assert.equal(b1917.loadout.bl92.guns, 1);
-assert.equal(b1917.loadout.bl6.mods.dmg, 1.12);
-assert.equal(b1917.loadout.bl6.mods.disp, 0.6, 'Barrel at its top');
-assert.ok(b1917.opposition.cb < 1 && b1917.opposition.assault < 1, 'A small lineup meets a lighter enemy');
+const bde = reread.battle('ww1');
+assert.deepEqual(Object.keys(bde.loadout).sort(), ['k17','lefh18','sfh13']);
+assert.equal(bde.loadout.k17.guns, 2);
+assert.equal(bde.loadout.sfh13.guns, 1);
+assert.equal(bde.loadout.k17.mods.dmg, 1.12);
+assert.equal(bde.loadout.k17.mods.disp, 0.6, 'Barrel at its top');
+assert.ok(bde.opposition.cb < 1 && bde.opposition.assault < 1, 'A small lineup meets a lighter enemy');
 // dev mode lays every battery at its top over the career, which it does not change
 reread.setDev(true);
-const dev = reread.battle('ww2');
-assert.deepEqual(Object.keys(dev.loadout).sort(), TREES.ww2.map(n=>n.kind).sort());
+const dev = reread.battle('de');
+assert.deepEqual(Object.keys(dev.loadout).sort(), [...reread.lineupKinds('de')].sort(), 'Dev mode fields its lineup (5 and 1), every battery open to it');
 assert.ok(Object.entries(dev.loadout).every(([k,l]) => l.guns === maxGuns(k) && Math.abs(l.mods.load - 0.72 * 0.9) < 1e-12 && l.mods.crew === 0.75));
-assert.deepEqual(dev.opposition, { cb: 1, assault: 1 });
-assert.equal(reread.level('bl6','guns',false), 3);
-// a v2 save carries over: its missions stay won and the batteries they earned stay researched
-const v2 = { data: new Map([[OLD_KEY, JSON.stringify({ completed: ['earn-bl92','earn-k18','earn-v1'], dev: false, devSet: true })]]), getItem(k) { return this.data.get(k); }, setItem(k,v) { this.data.set(k,v); } };
-const moved = new Progression(v2);
-assert.equal(moved.dev, false);
-assert.deepEqual([...moved.researched].sort(), ['bl92','k18']);
-assert.equal(moved.completed.size, 3);
-assert.equal(moved.rp['1917'] + moved.rp.ww2, 0, 'Missions won before RP pay no RP again');
-assert.equal(moved.unlocked('k18'), true);
-assert.equal(moved.unlocked('sfh18'), false);
-const old = new Progression({ getItem(k) { return k === SAVE_KEY ? null : '{"xp":999999}'; } });
-old.setDev(false);
-assert.equal(old.unlocked('rail'), false, 'XP must never unlock campaign batteries');
+assert.ok(dev.opposition.cb < 1 && dev.opposition.assault < 1, 'Five batteries of the tree meet a lighter enemy (a threat level replaces it in battle)');
+assert.equal(reread.level('k17','guns',false), 2);
+// the saves before the German tree are not carried over: a new career
+const v3 = new Progression(mk([['drumfire.campaign.v3', JSON.stringify({ researched: ['k18','gustav'], rp: { ww2: 9999 }, devSet: true, dev: false })]]));
+assert.deepEqual([v3.researched.size, v3.rp.de, v3.dev], [0, 0, true]);
+assert.equal(SAVE_KEY, 'drumfire.campaign.v4');
 career.unlockAll();
-assert.ok(BATTERIES.every(b=>new Progression(storage).unlocked(b.kind)));
+assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
 // a lineup takes the field with its guns and upgrades, and the battle pays the batteries that fought
 {
   const levels = { bl6: { guns: 2, breech: 3, sights: 2 }, bl92: { guns: 1 } };
@@ -125,25 +114,71 @@ assert.ok(BATTERIES.every(b=>new Progression(storage).unlocked(b.kind)));
 }
 {
   // unlimited points: research and upgrades free, the tree order kept, the switch saved
-  const st = { data: new Map(), getItem(k) { return this.data.get(k); }, setItem(k,v) { this.data.set(k,v); } };
+  const st = mk();
   const c = new Progression(st);
+  c.setDev(false);
   c.setFree(true);
-  assert.match(c.researchBlock('bl15'), /9\.2-inch howitzers first/, 'The tree order still holds');
-  assert.equal(c.research('bl92'), true);
-  assert.equal(c.rp['1917'], 0, 'Nothing is spent');
-  for (let i = 0; i < 3; i++) assert.equal(c.upgrade('bl6', 'shells'), true);
-  assert.equal(c.bp.bl6 ?? 0, 0);
+  assert.match(c.researchBlock('mrs18'), /21 cm Mörser 16 first/, 'The tree order still holds');
+  assert.equal(c.research('mrs18'), false);
+  assert.equal(c.research('m16'), true);
+  assert.equal(c.research('mrs18'), true);
+  assert.equal(c.rp.de, 0, 'Nothing is spent');
+  for (let i = 0; i < 3; i++) assert.equal(c.upgrade('k17', 'shells'), true);
+  assert.equal(c.bp.k17 ?? 0, 0);
   assert.equal(new Progression(st).free, true, 'The switch survives a reload');
-  c.setFree(false);
-  assert.match(c.researchBlock('bl60'), /RP short/);
   // the career reset: back to a new career, the switches kept
-  c.setDev(true); c.setFree(true);
-  c.complete('earn-bl60'); c.reward('1917', { rp: 50, batteries: { bl6: 30 } });
+  c.setDev(true);
+  c.complete('earn-k18'); c.reward('ww1', { rp: 50, batteries: { k17: 30 } });
   c.reset();
   const r = new Progression(st);
-  assert.deepEqual([r.researched.size, r.completed.size, r.rp['1917'], r.battles['1917'], r.level('bl6', 'shells', false), r.bp.bl6 ?? 0], [0, 0, 0, 0, 0, 0]);
+  assert.deepEqual([r.researched.size, r.completed.size, r.rp.de, r.battles.de, r.level('k17', 'shells', false), r.bp.k17 ?? 0, r.targetOf('de')], [0, 0, 0, 0, 0, 0, 'sfh13']);
   assert.deepEqual([r.dev, r.free], [true, true], 'The switches stay');
-  assert.equal(r.complete('earn-bl60'), 500, 'A campaign mission pays its bonus again after a reset');
+  assert.equal(r.complete('earn-k18'), 550, 'A campaign mission pays its bonus again after a reset');
+  // everything researched: the RP wait for the next battery the tree gets
+  r.setFree(false);
+  r.reward('de', { rp: 1e6, batteries: {} });
+  assert.deepEqual([r.researched.size, r.targetOf('de')], [DE.length - 1, null]);
+  assert.ok(r.rp.de > 0);
+}
+{
+  // the lineup: at most 5 batteries on the map and 1 off it (threat.js SLOTS), chosen in the hangar, the best of each
+  // line until then; and the threat levels, each won opening the next
+  const st = mk(), c = new Progression(st);
+  const dev = c.lineupKinds('de');
+  assert.equal(dev.filter((k) => !isOffmap(k)).length, SLOTS.map);
+  assert.equal(dev.filter(isOffmap).length, SLOTS.support);
+  assert.ok(dev.includes('sfh18'), 'The default lineup keeps a howitzer for the Sperrfeuer');
+  assert.deepEqual(Object.keys(c.battle('de').loadout).sort(), [...dev].sort(), 'The battle fields the lineup');
+  assert.match(c.lineupBlock('k17'), /lineup is full/);
+  assert.equal(c.toggleLineup('k17'), false);
+  assert.equal(c.toggleLineup('gustav'), true, 'A battery leaves the lineup');
+  assert.equal(c.toggleLineup('k17'), true, 'and another takes its slot');
+  assert.ok(new Progression(st).inLineup('k17') && !new Progression(st).inLineup('gustav'), 'The lineup survives a reload');
+  assert.match(c.lineupBlock('v1'), /off-map slot is taken/);
+  c.setDev(false);
+  assert.deepEqual(c.lineupKinds('de'), ['k17'], 'A new career fields its K 17');
+  assert.match(c.lineupBlock('k17'), /needs a battery/);
+  assert.match(c.lineupBlock('sfh13'), /research it first/);
+  assert.deepEqual([c.levelUnlocked('de', 1), c.levelUnlocked('de', 2)], [true, false]);
+  assert.equal(c.playedLevel('ww1', 2), 0, 'Only the highest level open opens the next: they are played in order');
+  assert.equal(c.playedLevel('ww1', 1), 2);
+  assert.equal(c.playedLevel('ww1', 1), 0);
+  assert.equal(new Progression(st).levelUnlocked('de', 2), true, 'An opened level survives a reload');
+  c.setDev(true);
+  assert.ok(c.levelUnlocked('de', MAX_LEVEL), 'Dev mode opens every level');
+  c.reset();
+  assert.deepEqual([c.threat.de, c.lineup.de], [1, null], 'A reset closes the levels and forgets the lineup');
+  // pay as it is earned: gain adds the points without counting a battle, countBattle counts it once at the end
+  c.setDev(false);
+  const b0 = c.battles.de;
+  c.gain('ww1', { rp: 100, batteries: { k17: 40 } });
+  c.gain('ww1', { rp: 60, batteries: { k17: 25 } });
+  assert.deepEqual([c.bp.k17, c.costLeft('sfh13'), c.battles.de], [65, 450 - 160, b0], 'Live pay adds up without counting battles');
+  c.countBattle('ww1');
+  assert.equal(new Progression(st).battles.de, b0 + 1);
+  assert.equal(new Progression(st).bp.k17, 65, 'Live pay is saved as it comes');
+  // a level's pay scales the battle's
+  assert.equal(battleReward({ units: [], earned: {}, time: 600, level: threatOf(10) }, { won: true }).rp, Math.round(40 * 4) + Math.round(400 * 4));
 }
 assert.deepEqual(modsOf({}), { dmg: 1, disp: 1, wear: 1, load: 1, bias: 1, lay: 1, sig: 1, ammo: 1, crew: 0 });
 {
@@ -160,7 +195,7 @@ assert.deepEqual(modsOf({}), { dmg: 1, disp: 1, wear: 1, load: 1, bias: 1, lay: 
   assert.ok(Math.abs(p.job.dur - GUNS.bl6.load[0].dur * mods.load) < 1e-9, 'Losses within the reserves do not slow the gun');
 }
 assert.deepEqual(Object.keys(maxedLevels('bl6')), ['guns', ...PARTS.map(p=>p.id)]);
-console.log('Research checks passed: RP challenges, research order and cost, upgrades, saves, v2 migration, dev overlay, lineup in the sim, pay.');
+console.log('Research checks passed: the German tree, research target and line order, RP challenges, upgrades, saves, dev overlay, lineup in the sim, pay.');
 const sim = new Sim({heightAt:()=>0});
 sim.newGame({allowedKinds:['bl6']});
 assert.deepEqual(sim.units.map(u=>u.kind),['bl6']);

@@ -15,11 +15,11 @@
 // tutorial range) the director never makes one, and the day is exactly as before.
 import { mulberry32 } from '../noise.js';
 
-const TRAFFIC = new Set(['crossroads', 'railyard', 'aconvoy']); // a mission only while the traffic is there
+const TRAFFIC = new Set(['crossroads', 'railyard', 'aconvoy', 'bconvoy']); // a mission only while the traffic is there
 const WAIT = 600; // the longest a scripted mission waits for a free hand (s)
 const IDLE = 80; // a battery idle this long is given work (s), and again this long after its last
 const PRIORITY = { cb: 8, destroy: 5 };
-const BATTERIES = new Set(['battery', 'abattery', 'amedium', 'sbattery']); // a counter-battery mission (1917, WW2)
+const BATTERIES = new Set(['battery', 'abattery', 'amedium', 'sbattery', 'bgun15', 'bgun92', 'bgun6', 'bgun60', 'bgunrail', 'bfield']); // a counter-battery mission (1917, WW2, the 1918 ridge)
 
 export class LineupDay {
   constructor(sim) {

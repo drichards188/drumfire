@@ -14,6 +14,8 @@ import { Infantry } from './infantry.js';
 import { Crews } from './crews.js';
 import { Director, clockAt } from './director.js';
 import { Script } from './script.js';
+import { Support, supportKinds } from './support.js';
+import { threatOf } from '../threat.js';
 
 const _st = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
 const TAKE_MANUAL = new Set(['mission', 'lay', 'correct', 'charge', 'fuze', 'rounds', 'fire']);
@@ -49,8 +51,11 @@ export class Sim {
   // research.js loadoutOf): { kind: { guns, mods } }, the kinds that take the field with how many of their guns and their
   // upgrades (guns.js). opposition ({ cb, assault }): the lineup's scale on the enemy's counter-battery fire and raids
   // and on the assaults (research.js opposition). Without them everything is as before.
-  // range: the test range (src/ui/range.js), a scripted game the player may also serve a gun in person on
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false } = {}) {
+  // range: the test range (src/ui/range.js), a scripted game the player may also serve a gun in person on.
+  // level (1 to 10, threat.js: the career's open battle) and modifiers (threat.js MODIFIERS ids): the level sets the
+  // enemy's side of the difficulty (Normal's for the player's own guns) and the day (the director, the enemy), in
+  // place of `opposition`; without a level everything is as before
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, level = null, modifiers = null } = {}) {
     this.loadout = loadout;
     this.range = scripted && range;
     this.allowedKinds = allowedKinds != null ? new Set(allowedKinds) : loadout ? new Set(Object.keys(loadout)) : null;
@@ -62,8 +67,19 @@ export class Sim {
     this.difficulty = { ...(DIFFICULTY[difficulty] ?? DIFFICULTY.Normal) };
     this.over = null; // the WW2 mode: { title, sub, stats } the end card shows
     this.attract = attract;
+    this.level = level != null && !attract && !scripted ? threatOf(level) : null;
+    this.modifiers = new Set(this.level ? modifiers ?? [] : []);
+    this.supplyK = 1; // the ammunition columns' pace (the modifiers' shells and rain)
+    this.drillK = 1; // the crews' drill (the modifier rain: mud at the guns)
     if (attract) Object.assign(this.difficulty, { err: 0.5, dmg: 0, ammo: 3 });
-    else if (opposition) {
+    else if (this.level) {
+      const L = this.level, M = this.modifiers;
+      this.difficultyName = 'Normal';
+      this.difficulty = { ...DIFFICULTY.Normal, cb: L.cb, dmg: L.dmg, assault: L.assault, sig: L.sig * (M.has('sound') ? 1.5 : 1), zero: L.zero, time: L.deadline,
+        ammo: DIFFICULTY.Normal.ammo * (M.has('shells') ? 0.4 : 1) };
+      this.supplyK = (M.has('shells') ? 0.5 : 1) * (M.has('rain') ? 0.5 : 1);
+      this.drillK = M.has('rain') ? 1.15 : 1;
+    } else if (opposition) {
       this.difficulty.cb *= opposition.cb;
       this.difficulty.assault *= opposition.assault;
     }
@@ -93,6 +109,9 @@ export class Sim {
     this.crews.reset();
     this.director.reset();
     this.special?.reset();
+    // off-map support (support.js): only with off-map weapons in the lineup, its own random stream
+    const sk = attract || scripted ? [] : supportKinds(loadout);
+    this.support = sk.length ? new Support(this, sk) : null;
     this._missionMap = new Map();
     if (scripted) this.script.begin();
     this.state = attract ? 'attract' : 'playing';
@@ -109,9 +128,12 @@ export class Sim {
   }
   // a unit's share of the battle's pay (research.js battleReward): missions done, damage done, targets destroyed; never in
   // the demonstration or on the lesson range
-  credit(id, pts) {
+  // the battle's pay to a unit (or an off-map weapon, `support:<kind>`); `why` says what for, for the page's reward feed
+  // (events.reward: { act: 'hit' | 'part' | 'kill' | 'men' | 'mission', ... }); never in attract mode or a lesson
+  credit(id, pts, why = null) {
     if (id == null || this.attract || this.scripted || !(pts > 0)) return;
     this.earned[id] = (this.earned[id] ?? 0) + pts;
+    this.events.reward?.(id, pts, why);
   }
   radio(text, kind = 'info') {
     this.events.radio?.(text, kind);
@@ -182,6 +204,7 @@ export class Sim {
     this.crews.update(dt);
     this.guns.update(dt);
     this.special?.update(dt, over);
+    this.support?.update(dt);
     this.moveShells(dt);
     this.targetAI.update(dt);
     this.infAI.update(dt);
@@ -292,6 +315,7 @@ export class Sim {
   command(unitId, name, args = {}) {
     const g = this.guns, d = this.director;
     if (name === 'sos') return this.sosCommand(args.sector);
+    if (name === 'support') return this.support?.command(args) ?? false; // (no unit: the weapons off the map)
     const u = this.unitById(unitId);
     if (!u || !u.alive) return false;
     if (TAKE_MANUAL.has(name) && u.mode === 'auto') u.mode = 'manual';

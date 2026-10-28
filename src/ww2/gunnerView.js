@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GUNS } from '../sim/tables.js';
-import { POSTS, STEP_POST, STEP_EN, STRICH, MANNABLE, DRIVEN, fmtSeite } from './gunner.js';
+import { POSTS, STRICH, MANNABLE, DRIVEN, fmtSeite, stepPost, stepEn } from './gunner.js';
 import './gunner.css';
 
 // The WW2 gunner's page side (src/ww2/gunner.js is the drill): the first-person camera at the eyes of the man whose
@@ -21,6 +21,17 @@ export const POST_ROLE = {
   mrs18: { cmd: 'officer', lay: 'layer', load: 'loader1', fire: 'lanyard' },
   gustav: { cmd: 'chief', lay: 'layer', load: 'loader1', fire: 'lanyard' },
   karl: { cmd: 'sergeant', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  // the 1918 guns of the German career's ridge (render/ww1/<kind>.js ROLES)
+  k17: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  sfh13: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  m16: { cmd: 'officer', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  // the bed-mounted giants (render/ww1/max38.js and gamma.js ROLES; Bertha's render/crews_heavy.js ROLES_HEAVY)
+  max38: { cmd: 'chief', lay: 'layer', load: 'rammer1', fire: 'lanyard' },
+  gamma: { cmd: 'officer', lay: 'layer', load: 'loader2', fire: 'lanyard' },
+  bertha: { cmd: 'sergeant', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  // the Nebelwerfer (render/crews_de.js): no commander's figure (his eye is the launcher's own, the rig's), the firer
+  // at the firing box in the slit trench (rig.anchors.cover) once the crew has taken cover
+  nbw41: { cmd: null, lay: 'layer', load: 'loader', fire: 'firer' },
 };
 // each post's view: what the eye turns to by default (the muzzle, the breech, or 'gun': the middle of the barrel), and
 // how far the camera sits behind (back) and above (up) the man's eyes so his hands and the work are in the
@@ -36,11 +47,17 @@ const VIEW = {
 const VIEW_KIND = {
   karl: { cmd: { poi: 'gun', back: 3.4, up: 1.6, pitch: -0.12 } },
   gustav: { cmd: { poi: 'gun', back: 3.0, up: 1.2, pitch: -0.08 } },
+  // the bed-mounted giants' commanders off the side of the bed, over the men at the breech and the crane
+  max38: { cmd: { poi: 'gun', back: 3.2, up: 1.4, pitch: -0.1 } },
+  gamma: { cmd: { poi: 'gun', back: 3.6, up: 1.8, pitch: -0.12 } },
+  bertha: { cmd: { poi: 'gun', back: 3.0, up: 1.4, pitch: -0.1 } },
+  // the Nebelwerfer: the commander a few steps behind the launcher; the firer looks at it from cover
+  nbw41: { cmd: { poi: 'gun', back: 4.5, up: 1.2, pitch: -0.08 }, fire: { poi: 'gun', back: 0.4, up: 0.25, pitch: -0.04 } },
 };
 const FOV = 62, FOV_MIN = 12, FOV_MAX = 75;
 // (Q goes with E: the console's charge keys stay off together; R, Z, X and the rest stay the console's)
 const GUN_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'KeyC', 'KeyN', 'ShiftLeft', 'ShiftRight']);
-const STEP_SHORT = { depress: 'DOWN', open: 'OPEN', shell: 'SHELL', ram: 'RAM', cartridge: 'CART.', close: 'CLOSE', prime: 'PRIME', lay: 'LAY' };
+const STEP_SHORT = { depress: 'DOWN', open: 'OPEN', shell: 'SHELL', ram: 'RAM', cartridge: 'CART.', close: 'CLOSE', prime: 'PRIME', lay: 'LAY', cover: 'COVER' };
 const POST_SHORT = { cmd: 'Commander', lay: 'Layer', load: 'Loader', fire: 'Firer' };
 const FUZE = { delay: 'AZ m.V.', shrapnel: 'ZEITZ.', instant: 'AZ o.V.' };
 const K = (...k) => k.map((x) => `<kbd>${x}</kbd>`).join('');
@@ -348,11 +365,11 @@ export class GunnerView {
         cmd: G(`${K('E')}hold: read back the fire command`),
         lay: driven ? G(`${K('W', 'S', 'A', 'D')}tap: start or stop the drive`, `${K('Shift')}held: hand wheel`)
           : G(`${K('W', 'S')}elevation`, `${K('A', 'D')}traverse`, `${K('Shift')}fine`),
-        load: G(`${K('E')}hold: open, load, ram and close`),
-        fire: G(`${K('E')}hold: fit the primer, pull the lanyard`),
+        load: G(GUNS[p.kind]?.salvo ? `${K('E')}hold: load the rockets, connect the igniters` : `${K('E')}hold: open, load, ram and close`),
+        fire: G(GUNS[p.kind]?.salvo ? `${K('E')}hold: take cover, fire the ripple` : `${K('E')}hold: fit the primer, pull the lanyard`),
       }[st.post] ?? '';
       this.keysAll.innerHTML = G(`${K('1')}-${K('4')}post`, `${K('C')}crew help`, ...(u.pieces.length > 1 ? [`${K('N')}next gun`] : []),
-        ...(p.kind === 'karl' ? [`${K('L')}hull`, `${K('T')}turn`, `${K('Y')}carrier`] : []),
+        ...(p.kind === 'karl' ? [`${K('L')}hull`, `${K('T')}turn`, `${K('Y')}carrier`] : []), ...(u.special?.bed ? [`${K('T')}relay the bed`] : []),
         `${K('F')}ride the shell`, `${K('P')}leave`, 'drag: look', 'wheel: zoom');
     }
     set(this.eyebrow, `AM GESCHÜTZ · No. ${p.i + 1} gun`);
@@ -420,12 +437,15 @@ export class GunnerView {
     togo(rs, !!c, dA, ['left', 'right'], ['A', 'D'], 'az');
     togo(re, !!c || heavyDown, dE, heavyDown ? ['to load', 'to load'] : ['up', 'down'], ['W', 'S'], 'el', heavyDown ? 'load angle' : 'on');
     // the drill: the steps of the cycle, the one being worked, whose it is
-    if (this.cells.length !== g.load.length) {
+    // (built again for another kind: the posts of a step are the kind's, the Nebelwerfer's igniters the loader's)
+    if (this.cellsFor !== p.kind) {
+      this.cellsFor = p.kind;
       this.drill.replaceChildren();
       this.cells = g.load.map((s) => {
-        const x = el('span', `g-step p-${STEP_POST[s.step]}`);
+        const post = stepPost(p.kind, s.step);
+        const x = el('span', `g-step p-${post}`);
         x.append(el('b', null, STEP_SHORT[s.step] ?? s.step), el('i'));
-        x.title = `${STEP_EN[s.step] ?? s.step} (${POSTS.find((q) => q.id === STEP_POST[s.step])?.name})`;
+        x.title = `${stepEn(p.kind, s.step)} (${POSTS.find((q) => q.id === post)?.name})`;
         this.drill.append(x);
         return x;
       });

@@ -1,5 +1,8 @@
-// Headless WW2 gunner games: node tools/gunnertest.mjs [seeds] [--kind lefh18,sfh18,k18,mrs18,gustav,karl|all]
+// Headless gunner games: node tools/gunnertest.mjs [seeds] [--kind lefh18,sfh18,k18,mrs18,gustav,karl,nbw41,...|all]
 //   [--op flanders|sevastopol|karl] [--assist on|off|both] [--difficulty Easy|Normal|Hard|all] [--manual] [--log] [--quiet]
+// The 1918 guns (k17, sfh13, m16, max38, gamma, bertha) are served on the WW1 ridge (src/ww1/ops.js, the 1918 Gruppe as
+// it stands), in a second process: its positions' pads must not change the WW2 battles' ground (the WW2 results stay
+// as they were).
 // The Flanders open battle (the Karl: its own operation, or with --op flanders the set-up Karl the open battle fields;
 // the Gustav with --op sevastopol: the siege, manned once its railway preparation is done) with every unit on auto and a scripted player in person at No. 1 gun of a battery
 // (src/ww2/gunner.js): every quarter second it reads the drill's next job, goes to that post and holds its key
@@ -8,8 +11,11 @@
 // is its own or nobody else's; with it off it runs the whole drill alone. --manual puts the player's battery on manual
 // (the player's pull is the order to fire for this gun alone). Prints per game the outcome, the rounds the manned gun fired against
 // its battery's other guns, the fire orders that lapsed, and the time from each fire order to the shot.
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { Sim } from '../src/sim/sim.js';
 import { ww2Theatre } from '../src/ww2/theatre.js';
+import { ww1Theatre } from '../src/ww1/theatre.js';
 import { sandboxTheatre } from '../src/campaign.js';
 import { GUNS } from '../src/sim/tables.js';
 import { DRIVEN } from '../src/ww2/gunner.js';
@@ -19,20 +25,26 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const seeds = args.filter((a, i) => /^\d+$/.test(a) && !/^--/.test(args[i - 1] ?? '')).map(Number);
 if (!seeds.length) seeds.push(1, 2, 3);
 const kindArg = opt('--kind', 'all');
-const kinds = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl'] : kindArg.split(',');
+const WW1_KINDS = new Set(['k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha']);
+const asked = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl', 'nbw41', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha'] : kindArg.split(',');
+// this process runs one era's guns (--era ww1: the 1918 ones, on the ridge); the 1918 ones asked for with the WW2
+// ones go to a second process, run after this one's
+const ERA1 = args.includes('--era') && opt('--era', 'ww2') === 'ww1';
+const kinds = asked.filter((k) => WW1_KINDS.has(k) === ERA1);
+const later = ERA1 ? [] : asked.filter((k) => WW1_KINDS.has(k));
 // the operation each kind is fought in (the Karl is in no other)
-const opOf = (kind) => (kind === 'karl' ? opt('--op', 'karl') : kind === 'gustav' ? opt('--op', 'flanders') : 'flanders');
+const opOf = (kind) => (WW1_KINDS.has(kind) ? 'ridge' : kind === 'karl' ? opt('--op', 'karl') : kind === 'gustav' ? opt('--op', 'flanders') : 'flanders');
 // the open battle's Karl is the game's extra (src/campaign.js sandboxTheatre: set up, its crew turns the hull); made
 // once, as it adds the Karl's pads to the terrain
 let sandbox = null;
-const theatre = (kind) => (kind === 'karl' && opOf(kind) === 'flanders' ? (sandbox ??= sandboxTheatre('flanders')) : ww2Theatre(opOf(kind)));
+const theatre = (kind) => (WW1_KINDS.has(kind) ? ww1Theatre('ridge') : kind === 'karl' && opOf(kind) === 'flanders' ? (sandbox ??= sandboxTheatre('flanders')) : ww2Theatre(opOf(kind)));
 const asArg = opt('--assist', 'both');
 const assists = asArg === 'both' ? [true, false] : [asArg === 'on'];
 const diffArg = opt('--difficulty', 'Normal');
 const diffs = diffArg === 'all' ? ['Easy', 'Normal', 'Hard'] : [diffArg];
 const LOG = args.includes('--log'), QUIET = args.includes('--quiet'), MANUAL = args.includes('--manual');
 
-ww2Theatre('flanders');
+if (ERA1) ww1Theatre('ridge'); else ww2Theatre('flanders');
 const { heightAt, groundKindAt } = await import('../src/terrainHeight.js');
 const KEY = { E: { work: true }, A: { az: 1 }, D: { az: -1 }, W: { el: 1 }, S: { el: -1 } };
 const DRIVE = { A: ['az', 1], D: ['az', -1], W: ['el', 1], S: ['el', -1] };
@@ -108,5 +120,11 @@ for (const kind of kinds) for (const assist of assists) for (const difficulty of
   }
   const lag = sum.lag.length ? (sum.lag.reduce((a, b) => a + b, 0) / sum.lag.length).toFixed(1) : '-';
   console.log(`== ${kind} ${assist ? 'crew help' : 'alone'} ${difficulty}${MANUAL ? ' manual' : ''}: won ${sum.won}/${sum.n}, manned gun ${(sum.mine / sum.n).toFixed(1)} rounds a game against ${(sum.others / sum.n).toFixed(1)} for each other gun, ${(sum.lapsed / sum.n).toFixed(1)} orders lapsed, order to shot ${lag} s`);
+}
+if (later.length) {
+  // the 1918 guns, in a process of their own (see the top)
+  const rest = args.filter((a, i) => a !== '--kind' && args[i - 1] !== '--kind');
+  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...rest, '--kind', later.join(','), '--era', 'ww1'], { stdio: 'inherit' });
+  if (r.status) fails++;
 }
 if (fails) { console.log(`${fails} game(s) failed`); process.exit(1); }

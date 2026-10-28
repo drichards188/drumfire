@@ -142,7 +142,7 @@ export class Director {
     // the battle's pay (sim.credit): a mission done shares its points among the units that fired on it, by their rounds
     if (ok && m.fired) {
       const all = Object.values(m.fired).reduce((a, n) => a + n, 0);
-      for (const [id, n] of Object.entries(m.fired)) sim.credit(Number(id), ((m.points ?? POINTS[m.kind] ?? 30) * n) / all);
+      for (const [id, n] of Object.entries(m.fired)) sim.credit(Number(id), ((m.points ?? POINTS[m.kind] ?? 30) * n) / all, { act: 'mission', title: m.title, kind: m.kind });
     }
     if (!sim.attract) {
       const pts = m.points ?? POINTS[m.kind] ?? 30;

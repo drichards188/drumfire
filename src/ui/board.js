@@ -30,6 +30,10 @@ function table(sim, kind, charge) {
   if (!t) { try { t = sim.rangeTable(kind, charge) || []; } catch (e) { t = []; } if (t.length) tableCache.set(k, t); }
   return t;
 }
+// pictures other modules lay over the map, each f(board, g, sim, unit, T) after the theatre's (ui/support.js: the
+// weapons off the map's aim points and strikes)
+export const BOARD_OVERLAYS = [];
+
 export function rangeSpan(sim, kind, charge) {
   const t = table(sim, kind, charge);
   return t.length ? { min: t[0].range, max: t[t.length - 1].range } : { min: 0, max: 0 };
@@ -534,6 +538,7 @@ export class Board {
     this.drawOrder(g, sim, unit, T);
     this.drawUnits(g, sim, unit, tracker, T);
     TH.overlay?.(this, g, sim, unit, T); // a theatre's own picture (the WW1 Paris Gun's targets 120 km off)
+    for (const f of BOARD_OVERLAYS) f(this, g, sim, unit, T);
     this.drawShells(g, sim, unit, tracker, T);
     this.drawEnemy(g, tracker, sim, T);
     this.drawFrame(g, sim, unit, T);

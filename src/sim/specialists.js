@@ -24,6 +24,7 @@ export class Specialists {
     this.next = Object.fromEntries(Object.keys(ROLES).map((r) => [r, 360 + this.rng() * 120]));
     this.ended = Object.fromEntries(Object.keys(ROLES).map((r) => [r, -999]));
     this.idle = new Map(); // unit id -> since when it has had no mission
+    this.allow = null; // the roles a threat level offers (ww1/director.js), null: every one
   }
 
   probe(t, role) {
@@ -37,6 +38,7 @@ export class Specialists {
       if (u.alive && u.missionId == null && !u.firing) { if (!this.idle.has(u.id)) this.idle.set(u.id, now); } else this.idle.delete(u.id);
     }
     for (const role of Object.keys(ROLES)) {
+      if (this.allow && !this.allow.has(role)) continue;
       const open = sim.missions.find((m) => m.role === role && m.state !== 'done' && m.state !== 'failed');
       if (open) continue;
       const last = sim.missions.filter((m) => m.role === role).reduce((a, m) => Math.max(a, m.tEnd ?? 0), this.ended[role]);
@@ -61,7 +63,8 @@ export class Specialists {
   open(t, role) {
     const sim = this.sim, d = sim.director, R = ROLES[role];
     t.known = true;
-    return d.addMission({ kind: 'destroy', title: R.title(t), targetId: t.id, x: t.pos.x, z: t.pos.z, observer: 'air',
+    // (no aeroplane of ours under a threat level's enemy air superiority: the balloon observes)
+    return d.addMission({ kind: 'destroy', title: R.title(t), targetId: t.id, x: t.pos.x, z: t.pos.z, observer: sim.modifiers?.has('air') ? 'balloon' : 'air',
       deadline: DEADLINE, priority: 6, hint: R.hint, role, points: POINTS, minHard: role === 'hard' ? MIN_HARD : 0 });
   }
 }

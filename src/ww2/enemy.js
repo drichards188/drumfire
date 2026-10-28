@@ -136,13 +136,20 @@ export class EnemyWW2 extends Enemy {
     return r;
   }
 
+  // the battle's raids' pace: the difficulty's counter-battery rate, or a threat level's own (0: none; twice it under
+  // the modifier 'air')
+  raidRate() {
+    const sim = this.sim, L = sim.level;
+    return L ? L.raids * (sim.modifiers.has('air') ? 2 : 1) : sim.difficulty.cb;
+  }
+
   airUpdate(dt) {
     const sim = this.sim, now = sim.time, op = sim.theatre.op;
     // the battle's own raids: a loud unit in daylight draws the fighter-bombers
-    if (!sim.scripted && !sim.attract && op.kind !== 'v1' && op.kind !== 'v2' && !sim.night && sim.phase >= 2) {
+    if (!sim.scripted && !sim.attract && op.kind !== 'v1' && op.kind !== 'v2' && !sim.night && sim.phase >= 2 && this.raidRate() > 0) {
       this.raidT -= dt;
       if (this.raidT <= 0) {
-        this.raidT = (260 + sim.rng() * 160) / sim.difficulty.cb;
+        this.raidT = (260 + sim.rng() * 160) / this.raidRate();
         let best = null, bs = 0.45;
         for (const u of sim.units) if (u.alive && u.signature > bs) { bs = u.signature; best = u; }
         if (best) this.raid({ x: best.pos.x, z: best.pos.z, flak: best.special?.flak ?? 0, spoil: best.special?.flakSpoil ?? 0 }, { n: 2 });

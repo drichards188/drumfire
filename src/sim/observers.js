@@ -93,6 +93,7 @@ export class Observers {
     // plays out exactly as it did before that answer existed
     let delay = wild && !sim.scripted ? 6 : m.observer === 'air' ? 6 + sim.rng() * 5 : m.observer === 'balloon' ? 5 + sim.rng() * 3 : 3 + sim.rng() * 4;
     if (sim.scripted) delay = 2 + (delay - 3) * 0.4; // the range's observers are quick, so a lesson does not stall
+    if (sim.modifiers?.has('mist')) delay *= 1.7; // (a threat level's ground mist: the observers see late)
     this.queue.push({ t: sim.time + delay, m, u, shell, over, right, ref, fx, fz, rx, rz, wild, vol, n: 1 });
   }
 

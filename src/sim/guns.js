@@ -306,7 +306,7 @@ export class Guns {
     const st = g.load[p.ji];
     // crews short of men are slower; a gun in a hurry (attract) is quicker
     const crewK = clamp((p.crewNeed ?? p.crewMax) / Math.max(1, p.crew), 1, 2.6) * (sim.attract ? 0.6 : 1);
-    let dur = st.dur * crewK * (u.mods ? u.mods.load : 1);
+    let dur = st.dur * crewK * (u.mods ? u.mods.load : 1) * (sim.drillK ?? 1);
     if (st.step === 'depress') dur = Math.max(dur, Math.abs(p.el - g.loadEl) / g.elRate);
     p.job = { step: st.step, t: 0, dur, i: p.ji, n: g.load.length };
     sim.events.load?.(u, p, st.step);
@@ -332,7 +332,7 @@ export class Guns {
       // supplies and replacements
       const quiet = sim.time - u.underFire > 40;
       for (const k of ['he', 'shrapnel']) if (u.ammo[k] < u.ammoMax[k]) {
-        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length * (u.def?.resupply ?? (u.def?.special ? 0 : 1)) * (u.mods ? u.mods.ammo : 1);
+        u._ac = (u._ac ?? 0) + dt * 0.02 * u.pieces.length * (u.def?.resupply ?? (u.def?.special ? 0 : 1)) * (u.mods ? u.mods.ammo : 1) * (sim.supplyK ?? 1);
         if (u._ac >= 1) {
           u._ac -= 1;
           u.ammo[k]++;

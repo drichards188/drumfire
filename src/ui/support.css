@@ -1,0 +1,25 @@
+/* The weapons off the map (ui/support.js): their tiles at the foot of the battery tabs, in the status block's dark
+   instrument style (a block apart from the batteries: they are not units, and the battery keys do not reach them). */
+.tsupport { flex: none; margin: 6px 0 0 6px; padding: 5px 6px 6px; background: #17110a; border: 1px solid #000; border-radius: 3px; box-shadow: inset 0 0 8px #000; }
+.tsupport[hidden] { display: none; }
+.tsup-h { font: 700 8px/1 'Courier 10 Pitch','Liberation Mono','FreeMono',monospace; letter-spacing: .12em; color: #a69a76; margin-bottom: 5px; }
+/* side by side, so a full column of batteries keeps its room; clear of the VOICES button in the corner */
+.tsup-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
+body:has(#voice-btn) .tsupport { margin-bottom: 26px; }
+.tsup {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  padding: 4px 3px 4px 4px; cursor: pointer; text-align: left; color: #cdbd93; min-width: 0;
+  background: linear-gradient(90deg, #3a2c1d, #4b3a28); border: 1px solid #130d07; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255,235,180,.12);
+  font: inherit;
+}
+.tsup:hover { background: linear-gradient(90deg, #46341f, #5a4731); }
+.tsup-n { font: 700 11px/1 'Bitstream Charter','Liberation Serif','DejaVu Serif',Georgia,serif; letter-spacing: .03em; }
+.tsup-s { font: 700 8px/1 'Courier 10 Pitch','Liberation Mono','FreeMono',monospace; letter-spacing: 0; color: #8a7a55; white-space: nowrap; }
+.tsup-x { position: absolute; top: 2px; right: 3px; font: 700 11px/1 sans-serif; font-style: normal; color: #ff8a6a; }
+.tsup-x[hidden] { display: none; }
+.tsup.ready .tsup-s { color: #93ea5e; text-shadow: 0 0 4px rgba(120,255,70,.45); }
+.tsup.preparing .tsup-s { color: #e8b13e; }
+.tsup.flight .tsup-s { color: #ffd37a; }
+.tsup.reloading { opacity: .8; }
+.tsup.armed { background: linear-gradient(90deg, var(--paper, #ece3c6), #f4edd6); color: #1b1913; border-color: #6b1f5e; box-shadow: 0 0 0 2px #6b1f5e; }
+.tsup.armed .tsup-s { color: #6b1f5e; text-shadow: none; animation: blink .8s steps(2, jump-none) infinite; }

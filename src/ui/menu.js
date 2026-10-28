@@ -1,22 +1,26 @@
 import { Progression } from '../progression.js';
 import { CAMPAIGN, BATTERIES } from '../campaign-data.js';
-import { TREES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT } from '../research.js';
-import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, ERAS, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl } from '../menuItems.js';
+import { TREES, LINES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
+import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf } from '../menuItems.js';
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
 import { createHangar } from './hangar.js';
 import { OPS as OPS_WW1 } from '../ww1/ops.js';
+import { THREAT, MAX_LEVEL, threatOf, rollModifiers, modifierOf, SLOTS } from '../threat.js';
+import { capabilities, recommendedLevel } from '../capability.js';
+import { showSummary, loadSummary, markSeen } from './summary.js';
 import './menu.css';
 
-// The main menu, laid out as a tank game's garage: a top bar with the era and nation tabs, the two screens (the Hangar:
-// a battery's gun in 3D, its details, its modifications and the era's batteries along the bottom; Research: the era's
-// tree) and the mission chooser with To battle beside it. Choosing a mission, a battery or a screen never reloads the
+// The main menu, laid out as a tank game's garage: a top bar with the nation tabs (Germany: the 1918 and the WW2
+// entries and one tree; Britain is hidden for now), the two screens (the Hangar: a battery's gun in 3D, its details, its
+// modifications and the lineup's batteries along the bottom; Research: the tree in its lines) and the mission chooser
+// with To battle beside it. Choosing a mission, a battery or a screen never reloads the
 // page; To battle opens the mission's game page, which loads the world behind its own loading screen (ui/loading.js).
 // Only the hangar's 3D view loads three.js (ui/hangar.js), the first time it shows a gun.
-const STORE = 'drumfire.menu'; // { view, era, sel: { era: key }, tab, difficulty, rs: { era: kind } }: the viewer's last choices
+const STORE = 'drumfire.menu'; // { view, era (the nation), sel: { era: key }, tab, difficulty, rs: { era: kind } }: the viewer's last choices
 const VIEWS = [['hangar', 'Hangar'], ['research', 'Research']];
 const TABS = [['battles', 'Battles'], ['campaign', 'Campaign'], ['tutorials', 'Tutorials']];
-const ERA_TABS = [['1917', '1917', 'British'], ['ww1', 'WW1', 'German'], ['ww2', 'WW2', 'German']];
+const SHOWN = NATIONS.filter((n) => !n.hidden);
 const KEYS = '<li><kbd>1</kbd>-<kbd>9</kbd> select battery</li><li><kbd>Drag</kbd> orbit</li><li><kbd>Wheel</kbd> zoom</li><li><kbd>F</kbd> follow the shell to its burst</li><li><kbd>C</kbd> free camera</li><li><kbd>M</kbd> mute</li><li><kbd>[</kbd> <kbd>]</kbd> time compression</li><li><kbd>H</kbd> hide overlay</li><li><kbd>F3</kbd> stats</li>';
 // the testing switches in the top bar's right corner: dev mode and unlimited points, and beside them the career reset
 // (two clicks: the first arms it for 4 s)
@@ -35,17 +39,20 @@ const nameOf = (kind) => BATTERIES.find((b) => b.kind === kind)?.name ?? kind;
 // a row of level marks: `have` lit of `of`
 const pips = (have, of) => { const p = el('span', 'rs-pips'); p.setAttribute('aria-hidden', 'true'); for (let i = 0; i < of; i++) p.append(el('i', i < have ? 'on' : null)); return p; };
 // an action button; `act` keeps the focus on it across a render
-// the test range (src/ui/range.js) with this battery selected, in its era (the menu's settings passed on)
+// the test range (src/ui/range.js) with this battery selected, on its own era's map (the menu's settings passed on)
 const rangeHref = (era, kind) => {
-  const p = new URLSearchParams();
-  if (era !== '1917') p.set('mode', era);
+  const p = new URLSearchParams(), e = gunEraOf(kind);
+  if (e !== '1917') p.set('mode', e);
   p.set('range', 1);
   p.set('kind', kind);
   const from = new URLSearchParams(location.search);
   for (const k of ['quality', 'hour', 'weather']) if (from.get(k)) p.set(k, from.get(k));
   return `index.html?${p}`;
 };
-const rangeBtn = (era, kind) => actBtn('Try on the range', `range:${kind}`, '', () => { location.href = rangeHref(era, kind); });
+const rangeBtn = (era, kind) => actBtn('Try on the range', `range:${kind}`, isOffmap(kind) ? 'off-map support fires only in battle' : '', () => { location.href = rangeHref(era, kind); });
+// a progress bar (0 to 1)
+const bar = (k) => { const b = el('span', 'rs-bar'), f = el('i'); f.style.width = `${Math.round(Math.min(1, k) * 100)}%`; b.append(f); return b; };
+const lineOf = (kind) => LINES[eraOfKind(kind)]?.find((l) => l.id === nodeOf(kind)?.line);
 const actBtn = (text, act, why, onClick) => {
   const b = el('button', 'rs-act', text);
   b.type = 'button';
@@ -94,61 +101,81 @@ function modsBlock(career, kind, onChange, onHover = null) {
   box.append(pts, rows);
   return box;
 }
-// A battery not yet researched: its cost, what must come first, and the button
+// A battery not yet researched: how far its research has got, and the button that makes it the research target (with
+// unlimited points on, one that researches it at once); what must come first when it cannot be researched yet
 function researchBlock(career, kind, onChange) {
   const box = el('div', 'rs-mods');
-  const node = nodeOf(kind), why = career.researchBlock(kind);
-  box.append(actBtn(`Research · ${num(node.cost)} RP`, `research:${kind}`, why, () => { career.research(kind); onChange(); }),
-    el('p', 'rs-help', why ? `Not yet: ${why}.` : 'Research it to take it into the open battle with one gun, then earn its other guns and parts with its own points.'));
+  const node = nodeOf(kind), why = career.researchBlock(kind), on = career.targetOf(eraOfKind(kind)) === kind;
+  const pts = el('p', 'rs-pts');
+  pts.append(el('b', null, num(node.cost - career.costLeft(kind))), ` of ${num(node.cost)} research points`);
+  box.append(pts, bar(career.researchShare(kind)));
+  if (on) box.append(el('p', 'rs-on', 'Researching: every battle\'s research points go to it until it is done.'));
+  else box.append(actBtn('Research this battery', `target:${kind}`, why, () => { career.setTarget(kind); onChange(); }));
+  if (career.free) box.append(actBtn('Research now · unlimited points', `research:${kind}`, why, () => { career.research(kind); onChange(); }));
+  box.append(el('p', 'rs-help', why ? `Not yet: ${why}.` : isOffmap(kind)
+    ? 'Off-map support: in battle you pick it and give it a target; it fires in its own time and takes long to be ready again.'
+    : 'Once researched it takes the open battle with one gun; its own points then buy its other guns and better parts.'));
   return box;
 }
 
-// The Research screen of a research era (research.js, progression.js): the era's research points and its tree by tier
-// (click a battery to see it) beside the battery shown, with its picture: research it, or spend its own points on its
-// guns and parts. It shows the career itself; dev mode only lays every battery at its top over it in battle.
+// The Research screen (research.js, progression.js): the battery being researched and how far it has got, the tree in
+// its lines (a column each, the batteries in the order they are researched, each with its rank; click one to see it)
+// beside the battery shown, with its picture: make it the research target, or spend its own points on its guns and
+// parts. It shows the career itself; dev mode only lays every battery at its top over it in battle.
 function researchView(career, era, shown, onShow, onChange, onHangar) {
-  const tree = TREES[era], kind = shownIn(era, shown), node = nodeOf(kind);
+  const tree = TREES[era], kind = shownIn(era, shown), node = nodeOf(kind), tgt = career.targetOf(era);
   const root = el('div', 'rs');
   const side = el('div', 'rs-side');
-  const purse = el('p', 'rs-purse');
-  purse.append(el('b', null, career.free ? 'Unlimited' : num(career.rp[era])), ' research points', el('small', null, ` · ${career.battles[era]} ${career.battles[era] === 1 ? 'battle' : 'battles'} fought`));
+  const purse = el('div', 'rs-purse');
+  if (tgt) {
+    const n = nodeOf(tgt);
+    purse.append(el('small', null, 'Researching'), el('b', null, nameOf(tgt)), bar(career.researchShare(tgt)),
+      el('small', null, `${num(n.cost - career.costLeft(tgt))} of ${num(n.cost)} RP · ${career.battles[era]} ${career.battles[era] === 1 ? 'battle' : 'battles'} fought`));
+  } else purse.append(el('small', null, 'Research'), el('b', null, 'Every battery researched'), el('small', null, `${num(career.rp[era])} RP to spare`));
   side.append(purse);
   if (career.dev) side.append(el('p', 'rs-note', 'Dev mode is on: in battle every battery is researched and at its best. This is your own career; switch dev mode off to play it.'));
   const cols = el('div', 'rs-tree');
-  for (let t = 1; t <= 4; t++) {
-    const col = el('div', 'rs-tier');
-    col.append(el('small', 'rs-tier-n', `Tier ${ROMAN[t - 1]}`));
-    for (const n of tree.filter((q) => q.tier === t)) {
-      const own = career.owns(n.kind), why = career.researchBlock(n.kind);
+  cols.style.setProperty('--lines', LINES[era].length);
+  for (const line of LINES[era]) {
+    const col = el('div', 'rs-line');
+    const h = el('div', 'rs-line-n');
+    h.append(el('b', null, line.name), el('small', null, line.de ?? ''));
+    col.append(h);
+    for (const n of tree.filter((q) => q.line === line.id)) {
+      const own = career.owns(n.kind), why = career.researchBlock(n.kind), on = n.kind === tgt;
       const b = el('button', 'rs-node');
       b.type = 'button';
       b.dataset.act = `show:${n.kind}`;
       b.classList.toggle('own', own);
       b.classList.toggle('ready', !own && !why);
+      b.classList.toggle('target', on);
       b.classList.toggle('on', n.kind === kind);
       b.setAttribute('aria-pressed', String(n.kind === kind));
       const name = el('b', null, nameOf(n.kind));
       if (WIP_KINDS.has(n.kind)) name.append(wipBadge());
-      b.append(name, el('small', null, own ? (maxGuns(n.kind) > 1 ? `${career.level(n.kind, 'guns', false)} of ${maxGuns(n.kind)} guns` : 'Researched') : n.after && !career.owns(n.after) ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
+      b.append(el('span', 'rs-rank', ROMAN[n.tier - 1]), name);
+      if (on) b.append(bar(career.researchShare(n.kind)));
+      b.append(el('small', null, own ? (maxGuns(n.kind) > 1 ? `${career.level(n.kind, 'guns', false)} of ${maxGuns(n.kind)} guns` : 'Researched')
+        : on ? `Researching · ${Math.round(career.researchShare(n.kind) * 100)}%` : why ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
       b.addEventListener('click', () => onShow(n.kind));
       col.append(b);
     }
     cols.append(col);
   }
-  side.append(cols, el('p', 'rs-help', 'Every battle in the era\'s open battle pays research points, won or lost, and each battery its own points for its upgrades.'));
+  side.append(cols, el('p', 'rs-help', 'Each line is researched in order, and the first of every line is open from the start. Every open battle pays research points to the battery you are researching, won or lost, and each battery its own points for its upgrades.'));
   root.append(side);
   // the battery shown, with its picture from the game
   const card = el('section', 'rs-card');
-  if (STILLS.has(kind)) {
+  if (stillOf(kind)) {
     const pic = el('div', 'rs-pic');
-    pic.style.backgroundImage = `url("${stillUrl(kind)}")`;
+    pic.style.backgroundImage = `url("${stillUrl(stillOf(kind))}")`;
     pic.setAttribute('role', 'img');
     pic.setAttribute('aria-label', `The ${nameOf(kind)} firing`);
     card.append(pic);
   }
   const head = el('header', 'rs-card-head');
   const title = el('div');
-  title.append(el('small', null, `Tier ${ROMAN[node.tier - 1]} · ${BATTERIES.find((b) => b.kind === kind)?.role ?? ''}`), el('h3', null, nameOf(kind)));
+  title.append(el('small', null, `Rank ${ROMAN[node.tier - 1]} · ${lineOf(kind)?.name ?? ''} · ${BATTERIES.find((b) => b.kind === kind)?.role ?? ''}`), el('h3', null, nameOf(kind)));
   const acts = el('div', 'rs-head-acts');
   acts.append(actBtn('Preview the full battery', `preview:${kind}`, '', () => onHangar(kind)), rangeBtn(era, kind));
   head.append(title, acts);
@@ -222,7 +249,7 @@ function parade(career, era, kind, preview = false) {
   const name = nameIn(kind), drill = GUNS[kind]?.crew ?? 8, base = detachmentOf(kind, drill);
   if (!TREES[era]) return { kind, name, guns: gunsWW1(kind), men: base, base, levels: {} };
   if (preview) return { kind, name, guns: maxGuns(kind), men: base, base, levels: {} };
-  const lv = career.lineupLevels(era)[kind] ?? {};
+  const lv = career.ownedLevels(era)[kind] ?? {};
   const levels = Object.fromEntries(PARTS.map((p) => [p.id, levelOf(lv, p.id)]));
   // `next`: what more guns and the first relief crews would bring, so the hangar keeps their places and shows them on hover
   const next = { guns: maxGuns(kind), reliefs: crewOf(kind, { crew: 1 }, drill) - base };
@@ -233,16 +260,21 @@ const hangarKinds = (career, era) => (TREES[era] ? kindsOf(era).filter((k) => ca
 
 // The battery's details beside the guns: what it is for, its figures as it takes the field (or, previewed, at its full
 // drill strength), where it stands
-function hangarInfo(career, era, kind, preview = false) {
+function hangarInfo(career, era, kind, preview = false, onLineup = null) {
   const box = el('div', 'hg-info-in');
   const node = nodeOf(kind), g = GUNS[kind], sandbox = !TREES[era];
   const own = sandbox || career.owns(kind);
-  const levels = sandbox ? {} : preview ? { guns: maxGuns(kind) } : career.lineupLevels(era)[kind] ?? career.levels[kind] ?? {}, mods = modsOf(levels);
-  box.append(el('small', 'mn-kicker', sandbox ? 'WW1 German · sandbox' : `Tier ${ROMAN[node.tier - 1]} · ${era === 'ww2' ? 'WW2 German' : '1917 British'}`));
+  const levels = sandbox ? {} : preview ? { guns: maxGuns(kind) } : career.ownedLevels(era)[kind] ?? career.levels[kind] ?? {}, mods = modsOf(levels);
+  box.append(el('small', 'mn-kicker', sandbox ? 'WW1 German · sandbox' : `Rank ${ROMAN[node.tier - 1]} · ${lineOf(kind)?.name ?? ''} · ${{ ww1: '1914 to 1918', ww2: 'WW2', '1917': '1917 British' }[gunEraOf(kind)]}`));
   const h = el('h1', 'hg-name', nameIn(kind));
   if (WIP_KINDS.has(kind)) h.append(wipBadge());
   box.append(h, el('p', 'hg-role', roleOf(kind)));
-  if (g) {
+  if (isOffmap(kind)) {
+    // the weapons that fire from off the map: no range table or reload of their own in battle
+    const dl = el('dl', 'hg-figs'), reachKm = Math.round((BATTERIES.find((b) => b.kind === kind)?.range ?? 0) / 1000);
+    for (const [k, v] of [['Fires', 'from off the map'], ['Reach', reachKm ? `${num(reachKm)} km` : '-'], ['In battle', 'one at a time, then a long wait'], ['Crew', `${detachmentOf(kind, g?.crew ?? 8)} a site${DETACHMENT[kind]?.est ? ' (est.)' : ''}`]]) dl.append(el('dt', null, k), el('dd', null, v));
+    box.append(dl);
+  } else if (g) {
     const load = g.load.reduce((a, st) => a + st.dur, 0);
     const guns = sandbox ? gunsWW1(kind) : levelOf(levels, 'guns');
     const figs = [
@@ -257,12 +289,19 @@ function hangarInfo(career, era, kind, preview = false) {
     for (const [k, v] of figs) dl.append(el('dt', null, k), el('dd', null, v));
     box.append(dl);
   }
+  // the lineup: take it into the open battle, or leave it out (SLOTS in threat.js)
+  if (!sandbox && !preview && career.unlocked(kind)) {
+    const inIt = career.inLineup(kind), why = career.lineupBlock(kind);
+    const lb = actBtn(inIt ? 'Leave out of battle' : 'Take into battle', `lineup:${kind}`, why, () => { career.toggleLineup(kind); onLineup?.(); });
+    lb.classList.add('hg-lineup');
+    box.append(lb);
+  }
   // the test range: any battery, earned or not, with any upgrades, nothing paid
   const tr = rangeBtn(era, kind);
   tr.classList.add('hg-range');
   tr.title = 'Fire it on the test range: any target, any upgrades, nothing scored';
   box.append(tr);
-  box.append(el('p', 'hg-state', sandbox ? 'Yours from the start: the WW1 German era is a sandbox.' : own ? 'Researched: in your lineup for the open battle.'
+  box.append(el('p', 'hg-state', sandbox ? 'Yours from the start: the WW1 German era is a sandbox.' : own ? `Researched${career.inLineup(kind) ? `: in your lineup for the open battle${isOffmap(kind) ? ', as off-map support' : ''}` : ', not in your lineup'}.`
     : career.dev ? `In the lineup in dev mode; your own career has not researched it (${career.researchBlock(kind)}).` : `Not researched: ${career.researchBlock(kind)}.`));
   if (career.dev && !sandbox) box.append(el('p', 'rs-note', 'Dev mode is on: on parade and in battle every battery is researched and at its best. The modifications are your own career.'));
   return box;
@@ -291,13 +330,16 @@ function slotCards(career, era, kind, onPick, kinds = kindsOf(era)) {
     b.classList.toggle('on', k === kind);
     b.classList.toggle('own', own);
     b.classList.toggle('ready', !own && !why);
+    b.classList.toggle('lineup', !sandbox && career.inLineup(k));
     b.setAttribute('aria-pressed', String(k === kind));
     if (n) b.append(el('span', 'hg-slot-tier', ROMAN[n.tier - 1]));
+    if (!sandbox && career.inLineup(k)) { const m = el('span', 'hg-slot-in', 'In battle'); m.title = 'In the lineup: it takes the field in the open battle'; b.append(m); }
     const name = el('b', null, nameIn(k));
     if (WIP_KINDS.has(k)) name.append(wipBadge());
     b.append(name);
     if (own && !sandbox && maxGuns(k) > 1) b.append(pips(career.level(k, 'guns', false), maxGuns(k)));
-    b.append(el('small', null, sandbox ? 'Yours' : own ? `${career.level(k, 'guns', false)} of ${maxGuns(k)} ${maxGuns(k) === 1 ? 'gun' : 'guns'}` : n.after && !career.owns(n.after) ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
+    b.append(el('small', null, sandbox ? 'Yours' : own ? (isOffmap(k) ? 'Off-map support' : `${career.level(k, 'guns', false)} of ${maxGuns(k)} ${maxGuns(k) === 1 ? 'gun' : 'guns'}`)
+      : career.targetOf(era) === k ? `Researching · ${Math.round(career.researchShare(k) * 100)}%` : why ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
     b.addEventListener('click', () => onPick(k));
     return b;
   });
@@ -311,17 +353,23 @@ export function mountMenu(root = document.getElementById('menu')) {
   const memo = read(STORE, {});
   memo.sel ??= {};
   let items = [];
-  let era = ERAS.includes(query.get('mode')) ? query.get('mode') : query.has('mode') ? '1917' : ERAS.includes(memo.era) ? memo.era : '1917';
+  // the nation: a game's way back (?mode=ww1|ww2) or the last one shown (only Germany for now)
+  let era = SHOWN.find((n) => n.id === NATION_OF[query.get('mode') ?? ''])?.id ?? SHOWN.find((n) => n.id === memo.era)?.id ?? SHOWN[0].id;
   let tab = query.get('lessons') ? 'tutorials' : TABS.some(([t]) => t === memo.tab) ? memo.tab : 'battles';
   // ?view=research (the end card's Research button) opens that screen; otherwise the last one
   let view = VIEWS.some(([v]) => v === query.get('view')) ? query.get('view') : VIEWS.some(([v]) => v === memo.view) ? memo.view : 'hangar';
   let difficulty = DIFFICULTIES.includes(memo.difficulty) ? memo.difficulty : 'Normal';
+  // the career battle's threat level (threat.js) and the seed its modifiers are rolled from (a new one after each battle)
+  let level = Math.max(1, Math.min(MAX_LEVEL, memo.level | 0 || 1));
+  memo.modSeed ??= (Math.random() * 1e9) | 0;
+  const levelNow = () => (career.levelUnlocked(era, level) ? level : Math.max(1, ...THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n)));
+  const modsNow = () => rollModifiers(levelNow(), memo.modSeed);
   let sel = null, open = query.has('lessons') || query.has('campaign');
 
   root.innerHTML = `<header class="mn-top">
     <div class="mn-top-in">
       <b class="mn-mark">DRUMFIRE</b>
-      <nav class="mn-eras" aria-label="Era and nation">${ERA_TABS.map(([e, n, side]) => `<button type="button" data-era="${e}">${n} <small>${side}</small></button>`).join('')}</nav>
+      <nav class="mn-eras" aria-label="Nation">${SHOWN.map((n) => `<button type="button" data-era="${n.id}">${n.name} <small>${n.sub}</small></button>`).join('')}</nav>
       <nav class="mn-views" aria-label="Screens">${VIEWS.map(([v, name]) => `<button type="button" data-view="${v}">${name}<span class="mn-view-n"></span></button>`).join('')}</nav>
       <div class="mn-go">
         <button type="button" class="mn-mode" aria-haspopup="dialog" aria-expanded="false" title="Choose the battle, campaign mission or lesson"><small class="mn-mode-k"></small><b class="mn-mode-t"></b><span class="mn-mode-d"></span></button>
@@ -340,6 +388,10 @@ export function mountMenu(root = document.getElementById('menu')) {
     <div class="mn-drop-detail">
       <div class="mn-detail" aria-live="polite"><small class="mn-kicker"></small><h2 class="mn-title"></h2><p class="mn-sub"></p><p class="mn-blurb"></p><ul class="mn-lines"></ul></div>
       <div class="mn-difficulty" role="radiogroup" aria-label="Difficulty">${DIFFICULTIES.map((d) => `<button type="button" role="radio" data-d="${d}">${d}</button>`).join('')}</div>
+      <div class="mn-level" hidden>
+        <div class="mn-lv-row" role="radiogroup" aria-label="Threat level">${THREAT.map((t) => `<button type="button" role="radio" data-lv="${t.n}">${t.n}</button>`).join('')}</div>
+        <div class="mn-lv-card"></div>
+      </div>
       <button type="button" class="mn-play2">To battle</button>
       <ul class="keys mn-keys">${KEYS}</ul>
     </div>
@@ -349,7 +401,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     <div class="hg-preview" hidden><span>Preview: the full battery</span><button type="button" class="rs-act" data-act="back-research">Back to research</button></div>
     <section class="hg-info" aria-label="Battery"></section>
     <aside class="hg-mods" aria-label="Modifications"></aside>
-    <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="mn-save"></span></div></footer>
+    <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span></div></footer>
   </main>
   <div class="mn-rsv" data-for="research" hidden>
     <header class="rsv-head"><div><small class="mn-kicker">FIELD COMMAND</small><h1 class="rsv-title">Research</h1></div></header>
@@ -385,17 +437,17 @@ export function mountMenu(root = document.getElementById('menu')) {
   });
   window.__menuHangar = hangar; // the headless tools look at the hangar through it
 
-  const save = () => { try { localStorage.setItem(STORE, JSON.stringify({ view, era, sel: memo.sel, tab, difficulty, rs: memo.rs })); } catch { /* private mode */ } };
-  const playable = (i) => i && i.era === era && !i.locked;
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify({ view, era, sel: memo.sel, tab, difficulty, rs: memo.rs, level, modSeed: memo.modSeed })); } catch { /* private mode */ } };
+  const playable = (i) => i && NATION_OF[i.era] === era && !i.locked;
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
   const HELP = {
-    battles: { '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
+    battles: { de: 'The open battle of 1918 with your career\'s batteries (it pays research points, won or lost), the WW2 open battle as a sandbox, the special weapons\' own missions, the Big Bertha demo and the test range.', '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
     campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'One-off challenges, in any order: each loans you a battery for a set task, and the first win pays research points.' },
     tutorials: { ww1: 'No lessons of its own yet: the 1917 and WW2 lessons teach the same drill (lay from the board, range, fire for effect).', other: 'Short lessons on a quiet range, in daylight.' },
   };
   const RESEARCH_HELP = {
     ww1: 'Nothing to research in this era: every battery of the Gruppe is yours from the start.',
-    other: 'Research points buy new batteries. Each battery starts with one gun; its own points buy its other guns and better parts.',
+    other: 'Pick the battery to research: every battle\'s research points go to it. Each line is researched in order. A battery takes the field with one gun; its own points buy its other guns and better parts.',
   };
   const shown = () => shownIn(era, memo.rs?.[era]);
   // the battery in the hangar: the one chosen if it is in the lineup, else the lineup's first; or the one previewed
@@ -422,20 +474,21 @@ export function mountMenu(root = document.getElementById('menu')) {
   function renderTop() {
     for (const b of $$('[data-view]')) {
       b.setAttribute('aria-pressed', String(b.dataset.view === view));
-      if (b.dataset.view === 'research') b.querySelector('.mn-view-n').textContent = TREES[era] ? (career.free ? 'unlimited' : `${num(career.rp[era])} RP`) : '';
+      const t = career.targetOf(era);
+      if (b.dataset.view === 'research') b.querySelector('.mn-view-n').textContent = TREES[era] ? (t ? `${Math.round(career.researchShare(t) * 100)}%` : 'done') : '';
     }
     for (const w of $$('[data-for]')) w.hidden = w.dataset.for !== view;
     for (const b of $$('[data-era]')) { b.classList.toggle('on', b.dataset.era === era); b.setAttribute('aria-pressed', String(b.dataset.era === era)); }
     $('.mn-mode-k').textContent = sel.kicker;
     $('.mn-mode-t').textContent = sel.title;
-    $('.mn-mode-d').textContent = sel.difficulty ? difficulty : '';
+    $('.mn-mode-d').textContent = sel.level ? `Level ${levelNow()}` : sel.difficulty ? difficulty : '';
     for (const sw of $$('[data-switch]')) {
       const on = sw.dataset.switch === 'free' ? career.free : career.dev;
       sw.setAttribute('aria-pressed', String(on));
       sw.querySelector('.dev-state').textContent = on ? 'ON' : 'OFF';
     }
     for (const s of $$('.mn-save')) s.textContent = career.saved ? 'Saved in this browser' : 'Saving unavailable: progress is lost on leaving';
-    document.title = era === 'ww2' ? 'Drumfire WW2: German artillery' : era === 'ww1' ? 'Drumfire WW1: German heavy artillery, 1918' : 'Drumfire: heavy artillery, Ypres 1917';
+    document.title = era === 'de' ? 'Drumfire: German artillery' : 'Drumfire: heavy artillery, Ypres 1917';
   }
 
   // the mission chooser: the lists (battles, campaign missions, lessons) and the chosen one's orders
@@ -448,7 +501,8 @@ export function mountMenu(root = document.getElementById('menu')) {
     $('.mn-lines').replaceChildren(...sel.lines.map((t) => el('li', null, t)));
     $('.mn-difficulty').hidden = !sel.difficulty;
     for (const b of $$('[data-d]')) { b.classList.toggle('on', b.dataset.d === difficulty); b.setAttribute('aria-checked', String(b.dataset.d === difficulty)); }
-    const ofEra = items.filter((i) => i.era === era), missions = CAMPAIGN.filter((m) => m.era === era);
+    renderLevel();
+    const ofEra = items.filter((i) => NATION_OF[i.era] === era), missions = CAMPAIGN.filter((m) => NATION_OF[m.era] === era);
     const counts = {
       campaign: missions.length ? `${missions.filter((m) => career.completed.has(m.id)).length}/${missions.length}` : '',
       tutorials: `${ofEra.filter((i) => i.tab === 'tutorials' && i.done).length}/${ofEra.filter((i) => i.tab === 'tutorials').length}`,
@@ -480,6 +534,57 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (!list.children.length) list.append(el('p', 'mn-empty', tab === 'campaign' ? 'No campaign missions in this era.' : 'Nothing here yet.'));
   }
 
+  // the lineup's capabilities and recommended level (capability.js), worked out again only when the lineup changes
+  const CAP_NAME = { soft: 'Soft targets', armour: 'Tank laagers', heavy: 'Their heavy batteries', deep: 'Deep targets', hard: 'Concrete' };
+  const CAP_SAY = { ready: 'ready', slow: 'slow: only just, or not every time', no: 'out of its reach or beyond its shells' };
+  let capKey = '', capMemo = null;
+  const lineupCaps = () => {
+    const lv = career.lineupLevels(era), key = JSON.stringify(lv);
+    if (key !== capKey) { capKey = key; capMemo = { caps: capabilities(lv), rec: recommendedLevel(lv) }; }
+    return capMemo;
+  };
+
+  // the threat level of a battle played at one: the ten levels (a locked one says what opens it) and the chosen one's
+  // card: what its day holds, the lineup it fits, its pay and the modifiers rolled for it
+  function renderLevel() {
+    $('.mn-level').hidden = !sel.level;
+    if (!sel.level) return;
+    const n = levelNow(), t = threatOf(n);
+    for (const b of $$('[data-lv]')) {
+      const k = +b.dataset.lv, open = career.levelUnlocked(era, k);
+      b.disabled = !open;
+      b.title = open ? `Level ${k}: ${threatOf(k).name} (${threatOf(k).en})` : `Locked: play level ${k - 1} to its end to open it`;
+      b.classList.toggle('on', k === n);
+      b.setAttribute('aria-checked', String(k === n));
+    }
+    const card = $('.mn-lv-card');
+    const head = el('div', 'mn-lv-head');
+    head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name));
+    const pay = el('span', 'mn-lv-pay', t.pay > 1 ? `Pay +${Math.round((t.pay - 1) * 100)}%` : 'Pay ×1');
+    head.append(pay);
+    const list = el('ul', 'mn-lv-lines');
+    for (const line of t.lines) list.append(el('li', null, line));
+    const fits = el('p', 'mn-lv-fits');
+    fits.append(el('b', null, 'Fits: '), t.fits, '.');
+    // what the lineup can do against the kinds of target this level brings (capability.js), and the level it suits
+    const { caps, rec } = lineupCaps();
+    const can = el('ul', 'mn-lv-caps');
+    for (const tier of t.sites) {
+      const v = caps[tier] ?? 'no', li = el('li', `v-${v}`);
+      li.append(el('b', null, CAP_NAME[tier] ?? tier), ` ${CAP_SAY[v]}`);
+      can.append(li);
+    }
+    const recP = el('p', 'mn-lv-rec', rec >= n ? `Your lineup suits up to level ${rec}.` : `Your lineup suits level ${rec}: this one asks more than it has. What it cannot do goes to the neighbouring Gruppe, unpaid.`);
+    recP.classList.toggle('over', rec < n);
+    card.replaceChildren(head, el('p', 'mn-lv-sub', t.sub), list, fits, el('small', 'mn-lv-k', 'Your lineup'), can, recP);
+    const mods = modsNow().map(modifierOf);
+    if (mods.length) {
+      const ml = el('ul', 'mn-lv-mods');
+      for (const m of mods) { const li = el('li'); li.append(el('b', null, m.name), ` ${m.line}`); ml.append(li); }
+      card.append(el('small', 'mn-lv-k', mods.length === 1 ? 'Modifier' : 'Modifiers'), ml);
+    }
+  }
+
   // keep the focus on the control that was pressed when a screen is built again
   const keepFocus = (box, build) => {
     const focus = document.activeElement?.dataset?.act;
@@ -492,14 +597,28 @@ export function mountMenu(root = document.getElementById('menu')) {
   function renderHangar() {
     const kind = inHangar();
     hangar.setActive(true);
-    hangar.show({ era, battery: parade(career, era, kind, !!preview) });
+    hangar.show({ era: gunEraOf(kind), battery: parade(career, era, kind, !!preview) });
     $('.hg-preview').hidden = !preview;
     keepFocus($('.mn-hangar'), () => {
-      $('.hg-info').replaceChildren(hangarInfo(career, era, kind, !!preview));
+      $('.hg-info').replaceChildren(hangarInfo(career, era, kind, !!preview, render));
       $('.hg-mods').replaceChildren(hangarMods(career, era, kind, render, () => pick(kind, 'research'), (part) => hangar.lookAt(part)));
       $('.hg-slots').replaceChildren(...slotCards(career, era, preview ? null : kind, (k) => pick(k), hangarKinds(career, era)));
     });
+    // the lineup's slots taken (threat.js SLOTS)
+    const ks = TREES[era] ? career.lineupKinds(era) : [], off = ks.filter(isOffmap).length;
+    $('.hg-count').textContent = TREES[era] ? `Lineup ${ks.length - off} of ${SLOTS.map} · off-map ${off} of ${SLOTS.support}` : '';
+    $('.hg-slots .hg-slot.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    edges();
   }
+
+  // the slot bar's fading ends while there is more of the lineup to scroll to on that side
+  const slots = $('.hg-slots');
+  const edges = () => {
+    slots.classList.toggle('more-l', slots.scrollLeft > 2);
+    slots.classList.toggle('more-r', slots.scrollLeft + slots.clientWidth < slots.scrollWidth - 2);
+  };
+  slots.addEventListener('scroll', edges, { passive: true });
+  addEventListener('resize', edges);
 
   // the Research screen of the era: its tree and the battery shown (the WW1 German sandbox: its roster)
   function renderResearch() {
@@ -520,7 +639,7 @@ export function mountMenu(root = document.getElementById('menu')) {
       return;
     }
     const kind = shown();
-    still(STILLS.has(kind) ? [kind] : stillsOf({ era }));
+    still(stillOf(kind) ? [stillOf(kind)] : stillsOf({ era }));
     keepFocus($('.rsv-body'), () => $('.rsv-body').replaceChildren(researchView(career, era, kind, (k) => pick(k), render, (k) => { (memo.rs ??= {})[era] = k; view = 'hangar'; preview = k; save(); render(); root.scrollTop = 0; })));
   }
 
@@ -529,15 +648,22 @@ export function mountMenu(root = document.getElementById('menu')) {
     // the entries are built again (a lock may have opened): the selection is held by its key
     sel = items.find((i) => i.key === sel?.key && playable(i)) ?? items.find((i) => i.key === memo.sel[era] && playable(i)) ?? firstOf('battles');
     renderTop();
-    if (!loaded) loading.querySelector('.ml-era').textContent = `${ERA_TABS.find(([e]) => e === era).slice(1).join(' ')} · the batteries drawn up for inspection`;
+    if (!loaded) loading.querySelector('.ml-era').textContent = `${NATIONS.find((n) => n.id === era).name} · the batteries drawn up for inspection`;
     if (open) renderDrop();
     if (view === 'research') renderResearch(); else renderHangar();
     // the hangar is loaded behind the loading screen whichever screen opens first
-    if (view === 'research' && !loaded) hangar.show({ era, battery: parade(career, era, inHangar()) });
+    if (view === 'research' && !loaded) hangar.show({ era: gunEraOf(inHangar()), battery: parade(career, era, inHangar()) });
   }
 
   // (the test range opens with the battery shown in the hangar)
-  const go = () => { if (playable(sel)) location.href = sel.key.startsWith('range:') ? rangeHref(era, inHangar()) : hrefOf(sel, difficulty, query); };
+  const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'k17' : inHangar());
+  const go = () => {
+    if (!playable(sel)) return;
+    const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow() });
+    // the next battle at a level rolls its modifiers afresh
+    if (sel.level) { memo.modSeed = (Math.random() * 1e9) | 0; save(); }
+    location.href = href;
+  };
 
   $('[data-act="back-research"]').addEventListener('click', () => pick(preview ?? shown(), 'research'));
   for (const b of $$('[data-view]')) b.addEventListener('click', () => {
@@ -557,11 +683,12 @@ export function mountMenu(root = document.getElementById('menu')) {
     render();
     // the address remembers the era (a reload or a game's way back keeps it); nothing is loaded
     const url = new URL(location.href);
-    if (era !== '1917') url.searchParams.set('mode', era); else url.searchParams.delete('mode');
+    url.searchParams.delete('mode'); // (the nation is remembered with the menu's choices)
     history.replaceState(null, '', url);
   });
   for (const b of $$('[data-tab]')) b.addEventListener('click', () => { tab = b.dataset.tab; save(); render(); });
   for (const b of $$('[data-d]')) b.addEventListener('click', () => { difficulty = b.dataset.d; save(); render(); });
+  for (const b of $$('[data-lv]')) b.addEventListener('click', () => { level = +b.dataset.lv; save(); render(); });
   $('[data-switch="dev"]').addEventListener('click', () => { career.setDev(!career.dev); render(); });
   $('[data-switch="free"]').addEventListener('click', () => { career.setFree(!career.free); render(); });
   // the career reset: the first click arms it ("Confirm?") for 4 s, the second resets
@@ -610,15 +737,24 @@ export function mountMenu(root = document.getElementById('menu')) {
   // a way back from a game (?sel=) or an old address (?op=, ?campaign=) selects its entry
   items = menuItems(career, read(LESSONS_KEY, {}));
   const asked = query.get('sel') ? items.find((i) => i.key === query.get('sel')) : query.get('op') || query.get('campaign') ? itemForQuery(query, items) : null;
-  if (asked) { era = asked.era; if (playable(asked)) { sel = asked; memo.sel[era] = asked.key; tab = asked.tab; } }
+  // (an entry in no list, the test range or the WW2 sandbox, selects nothing)
+  if (asked && SHOWN.some((n) => n.id === NATION_OF[asked.era])) { era = NATION_OF[asked.era]; if (playable(asked) && TABS.some(([t]) => t === asked.tab)) { sel = asked; memo.sel[era] = asked.key; tab = asked.tab; } }
   render();
   setOpen(open);
   save();
   if (['sel', 'op', 'campaign', 'lessons', 'view'].some((k) => query.has(k))) {
     const url = new URL(location.href);
-    for (const k of ['sel', 'op', 'campaign', 'lessons', 'view']) url.searchParams.delete(k);
-    if (era !== '1917') url.searchParams.set('mode', era); else url.searchParams.delete('mode');
+    for (const k of ['sel', 'op', 'campaign', 'lessons', 'view', 'mode']) url.searchParams.delete(k);
     history.replaceState(null, '', url);
   }
   document.body.classList.add('ready');
+  // a battle left without its summary seen (the page closed during it): the summary now, once
+  const last = loadSummary();
+  if (last && !last.seen) {
+    markSeen();
+    const page = showSummary(last, { actions: [
+      { label: 'Research', onClick: () => { page.close(); view = 'research'; preview = null; save(); render(); } },
+      { label: 'Continue', primary: true, onClick: () => page.close() },
+    ] });
+  }
 }

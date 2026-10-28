@@ -9,6 +9,7 @@ import { MISSION_NAME, OBSERVER, FUZE, KINDS, KIND_SHORT } from '../ui/consoles/
 import { LINES, lineX } from '../sector.js';
 import { ww1Ref, WW1_REF_HINT } from './grid.js';
 import { parisOverlay, parisHover } from '../ui/consoles/parisMap.js';
+import { MANNABLE } from '../ww2/gunner.js';
 
 export const WW1_KINDS = {
   bertha: { pieces: 1, title: '42 CM M-GERÄT "DICKE BERTHA"', note: 'The siege howitzer: 810 kg shells to 12 km against the heaviest works and the British heavies in their pits', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
@@ -37,6 +38,7 @@ export function ww1Ui(th) {
   });
   setUiTheatre({
     metric: true,
+    mannable: MANNABLE, // the guns the player can serve in person (ww2/gunner.js): MAN on the guns card
     mppMax: 120,
     salient: battle, // the Ypres map: the lines, places and roads (our front is the German line of 1917)
     sectors: th.sectors ?? [],

@@ -3,6 +3,7 @@ import { GunViews } from './guns.js';
 import { ShellViews } from './shells.js';
 import { TargetViews } from './targets.js';
 import { DetailCull } from './detail.js';
+import { supportTrails } from './support.js';
 
 // The render layer: gun rigs posed from the sim with their loading crews, shells in flight, German
 // targets, the infantry. main.js calls createRender(...) once, update() every frame, reset(sim) on a new
@@ -39,6 +40,7 @@ export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onl
       guns.camera = cam;
       guns.update(dt, rawDt, s);
       shells.update(s, cam);
+      if (s.support) supportTrails(f, s, dt); // (the weapons off the map in flight: the V-1's motor)
       targets.update(rawDt, s, cam);
       inf?.update(dt, s.infantry, terrain.heightAt, cam);
       detail.update(cam);

@@ -148,7 +148,7 @@ export class Targets {
         if (dmg <= 0) return;
         total += dmg;
         worst = Math.max(worst, dmg);
-        this.damagePart(t, i, dmg, shell.unitId);
+        this.damagePart(t, i, dmg, shell.unitId ?? (shell.support ? `support:${shell.support}` : null)); // (off-map support: its weapon's credit)
       });
       if (total > 0) {
         hitId = t.id;
@@ -168,8 +168,10 @@ export class Targets {
   damagePart(t, i, dmg, by) {
     const sim = this.sim, part = t.parts[i];
     if (!part.alive) return;
-    // the battle's pay (sim.credit): a quarter point for each point of damage that counted, the target's score for the kill
-    sim.credit(by, Math.min(part.hp, dmg) * 0.25);
+    // the battle's pay (sim.credit): a quarter point for each point of damage that counted; the target's score half
+    // shared among its parts as each is knocked out (a gun of a battery, a tank of a laager) and half for the kill
+    const why = { kind: t.kind, name: t.name, id: t.id };
+    sim.credit(by, Math.min(part.hp, dmg) * 0.25, { act: 'hit', ...why });
     part.hp -= dmg;
     t.hp = Math.max(0, t.hp - dmg);
     t.damage = 1 - t.hp / t.maxHp;
@@ -191,9 +193,10 @@ export class Targets {
     } else if (t.kind === 'hq') {
       sim.events.secondary?.(pos, 2);
     }
-    const was = t.alive;
+    const was = t.alive, score = TARGETS[t.kind].score;
     this.checkDead(t, by);
-    if (was && !t.alive) sim.credit(by, TARGETS[t.kind].score);
+    if (was && !t.alive) sim.credit(by, score * 0.5 + score * 0.5 / t.parts.length, { act: 'kill', ...why });
+    else sim.credit(by, score * 0.5 / t.parts.length, { act: 'part', part: i, ...why });
   }
 
   checkDead(t, by) {

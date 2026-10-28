@@ -497,14 +497,24 @@ the AI delays in `crews.js`. After changing any of them re-run on 72 seeds or mo
 
 ## Research and upgrades (the open battles)
 
-The career of the two research eras (1917 British, WW2 German; the WW1 German era stays an all-open sandbox).
+The German career: one tree for the 1918 and the WW2 guns (`TREE_OF`: the eras `ww1` and `ww2` map to the tree `de`),
+fought in the open battle on the 1918 ridge (main.js `RESEARCH_ERA = 'de'` on `?mode=ww1&op=ridge&play=1`; the WW2
+open battle and the British game are sandboxes for now, Britain hidden from the menu, its `TREES['1917']` kept).
 `src/research.js` is the data and the pure functions, `src/progression.js` the saved career, the menu's Hangar
 (`ui/menu.js` `hangarInfo`, `hangarMods`, `slotCards`; the 3D view `ui/hangar.js`) and Research screen (`researchView`)
 the screens; docs/PROGRESSION.md says it for players.
 
-- **Trees** (`TREES`): per era, `{ kind, tier, after, cost }` (RP). 1917: 6-inch (tier I) -> 60-pounder -> 18-inch
-  railway; 6-inch -> 9.2-inch -> 15-inch. WW2: leFH 18 -> sFH 18 / Nebelwerfer; sFH 18 -> Mörser 18 -> Karl;
-  sFH 18 -> K 18 -> Gustav. Costs 450 / 1,100 / 2,000 for tiers II / III / IV.
+- **Tree** (`TREES.de`, `LINES.de`): `{ kind, line, tier, after, cost, offmap? }`, `tier` the rank I to IV (it scales
+  `nextCost`). Lines of one type, researched in order along `after`, never crossing; the first of every line (`after:
+  null`) is open from the start; the K 17 (cost 0) is the career's from the start. guns: K 17 -> K 18 -> Langer Max ->
+  Paris Gun -> Gustav; howitzers: sFH 13 -> leFH 18 -> sFH 18; mortars: Mörser 16 -> Mörser 18 -> Gamma -> Bertha ->
+  Karl; rockets: Nebelwerfer 41; support: V-1 -> V-2. `offmap` (`isOffmap`: the V-1, V-2, Paris Gun) fight in the open
+  battle as off-map support. `gunEraOf(kind)` gives a gun's era for its look and its crews' dress (`ww1`, `ww2`, `1917`).
+- **Research** (`Progression`): `target[tree]` (`targetOf`, `setTarget`: any battery whose `after` is owned) receives
+  every RP (`addRP`, `reward`, `complete`); `progress[kind]` the RP put in; `settle` researches what is paid for and
+  carries the rest to the next in the target's line, else the cheapest open one (RP with nothing left wait in
+  `rp[tree]`). `researchBlock(kind)` is '' when it can be researched, else why not; `research(kind)` at once only with
+  unlimited points (`free`).
 - **Upgrades**: `levels = { guns, shells, barrel, breech, sights, camo, supply, crew }`. Every battery starts with one gun and
   earns the rest of its pits (`maxGuns(kind)`, its open battle definition); each part has three levels (`PARTS[].fx`).
   Bought with the battery's own points (`nextCost`). `modsOf(levels)` gives the sim's multipliers `{ dmg, disp, wear,
@@ -524,8 +534,8 @@ the screens; docs/PROGRESSION.md says it for players.
   end card, when the page is left (`pagehide`) or the battle is given up for another (no win bonus then).
 - **Campaign missions** pay a one-off RP bonus on the first win (`missionBonus`: half the featured battery's research
   cost, at least 500) and no longer grant a battery.
-- **Save** `drumfire.campaign.v3`: `{ completed, rp: { era }, researched, bp: { kind }, levels: { kind }, battles: { era },
-  dev, devSet }`; a v2 save is read once (its won missions stay won and their batteries researched). Dev mode
+- **Save** `drumfire.campaign.v4`: `{ completed, rp: { tree }, target: { tree }, progress: { kind }, researched, bp:
+  { kind }, levels: { kind }, battles: { tree }, dev, devSet, free }`; older saves are not read (a new career). Dev mode
   (`DEV_DEFAULT` on) lays every battery researched and at its top over the career in battle (`Progression.battle(era)`);
   the career underneath still earns and the menu's screens show it.
 - **Measure** with `node tools/researchtest.mjs [seeds] [--era] [--lineup start|early|mid|full|max|part:<id>|all]`.
@@ -564,6 +574,103 @@ nothing waiting, a battery that has had no mission for 80 s gets the site that s
 little noise; not the role sites, not traffic, not a site with a mission). Own random stream (`mulberry32(seed ^
 0x11e0b)`). `day.stats` counts `moved waited dropped work`; `tools/researchtest.mjs` prints them and the site missions
 opened, done and failed, and `NODAY=1` runs the fixed day to compare.
+
+## Off-map support (`src/sim/support.js`)
+
+The lineup's weapons that fire from beyond the map (research.js `offmap`: the V-1, the V-2, the Paris Gun) take no
+gun pit in the open battle: the player picks one, gives it a point, and it fires in its own time, then reloads for a
+long time. They keep their own launch missions (the WW2 V-1 and V-2 operations, the WW1 Paris Gun mission), which are
+untouched. Game values throughout (the real spreads are kilometres; these are sized to hit a battery on this map).
+
+- **Made by `sim.newGame`** when the loadout has off-map kinds (`supportKinds(loadout)`), never in the demonstration
+  or on the scripted range: `sim.support = new Support(sim, kinds)`, else `null`, so every battle without them is
+  bit-identical (`tools/ww1test.mjs`). Own random stream (`mulberry32(seed ^ 0x0ff3a9)`), never `sim.rng`.
+  `sim.step` calls `support.update(dt)` after the specials, also after the battle's end (a strike in flight lands).
+- **Assets** (`sim.support.assets`, plain objects): `{ kind, name, state, t, dur, aim, at, shellId, last, mods }`.
+  `state` is `ready`, `preparing` (`t` s left), `flight` (`t` the whole flight's time left), `reloading` (`t` left);
+  `aim` the point ordered, `at` the fall point drawn at launch (`aim` plus the spread), `last` the latest strike
+  `{ x, z, off, t, hit, destroyed }`. `mods` from the battery's upgrades: `load` (breech and reliefs) on the
+  preparation and the reload, `disp` (barrel) on the spread, `dmg` (shells) on the burst (`shell.dmgK`).
+- **Values** (`SUPPORT`): prep, reload, off-map flight, spread (one sd per axis): V-1 110 s, 540 s, 45 s, 110 m; V-2
+  170 s, 780 s, 60 s, 80 m; Paris Gun 75 s, 600 s, 80 s, 60 m. Over the map (`V1`, `V2`, `PARIS`): the V-1 comes in
+  from 9 km east of its fall point at 420 m and 175 m/s, its motor cuts 1.1 km out (`shell.engineOff`) and it steers
+  down onto the point, speeding up to 240 m/s; the V-2 falls from 30 km on a line 10 degrees off the vertical at
+  900 m/s; the Paris shell from 11 km at 55 degrees and 780 m/s. About two to five strikes each in a battle.
+- **The projectile** is a sim shell `{ own: true, guided: true, support: kind, unitId: null, kind }` flown by the
+  controller (`sim.moveShells` leaves guided shells alone) and burst through `sim.burst(s, p, false)`: the targets,
+  wire, infantry (ours too), craters and the `shellBurst` event as any own shell; `SHELLS.v1`, `v2`, `paris` are the
+  warheads. With `unitId: null` it earns no credit and no observer reports it (as the WW1 division's field guns).
+- **Commands** (no unit: `sim.command(null, 'support', args)`): `{ kind, x, z }` orders it onto a point (a preparing
+  one takes the new point); `{ kind, cancel: true }` stands a preparing one down (no reload); `{ kind, ask: true }`
+  tells why it cannot take an order. Refusals go on the radio as `sim.tell` does for the guns (`<name>: cannot fire.
+  <reason>.`, not repeated within 4 s); `support.problem(kind)` is the reason ('' when it can): preparing, already on
+  its way, reloading (with the time left), off the map, no target, the battle over. `sim.events.support(asset, what,
+  shell)`: `order launch arrive cut burst ready`. Radio lines in the theatre's map references (`theatre.ref`).
+- **Console** (`src/ui/support.js`, `support.css`, mounted by the Panel under the battery tabs): one tile per weapon
+  (`data-tut` `support`, `support-<kind>`), its state and countdown (READY, PREP, AIR, RLD) and a bar; pick a ready
+  or preparing tile and the next click on the board (a point or a target's symbol; consoles/console.js asks
+  `shared.supportClick` first) is its target; pick it again to put it down; × stands a preparing one down; a tile
+  that cannot take an order asks the sim, which says why. The board (`board.js` `BOARD_OVERLAYS`, a list of
+  `f(board, g, sim, unit, T)` drawn after the theatre's overlay) shows each aim with a ring two spreads across and its
+  countdown, the last strike for 90 s, and while one is picked a ring under the cursor and the word at the top.
+  main routes `support` orders past `canCommand` (they have no unit).
+- **Pictures and sound**: render/shells.js draws the projectiles as shells of their kind (the V-1, the A4, the Paris
+  shell); `render/support.js` `supportTrails(fx, sim, dt)` (from the render layer) the V-1's pulse-jet trail while its
+  motor runs. The audio engine's shell voices do the rest: the V-1's buzz until `engineOff` (silence d / 343 s
+  later), the V-2 unheard until its arrival (`burst` with kind `v2`: the double crack, then the fall's roar), the Paris
+  shell's freight train; main asks for the WW2 banks on the career's ridge when the lineup has the V-1 or the V-2.
+- **Test:** `node tools/supporttest.mjs [seeds] [--difficulty] [--lineup dev|start] [--kinds v1,v2,paris]`: the ridge
+  battle, auto crews, each weapon ordered onto a target whenever ready; prints strikes, misses and kills, and checks
+  determinism, a refusal told and a retarget.
+
+## Threat levels (`src/threat.js`, `src/capability.js`)
+
+The career's open battle (the 1918 ridge, version 1: all ten levels there) takes a level picked before battle, as
+Helldivers 2's difficulties: `sim.newGame({ loadout, level, modifiers })`. Without `level` nothing changes (every test
+bit-identical); with it the lineup's `opposition` is not used.
+
+- **The difficulty.** `sim.level` is the THREAT row; `sim.difficulty` is Normal's for the player's own side (err, ammo
+  before the modifiers) and the level's for the enemy's: `cb`, `dmg`, `assault`, `sig` (times 1.5 under the modifier
+  `sound`), `zero`, and `time` from the level's `deadline`. `difficultyName` is 'Normal'. `sim.modifiers` is a Set of
+  MODIFIERS ids; `sim.supplyK` the ammunition columns' pace (shells 0.6, rain 0.6; guns.js resupply).
+- **The day** (`ww1/director.js` `levelScript`): the open battle's sites and traffic, the first `attacks` of `ATTACKS`
+  (B 925 s, D 1230, C 1090, A 1530, B 1700), all inside the day (`DAY_END`: morning 900 s, day 1300, night 1850; a
+  'full' day goes on to X-Zeit at 1850). With `tanks`, four minutes before an attack its side's laager (A, B: T1; C,
+  D: T2) gets a mission, and if it still has half its tanks at the attack they go in with it (`TANK_K` 1.3 its size).
+- **Winning.** A shorter day (`dayEnd`, at its hour) is won with the front held and `need` site missions (destroy, cb,
+  harass) done; `sim.over` gives the end card's title and line. A full day is won at X-Zeit with `zero` of our men in.
+  Two sectors lost or every gun lost end any day, as always.
+- **The sites** (`offers`): only the level's `sites` (capability.js `tierOf`: soft, armour, heavy, deep, hard; the role
+  sites by their role, specialists.js `allow`). A site no battery of the lineup can finish (`siteVerdict` 'no') goes to
+  the neighbouring Gruppe: a radio line once, no mission, no pay, no penalty (the traffic is never handed on).
+  `heavies` off: only the British 18-pounders fire counter-battery, harassing fire and the Trommelfeuer; `spotters` off:
+  no RE8; `raids` the Camel raids' rate in place of `cb` (`EnemyWW2.raidRate`, 0 none, twice under `air`).
+- **Fairer targets on a level.** A tank laager's guns are laid on one tank at a time (`m.aimPart`; the observer reads
+  against it, `ObserversWW1.refPoint`; the next tank when it is out), and it is broken up, done, with half its tanks out;
+  a British battery is silenced with half its guns out. The crews adjust their fire for effect (`CrewsWW1.await`,
+  `firing`): the observer's "on target" allows 45 m each way, which a 10 cm shell does not forgive.
+- **The Feuerwalze on a level** (the friendly fire every lineup beyond a lone K 17 died of): fired by the field guns and
+  howitzers only (`FEUERWALZE`: K 17, sFH 13, leFH 18, sFH 18; any but the super-heavies when the lineup has none), with
+  HE, each gun laid `walzeMargin` beyond the line (two and a half spreads and its lethal radius less 40 m) and spread
+  across the lane by its place in the mission, not its unit number; a crew lifting late stops firing until it lifts.
+  Our assault keeps pace with the lifts (2.6 m/s), every British battery not silenced (half its guns standing) fires on
+  it at the level's `cb` rate, and the garrison is kept down by `cover` bursts on each lane in 20 s (6 without a level).
+- **Modifiers:** mist (the observers' reports 1.7 times as slow), air (twice the raids and the RE8 spotters; a map shoot
+  without reports where the Flieger would have observed, the balloon for the role missions), shells (0.4 of the stock
+  at the guns, half the resupply), sound (signature 1.5 times), intel (a site's mission point 90 to 250 m off until an
+  observer puts a round on it, `t.intelErr`; nothing known at the start), rain (the drill 1.15 times as slow in the
+  mud, `sim.drillK`, half the resupply). The page sets the weather (`MODIFIERS[].weather`).
+- **Capability** (`capability.js`, Node-safe): `batteryVerdict` / `siteVerdict` from reach (`autoCharge`), the shell's
+  damage on each part (`partLayout`) under the gun's spread at that range (the upgrades' `disp`, `dmg`), the rounds to do
+  what the mission needs and the minutes for the guns and drill (`load`), against the deadline and the shells carried:
+  'ready', 'slow' or 'no'. `capabilities(levels)` per kind of site, `firepower(levels)` the field guns' weight,
+  `recommendedLevel(levels)` the highest level whose sites are all at least 'slow' and whose reference lineup's firepower
+  is matched. `REFERENCE` is each level's reference lineup (at most five batteries and one off-map, `SLOTS`).
+- **Balance** (`node tools/leveltest.mjs [seeds] [--levels] [--lineup ref|below] [--mods roll] [--jobs] [--games]`, all
+  auto, 72 seeds, each level's reference lineup): 97, 97, 86, 71, 60, 51, 35, 28, 19, 11 % won for levels 1 to 10. A
+  lineup one level over its own (`--lineup below`) wins clearly less at 2 (78), 3 (1), 4 (0), 7 (19) and 9 (10), a little
+  less at 6 (43) and 8 (24), and not less at 5 (68) and 10 (8): the auto crews make little of the step from level 4's
+  lineup to level 5's, and at the top the lineups differ only by their upgrades.
 
 ## Test range
 
@@ -881,11 +988,13 @@ operation with the auto crews (all-auto Flanders on seeds 1 to 8: Easy 6, Normal
 ### The gunner (the player in person at a gun)
 
 P, or MAN on a gun's row of the guns card, puts the player in person into the detachment of a gun of the selected
-battery: the Big Bertha demo's drill on the main game's guns. The kinds are the leFH 18, the sFH 18, the K 18, the
-Mrs 18, the Gustav and the Karl (`gunner.js` `MANNABLE`; the Nebelwerfer, fired from cover, and the launch sites, with
-drills of their own, refuse with a reason, and so does the Gustav while its railway preparation has it in pieces,
-`p.fixed`). The camera sits at the eyes of the man at the player's post, the gun card lies over the 3D view,
-and the console beside it still commands the Group.
+battery: the Big Bertha demo's drill on the main game's guns. The kinds are every German gun of the open battles
+(`gunner.js` `MANNABLE`): the leFH 18, the sFH 18, the K 18, the Mrs 18, the Nebelwerfer, the Gustav and the Karl,
+and on the German career's 1918 ridge also the K 17, the sFH 13, the 21 cm Mörser 16, the Langer Max, the Gamma and
+Bertha (`SpecialWW1` makes the Gunner as `SpecialWW2` does; main loads `gunnerView.js` on WW1 pages too). The launch
+sites and the Paris Gun, with drills of their own, refuse with a reason, and so does the Gustav while its railway
+preparation has it in pieces (`p.fixed`). The camera sits at the eyes of the man at the player's post, the gun card
+lies over the 3D view, and the console beside it still commands the Group.
 
 - **Posts** (`POSTS`): `cmd` Geschützführer reads back each new fire command for this gun (hold E, 1.2 s). `lay`
   Richtkanonier: A/D traverse, W/S elevation, Shift fine. The wheels ease onto the command's mark and stop there (let go
@@ -897,7 +1006,19 @@ and the console beside it still commands the Group.
   loading angle). The elevation is locked while the breech is open, and through the heavies' prime. Laid: within 1
   Strich. While the others load, the prompt sends the layer at his post to the line (and on a gun loaded at its lay,
   the elevation with the breech shut).
-- **The powered drives** (`DRIVEN`: the Gustav, the Karl). Their laying rates are slow (the Gustav 0.08 degrees a
+- **The Nebelwerfer's drill** (its own, `stepPost` / `stepEn`): the commander reads back, the layer lays the launcher
+  by hand, the loader loads the six rockets and connects the igniters (its `prime` is the loader's), and the firer
+  takes the crew into cover (`cover`) and fires the ripple from the firing box there (hold E); the camera is the
+  firer's in the slit trench (`rig.anchors.cover`), looking at the launcher. The rockets are in when the `shell` step
+  ends and the rest of the six go off one by one after the first, as the launcher's own cycle does them (`p.tubes`,
+  `p.ripple`, sim/guns.js).
+- **The bed-mounted giants** (the ridge's Langer Max, Gamma and Bertha): the Gamma and the Max lay by power as the
+  Gustav and the Karl do (`DRIVEN`: over a minute of hand wheels for a lay, the Gamma's 0.6 and 1.6 degrees a second,
+  the Max's 48 degrees of traverse at 1); Bertha's layer cranks (0.9 and 2.2, under a minute). Their commanders stand
+  further back and higher (`VIEW_KIND`); Bertha's and the Gamma's bed relay stays the console's key (T), as the Karl's
+  L, T and Y do. Crew roles from their render rigs (render/ww1/max38.js and gamma.js `ROLES`, Bertha's
+  crews_heavy.js).
+- **The powered drives** (`DRIVEN`: the Gustav, the Karl). The Gamma and the Langer Max too (above). Their laying rates are slow (the Gustav 0.08 degrees a
   second along its curve and 0.35 in elevation: about two minutes from 40 degrees to the loading angle), so a tap of
   W A S D at the layer's post starts the drive (command `drive { axis: 'az' | 'el', dir }`, `st.drive`) and it runs on
   at the gun's own rate, whichever post the player goes to, until it is on the mark, against a stop, or the breech is
@@ -1023,8 +1144,38 @@ URL: `/?mode=ww1&op=ridge|paris&play=1` (`op` defaults to `ridge`; `&unit=1..6` 
 `&quality=`, `&hour=`, `&weather=`). The theatre is `src/ww1/theatre.js` `ww1Theatre(opId)` (id `'ww1'`, `era: 'ww1'`,
 metric, side german; `sectors` only for the battle; every op's pads are levelled on the first call); main loads it (and every
 other WW1 file) only on a WW1 page, sets `GUN_ERA.ww1` (`models/guns.js`: Bertha in its 1917 colours) and
-`CREW_ERA.ww1` (`render/crews_ww1.js`: every German crew in the 1917 dress) before the rigs are built, and calls
-`loadGuns(GUN_KINDS_WW1)`.
+`CREW_ERA.ww1` (`render/crews_ww1.js`: Bertha's crew in the 1917 dress; the 1918 guns have it by their era, the WW2
+guns of the career's ridge keep their own) before the rigs are built, and calls `loadGuns(GUN_KINDS_WW1)`.
+
+**The German career's battle.** The ridge is the career's open battle (research.js `TREES.de`, main `RESEARCH_ERA
+'de'`): `ww1Theatre('ridge', { kinds })` (main passes the career lineup's kinds on the battle's page) adds the WW2
+batteries the lineup names (`ops.js` `RIDGE_WW2`, ids 7 to 13, below), the Karl's prepared stops
+(`RIDGE_POSITIONS`, `op.positions`), the heavy and the long guns' role sites (`RIDGE_ROLE_SITES`: deep W1 to W3, 11
+to 15 km west; hard V1 to V3, `mebu` concrete shelters behind the British line) and their pads (`ridgeWW2Pads`, once
+per kind, before the terrain is sampled). Without `kinds` (the tests) the ridge is as it was (ww1test bit-identical
+on seeds 1 to 72). They take the field only when the loadout names them, as every career battery does.
+
+| id | kind | callsign | pieces | position (x, z), zero | notes |
+|---|---|---|---|---|---|
+| 7 | `lefh18` | Ludwig | 4 | (6400, -3600), 268 | 1.3 km off the sFH 13's spot (its Flanders one) |
+| 8 | `nbw41` | Fritz | 3 | (5700, -500), 270 | its Flanders spot |
+| 9 | `sfh18` | Bruno | 4 | (8100, 1500), 265 | its Flanders spot |
+| 10 | `k18` | Heinrich | 2 | (10400, 400), 270 | 1.5 km off the K 17's |
+| 11 | `mrs18` | Julius | 2 | (8900, 3300), 263 | 1.4 km off the Mörser 16's |
+| 12 | `karl` | Thor | 1 | (6000, 1800), 270 | `special: 'karl'`, `ready`, auto: set up in stop A (5700, 1800) |
+| 13 | `gustav` | Gustav | 1 | (13500, 600), 272, arc 18 | `special: 'gustav'`, assembled on its curve |
+
+The WW1 modules know them: `SpecialWW1` runs the Gustav's and the Karl's controllers (`ww2/special.js` `GustavCtl`,
+`KarlCtl`, exported), the crews (`crews.js`) give each its WW2 part (the leFH 18 and sFH 18 with the sFH 13, the K 18
+with the K 17, the Mörser 18 with the Mörser 16, the Nebelwerfer on the batteries, tanks and traffic, the Gustav and
+the Karl with the super-heavies, `SUPER_WW1` keeps them out of the Sperrfeuer; the Karl turns its hull onto a
+target), the director gives a fuze the gun has (the Nebelwerfer's only instant) and the leFH 18's Doppelzünder on the
+Sperrfeuer, `tables_ww1.js` `FFE_WW1` their rounds for effect on the British kinds, and the lineup's day
+(`sim/lineup.js`, with the ridge's battery and traffic kinds) and the heavy guns' missions (`specialists.js`) run in
+`DirectorWW1` as in the WW2 director (its `siteMission` gate, `missionsUpdate`). On the page main loads the WW2 guns,
+`ww2/render.js` for their scenery, poses and rockets only (`createWW2Render({ kinds, air: false })`: the aircraft are
+the 1918 ones, ww1/render.js's) beside ww1/render.js (`modeR` calls both), and the WW2 sound banks. The battery tabs
+past the tenth have no key (1 to 9, 0).
 
 | id | kind | gun | pieces | position (x, z), zero | notes |
 |---|---|---|---|---|---|
@@ -2120,3 +2271,58 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   range ring's label moves a little round its ring to a free spot or is left out (the charge laid always shows), a
   target's goes below, above, right or left of its symbol, inside the board (a far one with no room left out, one a
   place name already gives not repeated), and the battery names stay inside the board.
+- (career: one German tree) Germany is one nation with one research tree (`research.js` `TREES.de`, `LINES.de`): the
+  1918 and the WW2 guns in five lines of one type each (long-range guns, field howitzers, mortars and siege, rockets,
+  off-map support), researched in order along each line and never crossing, the first of every line open from the
+  start, a rank I to IV each (the upgrade costs). A career starts with one gun of the 10 cm K 17 and no upgrades and
+  fights the open battle on the 1918 ridge (main.js `RESEARCH_ERA = 'de'`). RP go to a research target picked on the
+  Research screen (`Progression.target`, `progress`, `settle`: the rest of a battery's cost goes on to the next in its
+  line); battery points stay each battery's. The V-1, V-2 and Paris Gun (`offmap`) fight in the open battle as off-map
+  support and keep their own missions. The WW2 open battle and the British game are sandboxes for now; Britain is
+  hidden from the menu (`menuItems.js` `NATIONS`), its tree kept. Save `drumfire.campaign.v4`; older saves are not
+  carried over. The menu's top bar has nations instead of eras; the hangar dresses each battery in its own era
+  (`gunEraOf`); its slot bar scrolls, its ends fading while there is more.
+- (support) Off-map support for the career's open battle (DESIGN.md "Off-map support"): `src/sim/support.js`
+  (`Support`, `SUPPORT`, `supportKinds`), made by `sim.newGame` when the loadout has v1, v2 or paris; `sim.command(null,
+  'support', { kind, x, z | cancel | ask })`; `sim.events.support`; `src/ui/support.js` tiles under the battery tabs
+  and `board.js` `BOARD_OVERLAYS`; `render/support.js` the V-1's trail; `tools/supporttest.mjs`. Without off-map kinds
+  nothing changes (ww1test bit-identical on seeds 1 to 72). Their strikes earn no battery points yet (`unitId: null`):
+  `research.js` `battleReward` counts `sim.units` only.
+- (WW1: the German career's ridge fields any German lineup; every German gun manned in person) `ww1Theatre('ridge', {
+  kinds })` adds the WW2 batteries a career lineup names (`src/ww1/ops.js` `RIDGE_WW2`, ids 7 to 13: own spots for the
+  leFH 18, K 18 and Mörser 18, whose Flanders ones are 1918 batteries'), the Karl's stops, deep and hard role sites
+  and their pads; `SpecialWW1` runs the Gustav's and the Karl's controllers and the Gunner; the WW1 crews, director,
+  `FFE_WW1` and `lineup.js` know the WW2 kinds; `DirectorWW1` now runs the lineup's day and the heavy guns' missions
+  (they were never called there); main draws the WW2 batteries with `createWW2Render({ kinds, air: false })` beside
+  ww1/render.js and loads the WW2 guns and sounds on such a page; `crews.js` keeps the WW2 crews' dress there
+  (`CREW_ERA.ww1` for Bertha only). The gunner: `MANNABLE` is every German open-battle gun (the 1918 ones, the
+  Nebelwerfer with its own drill: the loader's igniters, the firer's cover and firing box, the ripple; `DRIVEN` adds
+  the Gamma and the Langer Max), `POST_ROLE` and `VIEW_KIND` for them, the WW1 ui's guns card MAN; gunnertest and
+  rangetest cover the new kinds (the 1918 ones on the ridge, in a second process whose pads leave the WW2 ground as
+  it was: the WW2 results unchanged); researchtest `--era de` on the ridge. Without a loadout nothing changes
+  (ww1test bit-identical on seeds 1 to 72).
+- (career: live rewards and the battle summary) `sim.credit(id, pts, why)` emits `events.reward(id, pts, why)` with `why.act`
+  'hit' (damage, `Targets.damagePart`), 'part' (a part knocked out: half the target's score shared among its parts),
+  'kill' (the other half), 'men' (0.5 a man of the enemy's killed by a burst, `Infantry.onBurst`), 'mission' (a mission's
+  shares, `Director.finish`); credit only, the battles' outcomes unchanged. main.js shows each in the reward feed
+  (`ui/rewards.js`) and pays the career as it goes (`payLive`, about once a second: each battery's `battleReward` points
+  over what it was paid, `Progression.gain`); `payOut` adds the time in action and the victory at the end and counts the
+  battle (`countBattle`). Main menu during a career battle pays and shows the summary page (`ui/summary.js`
+  `showSummary`, a record from `battleRecord`) first; closing the page saves the record unseen (`drumfire.lastBattle`)
+  and the menu shows it on its next load. The career battle's end shows the summary instead of the end card.
+- (career: threat levels, version 1) The career's open battle takes a threat level 1 to 10 (`src/threat.js`, "Threat
+  levels" above), all on the 1918 ridge for now: the level sets the enemy's side of the difficulty and the day (its
+  length, attacks, the British heavies, spotters, raids, tanks with the attacks, the kinds of site, the deadlines, the
+  modifiers); a shorter day is won with the front held and `need` missions done, a full one at X-Zeit. `capability.js`
+  judges what a lineup can finish (the neighbouring Gruppe takes what it cannot) and recommends a level. On a level only:
+  the Feuerwalze by the field guns and howitzers, HE, laid a margin beyond the line, no firing on the old line while a
+  crew lifts late, our assault keeping pace (the friendly fire that lost X-Zeit for every lineup beyond a lone K 17 is
+  down from 17 to 48 men to 0 to 7); a laager broken up and a battery silenced at half; the guns on one tank at a time;
+  the crews correcting their fire for effect. `tools/leveltest.mjs` measures it. Without a level every test is
+  bit-identical.
+- (menu: the career battle's entry, the lists) The career battle's loading screen and entry describe the lineup and the
+  level, not a fixed roster (menuItems.js `CAREER_BLURB`, the lineup line). The test range and the WW2 open battle are in
+  no list (tab 'hidden': their pages stay, the hangar's "Try on the range" and the WW2 lessons use them). The threat
+  levels open in order: a level played to its end, won or lost, opens the next (`Progression.playedLevel`; leaving early
+  does not). The menu's stills gained the sFH 13 and the K 17 (`tools/menushots.mjs` now puts each shot's gun in the
+  career lineup and hides the newer overlays); Bertha's is the demo's (`stillOf`).

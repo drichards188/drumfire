@@ -2,7 +2,11 @@
 // from their controllers' state (the Gustav's assembly and its firing position, the Karl driving, turning and
 // lowering, the V-1 ramp and the V-2 firing table through their drills), the Nebelwerfer's tubes and its rockets'
 // launch, the smoke and flame behind rockets and missiles in flight, and the enemy's aircraft on their raids.
-//   const w = createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns });
+//   const w = createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns, kinds?, air? });
+//                                            kinds: only these batteries' scenery and poses (the German career's
+//                                            1918 ridge draws its WW2 batteries with this, its 1918 ones with
+//                                            ww1/render.js); air false: no aircraft and no siren (the ridge's are
+//                                            the 1918 ones, drawn by ww1/render.js)
 //   w.update(dt, rawDt, sim, camera)        every frame after the render layer
 //   w.reset(sim)                            after sim.newGame: frees the scenery of batteries not in the game
 //   w.fire(unit, piece, shell, night)       from main's fire handler: true when it drew the shot itself
@@ -29,7 +33,8 @@ const buildAircraft = Object.values(AIR)[0]?.buildAircraft ?? null;
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3(0, 0, -1);
 const _tv = { x: 0, y: 0, z: 0 }, _tw = { x: 0, y: 0, z: 0 };
 
-export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns }) {
+export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns, kinds = null, air = true }) {
+  const mine = (u) => !kinds || kinds.has(u.kind);
   const sites = new Map(); // unit id -> Gustav firing position
   const gunPositions = new Map(); // piece key -> static fieldworks and masking
   const batteryWorks = new Map(); // battery id -> connecting trenches and rear services
@@ -51,7 +56,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
 
   // the raiders, built now (before main patches the scene's fog into every material) and reused: three a raid
   const pool = [];
-  if (buildAircraft) {
+  if (buildAircraft && air) {
     const kind = sim.theatre?.op.enemy === 'soviet' ? 'il2' : 'typhoon';
     for (let i = 0; i < 4; i++) {
       try {
@@ -87,6 +92,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   const woodland = sim.theatre?.op?.id !== 'sevastopol';
   const stops = sim.theatre?.op?.positions ?? [];
   for (const u of sim.units) {
+    if (!mine(u)) continue;
     const id = u.id, kind = u.kind, zero = u.zero, pieces = u.pieces.map((p) => ({ i: p.i, x: p.pos.x, z: p.pos.z, bearing: p.bearing }));
     if (kind === 'gustav' && buildSite) {
       const arc = u.arc, p = pieces[0];
@@ -168,7 +174,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       w.audio?.v2Launch?.(at, 0);
     }
   };
-  sim.events.raid = (r, what) => {
+  if (air) sim.events.raid = (r, what) => {
     prevRaid?.(r, what);
     if (what === 'warning' && !sim.attract) {
       w.audio?.siren?.(true);
@@ -450,6 +456,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       q.obj.root.visible = q.near && !!s.unitById(q.unitId);
     }
     for (const u of s.units) {
+      if (!mine(u)) continue;
       if (u.special) poseSpecial(u, rawDt);
       if (u.kind === 'v1' || u.kind === 'v2') { const rig = rigOf(u); if (rig?.layout && u.special?.steps) vCamera(u, rig, s, rawDt); }
       if (u.kind === 'nbw41') for (const p of u.pieces) {
@@ -483,6 +490,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       }
     }
     placeMissiles(s);
+    if (!air) return;
     // the enemy's aircraft
     const a = s.alpha ?? 1;
     live.clear();

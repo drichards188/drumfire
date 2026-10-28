@@ -61,8 +61,10 @@ export class EnemyWW1 extends EnemyWW2 {
     const cbOn = (sim.phase >= 2 || sim.attract) && !sim.scripted;
     const sup = this.supply();
     const spot = this.spotter && this.spotter.plane.alive && this.spotter.circling ? this.spotter.unitId : null;
+    const heavies = !sim.level || sim.level.heavies;
     for (const t of cbOn ? sim.targets : []) {
       if (!t.battery || !t.alive) continue;
+      if (!heavies && t.kind !== 'bfield') continue; // (a threat level without them: only the 18-pounders answer)
       const f = t.fire, B = BRIT_FIRE[t.kind];
       f.cool -= dt;
       // the RE8 over the focus unit firms the locating up three times faster
@@ -94,7 +96,7 @@ export class EnemyWW1 extends EnemyWW2 {
     if (this.harassT <= 0 && !sim.scripted) {
       const gaps = [0, 45, 24, 16, 11, 12];
       this.harassT = (sim.attract ? 7 : gaps[sim.phase] ?? 20) * (0.6 + 0.8 * sim.rng()) / sup;
-      const bs = this.batteries().filter((b) => b.kind === 'bfield' || b.kind === 'bgun6' || b.kind === 'bgun60');
+      const bs = this.batteries().filter((b) => b.kind === 'bfield' || (heavies && (b.kind === 'bgun6' || b.kind === 'bgun60')));
       if (bs.length) {
         const b = bs[Math.floor(sim.rng() * bs.length)];
         const reach = BRIT_FIRE[b.kind].reach;
@@ -135,7 +137,7 @@ export class EnemyWW1 extends EnemyWW2 {
     h.t -= dt;
     if (h.t > 0) return;
     h.t = 0.35 + sim.rng() * 0.5;
-    const b = this.batteries().filter((q) => q.kind === 'bfield' || q.kind === 'bgun6');
+    const b = this.batteries().filter((q) => q.kind === 'bfield' || (q.kind === 'bgun6' && (!sim.level || sim.level.heavies)));
     if (!b.length) return;
     const t = b[Math.floor(sim.rng() * b.length)];
     const alive = t.parts.filter((p) => p.alive);
@@ -183,10 +185,10 @@ export class EnemyWW1 extends EnemyWW2 {
 
   spotterUpdate(dt) {
     const sim = this.sim, now = sim.time;
-    if (!sim.scripted && !sim.attract && !sim.night && sim.phase >= 2 && !this.spotter) {
+    if (!sim.scripted && !sim.attract && !sim.night && sim.phase >= 2 && !this.spotter && (!sim.level || sim.level.spotters)) {
       this.re8T -= dt;
       if (this.re8T <= 0) {
-        this.re8T = (240 + sim.rng() * 200) / sim.difficulty.cb / (sim.special?.effectK?.('air') ?? 1);
+        this.re8T = (240 + sim.rng() * 200) / sim.difficulty.cb / (sim.special?.effectK?.('air') ?? 1) / (sim.modifiers?.has('air') ? 2 : 1);
         let best = null, bs = 0.15;
         for (const u of sim.units) if (u.alive && u.signature > bs) { bs = u.signature; best = u; }
         if (best) {

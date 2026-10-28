@@ -9,7 +9,7 @@
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import os from 'node:os';
-import { TREES, PARTS, maxGuns, detachmentOf, crewOf } from '../src/research.js';
+import { TREES, PARTS, maxGuns, detachmentOf, crewOf, nodeOf, gunEraOf } from '../src/research.js';
 import { GUNS } from '../src/sim/tables.js';
 import { BATTERIES } from '../src/campaign-data.js';
 import { OPS as OPS_WW1 } from '../src/ww1/ops.js';
@@ -17,7 +17,8 @@ import { OPS as OPS_WW1 } from '../src/ww1/ops.js';
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const W1 = Object.values(OPS_WW1).flatMap((op) => op.units);
-const ERAS = { '1917': TREES['1917'].map((n) => n.kind), ww2: TREES.ww2.map((n) => n.kind), ww1: [...new Set(W1.map((u) => u.kind))] };
+// the German tree's batteries by the era of their dress and look (research.js gunEraOf)
+const ERAS = { '1917': TREES['1917'].map((n) => n.kind), ww2: TREES.de.map((n) => n.kind).filter((k) => gunEraOf(k) === 'ww2'), ww1: TREES.de.map((n) => n.kind).filter((k) => gunEraOf(k) === 'ww1') };
 const eras = opt('--era', 'all') === 'all' ? Object.keys(ERAS) : opt('--era').split(',');
 const only = opt('--kind', null)?.split(',');
 const parts = (opt('--parts', null)?.split(',') ?? PARTS.map((p) => p.id)).filter((p) => PARTS.some((q) => q.id === p));
@@ -29,17 +30,18 @@ const GAP = { x: 440, y: 60, width: 630, height: 740 }; // the view between the 
 fs.mkdirSync(out, { recursive: true });
 
 const nameOf = (kind) => BATTERIES.find((b) => b.kind === kind)?.name ?? W1.find((u) => u.kind === kind)?.name ?? kind;
-const gunsOf = (era, kind) => (TREES[era] ? maxGuns(kind) : W1.find((u) => u.kind === kind)?.pieces.length ?? 1);
+const gunsOf = (era, kind) => (nodeOf(kind) ? maxGuns(kind) : W1.find((u) => u.kind === kind)?.pieces.length ?? 1);
 // a battery on parade with these levels (as the menu's parade() builds it)
 const battery = (era, kind, lv) => {
   const drill = GUNS[kind]?.crew ?? 8, base = detachmentOf(kind, drill);
-  const next = TREES[era] ? { guns: maxGuns(kind), reliefs: crewOf(kind, { crew: 1 }, drill) - base } : undefined; // upgradable, as the menu's
+  const next = nodeOf(kind) ? { guns: maxGuns(kind), reliefs: crewOf(kind, { crew: 1 }, drill) - base } : undefined; // upgradable, as the menu's
   return { kind, name: nameOf(kind), guns: gunsOf(era, kind), base, men: crewOf(kind, lv, drill), levels: { ...Object.fromEntries(PARTS.map((p) => [p.id, 0])), ...lv }, next };
 };
 const MAX = Object.fromEntries(PARTS.map((p) => [p.id, 3]));
 
 const jobs = eras.flatMap((era) => ERAS[era].filter((k) => !only || only.includes(k)).map((kind) => ({ era, kind })));
-const exe = ['chromium-1247', 'chromium-1217'].map((d) => `${os.homedir()}/.cache/ms-playwright/${d}/chrome-linux64/chrome`).find((p) => fs.existsSync(p));
+// (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
+const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247', 'chromium-1217'].map((d) => `${os.homedir()}/.cache/ms-playwright/${d}/chrome-linux64/chrome`).find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 
 async function worker() {
@@ -47,7 +49,7 @@ async function worker() {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   page.on('console', (m) => { if (m.type() === 'error' || m.text().startsWith('hangar')) console.log('[console]', m.text().slice(0, 300)); });
   await page.addInitScript(() => {
-    localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true }));
+    localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true }));
     localStorage.setItem('drumfire.menu', JSON.stringify({ view: 'hangar', era: '1917' }));
     // no hot reload: a save while the sheets render would otherwise reload the page under them (as tools/shot.mjs)
     const Orig = window.WebSocket;
@@ -65,9 +67,9 @@ async function worker() {
   };
   for (let job; (job = jobs.shift());) {
     const { era, kind } = job, t0 = Date.now();
-    const cells = { none: await snap(era, battery(era, kind, {}), null), max: await snap(era, battery(era, kind, TREES[era] ? MAX : {}), null) };
+    const cells = { none: await snap(era, battery(era, kind, {}), null), max: await snap(era, battery(era, kind, nodeOf(kind) ? MAX : {}), null) };
     const rows = [];
-    for (const part of TREES[era] ? parts : []) {
+    for (const part of nodeOf(kind) ? parts : []) {
       const row = [];
       for (const lv of levels) row.push(await snap(era, battery(era, kind, { [part]: lv }), part, GAP));
       rows.push([part, row]);

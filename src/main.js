@@ -13,8 +13,11 @@ import { DynamicResolution } from './dynres.js';
 import { FX } from './fx.js';
 import { Flares } from './flares.js';
 import { HUD } from './hud.js';
-import { Progression } from './progression.js';
-import { battleReward } from './research.js';
+import { Progression, BATTERIES } from './progression.js';
+import { battleReward, gunEraOf, PAY } from './research.js';
+import { createRewardFeed, rewardWords } from './ui/rewards.js';
+import { showSummary, saveSummary } from './ui/summary.js';
+import { threatOf, parseModifiers, modifierOf } from './threat.js';
 import { missionById } from './campaign-data.js';
 import { setUiTheatre } from './ui/theatre.js';
 import { campaignTheatre, sandboxTheatre } from './campaign.js';
@@ -64,26 +67,39 @@ const WW2 = query.get('mode') === 'ww2';
 // Gun's own mission (src/ww1/). Its files are loaded only on a WW1 page, so the British game and the WW2 mode never
 // depend on them; its theatre also levels its positions' pads, so it is built here, before the terrain is first sampled.
 const WW1 = query.get('mode') === 'ww1';
-const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge') ?? null : null;
-if (WW1 && !WW1_TH) console.warn('WW1 theatre missing: the British game stands in');
 let careerStorage;
 try { careerStorage = window.localStorage; } catch { /* Session-only career. */ }
 const career = new Progression(careerStorage);
+// the German career's open battle on the ridge (not the range, a lesson or the sandbox page): the lineup's WW2
+// batteries take the field beside the 1918 ones (src/ww1/ops.js RIDGE_WW2), so the theatre is built with its kinds
+const RIDGE_CAREER = WW1 && (query.get('op') ?? 'ridge') === 'ridge' && !SANDBOX && !RANGE && !query.get('tutorial') && !query.get('campaign');
+const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge', { kinds: RIDGE_CAREER ? Object.keys(career.lineupLevels('de')) : null }) ?? null : null;
+if (WW1 && !WW1_TH) console.warn('WW1 theatre missing: the British game stands in');
 const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
 const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
+// the WW2 batteries on a WW1 page (the career's ridge): their models, pictures and sounds load beside the 1918 ones
+const WW2_GUNS = new Set(['lefh18', 'sfh18', 'nbw41', 'k18', 'mrs18', 'karl', 'gustav']);
+const WW2_ON_RIDGE = WW1 && UNITS.some((u) => WW2_GUNS.has(u.kind));
 // back to the menu (src/ui/menu.js), with this page's entry selected
-const MENU = menuHref(query, RANGE ? `range:${WW2 ? 'ww2' : WW1 ? 'ww1' : '1917'}` : CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
+const MENU = menuHref(query, RANGE ? `range:${WW2 || WW1 ? 'de' : '1917'}` : CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
 // Every mission, operation and lesson is open, in any order; only a campaign mission asked for on the other era's page
 // (no theatre for it here) goes back to the menu
 const MISPLACED = !query.get('tutorial') && !SANDBOX && !RANGE && !!requestedMission && !CAMPAIGN_MISSION;
 // a WW2 special weapon's own operation (the Gustav siege, the Karl, the V-1, the V-2): its whole roster is the player's,
 // earned or not, as a campaign mission's is; only the open battle's batteries are earned
 const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
-// the open battles of the two research eras (src/research.js): the career's researched lineup takes the field, with its
-// guns and upgrades, and the battle pays RP and battery points (null: everything else, which pays nothing)
-const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || WW1 || SANDBOX || RANGE ? null : WW2 ? 'ww2' : '1917';
+// the career's open battle (src/research.js, the German tree): the 1918 ridge, where the career's researched lineup
+// takes the field with its guns and upgrades, and the battle pays RP and battery points (null: everything else, which
+// pays nothing; the WW2 open battle and the British game are sandboxes for now, Britain hidden from the menu)
+const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || SANDBOX || RANGE ? null : WW1 && TH?.op?.kind === 'battle' ? 'de' : null;
+// the career's battle is played at a threat level with its modifiers (src/threat.js; the menu chose them: ?level=&mods=)
+const LEVEL = RESEARCH_ERA ? threatOf(+query.get('level') || 1) : null;
+const MODS = RESEARCH_ERA ? parseModifiers(query.get('mods')) : [];
+// the units that take the field, in order: in the career battle only the lineup's (the theatre holds every pit), so the
+// number keys, the tabs' numbers and the first unit shown follow the lineup; elsewhere every unit (set below with UNITS)
+let FIELDED = null;
 
 // ---------------------------------------------------------------- game values for the look and feel
 // Per gun kind: the camera's eye height over the unit's centre, its default orbit distance, and
@@ -168,10 +184,10 @@ async function init() {
     world: await optional('./world/index.js'),
     craters: await optional('./craters.js'),
     render: await optional('./render/index.js'),
-    ww2render: WW2 ? await optional('./ww2/render.js') : null,
+    ww2render: WW2 || WW2_ON_RIDGE ? await optional('./ww2/render.js') : null,
     ww2ui: WW2 ? await optional('./ww2/ui.js') : null,
     ww2tut: WW2 ? await optional('./ww2/tutorial.js') : null,
-    ww2gunner: WW2 ? await optional('./ww2/gunnerView.js') : null,
+    ww2gunner: WW2 || WW1 ? await optional('./ww2/gunnerView.js') : null, // (the ridge's guns are served in person too)
     ww2voices: WW2 || WW1 ? await optional('./ww2/voices.js') : null, // (the WW1 open battle speaks with the same clips)
     ww1render: WW1 ? await optional('./ww1/render.js') : null,
     ww1ui: WW1 ? await optional('./ww1/ui.js') : null,
@@ -183,7 +199,7 @@ async function init() {
   if (WW1 && mods.guns?.GUN_ERA) mods.guns.GUN_ERA.ww1 = true;
   if (WW1 && mods.ww1crews?.CREW_ERA) mods.ww1crews.CREW_ERA.ww1 = true;
   await mods.guns?.loadGuns?.();
-  if (WW2) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW2);
+  if (WW2 || WW2_ON_RIDGE) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW2);
   if (WW1) await mods.guns?.loadGuns?.(mods.guns.GUN_KINDS_WW1);
 
   // ---------------------------------------------------------------- the world and the gun line
@@ -225,7 +241,7 @@ async function init() {
         rig.rec = 0;
         // the career's upgrades on the lineup's guns, as the hangar shows them: the paint, the relined barrel, the
         // polished breech (models/looks.js); the battle's lineup is the career's, fixed for the page
-        if (mods.looks && RESEARCH_ERA) mods.looks.applyLook(rig, p.kind, RESEARCH_ERA, career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {});
+        if (mods.looks && RESEARCH_ERA) mods.looks.applyLook(rig, p.kind, gunEraOf(p.kind), career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {});
         rigs.set(`${u.id}:${p.i}`, rig);
       } catch (e) {
         console.warn(`buildGun(${p.kind}) failed: ${e.message}`);
@@ -258,7 +274,8 @@ async function init() {
   // the WW2 mode's own pictures: the special weapons' sites and stages, rockets and missiles, aircraft (src/ww2/render.js)
   let ww2r = null;
   try {
-    if (WW2 && mods.ww2render?.createWW2Render) ww2r = mods.ww2render.createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns });
+    // (on the ridge only its WW2 batteries' scenery, poses and rockets: the 1918 aircraft are ww1/render.js's)
+    if ((WW2 || WW2_ON_RIDGE) && mods.ww2render?.createWW2Render) ww2r = mods.ww2render.createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns, ...(WW1 ? { kinds: WW2_GUNS, air: false } : {}) });
   } catch (e) {
     console.warn('WW2 render failed:', e.message);
   }
@@ -270,7 +287,17 @@ async function init() {
   } catch (e) {
     console.warn('WW1 render failed:', e.message);
   }
-  const modeR = ww2r ?? ww1r;
+  // (the career's ridge with WW2 batteries has both: each call goes to the two, the WW2 layer's framing first)
+  const both = ww2r && ww1r ? [ww2r, ww1r] : null;
+  const modeR = both ? {
+    set audio(a) { for (const r of both) r.audio = a; },
+    focusTask: (id, task) => ww2r.focusTask?.(id, task),
+    reselect: () => { for (const r of both) r.reselect?.(); },
+    reset: (s) => { for (const r of both) r.reset?.(s); },
+    fire: (...a) => both.some((r) => r.fire?.(...a)),
+    update: (...a) => { for (const r of both) r.update?.(...a); },
+    framing: (id) => ww2r.framing?.(id) ?? ww1r.framing?.(id) ?? null,
+  } : ww2r ?? ww1r;
 
   patchSceneFog(scene);
 
@@ -284,7 +311,8 @@ async function init() {
   let audio = null;
   try {
     audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : WW1 ? { ww1: true } : undefined) : null;
-    if (WW2) audio?.enableWW2?.();
+    // (and on the career's ridge when the lineup has the V-1 or the V-2 off the map: their buzz and their arrival)
+    if (WW2 || WW2_ON_RIDGE || (RESEARCH_ERA && ['v1', 'v2'].some((k) => career.unlocked(k)))) audio?.enableWW2?.();
     if (WW1) audio?.enableWW1?.();
     audio?.prepare?.(); // the sample banks render in a worker behind the loading screen
     if (modeR) modeR.audio = audio;
@@ -330,11 +358,12 @@ async function init() {
         audio,
         onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
         // (MAN on the guns card: the player's choices for the gunner go with it)
-        onCommand: (id, name, args) => canCommand(id) && sim?.command(id, name, name === 'man' ? gunnerArgs(args) : args),
+        // (the weapons off the map have no unit: their orders go straight to the sim, which keeps them to the lineup's)
+        onCommand: (id, name, args) => (name === 'support' ? !!sim?.command(null, name, args) : canCommand(id) && sim?.command(id, name, name === 'man' ? gunnerArgs(args) : args)),
         keysOff: (e) => !!gview?.claims(e), // at a gun the drill's keys are the gun's, not the console's
         onFocus: (id, task) => modeR?.focusTask?.(id, task), // a Gustav task clicked on the procedure card
         isUnlocked: (u) => canCommand(u.id),
-        keyFor: (id) => (UNITS.findIndex(u => u.id === id) + 1) % 10,
+        keyFor: (id) => { const k = (FIELDED ?? UNITS).findIndex(u => u.id === id) + 1; return k >= 1 && k <= 10 ? k % 10 : ''; }, // (keys 1 to 9 and 0 by the units in the field; the 11th on have none)
       });
     }
   } catch (e) {
@@ -353,7 +382,7 @@ async function init() {
     fov: 50,
     hour: Number(query.get('hour') ?? 8.5),
     lockHour: query.get('hour') != null, // a fixed time of day (URL or the slider), not the sim's clock
-    weather: WEATHER[query.get('weather')] ? query.get('weather') : 'Overcast',
+    weather: WEATHER[query.get('weather')] ? query.get('weather') : MODS.map(modifierOf).find((m) => m.weather)?.weather ?? 'Overcast', // (a modifier's weather)
     exposure: 1.0,
     sunGain: 1.5,
     envIntensity: 0.4,
@@ -392,7 +421,9 @@ async function init() {
   let state = 'title'; // title | playing | ended
   let freeCam = false;
   // ?unit=N is the unit id (1 to 5); without it the 1917 battle opens on the 15-inch, the Group's centrepiece
-  let selected = Math.max(0, Math.min(UNITS.length - 1, Number(query.get('unit') ?? (TH ? 1 : UNITS.findIndex((u) => u.kind === 'bl15') + 1)) - 1));
+  FIELDED = RESEARCH_ERA ? UNITS.filter((u) => career.lineupKinds(RESEARCH_ERA).includes(u.kind)) : UNITS;
+  // (?unit=N: the N-th unit in the field)
+  let selected = Math.max(0, UNITS.indexOf(FIELDED[Math.max(0, Math.min(FIELDED.length - 1, Number(query.get('unit') ?? (TH ? 1 : FIELDED.findIndex((u) => u.kind === 'bl15') + 1)) - 1))]));
   if (RANGE && UNITS.some((u) => u.kind === query.get('kind'))) selected = UNITS.findIndex((u) => u.kind === query.get('kind'));
   // the test range's battery: the only one in the field there
   const RANGE_KIND = RANGE ? UNITS[selected].kind : null;
@@ -507,8 +538,8 @@ async function init() {
   view.appendChild(stats.dom);
 
   // ---------------------------------------------------------------- units and camera
-  // the WW1 mode is a sandbox: every unit is the player's (its kinds are not in the campaign's roster)
-  const canCommand = (id) => (RANGE ? UNITS.find((u) => u.id === id)?.kind === RANGE_KIND : state === 'tutorial' || !!CAMPAIGN_MISSION || OPERATION || WW1 || career.unlocked(UNITS.find(u => u.id === id)?.kind));
+  // every unit is the player's but in the career's open battle, where only the lineup's (which is all the sim fields)
+  const canCommand = (id) => (RANGE ? UNITS.find((u) => u.id === id)?.kind === RANGE_KIND : state === 'tutorial' || !RESEARCH_ERA || FIELDED.some((u) => u.id === id));
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
@@ -587,13 +618,13 @@ async function init() {
     }
   };
   const toggleMan = () => {
-    if (!WW2 || !sim?.gunner || state !== 'playing') return;
+    if (!(WW2 || WW1) || !sim?.gunner || state !== 'playing') return;
     const st = sim.gunner.st;
     if (st) { sim.command(st.unitId, 'unman'); return; }
     const u = UNITS[selected];
     if (canCommand(u.id)) sim.command(u.id, 'man', gunnerArgs());
   };
-  if (WW2 && sim?.gunner && mods.ww2gunner?.GunnerView) {
+  if ((WW2 || WW1) && sim?.gunner && mods.ww2gunner?.GunnerView) {
     try {
       gview = new mods.ww2gunner.GunnerView({ camera, canvas, root: view, render: renderLayer, send: gunnerSend, onButton: () => toggleMan() });
     } catch (e) {
@@ -688,6 +719,7 @@ async function init() {
     if (!UNITS.some(u => canCommand(u.id))) return;
     payOut(false); // a battle given up for a new one pays what it had earned
     paid = false;
+    resetRewards();
     state = 'playing';
     if (!canCommand(UNITS[selected].id)) selected = UNITS.findIndex(u => canCommand(u.id));
     hud.hideEnd();
@@ -695,8 +727,8 @@ async function init() {
     chase.autoOrbit = 0;
     chase.cine(false);
     following = false;
-    newBattle({ difficulty: params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
-      ...(RESEARCH_ERA ? career.battle(RESEARCH_ERA) : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
+    newBattle({ difficulty: LEVEL ? 'Normal' : params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
+      ...(RESEARCH_ERA ? { ...career.battle(RESEARCH_ERA), level: LEVEL.n, modifiers: MODS } : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
@@ -752,7 +784,7 @@ async function init() {
   };
 
   // the way back to the menu (src/ui/menu.js): the game page is left, the menu builds nothing of the battlefield
-  const toMenu = () => { location.href = MENU; };
+  const toMenu = () => { if (!leaveBattle()) location.href = MENU; };
   // the end card's Research: the menu's Research screen of this era, to spend what the battle paid
   document.getElementById('end-research')?.addEventListener('click', () => {
     location.href = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : WW2 ? `op:${TH.opId}` : 'battle:ypres', 'research');
@@ -1032,6 +1064,8 @@ async function init() {
     state(s) {
       if ((s === 'victory' || s === 'defeat') && !sim.attract && state === 'playing') endGame(s);
     },
+    // the battle's pay as it is earned (sim.credit): the reward feed and the career (onReward, above)
+    reward(id, pts, why) { onReward(id, pts, why); },
     // the WW2 gunner (src/ww2/gunner.js): a new fire command rings at the gun, a wheel comes onto its mark, a pull refused
     gunner(what, a) {
       if (what === 'order') {
@@ -1074,35 +1108,137 @@ async function init() {
     const sc = sim?.score;
     hud.setScore(typeof sc === 'number' ? sc : sc?.points ?? 0);
   };
-  // An open battle's pay (research.js battleReward) goes into the career once: at its end, or when it is left or given up
-  // for a new one (what it had earned, without the bonus for the day). Returns the reward, or null.
-  let paid = true;
+  // ---------------------------------------------------------------- the battle's rewards (research.js battleReward)
+  // The career battle pays as it is earned (War Thunder's and Enlisted's way): every kill, knock-out, burst among the
+  // enemy's men and mission done (sim.credit -> events.reward) shows in the reward feed (ui/rewards.js) and goes into
+  // the career about once a second (payLive: each battery's points so far over what it had, the same to the research
+  // target); the time in action and the victory go in at the end (payOut), when the battle is won, lost, left early
+  // (Main menu: its summary first, leaveBattle), given up for a new one, or the page is closed (the summary is kept for
+  // the menu, ui/summary.js). So leaving early keeps everything earned.
+  let paid = true, left = false, liveDue = false, liveAt = 0, paidBp = {}, log = null, before = null;
+  const rawNow = () => performance.now();
+  const feed = RESEARCH_ERA ? createRewardFeed(document.getElementById('view')) : null;
+  const payK = () => sim?.level?.pay ?? PAY[sim?.difficultyName] ?? 1;
+  const kindNameOf = (k) => BATTERIES.find((b) => b.kind === k)?.name ?? k;
+  const whoOf = (id) => (typeof id === 'string' && id.startsWith('support:') ? kindNameOf(id.slice(8)) : sim?.unitById(id)?.callsign ?? '');
+  const resetRewards = () => {
+    feed?.reset();
+    paidBp = {};
+    liveDue = false;
+    left = false;
+    log = { kill: 0, part: 0, men: 0, mission: 0, hit: 0, top: new Map() };
+    const t = RESEARCH_ERA ? career.targetOf(RESEARCH_ERA) : null;
+    before = { researched: new Set(career.researched), target: t, share: t ? career.researchShare(t) : 0 };
+  };
+  const onReward = (id, pts, why) => {
+    if (!feed || !log || paid || !sim || sim.attract || sim.scripted) return;
+    const p = pts * payK(), who = whoOf(id), act = why?.act ?? 'hit';
+    if (act === 'hit') log.hit += p;
+    else if (act === 'men') log.men += why.n ?? 0;
+    else if (act !== 'mission') log[act]++;
+    if (act !== 'hit') {
+      // the biggest actions for the summary (a mission's shares gather into one line)
+      const w = rewardWords(why), key = act === 'mission' ? `m:${why.title}` : `${act}:${why?.id ?? ''}:${log.top.size}`;
+      const e = log.top.get(key) ?? { act: w.act, what: w.what, who, pts: 0, kind: act };
+      e.pts += p;
+      log.top.set(key, e);
+    }
+    feed.push(why, p, who);
+    liveDue = true;
+  };
+  // what each battery has earned over what it had been paid: into the career now
+  const payLive = () => {
+    liveDue = false;
+    liveAt = rawNow();
+    if (paid || !RESEARCH_ERA || !sim || sim.attract || sim.scripted) return;
+    const r = battleReward(sim, { won: false }), d = {};
+    let sum = 0;
+    for (const [k, v] of Object.entries(r.batteries)) { const x = v - (paidBp[k] ?? 0); if (x > 0) { d[k] = x; paidBp[k] = v; sum += x; } }
+    if (sum > 0) career.gain(RESEARCH_ERA, { rp: sum, batteries: d });
+  };
+  // the end of the battle's pay: the last kills, the time in action, the victory; the battle counted. Returns the reward
   const payOut = (won) => {
     if (paid || !RESEARCH_ERA || state !== 'playing' || !sim || sim.attract || sim.scripted) return null;
+    payLive();
     paid = true;
-    const r = battleReward(sim, { won });
-    career.reward(RESEARCH_ERA, r);
+    const r = battleReward(sim, { won }), rest = {};
+    let sum = 0;
+    for (const [k, v] of Object.entries(r.batteries)) { const x = v - (paidBp[k] ?? 0); if (x > 0) { rest[k] = x; sum += x; } }
+    career.gain(RESEARCH_ERA, { rp: sum + r.time + r.win, batteries: rest }, false);
+    career.countBattle(RESEARCH_ERA);
     return r;
   };
-  addEventListener('pagehide', () => payOut(false));
+  // the battle in a record for the summary page (ui/summary.js)
+  const battleRecord = (r, outcome, opened = 0) => {
+    const tgt = career.targetOf(RESEARCH_ERA);
+    const top = [...(log?.top.values() ?? [])].sort((a, b) => b.pts - a.pts).slice(0, 14);
+    const bats = sim.units.map((u) => ({ name: u.name, callsign: u.callsign, points: r.batteries[u.kind] ?? 0, rounds: u.stats?.rounds ?? 0, kills: u.stats?.kills ?? 0 }))
+      .concat((sim.support?.assets ?? []).map((a) => ({ name: kindNameOf(a.kind), callsign: 'Off-map', points: r.batteries[a.kind] ?? 0, rounds: a.fired ?? 0, kills: 0 })));
+    return {
+      v: 1, at: Date.now(), seen: false, outcome,
+      title: TH?.op?.title ?? 'Open battle', sub: outcome === 'left' ? 'You left the battle before it was decided.' : sim.over?.sub ?? '',
+      level: LEVEL ? { n: LEVEL.n, name: LEVEL.name, en: LEVEL.en } : null, mods: MODS.map((id) => modifierOf(id)?.name).filter(Boolean),
+      minutes: sim.time / 60, rp: { fought: r.fought, time: r.time, win: r.win, total: r.rp },
+      research: { target: tgt ? kindNameOf(tgt) : null, from: tgt && tgt === before?.target ? before.share : 0, to: tgt ? career.researchShare(tgt) : 1,
+        researched: [...career.researched].filter((k) => !before?.researched.has(k)).map(kindNameOf) },
+      opened: opened ? { n: opened, name: threatOf(opened).name } : null,
+      batteries: bats, tally: { kill: log?.kill ?? 0, part: log?.part ?? 0, men: log?.men ?? 0, mission: sim.score?.missions ?? 0, hit: log?.hit ?? 0 }, top,
+    };
+  };
+  const toResearch = () => { location.href = menuHref(query, CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres', 'research'); };
+  const showBattleSummary = (rec, again) => {
+    rec.seen = true;
+    saveSummary(rec);
+    const page = showSummary(rec, { root: document.body, actions: [
+      { label: 'Research', onClick: toResearch },
+      ...(again ? [{ label: 'Fight again', onClick: () => { page.close(); again(); } }] : []),
+      { label: 'Main menu', primary: true, onClick: () => { location.href = MENU; } },
+    ] });
+    return page;
+  };
+  // Main menu during a career battle: it pays what was earned and shows the summary (true), or there is none (false)
+  const leaveBattle = () => {
+    if (paid || !RESEARCH_ERA || state !== 'playing' || !sim || sim.attract || sim.scripted) return false;
+    if (sim.gunner?.st) sim.command(sim.gunner.st.unitId, 'unman');
+    const r = payOut(false);
+    left = true;
+    state = 'ended';
+    showBattleSummary(battleRecord(r, 'left'), null);
+    return true;
+  };
+  // the page closed during a battle: it pays, and the menu shows the summary next time
+  addEventListener('pagehide', () => {
+    if (paid || !RESEARCH_ERA || state !== 'playing' || !sim || sim.attract || sim.scripted) return;
+    const r = payOut(false);
+    if (r) saveSummary(battleRecord(r, 'left'));
+  });
   const endGame = (s) => {
     if (sim.gunner?.st) sim.command(sim.gunner.st.unitId, 'unman');
     const sc = sim.score;
     const win = s === 'victory';
     let bonus = 0;
+    const had = new Set(career.researched);
     if (CAMPAIGN_MISSION && win && !sim.attract && !sim.scripted) bonus = career.complete(CAMPAIGN_MISSION.id);
+    // a threat level played to its end, won or lost, opens the next (progression.js; leaving early does not)
+    const opened = LEVEL && !sim.attract && !sim.scripted ? career.playedLevel(RESEARCH_ERA, LEVEL.n) : 0;
     const pay = payOut(win);
     state = 'ended';
+    // the career battle: its summary page (ui/summary.js) instead of the end card
+    if (pay && RESEARCH_ERA) { showBattleSummary(battleRecord(pay, win ? 'victory' : 'defeat', opened), () => start()); return; }
     const research = document.getElementById('end-research');
     if (research) research.hidden = !(pay || bonus);
     const names = Object.fromEntries(sim.units.map((u) => [u.kind, u.name]));
-    const rpLine = (n, why) => ['Research points', `+${n.toLocaleString('en-US')}`, `${why}; ${career.rp[RESEARCH_ERA ?? CAMPAIGN_MISSION?.era].toLocaleString('en-US')} to spend`];
+    // where the RP went: the research target now (the one paid for may be researched, the next taking the rest)
+    const tgt = career.targetOf(RESEARCH_ERA ?? CAMPAIGN_MISSION?.era), nameOf = (k) => BATTERIES.find((b) => b.kind === k)?.name ?? k;
+    const fresh = [...career.researched].filter((k) => !had.has(k)).map(nameOf);
+    const rpLine = (n, why) => ['Research points', `+${n.toLocaleString('en-US')}`, `${why}${fresh.length ? `; researched: ${fresh.join(', ')}` : ''}; ${tgt ? `now researching the ${nameOf(tgt)} (${Math.round(career.researchShare(tgt) * 100)}%)` : 'every battery researched'}`];
     hud.showEnd(
       {
         title: sim.over?.title ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The attack goes through' : 'The line is lost') : TH ? (win ? 'Operation successful' : 'Operation failed') : win ? 'Objectives taken' : 'The line is lost'),
         sub: sim.over?.sub ?? (WW1 && TH?.op?.kind === 'battle' ? (win ? 'The Feuerwalze carried our infantry onto their objectives. The Gruppe has done its work.' : 'The British are through our front. Stellungswechsel: the Gruppe falls back.') : TH ? `${TH.op.title}.` : win ? 'The Group has done its work.' : 'The sector is overrun.'),
         victory: win,
         stats: [
+          ...(LEVEL ? [['Threat level', `${LEVEL.n} · ${LEVEL.name}`, opened ? `level ${opened}, ${threatOf(opened).name}, is open` : 'played']] : []),
           ...(CAMPAIGN_MISSION ? [win && bonus ? rpLine(bonus, 'first win of this mission') : ['Research points', win ? 'none' : 'not yet', win ? 'the bonus is paid on the first win only' : 'win the mission for its one-off bonus']] : []),
           ...(pay ? [rpLine(pay.rp, `${pay.fought.toLocaleString('en-US')} from the batteries, ${pay.time} for the time in action${pay.win ? `, ${pay.win} for the day won` : ''}`),
             ['Battery points', Object.values(pay.batteries).reduce((a, b) => a + b, 0).toLocaleString('en-US'), Object.entries(pay.batteries).map(([k, v]) => `${names[k]} +${v}`).join(', ')]] : []),
@@ -1121,14 +1257,15 @@ async function init() {
     if (e.repeat || e.target.closest?.('input, textarea, select')) return;
     if (e.code === 'KeyP' && !e.ctrlKey && !e.metaKey && gview) { toggleMan(); return; }
     if (gview?.active && gview.key(e, sim)) return; // at a gun: the posts, the crew help, the next gun, the drill's keys
-    if (/^Digit[0-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && (Number(e.code.slice(5)) || 10) <= UNITS.length) unitKey((Number(e.code.slice(5)) || 10) - 1);
+    if (/^Digit[0-9]$/.test(e.code) && !e.ctrlKey && !e.metaKey && (Number(e.code.slice(5)) || 10) <= FIELDED.length) unitKey(UNITS.indexOf(FIELDED[(Number(e.code.slice(5)) || 10) - 1]));
     else if (e.code === 'KeyF' && !e.ctrlKey && !e.metaKey) {
       if (following) {
         chase.releaseShot();
         backToUnit();
         return;
       }
-      const sh = newestShell(gview?.active ? sim.gunner.st.unitId : UNITS[selected].id);
+      // (and with none of the unit's, a weapon off the map coming in over the map: src/sim/support.js)
+      const sh = newestShell(gview?.active ? sim.gunner.st.unitId : UNITS[selected].id) ?? sim?.shells.find((q) => q.support && q.alive);
       if (sh) followShell(sh);
       else hud.hint('No shell in flight from this unit', 1800);
     } else if (e.code === 'KeyC' && !e.ctrlKey) {
@@ -1238,8 +1375,10 @@ async function init() {
 
     if (gview?.active && sim?.gunner) sim.gunner.setInput(following ? IDLE : gview.input());
     fx.closeUp = !!gview?.active && !following; // at a gun, a blast near the eye throws fewer puffs (fx/artillery.js lod)
-    if (dt > 0) sim?.update(dt);
+    if (dt > 0 && !left) sim?.update(dt); // (a battle left early stands still behind its summary)
     syncGunner();
+    feed?.update();
+    if (liveDue && rawNow() - liveAt > 1000) payLive();
     updateCampaignObjectives(sim, state === 'playing' && !!CAMPAIGN_MISSION);
     if (tutorial?.active && !DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
     tutorial?.update(rawDt);

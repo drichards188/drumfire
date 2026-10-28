@@ -23,7 +23,8 @@ const dev = args.includes('--dev');
 if (dev) args.splice(args.indexOf('--dev'), 1);
 const [path = '/', out = 'shots/shot.png'] = args;
 
-const exe = ['chromium-1247', 'chromium-1217']
+// (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
+const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247', 'chromium-1217']
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
   .concat(process.env.PLAYWRIGHT_BROWSERS_PATH ? [`${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium`] : [])
   .find((p) => fs.existsSync(p));
@@ -34,7 +35,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 // No hot reload: another agent's save would otherwise reload the page in the middle of a capture.
-if (dev) await page.addInitScript(() => { try { localStorage.setItem('drumfire.campaign.v3', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {} });
+if (dev) await page.addInitScript(() => { try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {} });
 await page.addInitScript(() => {
   const Orig = window.WebSocket;
   window.WebSocket = function (url, proto) {

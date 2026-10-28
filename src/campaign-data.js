@@ -14,6 +14,14 @@ export const BATTERIES = [
   { kind: 'gustav', era: 'ww2', name: 'Schwerer Gustav', role: 'Long-range deep penetration', target: 'magazine', range: 22000, fuze: 'delay', damage: .75, rounds: 1, title: 'Under the rock', task: 'Gustav is assembled and supplied. Penetrate the deep magazine at long range with delay fuze. Every earlier battery has a covering objective.' },
   { kind: 'v1', era: 'ww2', sandbox: false, name: 'V-1 catapult', role: 'Compass, air log and launch drill', range: 160000, rounds: 1, title: 'Prepare the launch corridor', task: 'Complete the catapult drill with compass error under 1° and range error under 1%. Earlier batteries clear the local positions. Success measures launch procedure, not casualties.' },
   { kind: 'v2', era: 'ww2', sandbox: false, name: 'V-2 firing table', role: 'Erection, fuelling and timed launch', range: 180000, rounds: 1, title: 'The mobile launch operation', task: 'Erect, align and fuel the A4; launch with correct range and bearing before oxygen loss causes a shortfall. The V-1 crew and every earlier battery must complete their supporting assignments.' },
+  // the 1918 guns of the German tree (research.js); no campaign mission earns them (CAMPAIGN below is the 1917 and WW2 eras')
+  { kind: 'k17', era: 'ww1', name: '10 cm Kanone 17', role: 'Long field gun: deep targets, roads and traffic' },
+  { kind: 'sfh13', era: 'ww1', name: '15 cm sFH 13', role: 'Heavy field howitzer: batteries, barrages and the Sperrfeuer' },
+  { kind: 'm16', era: 'ww1', name: '21 cm Mörser 16', role: 'Heavy mortar: plunging fire on batteries, tanks and dumps' },
+  { kind: 'max38', era: 'ww1', name: '38 cm Langer Max', role: 'Long naval gun: heavy shells anywhere on the map' },
+  { kind: 'gamma', era: 'ww1', name: '42 cm Gamma-Mörser', role: 'Fortress mortar on its concrete bed: the heaviest shell' },
+  { kind: 'bertha', era: 'ww1', name: '42 cm Dicke Bertha', role: 'Siege howitzer: few shells, slow, terrible' },
+  { kind: 'paris', era: 'ww1', name: 'Paris Gun', role: 'Off-map support: one shell at a time, 120 km away' },
 ];
 export const rosterFor = era => BATTERIES.filter(b => b.era === era);
 export const CAMPAIGN = ['1917', 'ww2'].flatMap(era => rosterFor(era).slice(1).map((b, i) => ({

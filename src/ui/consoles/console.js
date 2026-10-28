@@ -127,8 +127,10 @@ export function mountConsole(ctx) {
   const board = new Board({
     memo,
     // a special card may take the click itself (the Paris Gun: lay on the target clicked, 120 km off)
-    onLay: (x, z) => { if (special?.boardClick?.(x, z, board.view?.mpp ?? 1)) return; cmd('lay', { x, z }); },
+    // a weapon off the map picked on its tile (ui/support.js) takes the click first: its target, a point or a symbol
+    onLay: (x, z) => { if (shared?.supportClick?.(x, z)) return; if (special?.boardClick?.(x, z, board.view?.mpp ?? 1)) return; cmd('lay', { x, z }); },
     onTarget: (t) => {
+      if (shared?.supportClick?.(t.pos.x, t.pos.z)) return;
       const m = (SIM.missions || []).find((q) => q.targetId === t.id && (q.state === 'open' || q.state === 'ranging' || q.state === 'ffe'));
       if (m) take(m); else cmd('lay', { x: t.pos.x, z: t.pos.z });
     },

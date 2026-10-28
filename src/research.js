@@ -1,39 +1,76 @@
 // Research and battery upgrades, the long game of the open battles (docs/PROGRESSION.md). Node-safe data and pure
 // functions: the career that keeps them is progression.js, the battle that pays them is the sim (`sim.earned`).
 //
-// One payout feeds two purses. A battle's research points (RP) go to its era's tree, where they research the next
-// batteries; each battery that fought also keeps its own battery points, spent on its own upgrades in any order:
-// more guns (every battery starts with one) and three levels each of shells, barrel, breech, sights, camouflage and
-// ammunition supply, and men for each gun's detachment. The upgrades are game multipliers on the gun tables
-// (sim/guns.js `u.mods`), not weapons data.
+// One payout feeds two purses. A battle's research points (RP) go to the battery the player has chosen to research
+// (`target`, picked on the Research screen); each battery that fought also keeps its own battery points, spent on its
+// own upgrades in any order: more guns (every battery starts with one) and three levels each of shells, barrel,
+// breech, sights, camouflage and ammunition supply, and men for each gun's detachment. The upgrades are game
+// multipliers on the gun tables (sim/guns.js `u.mods`), not weapons data.
+//
+// Germany is one tree (the 1917 and the WW2 guns together, as War Thunder's nations): lines of one type each, a
+// battery researched only after the one before it in its line (`after`), the lines never crossing. `rank` is its
+// weight class (I field, II heavy, III super-heavy, IV the giants and the weapons off the map), as War Thunder's ranks
+// (it scales the upgrade costs). The first battery of every line can be researched from the start; a career owns only
+// the K 17 (the line `guns`, cost 0). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
+// open battle as off-map support: picked, given a target, they fire in their own time. The British 1917 tree is kept
+// for when Britain comes back; the menu does not show it for now.
 import { UNITS } from './sector.js';
 import { OPS } from './ww2/ops.js';
+import { OPS as OPS_WW1 } from './ww1/ops.js';
 
-// the batteries each era researches; `after` must be researched first, `cost` is in RP (tier I is the starting battery)
+export const LINES = {
+  de: [
+    { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
+    { id: 'howitzers', name: 'Field howitzers', de: 'Feldhaubitzen' },
+    { id: 'mortars', name: 'Mortars and siege', de: 'Mörser' },
+    { id: 'rockets', name: 'Rockets', de: 'Werfer' },
+    { id: 'support', name: 'Off-map support', de: 'Fernwaffen' },
+  ],
+  '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
+};
+// the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: the starting battery)
 export const TREES = {
   '1917': [
-    { kind: 'bl6', tier: 1, after: null, cost: 0 },
-    { kind: 'bl60', tier: 2, after: 'bl6', cost: 450 },
-    { kind: 'bl92', tier: 2, after: 'bl6', cost: 450 },
-    { kind: 'bl15', tier: 3, after: 'bl92', cost: 1100 },
-    { kind: 'rail', tier: 4, after: 'bl60', cost: 2000 },
+    { kind: 'bl6', line: 'all', tier: 1, after: null, cost: 0 },
+    { kind: 'bl60', line: 'all', tier: 2, after: 'bl6', cost: 450 },
+    { kind: 'bl92', line: 'all', tier: 2, after: 'bl6', cost: 450 },
+    { kind: 'bl15', line: 'all', tier: 3, after: 'bl92', cost: 1100 },
+    { kind: 'rail', line: 'all', tier: 4, after: 'bl60', cost: 2000 },
   ],
-  ww2: [
-    { kind: 'lefh18', tier: 1, after: null, cost: 0 },
-    { kind: 'sfh18', tier: 2, after: 'lefh18', cost: 450 },
-    { kind: 'nbw41', tier: 2, after: 'lefh18', cost: 450 },
-    { kind: 'mrs18', tier: 3, after: 'sfh18', cost: 1100 },
-    { kind: 'k18', tier: 3, after: 'sfh18', cost: 1100 },
-    { kind: 'karl', tier: 4, after: 'mrs18', cost: 2000 },
-    { kind: 'gustav', tier: 4, after: 'k18', cost: 2000 },
+  de: [
+    { kind: 'k17', line: 'guns', tier: 1, after: null, cost: 0 },
+    { kind: 'k18', line: 'guns', tier: 2, after: 'k17', cost: 1100 },
+    { kind: 'max38', line: 'guns', tier: 3, after: 'k18', cost: 2400 },
+    { kind: 'paris', line: 'guns', tier: 4, after: 'max38', cost: 4000, offmap: true },
+    { kind: 'gustav', line: 'guns', tier: 4, after: 'paris', cost: 5000 },
+    { kind: 'sfh13', line: 'howitzers', tier: 1, after: null, cost: 450 },
+    { kind: 'lefh18', line: 'howitzers', tier: 1, after: 'sfh13', cost: 600 },
+    { kind: 'sfh18', line: 'howitzers', tier: 2, after: 'lefh18', cost: 1100 },
+    { kind: 'm16', line: 'mortars', tier: 2, after: null, cost: 900 },
+    { kind: 'mrs18', line: 'mortars', tier: 2, after: 'm16', cost: 1300 },
+    { kind: 'gamma', line: 'mortars', tier: 3, after: 'mrs18', cost: 2400 },
+    { kind: 'bertha', line: 'mortars', tier: 3, after: 'gamma', cost: 2800 },
+    { kind: 'karl', line: 'mortars', tier: 4, after: 'bertha', cost: 4000 },
+    { kind: 'nbw41', line: 'rockets', tier: 1, after: null, cost: 450 },
+    { kind: 'v1', line: 'support', tier: 4, after: null, cost: 3000, offmap: true },
+    { kind: 'v2', line: 'support', tier: 4, after: 'v1', cost: 4500, offmap: true },
   ],
 };
 export const RESEARCH_ERAS = Object.keys(TREES);
+// the tree a game era's guns are researched in (the German eras share one)
+export const TREE_OF = { '1917': '1917', ww1: 'de', ww2: 'de', de: 'de' };
 export const nodeOf = (kind) => RESEARCH_ERAS.map((e) => TREES[e].find((n) => n.kind === kind)).find(Boolean) ?? null;
 export const eraOfKind = (kind) => RESEARCH_ERAS.find((e) => TREES[e].some((n) => n.kind === kind)) ?? null;
+// the battery after this one in its line (null at the line's end)
+export const nextInLine = (kind) => TREES[eraOfKind(kind)]?.find((n) => n.after === kind) ?? null;
+// the batteries that fight from off the map (off-map support): never in a gun pit
+export const isOffmap = (kind) => !!nodeOf(kind)?.offmap;
+// the era a gun belongs to, for its look (models/looks.js camouflage, the crews' dress)
+const WW1_KINDS = new Set(OPS_WW1.ridge.units.concat(OPS_WW1.paris.units).map((u) => u.kind));
+export const gunEraOf = (kind) => (TREES['1917'].some((n) => n.kind === kind) ? '1917' : WW1_KINDS.has(kind) ? 'ww1' : 'ww2');
 
 // a battery's full strength: the gun pits of its open battle position (the sandbox Karl is the Karl operation's)
-const DEFS = [...UNITS, ...OPS.flanders.units, OPS.karl.units[0]];
+const DEFS = [...UNITS, ...OPS.flanders.units, OPS.karl.units[0], ...OPS_WW1.ridge.units, ...OPS_WW1.paris.units];
 export const maxGuns = (kind) => DEFS.find((d) => d.kind === kind)?.pieces.length ?? 1;
 
 // The parts. Each level replaces the one before (fx[k][level - 1]); the keys are the sim's multipliers (guns.js):
@@ -119,7 +156,8 @@ export const loadoutOf = (levelsByKind) => Object.fromEntries(Object.entries(lev
 // less), the assaults a fifth of the way (they decide the day). So a better lineup still does better.
 export function opposition(era, levelsByKind) {
   let have = 0, full = 0;
-  for (const n of TREES[era] ?? []) {
+  for (const n of TREES[TREE_OF[era] ?? era] ?? []) {
+    if (n.offmap) continue; // (the weapons off the map add no guns to the battle)
     full++;
     const l = levelsByKind[n.kind];
     if (!l) continue;
@@ -133,13 +171,15 @@ export function opposition(era, levelsByKind) {
 // What a battle paid. `sim.earned` (sim.js) holds each unit's credit: its share of every mission done (the mission's
 // points split by the rounds each unit fired on it), the effective damage it did and the score of what it destroyed.
 // The batteries keep their own credit as battery points; the RP are their credit together, plus a little for every
-// minute in action and a bonus for the day won (a lost battle still pays). Difficulty scales it all.
+// minute in action and a bonus for the day won (a lost battle still pays). The threat level (or the difficulty) scales it all.
 export const PAY = { Easy: 0.8, Normal: 1, Hard: 1.35 };
 const PER_MINUTE = 4, WIN = 400;
 export function battleReward(sim, { won = false } = {}) {
-  const k = PAY[sim.difficultyName] ?? 1;
+  const k = sim.level?.pay ?? PAY[sim.difficultyName] ?? 1; // (a threat level's pay, threat.js; else the difficulty's)
   const batteries = {};
   for (const u of sim.units) batteries[u.kind] = (batteries[u.kind] ?? 0) + Math.round((sim.earned?.[u.id] ?? 0) * k);
+  // the weapons off the map (sim/support.js): their strikes' credit, kept under `support:<kind>`
+  for (const a of sim.support?.assets ?? []) batteries[a.kind] = (batteries[a.kind] ?? 0) + Math.round((sim.earned?.[`support:${a.kind}`] ?? 0) * k);
   const fought = Object.values(batteries).reduce((a, b) => a + b, 0);
   const time = Math.round((Math.min(sim.time, 2700) / 60) * PER_MINUTE * k);
   const win = won ? Math.round(WIN * k) : 0;

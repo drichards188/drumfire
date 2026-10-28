@@ -8,6 +8,9 @@
 //         tap starts the drive (command 'drive') and it runs on by itself to the mark; Shift held is the hand wheel
 //   load  Ladekanonier: opens the breech, brings up and rams the shell, puts in the cartridge, closes (hold E)
 //   fire  Abzugskanonier: fits the primer, pulls the lanyard (hold E)
+// The Nebelwerfer's drill is its own: the loader loads the six rockets and connects the igniters (its 'prime' is his),
+// the firer takes the crew into cover ('cover') and fires the ripple from the firing box there (hold E); the rest of
+// the six go off one by one after the first, as the launcher's own cycle does them (sim/guns.js).
 // The steps are the piece's own loading cycle (GUNS[kind].load; a step the player works takes at most HOLD seconds of
 // holding, so the big guns' hoists and rammers are not minutes of a held key) and the piece keeps the fields the render layer and the
 // console read (state, job, az, el, breech, loaded, firedAt, fireAt), so the crew's choreography (render/crews.js, a
@@ -37,19 +40,27 @@ export const POSTS = [
   { id: 'fire', key: 4, name: 'Abzugskanonier', en: 'firer' },
 ];
 const POST_IDS = new Set(POSTS.map((p) => p.id));
-// the guns a player can serve in person: the field and heavy howitzers, the Mörserlafette pair, the Gustav and the
-// Karl (the Nebelwerfer is fired from cover; the launch sites have drills of their own)
-export const MANNABLE = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl']);
+// the guns a player can serve in person: every German gun of the open battles (the WW2 batteries; on the German
+// career's 1918 ridge also the K 17, the sFH 13, the 21 cm Mörser 16 and the bed-mounted giants, Langer Max, Gamma and
+// Bertha); not the V-1 and V-2 sites and the Paris Gun, whose own missions have drills of their own
+export const MANNABLE = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha']);
 // the guns whose laying gear is powered: the Gustav shunted along its curve and elevated by motor, the Karl's
 // hydraulic elevation and traverse. Their rates are slow (minutes from the loading angle to the lay), so the layer
-// starts the drive and it stops itself on the mark
-export const DRIVEN = new Set(['gustav', 'karl']);
+// starts the drive and it stops itself on the mark. The Gamma and the Langer Max on their beds too: over a minute
+// of hand wheels for a lay (the Gamma's 0.6 and 1.6 degrees a second, the Max's 48 degrees of traverse at 1); Bertha's
+// is under one (0.9 and 2.2), so its layer cranks
+export const DRIVEN = new Set(['gustav', 'karl', 'gamma', 'max38']);
 // which post works which step of the loading cycle, and the step in the player's words
-export const STEP_POST = { depress: 'lay', open: 'load', shell: 'load', ram: 'load', cartridge: 'load', close: 'load', prime: 'fire', lay: 'lay' };
+export const STEP_POST = { depress: 'lay', open: 'load', shell: 'load', ram: 'load', cartridge: 'load', close: 'load', prime: 'fire', lay: 'lay', cover: 'fire' };
 export const STEP_EN = {
   depress: 'run the barrel down to the loading angle', open: 'open the breech', shell: 'bring up the shell', ram: 'ram the shell',
-  cartridge: 'put in the cartridge', close: 'close the breech', prime: 'fit the primer', lay: 'lay the gun',
+  cartridge: 'put in the cartridge', close: 'close the breech', prime: 'fit the primer', lay: 'lay the gun', cover: 'take the crew into cover',
 };
+// a launcher's own (the Nebelwerfer's: the loader connects the igniters, the firer fires from cover)
+const STEP_POST_KIND = { nbw41: { prime: 'load' } };
+const STEP_EN_KIND = { nbw41: { open: 'clear the tubes', shell: 'load the six rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' } };
+export const stepPost = (kind, step) => STEP_POST_KIND[kind]?.[step] ?? STEP_POST[step] ?? 'load';
+export const stepEn = (kind, step) => STEP_EN_KIND[kind]?.[step] ?? STEP_EN[step] ?? step;
 export const GUNNER_CMDS = new Set(['man', 'post', 'unman', 'assist', 'drive']);
 const ACK = 1.2, PULL = 0.7; // how long the player holds E to read back a command and to pull the lanyard (s)
 const HOLD = 8; // s: the most a step of the cycle takes in the player's hands (the field guns' longest is 8 already)
@@ -105,10 +116,7 @@ export class Gunner {
       const g = GUNS[u.kind];
       if (sim.attract) return false;
       if (sim.scripted && !sim.range) return this.refuse('Not during a lesson: the lesson keeps you at the console.'); // (the test range allows it)
-      if (!MANNABLE.has(u.kind)) {
-        return this.refuse(u.kind === 'nbw41' ? `${u.callsign}: the Nebelwerfer is fired electrically from cover; there is no gun to serve in person.`
-          : `${u.callsign}: the ${g?.name ?? u.name} has a drill of its own; it cannot be served in person.`);
-      }
+      if (!MANNABLE.has(u.kind)) return this.refuse(`${u.callsign}: the ${g?.name ?? u.name} has a drill of its own; it cannot be served in person.`);
       const live = u.pieces.filter((p) => p.state !== 'dead');
       if (!live.length) return this.refuse(`${u.callsign}: every gun is knocked out.`);
       const p = a.piece != null ? u.pieces[a.piece] : live[0];
@@ -249,12 +257,20 @@ export class Gunner {
     } else if (st.hold?.what === 'ack') st.hold = null;
     const ack = st.ack;
 
-    // recoil: the kick and the run out (the cycle starts again after it)
+    // recoil: the kick and the run out (the cycle starts again after it); a launcher's ripple first, the rest of its
+    // tubes going off one by one as in its own cycle (sim/guns.js)
     if (p.state === 'recoil') {
-      const t = sim.time - p.firedAt;
+      if (p.ripple) {
+        if (sim.time >= p.ripple.next && p.ripple.i < g.salvo.n) {
+          if (!u.order.ok || u.order.charge < 0 || u.mode === 'hold') p.ripple.i = g.salvo.n;
+          else { sim.guns.fireShell(u, p); p.fireAt = Infinity; return this.after(u, p, prog + 1, dt); }
+        }
+        if (p.ripple.i < g.salvo.n) return this.after(u, p, prog + 1, dt);
+      }
+      const t = sim.time - (p.ripple ? p.ripple.last : p.firedAt);
       const k = t < 0.18 ? t / 0.18 : Math.max(0, 1 - (t - 0.18) / g.runout);
       p.recoil = t < 0.18 ? Math.sin(k * Math.PI / 2) : k * k * (3 - 2 * k);
-      if (t > 0.18 + g.runout) { p.recoil = 0; p.state = 'idle'; }
+      if (t > 0.18 + g.runout) { p.recoil = 0; p.state = 'idle'; p.ripple = null; }
       this.after(u, p, prog + 1, dt);
       return;
     }
@@ -323,7 +339,7 @@ export class Gunner {
         prog++;
       }
     } else if (p.state === 'loading') {
-      const s = g.load[p.ji], job = p.job, owner = STEP_POST[s.step] ?? 'load';
+      const s = g.load[p.ji], job = p.job, owner = stepPost(p.kind, s.step);
       const t0 = job.t;
       if (s.step === 'depress') {
         // the barrel is run down by the layer's wheel (above); the step is done on the loading angle
@@ -342,9 +358,12 @@ export class Gunner {
       if (s.step === 'open') p.breech = Math.min(1, job.t / job.dur);
       else if (s.step === 'close') p.breech = 1 - Math.min(1, job.t / job.dur);
       if (job.t >= job.dur) {
-        if (s.step === 'ram') {
+        // the round is in when it is rammed (a launcher's when the rockets are in the tubes, as sim/guns.js)
+        if (s.step === 'ram' || (s.step === 'shell' && g.salvo)) {
           p.loaded = true;
-          if (u.order.fuze === 'shrapnel') u.ammo.shrapnel = Math.max(0, u.ammo.shrapnel - 1); else u.ammo.he = Math.max(0, u.ammo.he - 1);
+          const n = g.salvo ? Math.min(g.salvo.n, u.ammo.he) : 1;
+          p.tubes = n;
+          if (u.order.fuze === 'shrapnel') u.ammo.shrapnel = Math.max(0, u.ammo.shrapnel - 1); else u.ammo.he = Math.max(0, u.ammo.he - n);
           p.shot = u.order.fuze;
         }
         p.ji++;
@@ -504,7 +523,7 @@ export class Gunner {
     const st = this.st, o = st.order, g = GUNS[p.kind];
     const J = (post, key, text, wait = false) => ({ post, key, text, wait });
     if (u.mode === 'hold') return J('cmd', null, 'the battery is holding: cease fire', true);
-    if (p.state === 'recoil') return J(st.post, null, 'the shot: the barrel runs out', true);
+    if (p.state === 'recoil') return J(st.post, null, g.salvo ? 'the ripple: the rockets go one by one' : 'the shot: the barrel runs out', true);
     if (!o) {
       const sh = this.sim.shells.find((s) => s.own && s.alive && s.unitId === u.id && s.piece === p.i);
       if (sh) return J('cmd', null, `round in the air, ${Math.max(0, Math.round((sh.tof || 0) - sh.t))} s to the burst`, true);
@@ -539,17 +558,17 @@ export class Gunner {
       if (s === 'lay') return this.laidTo(p, st.ack) ? J('lay', null, 'the lay is checked', true) : lay();
       // the layer at his post meanwhile: the line (and on a gun loaded at its lay, not the heavies at their loading
       // angle, the elevation while the breech is shut); the Gustav's shunting is minutes, best begun now
-      if (st.post === 'lay' && STEP_POST[s] !== 'lay') {
+      if (st.post === 'lay' && stepPost(p.kind, s) !== 'lay') {
         const j = layJob(st.assist ? 'while they load, ' : '', g.load[0]?.step !== 'depress' && !OPEN_STEPS.has(s));
         if (j) return j;
       }
-      return J(STEP_POST[s] ?? 'load', 'E', STEP_EN[s] ?? s);
+      return J(stepPost(p.kind, s), 'E', stepEn(p.kind, s));
     }
     if (p.state === 'laying') return this.laidTo(p, st.ack) ? J('lay', null, 'the lay is checked', true) : lay();
     if (p.state === 'ready') {
       const why = this.cannotFire(u, p);
       // (the rounds are on the page's FEUER chip)
-      if (!why) return J('fire', 'E', 'pull the lanyard: Feuer!');
+      if (!why) return J('fire', 'E', g.salvo ? 'fire the ripple from the firing box: Feuer!' : 'pull the lanyard: Feuer!');
       return J('fire', null, `loaded and laid: ${why}`, true);
     }
     const no = this.canLoad(u, p);
