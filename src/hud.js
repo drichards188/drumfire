@@ -1,27 +1,14 @@
 import * as THREE from 'three';
 
 const $ = (id) => document.getElementById(id);
-const CARDINALS = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
-const COMPASS_W = 360;
-const COMPASS_FOV = 130;
 const _v = new THREE.Vector3();
 const wrap = (a) => ((((a + 180) % 360) + 360) % 360) - 180;
 
-// The overlay inside the left (3D) view: unit name and callsign, compass strip, the time of day,
+// The overlay inside the left (3D) view: unit name and callsign, the time of day,
 // the message log (telephone, wireless, observers), phase toasts, score, time compression, a
 // bracket on a point of interest and the end card.
 export class HUD {
   constructor() {
-    this.compass = $('compass-strip');
-    this.ticks = [];
-    for (let d = 0; d < 360; d += 15) {
-      const el = document.createElement('div');
-      el.className = CARDINALS[d] ? 'tick major' : 'tick';
-      el.textContent = CARDINALS[d] || '';
-      this.compass.appendChild(el);
-      this.ticks.push({ el, deg: d });
-    }
-    this.markers = [];
     this.toastTimer = null;
     this.radioLines = [];
     this.killEls = [];
@@ -139,45 +126,6 @@ export class HUD {
     box.prepend(el);
     while (box.children.length > 4) box.lastChild.remove();
     setTimeout(() => el.remove(), 4200);
-  }
-
-  /** Compass strip: markers are { pos: {x, z}, kind: 'enemy' | 'friend' | 'unit', label }. */
-  updateCompass(camera, markers = []) {
-    const f = camera.getWorldDirection(_v);
-    const heading = (Math.atan2(f.x, -f.z) * 180) / Math.PI;
-    $('heading').textContent = String(Math.round((heading + 360) % 360)).padStart(3, '0');
-    const px = COMPASS_W / COMPASS_FOV;
-    for (const t of this.ticks) {
-      const d = wrap(t.deg - heading);
-      const vis = Math.abs(d) < COMPASS_FOV / 2;
-      t.el.style.display = vis ? '' : 'none';
-      if (vis) {
-        t.el.style.transform = `translateX(${COMPASS_W / 2 + d * px}px)`;
-        t.el.style.opacity = String(1 - Math.pow(Math.abs(d) / (COMPASS_FOV / 2), 3));
-      }
-    }
-    while (this.markers.length < markers.length) {
-      const el = document.createElement('div');
-      el.className = 'marker';
-      el.innerHTML = '<i></i><span></span>';
-      this.compass.appendChild(el);
-      this.markers.push(el);
-    }
-    this.markers.forEach((el, i) => {
-      const m = markers[i];
-      if (!m) {
-        el.style.display = 'none';
-        return;
-      }
-      const dx = m.pos.x - camera.position.x, dz = m.pos.z - camera.position.z;
-      const bearing = (Math.atan2(dx, -dz) * 180) / Math.PI;
-      const d = wrap(bearing - heading);
-      const clamped = Math.max(-COMPASS_FOV / 2, Math.min(COMPASS_FOV / 2, d));
-      el.style.display = '';
-      el.style.transform = `translateX(${COMPASS_W / 2 + clamped * px}px)`;
-      el.className = `marker ${m.kind || ''}${Math.abs(d) > COMPASS_FOV / 2 ? ' edge' : ''}`;
-      el.querySelector('span').textContent = m.label || '';
-    });
   }
 
   /** A bracket round a world point (the selected target or fall of shot); null hides it. */

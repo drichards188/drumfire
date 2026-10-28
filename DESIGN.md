@@ -2326,3 +2326,4 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   levels open in order: a level played to its end, won or lost, opens the next (`Progression.playedLevel`; leaving early
   does not). The menu's stills gained the sFH 13 and the K 17 (`tools/menushots.mjs` now puts each shot's gun in the
   career lineup and hides the newer overlays); Bertha's is the demo's (`stillOf`).
+- (hud: the compass strip removed) The compass strip at the top of the 3D view (the camera's heading, the other batteries, the known targets as three-letter codes) is gone: the board shows all of it better. `hud.updateCompass` and its markers are removed; the mission bracket in the view stays.

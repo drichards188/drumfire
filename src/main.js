@@ -1346,7 +1346,6 @@ async function init() {
   let hudTimer = 0;
   let ambTimer = 0;
   let frameAvg = 16;
-  const markers = [];
   const bracketPt = new THREE.Vector3();
 
   const frame = (forcedDt, draw = true) => {
@@ -1545,21 +1544,9 @@ async function init() {
       applyPixelRatio();
     }
 
-    // compass: the other batteries, the known targets, the selected unit's mission point
-    markers.length = 0;
-    UNITS.forEach((un, i) => {
-      if (i !== selected) markers.push({ pos: unitRoot[un.id].position, kind: 'unit', label: un.id });
-    });
-    let mission = null;
-    if (sim) {
-      const su = sim.units?.find((x) => x.id === UNITS[selected].id);
-      mission = su?.missionId != null ? sim.missionById?.(su.missionId) : null;
-      let n = 0;
-      for (const tg of sim.targets ?? []) {
-        if (tg.alive && tg.known && n++ < 8) markers.push({ pos: tg.pos, kind: 'enemy', label: (tg.kind ?? '').slice(0, 3).toUpperCase() });
-      }
-    }
-    hud.updateCompass(camera, markers);
+    // the selected unit's mission point, bracketed in the 3D view
+    const su = sim?.units?.find((x) => x.id === UNITS[selected].id);
+    const mission = su?.missionId != null ? sim.missionById?.(su.missionId) : null;
     if (mission) {
       bracketPt.set(mission.x, terrain.heightAt(mission.x, mission.z) + 4, mission.z);
       hud.bracket(camera, bracketPt, `${mission.title ?? mission.kind}`);
