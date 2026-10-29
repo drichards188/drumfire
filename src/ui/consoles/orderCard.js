@@ -58,6 +58,7 @@ export class OrderCard {
     fz.append(el('i', 'ftitle', 'FUZE'), this.fuze.el);
     // which guns fire: hidden for a one-piece unit
     const choices = gunChoices(cfg.pieces || 1);
+    this.nPieces = cfg.pieces || 1;
     this.gunsRow = el('div', 'frowf frowg');
     this.guns = new Seg({ cls: 'gunsel', items: choices, onChange: (v) => this.act('guns', v) });
     this.gunsRow.append(el('i', 'ftitle', 'GUNS'), this.guns.el);
@@ -88,8 +89,19 @@ export class OrderCard {
     b.append(this.target, r2, r3, fz, this.gunsRow, this.corr, bottom);
   }
 
+  // the GUNS buttons for n guns in the field (the battery's own, which a lineup may bring fewer of): built again when it changes
+  setPieces(n) {
+    if (n === this.nPieces) return;
+    this.nPieces = n;
+    const choices = gunChoices(n || 1), seg = new Seg({ cls: 'gunsel', items: choices, onChange: (v) => this.act('guns', v) });
+    this.guns.el.replaceWith(seg.el);
+    this.guns = seg;
+    this.gunsRow.style.display = choices.length ? '' : 'none';
+  }
+
   update(x) {
     const { unit, sim, nCharges, missionName, ready, alive, stepYd } = x;
+    this.setPieces(unit.pieces?.length || 1);
     const o = unit.order || {};
     const t = o.target;
     setText(this.tRef, t ? ref(t.x, t.z) : '-- . -- . -');

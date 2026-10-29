@@ -49,7 +49,9 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     root.position.set(x, terrain.heightAt(x, z), z);
     root.rotation.y = headingFor(bearing);
   };
-  const slot = (key, unitId, map, far, make) => slots.push({ key, unitId, map, far, make, obj: null, c: new THREE.Vector3(), r: 0, near: true });
+  // `pi`: a gun's own pit, there only while that gun is in the field (a career's lineup may bring one gun of four)
+  const slot = (key, unitId, map, far, make, pi = null) => slots.push({ key, unitId, map, far, make, pi, obj: null, c: new THREE.Vector3(), r: 0, near: true, present: true });
+  const there = (q, s) => { const u = s.unitById(q.unitId); return !!u && (q.pi == null || u.pieces.some((p) => p.i === q.pi)); };
   for (const u of sim.units) {
     const id = u.id, kind = u.kind;
     const pieces = u.pieces.map((p) => ({ i: p.i, x: p.pos.x, z: p.pos.z, bearing: p.bearing }));
@@ -66,7 +68,7 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
         const pos = buildGunSite1918(kind, id * 37 + p.i);
         place(pos.root, p.x, p.z, p.bearing);
         return pos;
-      });
+      }, p.i);
     }
   }
   const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
@@ -96,13 +98,14 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   }
   for (const q of slots) buildSlot(q);
 
-  // after sim.newGame (the WW1 battle has every unit, but a test may hand it fewer)
+  // after sim.newGame (the career's battle fields its lineup only, and of each battery the guns it has earned): the pits
+  // of the guns not there are freed in a game and hidden always (update)
   function reset(s = sim) {
     const game = !s.attract && !s.scripted;
     for (const q of slots) {
-      const present = !!s.unitById(q.unitId);
-      if (present && !q.obj) buildSlot(q);
-      else if (!present && game) dropSlot(q);
+      q.present = there(q, s);
+      if (q.present && !q.obj) buildSlot(q);
+      else if (!q.present && game) dropSlot(q);
     }
     rides.length = 0;
     riding = null;
@@ -209,7 +212,7 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     for (const q of slots) {
       if (!q.obj) continue;
       if (cam) q.near = cam.distanceTo(q.c) - q.r < q.far * (q.near ? 1.05 : 1);
-      q.obj.root.visible = q.near && !!s.unitById(q.unitId);
+      q.obj.root.visible = q.near && q.present;
     }
     // the controllers' hints the sites show: the Paris Gun's Stellungsbau (paris.js stage: the firing frame rolled in
     // onto the turntable, the portal crane run over it and the barrel lowered into the cradle, the crane back to its

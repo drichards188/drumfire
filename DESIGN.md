@@ -2413,3 +2413,9 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   until the basic training is done. The bar drops its wordmark, takes two rows from 1100 to 1399 px (`--mn-bar` 104 px),
   and the hangar no longer scrolls the page past it on a phone (the chosen slot is brought into view sideways only).
   The Big Bertha demo's entry is gone from Battles: its drill is the main game's gunner; `bertha.html` stays.
+- (battle: only the guns brought) A lineup's battery that fields fewer guns than its pits (research.js `guns`) no longer
+  shows the others: the WW1 and WW2 render layers tie each gun's pit to its piece (`slot(..., { pi })`, kept only while
+  that piece is in the sim; freed in a game, hidden on the range and in lessons) and build a WW2 battery's works round
+  the guns it fields (rebuilt when they change); the console's settings take `pieces` from the unit's fielded guns, so
+  the GUNS selector offers only what it has (none for one gun; 1 GUN and SECTION for two) and the order card rebuilds
+  its buttons when the count changes (`OrderCard.setPieces`).

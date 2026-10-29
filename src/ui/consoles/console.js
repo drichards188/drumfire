@@ -24,7 +24,15 @@ export function mountConsole(ctx) {
   let U = null, SIM = null;
   let toast = '', toastT = -1e9;
   const say = (t) => { toast = t; toastT = performance.now(); };
-  const cfgOf = (u) => KINDS[u.kind] || KINDS.bl6;
+  // the kind's console settings, its `pieces` the guns this unit has in the field (a career's lineup may bring one gun
+  // of a battery of four: no SECTION or BATTERY for guns it has not got)
+  const cfgs = new Map();
+  const cfgOf = (u) => {
+    const base = KINDS[u.kind] || KINDS.bl6, n = u.pieces?.length || base.pieces || 1, k = `${u.kind}:${n}`;
+    let c = cfgs.get(k);
+    if (!c) cfgs.set(k, (c = { ...base, pieces: n }));
+    return c;
+  };
   const man = () => { if (U && U.mode === 'auto') send('mode', { mode: 'manual' }); };
   const cmd = (name, args = {}) => { man(); send(name, args); };
 

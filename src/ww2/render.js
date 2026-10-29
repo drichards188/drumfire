@@ -84,7 +84,17 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     root.position.set(x, terrain.heightAt(x, z), z);
     root.rotation.y = headingFor(bearing);
   };
-  const slot = (key, unitId, map, far, make) => slots.push({ key, unitId, map, far, make, obj: null, c: new THREE.Vector3(), r: 0, near: true });
+  // `pi`: a gun's own position, there only while that gun is in the field; `works`: a battery's works, built round the
+  // guns it fields (a career's lineup may bring one gun of four: no empty pits, no works for guns left at home)
+  const slot = (key, unitId, map, far, make, { pi = null, works = false } = {}) => slots.push({ key, unitId, map, far, make, pi, works, obj: null, c: new THREE.Vector3(), r: 0, near: true, present: true, sig: null });
+  // what a slot stands for in a game: null when it has nothing there, else a signature that changes when it must be built again
+  const sigOf = (q, s) => {
+    const u = s.unitById(q.unitId);
+    if (!u) return null;
+    if (q.pi != null) return u.pieces.some((p) => p.i === q.pi) ? '1' : null;
+    return q.works ? u.pieces.map((p) => p.i).join(',') : '1';
+  };
+  const fielded = (id, all) => { const u = sim.unitById(id); return u ? all.filter((p) => u.pieces.some((q) => q.i === p.i)) : all; };
   const buildSite = guns?.EXTRAS?.buildGustavSite;
   // the Gustav is put together on the spot only at the fortress siege: there its site has the assembly section's
   // works (the yard, the delivery track, the cranes and their derricks); elsewhere it came ready and stands on its curve
@@ -112,19 +122,19 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     }
     if (kind === 'v1' || kind === 'v2') continue;
     const works = kind === 'karl'
-      ? stops.map((q, i) => ({ key: `${id}:${q.id}`, origin: q.pos, pieces: [{ x: q.pos.x, z: q.pos.z }], seed: id * 79 + i }))
-      : [{ key: `${id}`, origin: { ...u.pos }, pieces: pieces.map((p) => ({ x: p.x, z: p.z })), seed: id * 79 }];
+      ? stops.map((q, i) => ({ key: `${id}:${q.id}`, origin: q.pos, pieces: () => [{ x: q.pos.x, z: q.pos.z }], seed: id * 79 + i, karl: true }))
+      : [{ key: `${id}`, origin: { ...u.pos }, pieces: () => fielded(id, pieces).map((p) => ({ x: p.x, z: p.z })), seed: id * 79 }];
     for (const q of works) slot(q.key, id, batteryWorks, 4000, () => buildGermanBatteryWorks({ kind, origin: q.origin, bearing: zero,
-      pieces: q.pieces, terrain, seed: q.seed, woodland }));
+      pieces: q.pieces(), terrain, seed: q.seed, woodland }), { works: !q.karl });
     if (kind === 'gustav') continue;
     const spots = kind === 'karl'
       ? stops.map((q, i) => ({ key: `${id}:position:${q.id}`, x: q.pos.x, z: q.pos.z, bearing: zero, seed: id * 37 + i }))
-      : pieces.map((p) => ({ key: `${id}:${p.i}`, x: p.x, z: p.z, bearing: p.bearing, seed: id * 37 + p.i }));
+      : pieces.map((p) => ({ key: `${id}:${p.i}`, x: p.x, z: p.z, bearing: p.bearing, seed: id * 37 + p.i, pi: p.i }));
     for (const q of spots) slot(q.key, id, gunPositions, 4000, () => {
       const position = buildGermanGunSite(kind, q.seed);
       place(position.root, q.x, q.z, q.bearing);
       return position;
-    });
+    }, { pi: q.pi ?? null });
   }
   const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
   function buildSlot(q) {
@@ -149,16 +159,19 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     q.map.delete(q.key);
     q.obj = null;
   }
-  for (const q of slots) buildSlot(q);
+  for (const q of slots) { q.sig = sigOf(q, sim); buildSlot(q); }
 
-  // after sim.newGame: a game (not the title's demonstration, not a lesson) frees the scenery of the batteries it
-  // has not got; the scenery of a battery that comes back is built again
+  // after sim.newGame: a game (not the title's demonstration, not a lesson) frees the scenery of the batteries and the
+  // guns it has not got; the scenery of one that comes back, or of works whose guns changed, is built again. Anything
+  // absent is hidden in every case (update).
   function reset(s = sim) {
     const game = !s.attract && !s.scripted;
     for (const q of slots) {
-      const present = !!s.unitById(q.unitId);
-      if (present && !q.obj) buildSlot(q);
-      else if (!present && game) dropSlot(q);
+      const sig = sigOf(q, s);
+      q.present = sig != null;
+      if (q.present && q.obj && q.sig !== sig) dropSlot(q);
+      if (q.present && !q.obj) { q.sig = sig; buildSlot(q); }
+      else if (!q.present && game) dropSlot(q);
     }
     focus.clear(); framed.clear(); cams.clear();
   }
@@ -453,7 +466,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       if (!q.obj) continue;
       // a little further out before it goes than before it comes back, so it does not flicker on the line
       if (cam) q.near = cam.distanceTo(q.c) - q.r < q.far * (q.near ? 1.05 : 1);
-      q.obj.root.visible = q.near && !!s.unitById(q.unitId);
+      q.obj.root.visible = q.near && q.present;
     }
     for (const u of s.units) {
       if (!mine(u)) continue;
