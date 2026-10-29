@@ -457,6 +457,7 @@ export function mountMenu(root = document.getElementById('menu')) {
       <nav class="mn-eras" aria-label="Nation">${SHOWN.map((n) => `<button type="button" data-era="${n.id}">${n.name} <small>${n.sub}</small></button>`).join('')}</nav>
       <nav class="mn-views" aria-label="Screens">${VIEWS.map(([v, name]) => `<button type="button" data-view="${v}">${name}<span class="mn-view-n"></span></button>`).join('')}</nav>
       <div class="mn-go">
+        <nav class="mn-modes" aria-label="What to play">${TABS.map(([t, name]) => `<button type="button" data-mode="${t}">${name}<i class="mn-dot" hidden></i></button>`).join('')}</nav>
         <button type="button" class="mn-mode" aria-haspopup="dialog" aria-expanded="false" title="Choose the battle, campaign mission or lesson"><small class="mn-mode-k"></small><b class="mn-mode-t"></b><span class="mn-mode-d"></span></button>
         <button type="button" id="mn-play">To battle</button>
       </div>
@@ -529,7 +530,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   const playable = (i) => i && NATION_OF[i.era] === era && !i.locked;
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
   const HELP = {
-    battles: { de: 'The open battle of 1918 with your career\'s batteries (it pays research points, won or lost), the WW2 open battle as a sandbox, the special weapons\' own missions, the Big Bertha demo and the test range.', '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
+    battles: { de: 'The open battle of 1918 with your career\'s batteries (it pays research points, won or lost), the WW2 open battle as a sandbox, the special weapons\' own missions and the test range.', '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
     campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'One-off challenges, in any order: each loans you a battery for a set task, and the first win pays research points.' },
     tutorials: { de: 'Start with the basic training: the console and serving a gun in person, on the career\'s own ridge. The WW2 lessons teach each special weapon.', other: 'Short lessons on a quiet range, in daylight.' },
   };
@@ -550,10 +551,22 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (!playable(item)) return;
     sel = item;
     memo.sel[era] = item.key;
+    memo.sel[`${era}:${item.tab}`] = item.key; // (each list's last choice, for coming back to it)
     save();
     render();
     if (focus) list.querySelector(`[data-key="${CSS.escape(item.key)}"]`)?.focus();
   }
+  // another list (the top bar's tabs or the chooser's): its first entry is chosen unless the choice is already in it (the
+  // lessons: the first not yet done), so To battle always plays what the open list shows
+  const toTab = (t) => {
+    tab = t;
+    if (sel?.tab !== t) {
+      const rows = items.filter((i) => i.tab === t && playable(i));
+      const pick = (t === 'tutorials' && rows.find((i) => !i.done)) || rows.find((i) => i.key === memo.sel[`${era}:${t}`]) || rows[0];
+      if (pick) { sel = pick; memo.sel[era] = pick.key; }
+    }
+    save();
+  };
   const setOpen = (on) => {
     open = on;
     drop.hidden = !on;
@@ -570,6 +583,16 @@ export function mountMenu(root = document.getElementById('menu')) {
     }
     for (const w of $$('[data-for]')) w.hidden = w.dataset.for !== view;
     for (const b of $$('[data-era]')) { b.classList.toggle('on', b.dataset.era === era); b.setAttribute('aria-pressed', String(b.dataset.era === era)); }
+    // the lists in the bar: the chosen entry's lit; Tutorials marked until the basic training is done
+    const fresh = !items.find((i) => i.key === 'tutorial:training')?.done;
+    for (const b of $$('[data-mode]')) {
+      const on = b.dataset.mode === sel.tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+      const dot = b.querySelector('.mn-dot');
+      dot.hidden = !(b.dataset.mode === 'tutorials' && fresh);
+      b.title = b.dataset.mode === 'tutorials' && fresh ? 'New here? Start with the basic training' : `Choose from the ${b.textContent.toLowerCase()}`;
+    }
     $('.mn-mode-k').textContent = sel.kicker;
     $('.mn-mode-t').textContent = sel.title;
     $('.mn-mode-d').textContent = sel.level ? `Level ${levelNow()}` : sel.difficulty ? difficulty : '';
@@ -596,7 +619,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     const ofEra = items.filter((i) => NATION_OF[i.era] === era), missions = CAMPAIGN.filter((m) => NATION_OF[m.era] === era);
     const counts = {
       campaign: missions.length ? `${missions.filter((m) => career.completed.has(m.id)).length}/${missions.length}` : '',
-      tutorials: `${ofEra.filter((i) => i.tab === 'tutorials' && i.done).length}/${ofEra.filter((i) => i.tab === 'tutorials').length}`,
+      tutorials: `${ofEra.filter((i) => i.tab === 'tutorials' && i.done).length}/${ofEra.filter((i) => i.tab === 'tutorials').length}${items.find((i) => i.key === 'tutorial:training')?.done ? '' : ' · start here'}`,
     };
     for (const b of $$('[data-tab]')) {
       b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
@@ -704,7 +727,13 @@ export function mountMenu(root = document.getElementById('menu')) {
     // the lineup's slots taken (threat.js SLOTS)
     const ks = TREES[era] ? career.lineupKinds(era) : [], off = ks.filter(isOffmap).length;
     $('.hg-count').textContent = TREES[era] ? `Lineup ${ks.length - off} of ${SLOTS.map} · off-map ${off} of ${SLOTS.support}` : '';
-    $('.hg-slots .hg-slot.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // the chosen slot into view along the bar, sideways only (scrollIntoView also scrolled the page past the top bar on a phone)
+    const slotOn = $('.hg-slots .hg-slot.on'), slotBar = $('.hg-slots');
+    if (slotOn && slotBar) {
+      const a = slotOn.getBoundingClientRect(), b = slotBar.getBoundingClientRect();
+      if (a.left < b.left) slotBar.scrollLeft += a.left - b.left;
+      else if (a.right > b.right) slotBar.scrollLeft += a.right - b.right;
+    }
     edges();
   }
 
@@ -784,7 +813,8 @@ export function mountMenu(root = document.getElementById('menu')) {
     url.searchParams.delete('mode'); // (the nation is remembered with the menu's choices)
     history.replaceState(null, '', url);
   });
-  for (const b of $$('[data-tab]')) b.addEventListener('click', () => { tab = b.dataset.tab; save(); render(); });
+  for (const b of $$('[data-tab]')) b.addEventListener('click', () => { toTab(b.dataset.tab); render(); });
+  for (const b of $$('[data-mode]')) b.addEventListener('click', () => { const t = b.dataset.mode; if (open && tab === t) { setOpen(false); return; } toTab(t); render(); setOpen(true); });
   for (const b of $$('[data-d]')) b.addEventListener('click', () => { difficulty = b.dataset.d; save(); render(); });
   for (const b of $$('[data-lv]')) b.addEventListener('click', () => { level = +b.dataset.lv; save(); render(); });
   $('[data-switch="dev"]').addEventListener('click', () => { career.setDev(!career.dev); render(); });
@@ -812,7 +842,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   $('#mn-play').addEventListener('click', go);
   $('.mn-play2').addEventListener('click', go);
   // a click outside the chooser closes it
-  addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target)) setOpen(false); });
+  addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target) && !e.target.closest?.('.mn-modes')) setOpen(false); });
   // and one outside the bench and the slot bar closes the bench
   addEventListener('pointerdown', (e) => { if (swap && !e.target.closest?.('.hg-bench, .hg-slots')) setSwap(null); });
   // Escape closes the chooser; in it Up and Down walk the list; Enter goes to battle; in the hangar Left and Right

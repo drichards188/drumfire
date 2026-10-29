@@ -13,7 +13,7 @@
 - **One German career.** The guns of 1918 and of the Second World War in one research tree, five lines from the 10 cm K 17 to the Gustav, with the V-1, V-2 and Paris Gun as off-map support.
 - **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
 - **Tutorials.** A basic training offered on first launch (the console and serving a gun, with a borrowed battery), and guided lessons for the WW2 special weapons.
-- **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or on the Big Bertha demo's 42 cm howitzer.
+- **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or the 1918 guns of the career.
 
 ## Play it
 
@@ -43,7 +43,7 @@ Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#con
 
 ## Status
 
-**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels), the WW2 special weapons, the campaign, the lessons and the Big Bertha demo; the British 1917 game is hidden from the menu for now. The Gustav, the Paris Gun and the demo are work in progress (marked WIP).
+**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels), the WW2 special weapons, the campaign and the lessons; the British 1917 game is hidden from the menu for now. The Gustav and the Paris Gun are work in progress (marked WIP).
 
 **Not done yet:**
 

@@ -31,7 +31,7 @@ body.menu #view, body.menu #panel { display: none; }
 }
 .mn-top-in { width: var(--mn-w); margin: 0 auto; height: var(--mn-bar); display: flex; align-items: center; gap: 20px; }
 .mn-eras button, .mn-views button { white-space: nowrap; }
-.mn-mark { font: 800 16px var(--serif); letter-spacing: .2em; color: var(--paper); }
+.mn-mark { display: none; font: 800 16px var(--serif); letter-spacing: .2em; color: var(--paper); } /* (the bar's room is the lists') */
 .mn-eras { display: flex; gap: 6px; }
 .mn-eras button {
   font: 700 11px var(--mono); letter-spacing: .22em; text-transform: uppercase; padding: 7px 11px; cursor: pointer;
@@ -50,6 +50,20 @@ body.menu #view, body.menu #panel { display: none; }
 .mn-view-n { margin-left: 10px; font-size: 10px; letter-spacing: .08em; color: #c9a95e; }
 .mn-view-n:empty { display: none; }
 .mn-go { margin-left: auto; display: flex; height: 42px; min-width: 0; }
+/* the lists (Battles, Campaign, Tutorials) in the bar, joined to the chooser they open: what there is to play, in sight */
+.mn-modes { display: flex; margin-right: 8px; border: 1px solid #c2a46499; }
+.mn-modes button {
+  position: relative; padding: 0 13px; cursor: pointer; white-space: nowrap; border: 0; border-left: 1px solid #c2a46455;
+  font: 700 10px var(--mono); letter-spacing: .16em; text-transform: uppercase; background: #c2bc930f; color: #d3c79f;
+}
+.mn-modes button:first-child { border-left: 0; }
+.mn-modes button:hover { background: #c2bc9330; color: #fff0c8; }
+.mn-modes button.on { background: #bca16a; color: #171b16; }
+/* Tutorials until the basic training is done: a pulsing brass light */
+.mn-dot { position: absolute; top: 5px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ffd45a; box-shadow: 0 0 0 0 #ffd45aaa; animation: mn-dot 1.6s ease-out infinite; }
+.mn-dot[hidden] { display: none; }
+.mn-modes button.on .mn-dot { background: #6a1f12; }
+@keyframes mn-dot { 0% { box-shadow: 0 0 0 0 #ffd45aaa; } 100% { box-shadow: 0 0 0 7px #ffd45a00; } }
 .mn-mode {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; column-gap: 10px; text-align: left;
   width: 250px; min-width: 0; padding: 3px 34px 3px 12px; cursor: pointer; border: 1px solid #a49b6988; border-right: 0;
@@ -87,11 +101,16 @@ body.menu #view, body.menu #panel { display: none; }
 }
 .mn-drop-close { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: #a3a690; font-size: 16px; cursor: pointer; padding: 4px 6px; }
 .mn-drop-close:hover { color: #f0d999; }
-.mn-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid #9b906343; gap: 4px 24px; }
-.mn-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 0 0 12px; background: none; color: #969d8d; cursor: pointer; font: 11px var(--mono); }
-.mn-tabs button:hover { color: #d6cfb4; }
-.mn-tabs button[aria-pressed="true"] { color: #e0c78e; border-bottom-color: #c2a464; }
-.mn-count { font-size: 9px; margin-left: 4px; opacity: .7; }
+/* the chooser's lists: three big tabs, the open one lit */
+.mn-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mn-tabs button {
+  display: grid; gap: 3px; justify-items: start; padding: 10px 12px; cursor: pointer; text-align: left;
+  border: 1px solid #9b906366; background: #c2bc930d; color: #c9c5ae; font: 700 12px var(--mono); letter-spacing: .16em; text-transform: uppercase;
+}
+.mn-tabs button:hover { border-color: #c2a464; color: #f0d999; background: #c2bc931f; }
+.mn-tabs button[aria-pressed="true"] { border-color: #d2b77d; background: #bca16a; color: #171b16; }
+.mn-count { font: 9px var(--mono); letter-spacing: .08em; text-transform: none; opacity: .8; }
+.mn-count:empty { display: none; }
 .mn-help { margin: 14px 0 10px; font-size: 12px; line-height: 1.5; color: #acb09e; }
 .mn-list { display: grid; gap: 3px; align-content: start; }
 .mn-row {
@@ -366,12 +385,22 @@ body.menu #view, body.menu #panel { display: none; }
   .mn-mark { display: none; }
   .mn-mode { width: 230px; }
 }
+/* a bar narrower than its 1320 px: two rows, the nation, screens and switches above, what to play and To battle below */
+@media (max-width: 1399px) and (min-width: 1100px) {
+  #menu { --mn-bar: 104px; }
+  .mn-top-in { flex-wrap: wrap; align-content: center; row-gap: 8px; }
+  .mn-views { height: 38px; }
+  .mn-switches { margin-left: auto; }
+  .mn-go { order: 5; width: 100%; margin-left: 0; height: 40px; }
+  .mn-mode { flex: 1; width: auto; }
+}
 /* a narrower screen: the top bar wraps and scrolls away, the gun stands above the panels */
 @media (max-width: 1099px) {
   .mn-top { position: relative; }
   .mn-top-in { height: auto; flex-wrap: wrap; gap: 10px 20px; padding: 10px 0; }
   .mn-views { height: 38px; }
   .mn-go { margin-left: 0; width: 100%; order: 5; }
+  .mn-modes button { padding: 0 9px; }
   .mn-switches { order: 1; margin-left: auto; }
   .mn-mode { flex: 1; width: auto; }
   .mn-drop { position: fixed; top: 8px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 16px); }
@@ -386,6 +415,11 @@ body.menu #view, body.menu #panel { display: none; }
   #menu { --mn-w: calc(100% - 32px); }
   .mn-mark { display: none; }
   .mn-drop { grid-template-columns: minmax(0, 1fr); }
+  .mn-go { flex-wrap: wrap; height: auto; gap: 6px 0; }
+  .mn-modes { width: 100%; height: 36px; margin-right: 0; }
+  .mn-modes button { flex: 1; }
+  .mn-mode { height: 42px; }
+  #mn-play { height: 42px; }
   .mn-hangar { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'stage' 'info' 'bar' 'mods'; }
   .hg-bar { flex-direction: column; align-items: stretch; }
   .mn-status { justify-items: start; }

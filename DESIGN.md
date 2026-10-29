@@ -2406,3 +2406,10 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   and `tools/trainingtest.mjs` (the lesson out of order at every step). Found by it and fixed: re-manning the gun read
   back the command in hand, which passed the read-back step before the VB had reported; a wrong aim in fire for effect
   went on missing unobserved (the laager step now says so and how to recover).
+- (menu: the lists in sight) Battles, Campaign and Tutorials stand in the top bar beside the chooser and To battle
+  (`.mn-modes`, `data-mode`), each opening the chooser on its list; a list, from the bar or the chooser's big tabs, picks
+  its first entry unless the choice is already in it (Tutorials: the first lesson not done; each list's last choice is
+  kept in `memo.sel['<era>:<tab>']`), so To battle plays what the open list shows. Tutorials carries a pulsing light
+  until the basic training is done. The bar drops its wordmark, takes two rows from 1100 to 1399 px (`--mn-bar` 104 px),
+  and the hangar no longer scrolls the page past it on a phone (the chosen slot is brought into view sideways only).
+  The Big Bertha demo's entry is gone from Battles: its drill is the main game's gunner; `bertha.html` stays.

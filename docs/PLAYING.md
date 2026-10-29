@@ -13,7 +13,7 @@ This page covers the menu, research and the campaigns, every era's units and ope
 - **In battle** the guns wear the same camouflage paint, and the radio says when a relief takes a fallen man's place.
 - **Research.** The German tree in its five lines: click a battery to see it, make it the battery to research, or upgrade it. "Preview the full battery" opens it in the hangar at full strength, every gun with its crew, with a way back to Research.
 - **Test range.** "Try on the range" (in the hangar under a battery's figures, and on Research) opens the test range with one gun of that battery; the Battles list no longer has a Test range entry. See [The test range](#the-test-range).
-- **To battle.** The dropdown beside the To battle button chooses what to play: the Battles, Campaign and Tutorials lists, the chosen one's orders, and the difficulty (Easy, Normal or Hard). To battle, Enter, or a double-click on an entry plays it; in the dropdown Up and Down walk the list and Esc closes it. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back, and the end card's Research button goes straight to the Research screen.
+- **To battle.** Battles, Campaign and Tutorials, the three lists of what to play, sit in the top bar beside To battle; each opens the dropdown on its list and picks its first entry (Tutorials: the first lesson not yet done, marked with a light until the basic training is done). The dropdown holds the lists, the chosen one's orders, and the difficulty (Easy, Normal or Hard). To battle, Enter, or a double-click on an entry plays it; in the dropdown Up and Down walk the list and Esc closes it. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back, and the end card's Research button goes straight to the Research screen.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
 - **AI crews.** Units you are not operating fight on their own with an AI crew, in whatever mode you left them.
@@ -324,6 +324,8 @@ While you serve a gun in person ([Serving a gun in person](#serving-a-gun-in-per
 | P | leave the gun |
 
 ### Big Bertha demo
+
+No longer in the menu (its drill is the main game's gunner now); the page `/bertha.html` still opens it.
 
 | Key | Action |
 |---|---|

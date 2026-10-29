@@ -8,7 +8,7 @@ import { maxGuns, missionBonus, TREES, isOffmap } from './research.js';
 
 // The menu's entries and the game pages they open (plain data, Node-safe). The menu (ui/menu.js) builds none of
 // the battlefield: a game page is a URL with play, tutorial, sandbox or range (src/boot.js), and its loading screen
-// (ui/loading.js) is described from that same URL. Keys: battle:ypres, op:<id>, ww1:<id>, bertha:ww1 (the Big Bertha demo, in the WW1 German era only), range:<era> (the test range),
+// (ui/loading.js) is described from that same URL. Keys: battle:ypres, op:<id>, ww1:<id>, range:<era> (the test range),
 // campaign:<id>, tutorial:<id>. Eras: '1917' (British), 'ww1' (German, 1918: a sandbox era, every battery from the
 // start, no campaign), 'ww2' (German).
 export const ERAS = ['1917', 'ww1', 'ww2'];
@@ -21,8 +21,7 @@ export const eraOf = (q) => (q.get('mode') === 'ww1' || q.get('mode') === 'ww2' 
 // the WW1 German era's roster (the open battle's and the Paris Gun's): every battery is the player's from the start
 export const ROSTER_WW1 = Object.values(OPS_WW1).flatMap((op) => op.units).map((u) => ({ kind: u.kind, name: u.name, role: u.role }));
 export const isGame = (q) => ['play', 'tutorial', 'sandbox', 'range'].some((k) => q.has(k));
-// Still being built (the user's call): the Paris Gun and the Gustav, wherever they are the entry's gun, and the Big
-// Bertha demo. Their entries carry `wip` (the menu and the loading screen badge them) and lead with WIP_LINE; main
+// Still being built (the user's call): the Paris Gun and the Gustav, wherever they are the entry's gun. Their entries carry `wip` (the menu and the loading screen badge them) and lead with WIP_LINE; main
 // badges the unit's name in the game (hud.setUnit).
 export const WIP_KINDS = new Set(['paris', 'gustav']);
 export const WIP_LINE = 'Work in progress: still being built, so expect rough edges and changes.';
@@ -75,7 +74,8 @@ export function menuItems(career = null, lessons = {}) {
     lines: [earned(career, '1917'), PAYS], query: { play: 1 }, difficulty: true, still: 'bl15',
   });
   // the career's open battle (the 1918 ridge: the German tree's lineup, any of its batteries), the Paris Gun's own
-  // mission (as the WW2 V-weapons have theirs), and the Bertha demo
+  // mission (as the WW2 V-weapons have theirs); the Big Bertha demo is no longer listed (its drill is the main game's
+  // gunner now), its page bertha.html stays
   for (const op of Object.values(OPS_WW1)) {
     const battle = op.kind === 'battle';
     items.push(wip({
@@ -98,11 +98,6 @@ export function menuItems(career = null, lessons = {}) {
       still: id === 'flanders' ? 'nbw41' : stillFor(op.units[0].kind),
     }, id !== 'flanders' && WIP_KINDS.has(op.units[0].kind)));
   }
-  items.push(wip({
-    key: 'bertha:ww1', era: 'ww1', tab: 'battles', title: 'Big Bertha', side: 'demo', kicker: 'Demo · first person',
-    sub: 'A German 42 cm howitzer crew', blurb: 'Crew a German 42 cm howitzer in first person: command, traverse, elevate, load and fire, one station at a time.',
-    lines: [], page: 'bertha.html', query: { play: 1 }, pass: ['quality'], still: 'bertha-demo',
-  }));
   // the test fire range of each nation (src/ui/range.js): any battery, any target, nothing scored (the German one opens
   // on the map of the battery shown, menu.js rangeHref); in no list (tab 'hidden': the hangar's "Try on the range"
   // opens it), kept for the range page's own loading screen

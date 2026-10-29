@@ -96,9 +96,9 @@ Page-local viewers (dev server only):
 - the 1917 British battle with its four-mission campaign and six lessons;
 - the WW2 German Flanders battle, its four special-weapon operations, its eight-mission campaign and six lessons;
 - the WW1 German open battle and the Paris Gun's mission;
-- the Big Bertha demo with its tutorial.
+- the Big Bertha demo with its tutorial (not in the menu: `/bertha.html`).
 
-**Work in progress.** Three of these are playable but still being built, and marked WIP in the menu, on the loading screen and on the gun's name in the game: the Gustav (its siege operation, its campaign mission and its lesson), the Paris Gun's mission and the Big Bertha demo.
+**Work in progress.** Three of these are playable but still being built, and marked WIP in the menu, on the loading screen and on the gun's name in the game: the Gustav (its siege operation, its campaign mission and its lesson), the Paris Gun's mission and the Big Bertha demo (no longer in the menu).
 
 **Checks.** Headless tools check the battles' balance, the campaigns' rules and the sound banks.
 
