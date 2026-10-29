@@ -39,6 +39,9 @@ const RAIL_HEAD = 0.5; // the hangar's track for the 18-inch car: the rail head 
 // the railway guns' track beds in front of them, in the gun's frame (x from, x to): their men form up either side
 // (the Gustav's two gun tracks at +-2.4 m and the delivery track at +7.6 m, src/ww2/gustav_layout.js; the 18-inch's bed)
 const BED = { gustav: [-6, 11], rail: [-3.4, 3.4] };
+// a site whose model runs far past its working heart (the V-2's fire control halftrack about 100 m off): the parade
+// forms up round the heart, x and z in the model's frame, and the rest stands beyond the ranks
+const CORE = { v2: { x: [-11.5, 11.5], z: [-14, 27] } };
 
 // Where a detachment of `men` stands in front of a gun `w` wide: [x, z] (z toward the front, from the gun's front), the
 // No. 1 last, a pace in front of the right of the line. Up to 17 men in two ranks, up to 37 in three, more in blocks of
@@ -66,6 +69,8 @@ function formation(men, w, maxRow = Infinity) {
 // The Shells upgrade on the shells displayed: a fresh, glossier coat and a green filling band (I); a white band and a
 // taller brass nose fuze (II); a long pointed ballistic cap over the nose and a polished driving band (III). Game
 // markings, not ordnance practice.
+// a missile's body radius (its model's radius is its wings' or fins' span)
+const MISSILE_BODY = { v1: 0.425, v2: 0.825 };
 const SHELL_LOOK = { fill: 0x3c6a38, ring: 0xe6e1d2, brass: 0xb59343, cap: 0x7d8186 };
 
 // `host` is the element the canvas fills; `onProgress(text, k)` reports a parade being assembled (k 0 to 1) and
@@ -225,6 +230,8 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     await guns.loadGuns([kind]);
     guns.GUN_ERA.ww1 = era === 'ww1'; // Bertha in her 1917 colours on the WW1 tab
     const rig = guns.buildGun(kind), g = GUNS[kind];
+    rig.trees?.removeFromParent(); // (a site's own wood, the V-2's: the parade ground has its own scenery)
+    rig.setErect?.(1); // the V-2 stands on its table
     // on parade the guns are run in and lowered as far as they go
     rig.setElevation?.(Math.max(g?.elMin ?? 0, 0.05));
     rig.update?.(0);
@@ -259,6 +266,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       } catch (e) { console.warn('hangar: tray', e.message); }
     }
     const box = new THREE.Box3().setFromObject(rig.root);
+    if (CORE[kind]) [box.min.x, box.max.x, box.min.z, box.max.z] = [...CORE[kind].x, ...CORE[kind].z];
     const at = (a) => (a ? a.getWorldPosition(new THREE.Vector3()) : null);
     const muzzle = at(rig.anchors?.muzzle), breech = at(rig.anchors?.breech);
     const loaded = (levels.breech ?? 0) >= 3 ? at(rig.props?.tray ?? ownRound) : null; // the round on the tray
@@ -293,6 +301,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
   function shellModel(shellKind, level) {
     const { THREE, shells } = three;
     const s = shells.buildShell(shellKind, 24), g = new THREE.Group(), R = s.radius, L = s.length, half = L / 2;
+    if (L > 4) level = 0; // (a missile keeps its own paint: a shell's bands, fuze and cap would float round its taper)
     const paint = (color, rough = 0.5, metal = 0.15) => {
       const k = `${color}|${rough}|${metal}`;
       if (!shellMats.has(k)) shellMats.set(k, new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal }));
@@ -305,7 +314,10 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
         const c = p.material.color.clone().offsetHSL(0, 0.04, 0.05);
         m = paint(c.getHex(), 0.5 - level * 0.08, 0.15);
       } else if (i === 1 && level >= 3) m = paint(0xc8784a, 0.25, 0.9); // the driving band polished
-      g.add(new THREE.Mesh(p.geometry, m));
+      // (a round on show has no use for the A-4's vane deflection, and an instanced pile of it would not draw)
+      const geo = p.geometry.morphAttributes.position ? p.geometry.clone() : p.geometry;
+      geo.morphAttributes = {};
+      g.add(new THREE.Mesh(geo, m));
     });
     const ring = (z, color, w) => {
       const r = new THREE.Mesh(new THREE.CylinderGeometry(R * 1.006, R * 1.006, w, 32, 1, true).rotateX(Math.PI / 2), paint(color, 0.5));
@@ -325,7 +337,10 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       g.add(cap);
     }
     g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    return { group: g, L, R };
+    // `low`: how far it reaches below its axis lying down (a shell its radius; a missile its wings or fins, R being
+    // their span), `body` its body's radius
+    const low = L > 4 ? -new THREE.Box3().setFromObject(g).min.y : R;
+    return { group: g, L, R, low, body: L > 4 ? MISSILE_BODY[shellKind] ?? R : R };
   }
 
   // The powder beside the shells, heaped as a battery's charges were (models/shells.js buildCartridge, along Z, its
@@ -403,24 +418,28 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     const { THREE, mesher, mats } = three;
     const g = new THREE.Group(), inner = new THREE.Group(), m = new mesher.Mesher();
     g.add(inner);
-    const one = shellModel(shellKind, level), { L, R } = one, gap = Math.max(R * 3.4, 0.35), w = gap * 2 + R * 2 + 0.6, top = 0.28;
-    m.box('timber', 0, top / 2, 0, w, top, R * 2 + 0.5, 0, mesher.grey(0.75));
-    for (let i = 0; i < 3; i++) {
+    const one = shellModel(shellKind, level), { L, R } = one, gap = Math.max(R * 3.4, 0.35), top = 0.28;
+    // (a missile is shown lying in its cradle only: three of them on end would stand higher than the site)
+    const tall = L > 4, w = tall ? 0 : gap * 2 + R * 2 + 0.6;
+    if (!tall) m.box('timber', 0, top / 2, 0, w, top, R * 2 + 0.5, 0, mesher.grey(0.75));
+    for (let i = 0; i < (tall ? 0 : 3); i++) {
       const s = i ? shellModel(shellKind, level).group : one.group;
       s.rotation.x = Math.PI / 2; // the nose up
       s.position.set((i - 1) * gap, top + L / 2, 0);
       inner.add(s);
     }
     // the cradle: two chocks, and the shell on them along x, its nose toward the camera's side
-    const cz = -(R * 2 + 0.5) / 2 - Math.max(0.6, R * 2.2);
-    for (const x of [-L * 0.28, L * 0.28]) m.box('timber', x, 0.12, cz, 0.18, 0.24, R * 2.4, 0, mesher.grey(0.7));
-    const lying = shellModel(shellKind, level).group;
+    // (a missile on chocks under its body, high enough that its wings or fins clear the ground)
+    const cz = tall ? 0 : -(R * 2 + 0.5) / 2 - Math.max(0.6, R * 2.2);
+    const ly = tall ? Math.max(one.low + 0.05, 0.24 + one.body * 0.92) : 0.24 + R * 0.92, ch = tall ? ly - one.body * 0.92 : 0.24;
+    for (const x of [-L * 0.28, L * 0.28]) m.box('timber', x, ch / 2, cz, 0.18, ch, (tall ? one.body : R) * 2.4, 0, mesher.grey(0.7));
+    const lying = tall ? one.group : shellModel(shellKind, level).group;
     lying.rotation.y = -Math.PI / 2;
-    lying.position.set(0, 0.24 + R * 0.92, cz);
+    lying.position.set(0, ly, cz);
     inner.add(lying);
     m.build(inner, mats, { name: 'shells-' });
     const half = Math.max(w, L + 0.4) / 2, pw = powder(shellKind, supply);
-    let width = half * 2, depth = R * 2 + 0.5 + Math.max(0.6, R * 2.2) + R * 2.4;
+    let width = half * 2, depth = tall ? R * 2.4 : R * 2 + 0.5 + Math.max(0.6, R * 2.2) + R * 2.4;
     if (pw) {
       pw.group.position.x = half + 0.4;
       inner.add(pw.group);
@@ -589,14 +608,14 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
   // { group, width, depth } centred on x and z
   function shellPiles(shellKind, shellLevel, count) {
     const { THREE, mesher, mats } = three;
-    const one = shellModel(shellKind, shellLevel), { L, R } = one;
-    const n = R < 0.06 ? 6 : R < 0.1 ? 5 : R < 0.2 ? 4 : 3, pitch = R * 2.04, pw = n * pitch + 0.3, gap = 0.5;
+    const one = shellModel(shellKind, shellLevel), { L, R, low } = one;
+    const n = L > 4 ? 1 : R < 0.06 ? 6 : R < 0.1 ? 5 : R < 0.2 ? 4 : 3, pitch = R * 2.04, pw = n * pitch + 0.3, gap = 0.5;
     const width = count * pw + (count - 1) * gap, depth = L + 0.2;
     const mats4 = [];
     for (let p = 0; p < count; p++) {
       const px = -width / 2 + pw / 2 + p * (pw + gap);
       for (let k = 0; k < n; k++) for (let i = 0; i < n - k; i++) {
-        mats4.push(new THREE.Matrix4().makeTranslation(px + (i - (n - k - 1) / 2) * pitch, 0.16 + R + k * R * Math.sqrt(3), 0));
+        mats4.push(new THREE.Matrix4().makeTranslation(px + (i - (n - k - 1) / 2) * pitch, 0.16 + low + k * R * Math.sqrt(3), 0));
       }
     }
     // each mesh of the one shell (its marks included) instanced at every place in the piles
@@ -974,6 +993,15 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       onReady();
     } catch (e) {
       console.warn('hangar:', e);
+      // a parade that would not draw leaves the scene, so it does not stop every battery after it drawing too
+      if (park && parkKey === key && three) {
+        three.scene.remove(park.group, three.env);
+        dispose(park);
+        three.mesher.disposeGroup(three.env);
+        park = null;
+        parkKey = '';
+        three.env = null;
+      }
       failed = failed || !three;
       fallback(b.kind);
       onReady();

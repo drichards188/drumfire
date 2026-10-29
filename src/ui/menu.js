@@ -133,7 +133,7 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
       el('small', null, `${num(n.cost - career.costLeft(tgt))} of ${num(n.cost)} RP · ${career.battles[era]} ${career.battles[era] === 1 ? 'battle' : 'battles'} fought`));
   } else purse.append(el('small', null, 'Research'), el('b', null, 'Every battery researched'), el('small', null, `${num(career.rp[era])} RP to spare`));
   side.append(purse);
-  if (career.dev) side.append(el('p', 'rs-note', 'Dev mode is on: in battle every battery is researched and at its best. This is your own career; switch dev mode off to play it.'));
+  if (career.dev) side.append(el('p', 'rs-note', 'Dev mode is on: any battery can join the lineup, and in battle each is at its best. This is your own career; switch dev mode off to play it.'));
   const cols = el('div', 'rs-tree');
   cols.style.setProperty('--lines', LINES[era].length);
   for (const line of LINES[era]) {
@@ -255,8 +255,8 @@ function parade(career, era, kind, preview = false) {
   const next = { guns: maxGuns(kind), reliefs: crewOf(kind, { crew: 1 }, drill) - base };
   return { kind, name, guns: levelOf(lv, 'guns'), men: crewOf(kind, lv, drill), base, levels, next };
 }
-// the batteries the hangar shows: those in the lineup (dev mode: all), and every one in the WW1 sandbox
-const hangarKinds = (career, era) => (TREES[era] ? kindsOf(era).filter((k) => career.unlocked(k)) : kindsOf(era));
+// the batteries the hangar shows: the lineup's (the bench is reached by a slot's swap), and every one in the WW1 sandbox
+const hangarKinds = (career, era) => (TREES[era] ? career.lineupKinds(era) : kindsOf(era));
 
 // The battery's details beside the guns: what it is for, its figures as it takes the field (or, previewed, at its full
 // drill strength), where it stands
@@ -302,8 +302,8 @@ function hangarInfo(career, era, kind, preview = false, onLineup = null) {
   tr.title = 'Fire it on the test range: any target, any upgrades, nothing scored';
   box.append(tr);
   box.append(el('p', 'hg-state', sandbox ? 'Yours from the start: the WW1 German era is a sandbox.' : own ? `Researched${career.inLineup(kind) ? `: in your lineup for the open battle${isOffmap(kind) ? ', as off-map support' : ''}` : ', not in your lineup'}.`
-    : career.dev ? `In the lineup in dev mode; your own career has not researched it (${career.researchBlock(kind)}).` : `Not researched: ${career.researchBlock(kind)}.`));
-  if (career.dev && !sandbox) box.append(el('p', 'rs-note', 'Dev mode is on: on parade and in battle every battery is researched and at its best. The modifications are your own career.'));
+    : career.dev ? `${career.inLineup(kind) ? 'In your lineup' : 'Not in your lineup'} by dev mode: your own career has not researched it${career.researchBlock(kind) ? ` (${career.researchBlock(kind)})` : ''}.` : `Not researched: ${career.researchBlock(kind)}.`));
+  if (career.dev && !sandbox) box.append(el('p', 'rs-note', 'Dev mode is on: any battery can join the lineup, and on parade and in battle each is at its best. The modifications are your own career.'));
   return box;
 }
 
@@ -343,6 +343,90 @@ function slotCards(career, era, kind, onPick, kinds = kindsOf(era)) {
     b.addEventListener('click', () => onPick(k));
     return b;
   });
+}
+
+// The slot bar of a career: the lineup's SLOTS.map batteries on the map and SLOTS.support off it (threat.js), each
+// slot with a swap that opens the bench (`swap`: the slot open, { off, out }), an empty slot opening it at once
+function lineupSlots(career, era, kind, onPick, swap, onSwap) {
+  const ks = career.lineupKinds(era), cells = [];
+  for (const off of [false, true]) {
+    const mine = ks.filter((k) => isOffmap(k) === off), n = off ? SLOTS.support : SLOTS.map;
+    for (let i = 0; i < n; i++) {
+      const k = mine[i] ?? null, cell = el('div', `hg-cell${off ? ' off' : ''}${off && i === 0 ? ' first-off' : ''}`);
+      const open = !!swap && swap.off === off && swap.out === k;
+      cell.classList.toggle('swapping', open);
+      if (k) {
+        const [card] = slotCards(career, era, kind, onPick, [k]);
+        // (as it takes the field: its guns, dev mode's included, never its research)
+        card.classList.remove('lineup', 'ready');
+        card.classList.add('own');
+        card.querySelector('.hg-slot-in')?.remove();
+        card.querySelector('.rs-pips')?.remove();
+        const g = career.level(k, 'guns'), m = maxGuns(k);
+        if (!off && m > 1) card.querySelector('small').before(pips(g, m));
+        card.querySelector('small').textContent = off ? 'Off-map support' : `${g} of ${m} ${m === 1 ? 'gun' : 'guns'}${career.owns(k) ? '' : ' · dev mode'}`;
+        if (off) card.prepend(el('span', 'hg-slot-in', 'Off-map'));
+        const sw = el('button', 'hg-swap', '⇄');
+        sw.type = 'button';
+        sw.dataset.act = `swap:${k}`;
+        sw.title = `Swap the ${nameIn(k)} for another battery`;
+        sw.setAttribute('aria-label', sw.title);
+        sw.setAttribute('aria-expanded', String(open));
+        sw.addEventListener('click', (e) => { e.stopPropagation(); onSwap(open ? null : { off, out: k }); });
+        cell.append(card, sw);
+      } else {
+        const b = el('button', 'hg-slot empty');
+        b.type = 'button';
+        b.dataset.act = `fill:${off ? 'off' : 'map'}`;
+        b.setAttribute('aria-expanded', String(open));
+        b.append(el('b', null, 'Empty slot'), el('small', null, off ? 'Add off-map support' : 'Add a battery'));
+        b.addEventListener('click', () => onSwap(open ? null : { off, out: null }));
+        cell.append(b);
+      }
+      cells.push(cell);
+    }
+  }
+  return cells;
+}
+
+// The bench above the slot bar: the batteries the career has that could take the slot, and leaving the slot empty
+function benchCard(career, era, swap, onChoose, onLeave, onResearch, onClose) {
+  const box = el('div', 'hg-bench');
+  box.setAttribute('role', 'dialog');
+  const head = el('div', 'hg-bench-h');
+  head.append(el('span', null, swap.out ? `In place of the ${nameIn(swap.out)}` : swap.off ? 'Off-map support' : 'Into the empty slot'));
+  const x = el('button', 'hg-bench-x', '×');
+  x.type = 'button';
+  x.setAttribute('aria-label', 'Close');
+  x.addEventListener('click', onClose);
+  head.append(x);
+  box.append(head);
+  const bench = career.benchOf(era, swap.off);
+  const list = el('div', 'hg-bench-list');
+  for (const k of bench) {
+    const n = nodeOf(k), b = el('button', 'hg-bench-row');
+    b.type = 'button';
+    b.dataset.act = `bench:${k}`;
+    const name = el('b', null, nameIn(k));
+    if (WIP_KINDS.has(k)) name.append(wipBadge());
+    b.append(el('span', 'hg-slot-tier', ROMAN[n.tier - 1]), name,
+      el('small', null, `${lineOf(k)?.name ?? ''}${swap.off ? '' : ` · ${career.level(k, 'guns')} of ${maxGuns(k)} ${maxGuns(k) === 1 ? 'gun' : 'guns'}`}${career.owns(k) ? '' : ' · dev mode'}`));
+    b.addEventListener('click', () => onChoose(k));
+    list.append(b);
+  }
+  if (!bench.length) {
+    const p = el('p', 'hg-bench-none', `No other ${swap.off ? 'off-map weapon' : 'battery'} to take: research one first.`);
+    const r = el('button', 'rs-act', 'Open the research tree');
+    r.type = 'button';
+    r.addEventListener('click', onResearch);
+    list.append(p, r);
+  }
+  box.append(list);
+  if (swap.out) {
+    const why = career.lineupBlock(swap.out);
+    box.append(actBtn(`Leave the ${nameIn(swap.out)} out`, `leave:${swap.out}`, why, onLeave));
+  }
+  return box;
 }
 
 export function mountMenu(root = document.getElementById('menu')) {
@@ -453,7 +537,10 @@ export function mountMenu(root = document.getElementById('menu')) {
   // the battery in the hangar: the one chosen if it is in the lineup, else the lineup's first; or the one previewed
   let preview = null;
   const inHangar = () => { const ks = hangarKinds(career, era), k = shown(); return preview ?? (ks.includes(k) ? k : ks[0] ?? k); };
-  const pick = (kind, to = view) => { (memo.rs ??= {})[era] = kind; view = to; preview = null; save(); render(); };
+  const pick = (kind, to = view) => { (memo.rs ??= {})[era] = kind; view = to; preview = null; swap = null; save(); render(); };
+  // the lineup slot whose bench is open ({ off, out }: off the map or on it, the battery in it or null), or null
+  let swap = null;
+  const setSwap = (s) => { swap = s; render(); };
 
   function select(item, focus = false) {
     if (!playable(item)) return;
@@ -602,7 +689,13 @@ export function mountMenu(root = document.getElementById('menu')) {
     keepFocus($('.mn-hangar'), () => {
       $('.hg-info').replaceChildren(hangarInfo(career, era, kind, !!preview, render));
       $('.hg-mods').replaceChildren(hangarMods(career, era, kind, render, () => pick(kind, 'research'), (part) => hangar.lookAt(part)));
-      $('.hg-slots').replaceChildren(...slotCards(career, era, preview ? null : kind, (k) => pick(k), hangarKinds(career, era)));
+      $('.hg-slots').replaceChildren(...(TREES[era] ? lineupSlots(career, era, preview ? null : kind, (k) => pick(k), swap, setSwap) : slotCards(career, era, preview ? null : kind, (k) => pick(k), kindsOf(era))));
+      const bench = $('.hg-bar > .hg-bench');
+      if (swap && TREES[era]) {
+        const card = benchCard(career, era, swap, (k) => { career.swapLineup(swap.out, k); pick(k); },
+          () => { career.toggleLineup(swap.out); swap = null; render(); }, () => pick(inHangar(), 'research'), () => setSwap(null));
+        bench ? bench.replaceWith(card) : $('.hg-bar').prepend(card);
+      } else bench?.remove();
     });
     // the lineup's slots taken (threat.js SLOTS)
     const ks = TREES[era] ? career.lineupKinds(era) : [], off = ks.filter(isOffmap).length;
@@ -679,6 +772,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     era = b.dataset.era;
     sel = null;
     preview = null;
+    swap = null;
     save();
     render();
     // the address remembers the era (a reload or a game's way back keeps it); nothing is loaded
@@ -715,10 +809,13 @@ export function mountMenu(root = document.getElementById('menu')) {
   $('.mn-play2').addEventListener('click', go);
   // a click outside the chooser closes it
   addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target)) setOpen(false); });
+  // and one outside the bench and the slot bar closes the bench
+  addEventListener('pointerdown', (e) => { if (swap && !e.target.closest?.('.hg-bench, .hg-slots')) setSwap(null); });
   // Escape closes the chooser; in it Up and Down walk the list; Enter goes to battle; in the hangar Left and Right
   // walk the batteries
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && open) { setOpen(false); modeBtn.focus(); return; }
+    if (e.code === 'Escape' && swap) { setSwap(null); return; }
     if (e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); go(); return; }
     if (!open && view === 'hangar' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.target.closest?.('input')) {
       const ks = hangarKinds(career, era), k = ks.indexOf(inHangar());

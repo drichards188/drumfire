@@ -84,6 +84,9 @@ function breechOpen(rig) {
   rig.update?.(0);
 }
 
+// the launch sites, whose `muzzle` anchor is the missile's nose, not a barrel's mouth
+const NO_BARREL = new Set(['v1', 'v2']);
+
 export function applyLook(rig, kind, era, levels = {}, { parade = false } = {}) {
   if (!rig?.root || rig.looked) return;
   rig.looked = true;
@@ -100,7 +103,7 @@ export function applyLook(rig, kind, era, levels = {}, { parade = false } = {}) 
       });
     }
   }
-  if (!parade) return;
+  if (!parade || NO_BARREL.has(kind)) return;
   const rb = ((GUNS[kind]?.calibre ?? 6) * 0.0254) / 2; // the bore's radius, from the calibre in inches
   // a cover on every tube of a launcher (its muzzles), else on the barrel's muzzle
   if (lv('barrel') >= 3 && rig.anchors?.muzzles?.length > 1) for (const a of rig.anchors.muzzles) muzzleCover(rig, era, rb, a, rb * 1.3);

@@ -25,7 +25,7 @@ Five lines, one type each. A line is researched in order, and lines never cross;
 
 ## Your lineup
 
-As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** take the field. Choose them in the hangar: a battery's "Take into battle" or "Leave out of battle", the lineup's batteries marked IN BATTLE along the bottom, and the slots taken shown beside them. Until you choose, the lineup is the best battery of each line, then more field howitzers (the Sperrfeuer's guns), then the heaviest; off the map the dearest. Dev mode opens every battery to the lineup, at its best, but the slots stay the same.
+As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** take the field. Choose them in the hangar: its bar along the bottom holds only the lineup's slots, each with a swap (⇄) that opens the bench (the batteries you have outside the lineup, on the map or off it as the slot is), where picking one puts it in that slot or the slot is left empty; an empty slot opens the bench at once, and "Leave out of battle" beside the battery empties its slot. Until you choose, the lineup is the best battery of each line, then more field howitzers (the Sperrfeuer's guns), then the heaviest; off the map the dearest. Dev mode opens every battery to the lineup, at its best, but the slots stay the same.
 
 ## Threat levels
 
@@ -138,7 +138,7 @@ The **Dev mode** switch in the top right corner of the menu bar is on by default
 
 **The tree and the lineup**
 - **The light guns' drill.** The leFH 18's crew looks fast: 8.6 s a round, about 6 s with its best breech. The proposal is about 12 s for the leFH 18 and 16 s for the sFH 18, and a look at the other light guns. It is a balance change, so re-run the tests.
-- **Choosing the lineup.** Only "Take into battle" and "Leave out of battle" for now: no drag in the slot bar, no saved lineups.
+- **Choosing the lineup.** The slot bar's swap and "Leave out of battle" for now: no drag between slots, no saved lineups.
 - **New batteries.** The lines' growth is listed under "The tree" above.
 - **Britain's return**, with its own tree (`TREES['1917']` is kept).
 

@@ -155,6 +155,15 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   assert.equal(c.toggleLineup('k17'), true, 'and another takes its slot');
   assert.ok(new Progression(st).inLineup('k17') && !new Progression(st).inLineup('gustav'), 'The lineup survives a reload');
   assert.match(c.lineupBlock('v1'), /off-map slot is taken/);
+  // a swap from the slot bar: in the slot of the one it replaces, from the bench of its own kind of slot
+  const before = c.lineupKinds('de'), slot = before.indexOf('k17');
+  assert.ok(!c.benchOf('de', false).some((k) => before.includes(k) || isOffmap(k)) && c.benchOf('de', true).every(isOffmap));
+  assert.equal(c.swapLineup('k17', 'v1'), false, 'An off-map weapon cannot take a slot on the map');
+  assert.equal(c.swapLineup('k17', 'sfh18'), false, 'nor a battery already in the lineup');
+  assert.equal(c.swapLineup('k17', 'm16'), true);
+  assert.deepEqual(c.lineupKinds('de'), before.map((k, i) => (i === slot ? 'm16' : k)), 'The swap keeps the slot');
+  assert.equal(c.swapLineup('v2', 'v1'), true);
+  assert.ok(c.inLineup('v1') && !c.inLineup('v2') && c.lineupKinds('de').length === SLOTS.map + SLOTS.support);
   c.setDev(false);
   assert.deepEqual(c.lineupKinds('de'), ['k17'], 'A new career fields its K 17');
   assert.match(c.lineupBlock('k17'), /needs a battery/);

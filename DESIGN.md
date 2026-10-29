@@ -2327,3 +2327,21 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   does not). The menu's stills gained the sFH 13 and the K 17 (`tools/menushots.mjs` now puts each shot's gun in the
   career lineup and hides the newer overlays); Bertha's is the demo's (`stillOf`).
 - (hud: the compass strip removed) The compass strip at the top of the 3D view (the camera's heading, the other batteries, the known targets as three-letter codes) is gone: the board shows all of it better. `hud.updateCompass` and its markers are removed; the mission bracket in the view stays.
+- (menu: the lineup's slot bar) A career's hangar bar holds only the lineup's slots, `SLOTS.map` on the map and
+  `SLOTS.support` off it (`lineupSlots`; an empty slot is drawn as one), dev mode included: dev mode opens every battery
+  to the lineup but never adds slots. Each slot has a swap (⇄) that opens the bench above the bar (`benchCard`): the
+  batteries the career has outside the lineup, on the map or off it as the slot is (`Progression.benchOf(era, off)`);
+  picking one puts it in that slot (`Progression.swapLineup(out, kind)`, the slot's place kept; `out` null fills an
+  empty slot), and "Leave the X out" empties it. The hangar shows only the lineup's batteries (`hangarKinds`); a slot
+  card reads as the battery takes the field (its guns, dev mode's included). The WW1 sandbox keeps its roster bar.
+- (menu: the V-weapons on parade) The V-2's parade failed to draw: its missile's vane morph target went into the
+  instanced shell piles, which three.js cannot draw without influences, and the error then stopped every later parade
+  drawing (the canvas stayed on the battery before). The hangar's rounds on show drop their morph targets
+  (`shellModel`), and a parade that throws while drawing leaves the scene. On parade the V-1 and V-2 sites leave out
+  their own wood (`rig.trees`; v1.js now builds its conifers into that node too, as v2.js did), the V-2 stands on its
+  table (`setErect(1)`), the V-2's ranks form round the site's heart (hangar.js `CORE`) instead of the fire control
+  halftrack's 100 m reach, and a missile is shown lying in its cradle, its supply piles one rocket deep, in its own paint: the Shells
+  upgrade's coat, bands, fuze and cap are a shell's marks and are left off a missile (`shellModel`, longer than 4 m).
+  Nor do the launch sites take the parade's barrel and breech marks (looks.js `NO_BARREL`: their `muzzle` anchor
+  is the missile's nose, which wore Barrel III's canvas muzzle cover). A missile on show rests by its lowest point and its body
+  (`shellModel` `low`, `MISSILE_BODY`): its model's radius is its wings' or fins' span, which floated the V-1 2.5 m up.

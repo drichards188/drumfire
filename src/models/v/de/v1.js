@@ -521,11 +521,14 @@ export function buildV1Site() {
     P.add('dark', box(0.85, 0.02, Math.hypot(x1 - x0, z1 - z0), (x0 + x1) / 2, 0.012, (z0 + z1) / 2, 0, Math.atan2(x1 - x0, z1 - z0), 0), { tint: 0x504030 });
   }
   // the wood the site was cut into (the sites hid in woods and orchards): trees along both flanks, clear of the
-  // line of fire and the ramp
+  // line of fire and the ramp (rig.trees, as the V-2's: the menu's parade ground leaves them out)
+  const trees = node(root, 'trees'), PTr = mk();
+  rig.trees = trees;
   for (let i = 0; i < 16; i++) {
     const left = i < 10, zt = left ? -52 + i * 5.2 + rnd() * 2 : -54 + (i - 10) * 4.5 + rnd() * 2, xt = left ? -(13 + rnd() * 10) : 16 + rnd() * 10;
-    conifer(P, xt, zt, 12 + rnd() * 6, rnd);
+    conifer(PTr, xt, zt, 12 + rnd() * 6, rnd);
   }
+  PTr.build(trees, { dirt: 0.3, y0: 0 });
 
   P.build(root, { dirt: 0.3, y0: 0 });
   PS.build(sled, { dirt: 0.05, y0: Y0 + 0.4 });

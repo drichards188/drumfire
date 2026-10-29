@@ -192,6 +192,20 @@ export class Progression {
     this.save();
     return true;
   }
+  // the batteries that could take a slot of the lineup: had, out of it, on the map or off it as the slot is
+  benchOf(era, off) {
+    const tree = treeOf(era), kinds = this.lineupKinds(tree);
+    return (TREES[tree] ?? []).filter((n) => !!n.offmap === off && this.unlocked(n.kind) && !kinds.includes(n.kind)).map((n) => n.kind);
+  }
+  // swap a battery of the lineup for one out of it, in its slot (`out` null: into an empty slot)
+  swapLineup(out, kind) {
+    if (!out) return this.toggleLineup(kind);
+    const tree = eraOfKind(kind), kinds = this.lineupKinds(tree);
+    if (!kinds.includes(out) || !this.benchOf(tree, isOffmap(out)).includes(kind)) return false;
+    this.lineup[tree] = kinds.map((k) => (k === out ? kind : k));
+    this.save();
+    return true;
+  }
 
   // ------------------------------------------------------------------ the threat levels (threat.js)
   levelUnlocked(era, n) {
