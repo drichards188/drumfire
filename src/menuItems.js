@@ -2,6 +2,7 @@ import { OPS, OP_IDS } from './ww2/ops.js';
 import { BATTERIES, CAMPAIGN, rosterFor } from './campaign-data.js';
 import { TUTORIALS } from './tutorial.js';
 import { WW2_TUTORIALS } from './ww2/tutorial.js';
+import { WW1_TUTORIALS } from './ww1/tutorial.js';
 import { OPS as OPS_WW1 } from './ww1/ops.js';
 import { maxGuns, missionBonus, TREES, isOffmap } from './research.js';
 
@@ -122,13 +123,16 @@ export function menuItems(career = null, lessons = {}) {
       query: { ...(m.era === 'ww2' ? { mode: 'ww2' } : {}), campaign: m.id, play: 1 }, difficulty: true, still: stillFor(m.reward),
     }, WIP_KINDS.has(m.reward)));
   }
-  for (const [era, defs] of [['1917', TUTORIALS], ['ww2', WW2_TUTORIALS]]) defs.forEach((d, i) => {
-    const done = !!lessons[d.id];
+  // (the German lessons numbered through both eras: the basic training on the career's ridge first, then the WW2 ones)
+  const nth = {};
+  for (const [era, defs] of [['1917', TUTORIALS], ['ww1', WW1_TUTORIALS], ['ww2', WW2_TUTORIALS]]) defs.forEach((d) => {
+    const done = !!lessons[d.id], n = (nth[NATION_OF[era]] = (nth[NATION_OF[era]] ?? 0) + 1);
     items.push(wip({
-      key: `tutorial:${d.id}`, era, tab: 'tutorials', n: done ? '✓' : pad(i + 1), done, title: d.name, side: `${d.steps.length} steps`,
-      kicker: `Tutorial · ${d.steps.length} steps`, sub: 'A quiet range in daylight. Nothing is scored and nothing is lost.', blurb: d.blurb,
-      lines: [], query: era === 'ww2' ? { mode: 'ww2', op: d.op, tutorial: d.id } : { tutorial: d.id },
-      still: era !== 'ww2' ? null : d.id === 'w-werfer' ? 'nbw41' : d.op === 'flanders' ? 'lefh18' : stillFor(OPS[d.op]?.units[0].kind),
+      key: `tutorial:${d.id}`, era, tab: 'tutorials', n: done ? '✓' : pad(n), done, title: d.name, side: `${d.steps.length} steps`,
+      kicker: `Tutorial · ${d.steps.length} steps`, sub: era === 'ww1' ? 'The career\'s ridge in daylight, with a borrowed battery. Nothing is scored and nothing is lost.' : 'A quiet range in daylight. Nothing is scored and nothing is lost.', blurb: d.blurb,
+      lines: era === 'ww1' ? ['Start here: it teaches the console and serving a gun in person.'] : [],
+      query: era === 'ww2' ? { mode: 'ww2', op: d.op, tutorial: d.id } : era === 'ww1' ? { mode: 'ww1', tutorial: d.id } : { tutorial: d.id },
+      still: era === '1917' ? null : era === 'ww1' ? stillFor(d.kinds[0]) : d.id === 'w-werfer' ? 'nbw41' : d.op === 'flanders' ? 'lefh18' : stillFor(OPS[d.op]?.units[0].kind),
     }, era === 'ww2' && d.op !== 'flanders' && WIP_KINDS.has(OPS[d.op]?.units[0].kind)));
   });
   return items;

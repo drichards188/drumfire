@@ -760,6 +760,49 @@ Every step has an optional `demo(T)` that performs its goal with the same comman
 (and the same keys main handles), so `window.__drumfire.tutorial.autoplay()` can run a whole lesson
 unattended; it is how the lessons are tested (every lesson must complete under autoplay).
 
+**Basic training** (`WW1_TUTORIALS` in `src/ww1/tutorial.js`, id `training`, `/?mode=ww1&tutorial=training`): the
+German career's first lesson, on the career's own ridge, offered once to a new player (`src/ui/invite.js`: the menu's
+first load, or the career battle opened straight from a link; answered in localStorage `drumfire.invite`; never under
+`navigator.webdriver`). The Gruppe lends a battery above a new career's: the ridge's WW2 21 cm Mörser 18 pair "Julius"
+(ops.js `RIDGE_WW2`, unit 11) with every upgrade, so the career's first battle with its one K 17 feels the difference.
+Steps: the view, the console a section at a time (the battery's header, the board, the fire order, the range table, the
+guns, the calls, the messages), take a call (a tank laager: hard, so the fire for effect has work to do), watch No. 1
+gun lay and load (main's `host.closeUp(i)` puts the camera on that gun), one ranging round once it is ready, ride the
+shell, the VB's report, apply the correction, bracket, fire for effect until three of the four tanks are wrecked; then
+at the gun (an ammunition dump, soft, its call laid only once the laager's last shells are down; its first round lands
+160 m over, so there is always a correction: not a battery, whose aim point carries the 70 to 200 m `cbErr`): man it
+(P), lay and fire with crew help on, read back the corrected command at post 1, then with crew help off the barrel
+down, load, prime, lay and fire, watch it land, crew help on (C), leave (P); `finish` only if the dump still stands. Lesson fields it adds (any lesson may use them): `kinds` (main builds the ridge's theatre with
+them and fields only them: key 1 is the first), `levels` (the lent battery's look, models/looks.js), `loadout`
+(`sim.newGame`'s), `gunnerFrom` (the step from which P and MAN work: `tutorial.canMan`; the sim allows the gunner in this
+scripted game through `newGame({ manning: true })`, `sim.manning`), `spotlight`, `noSkip` (no Skip step: every step is
+done; Exit tutorial stays), `after: { label }` (the finished card's main button: main's `host.after`, the career battle at
+the menu's last open threat level), `instant` (a step advances the moment its goal is met, a "✓" for it on the next card,
+and a step whose `skipIf` turns true while open is passed over: no pause in which a player's action ahead of the card can
+be lost), `stall` and `stuck(T, step)` (after `stall` seconds without the goal met the card adds STILL WAITING: the step's
+`stuck(T)` or the lesson's, read from the game: the battery's `guns.problem`, the gun card's next job, rounds falling
+wide unobserved). Step fields: `spot` (the spotlight's holes, default `hi`), `skipIf(T)` (passed over when true, not
+counted as skipped), `stuck(T)`. A demo may hold the gun's keys through `T.gunInput` (main uses it in place of the
+keyboard; cleared on every step).
+
+**Keeping the card in step with the game.** Every goal is game state, never "since this step opened": the call taken,
+a gun ready or rounds fired on the call (`mission.fired`), reports received, a fire for effect given (`unit.ffeVolley`),
+the target's damage, the aim moved since the VB's report and the gun's command read back, No. 1 gun's drill state; the
+one count kept is No. 1 gun's rounds since the player was sent to it. Each goal also reads true once a later one does,
+so the steps collapse in whatever order things happened. `node tools/trainingtest.mjs [--cases ...] [--jobs N]` plays
+the lesson misbehaving at every step: the next steps' actions done early (console steps), nothing done for 60 s (every
+step), the gun card followed instead of the lesson card and the gun left and manned again (gun steps); it fails on any
+stalled step.
+
+**Spotlight** (`src/ui/spotlight.js` `setSpotlight(list | [] | null)`): the screen dark but for holes over the
+step's `spot` (data-tut names, or CSS selectors lighting their first match: `#view`, `#panel`, `#gunner`, `#man-gun`, `[data-tut~="report"]` the newest report slip; a step's `spot` may be `(T) => list`, read every frame), the screen less the holes
+at z-index 40, drawn as plain rectangles (the cells of a grid on the holes' edges that lie in no hole: holes that touch
+join; no SVG mask, which SwiftShader drew in 256 px bands), the SVG itself taking no input; window capture listeners
+stop a pointer press, click or wheel that lands in the dark (outside every hole, the card and the hints), so one in a
+hole reaches the control; keys work everywhere. The card and the hints stand above it (`body.spotlit`); a list that finds
+no visible element darkens nothing; `[]` darkens all but the card (the welcome and the finished card). A spotlit lesson
+draws no `.tut-hi` pulse: the holes have their own rim. At a gun the card moves to the view's upper right.
+
 ## Dicke Bertha mode (demo)
 
 A first-person demo on the German side, meant to become a mode of the main game if it works: `bertha.html`
@@ -2345,6 +2388,21 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   Nor do the launch sites take the parade's barrel and breech marks (looks.js `NO_BARREL`: their `muzzle` anchor
   is the missile's nose, which wore Barrel III's canvas muzzle cover). A missile on show rests by its lowest point and its body
   (`shellModel` `low`, `MISSILE_BODY`): its model's radius is its wings' or fins' span, which floated the V-1 2.5 m up.
+- (tutorial: the basic training) A first lesson for the German career, `src/ww1/tutorial.js` `training` (DESIGN.md
+  "Tutorial", Basic training), offered once by `src/ui/invite.js`; the lesson spotlight `src/ui/spotlight.js`; lesson
+  fields `kinds`, `levels`, `loadout`, `gunnerFrom`, `spotlight`, `noSkip`, `after` and step fields `spot`, `skipIf`;
+  `sim.newGame({ manning })` and `sim.manning` (gunner.js refuses the gunner in a scripted game without it: the test
+  range and this lesson have it). main: a WW1 lesson page builds the ridge with the lesson's `kinds`, fields only them,
+  is never the career's battle (`RESEARCH_ERA` null on any lesson page, so nothing is paid), and gates P and MAN by
+  `tutorial.canMan`. The menu lists the lesson first in the German Tutorials (numbered through both eras).
 - (career: dev mode off by default) `progression.js` `DEV_DEFAULT = false`: a browser without a choice of its own plays its
   own career (the K 17 to start); a choice made with the switch (`devSet`) is kept as before. The headless tools that
   need every battery set dev mode themselves (`shot.mjs --dev`, menushots, hangarsheet, voicetest).
+- (tutorials: the WW2 basics removed) `w-basics` ("Die Grundlagen", the leFH 18 on the hidden WW2 Flanders battle) left
+  `src/ww2/tutorial.js`: the German basic training (`src/ww1/tutorial.js` `training`) teaches the same loop on the
+  career's ridge. The WW2 lessons are the special weapons' five.
+- (tutorial: the card kept in step with the game) The basic training's goals rewritten as game state, the lesson
+  `instant` with a STILL WAITING line (`src/tutorial.js` `instant`, `stall`, `stuck`, skipIf read while a step is open),
+  and `tools/trainingtest.mjs` (the lesson out of order at every step). Found by it and fixed: re-manning the gun read
+  back the command in hand, which passed the read-back step before the VB had reported; a wrong aim in fire for effect
+  went on missing unobserved (the laager step now says so and how to recover).

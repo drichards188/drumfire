@@ -12,7 +12,7 @@
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
 - **One German career.** The guns of 1918 and of the Second World War in one research tree, five lines from the 10 cm K 17 to the Gustav, with the V-1, V-2 and Paris Gun as off-map support.
 - **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
-- **Tutorials.** Six guided lessons for the WW2 guns and special weapons.
+- **Tutorials.** A basic training offered on first launch (the console and serving a gun, with a borrowed battery), and guided lessons for the WW2 special weapons.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or on the Big Bertha demo's 42 cm howitzer.
 
 ## Play it
@@ -50,7 +50,7 @@ Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#con
 - Threat levels 6 to 10 on the WW2 map, and tanks moving with the British attacks.
 - Playtesting the research pace, the pay, the upgrades and the ten levels.
 - Britain's return, with its own tree.
-- Lessons for the 1918 guns, now the career's start.
+- Lessons for each 1918 gun (the basic training teaches the drill on a WW2 battery).
 - Relaying Bertha's or the Gamma's bed is instant; the 100 s it took is to come back.
 
 Full list: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#not-done-yet).

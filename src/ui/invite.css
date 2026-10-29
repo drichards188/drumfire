@@ -1,0 +1,31 @@
+/* The first-run invitation to the basic training (ui/invite.js), over the menu or a game page, in the menu's dark folio */
+.iv-page {
+  position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px 16px;
+  background: rgba(8, 10, 7, 0.78); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.iv-page.in { opacity: 1; }
+.iv-card {
+  width: min(520px, 100%); display: grid; gap: 12px; padding: 24px 28px 22px;
+  border: 1px solid #9b906366; border-top: 4px solid #cfa94b; background: linear-gradient(145deg, #262b23f4, #151b17fa);
+  box-shadow: 0 24px 80px #000b; color: #ddd8c5; font: 14px/1.5 var(--serif);
+  transform: translateY(10px); transition: transform 0.3s ease;
+}
+.iv-page.in .iv-card { transform: none; }
+.iv-kicker { font: 10px var(--mono); letter-spacing: 0.22em; text-transform: uppercase; color: #cfa94b; }
+.iv-card h2 { font: normal 34px/1.1 var(--serif); letter-spacing: 0.05em; text-transform: uppercase; color: #ece2c6; }
+.iv-lede { font-size: 15px; color: #e4ddc6; }
+.iv-list { display: grid; gap: 6px; margin: 2px 0 0; padding: 0; list-style: none; font: 12px/1.45 var(--mono); color: #c9c5ae; }
+.iv-list li { display: grid; grid-template-columns: 86px 1fr; gap: 10px; padding: 7px 10px; border: 1px solid #a49b6933; background: #c2bc930a; }
+.iv-list b { font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f0d999; font-size: 10px; padding-top: 1px; }
+.iv-note { font: italic 12px/1.5 var(--serif); color: #aaa690; }
+.iv-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.iv-actions button {
+  font: 700 11px var(--mono); letter-spacing: 0.16em; text-transform: uppercase; padding: 10px 16px; cursor: pointer;
+  border: 1px solid #9b906388; background: transparent; color: #ddd8c5;
+}
+.iv-actions button:hover { background: #ddd8c512; }
+.iv-actions .iv-yes { border-color: #cfa94b; background: #cfa94b; color: #1d1912; }
+.iv-actions .iv-yes:hover { background: #e2bd5c; }
+.iv-actions button:focus-visible { outline: 2px solid #ffd45a; outline-offset: 2px; }
+@media (max-width: 480px) { .iv-list li { grid-template-columns: 1fr; gap: 2px; } .iv-actions button { flex: 1 1 auto; } }

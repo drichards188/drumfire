@@ -341,7 +341,8 @@ While you serve a gun in person ([Serving a gun in person](#serving-a-gun-in-per
 ## Tutorials
 
 - **Where.** The menu's Tutorials tab holds short guided lessons on a quiet scripted range, always in daylight: the sun is held at 10:00 and the weather is Clear or Overcast; your own settings come back when you leave.
-- **How.** Each lesson shows an instruction card over the 3D view, pulses the console controls it is about, and completes a step when you have done what it asks. Skip step and Esc are always there.
+- **How.** Each lesson shows an instruction card over the 3D view, pulses the console controls it is about, and completes a step when you have done what it asks. Skip step and Esc are always there (the basic training has no Skip step: Exit tutorial and Esc leave it).
+- **First launch.** A new player's first menu offers the basic training once (Start basic training, or Not now); it stays in the Tutorials list either way.
 - **Always open.** Lessons are open whatever you have researched, and completed ones are ticked (stored in the browser).
 
 **1917 British**, six lessons (`/?tutorial=basics|ranging|clockcode|heavy|counter|sos`):
@@ -353,13 +354,16 @@ While you serve a gun in person ([Serving a gun in person](#serving-a-gun-in-per
 - **Counter-battery:** German fire walks onto you; HOLD; the 60-pounders on the sound rangers' reference.
 - **S.O.S.:** red rockets, every gun on the line, shrapnel, break the attack.
 
-**WW2 German**, six lessons (`/?mode=ww2&tutorial=w-basics|w-werfer|w-gustav|w-karl|w-v1|w-v2`; a lesson on another operation reloads the page there):
+**WW2 German**, five lessons on the special weapons (`/?mode=ww2&tutorial=w-werfer|w-gustav|w-karl|w-v1|w-v2`; a lesson on another operation reloads the page there; the basic training below teaches the drill they share):
 
-- **Die Grundlagen:** the leFH 18, metres and Strich.
 - **Der Nebelwerfer**
 - **Gustav: railway preparation**
 - **Karl-Gerät**
 - **V-1: the launch drill**
 - **V-2: the A4 drill**
 
-**WW1 German** has no lessons of its own; the 1917 and WW2 lessons teach the same drill. The Big Bertha demo has its own tutorial.
+**WW1 German**, the career's ridge (`/?mode=ww1&tutorial=training`), listed first:
+
+- **Basic training:** with a borrowed battery of two 21 cm Mörser 18, every upgrade fitted. The console, one section at a time, then a call: watch No. 1 gun lay and load, fire a ranging round, ride the shell, read the VB's report, correct, bracket, fire for effect, then a gun in person: man it (P), lay and fire, read back a corrected command at post 1, then work every post for the next round (barrel down, load, prime, lay, fire), crew help (C), leave (P). The screen is dark but for what each step is about, and every step waits until you have done it. When it ends, To battle opens the career's battle with your own guns.
+
+The Big Bertha demo has its own tutorial.

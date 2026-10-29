@@ -67,6 +67,7 @@ export class MessagePad {
     if (s.code) body.append(el('span', 'scode', s.rawCode));
     if (!dup) body.append(el('span', 'stext', s.text));
     e.append(head, body);
+    if (s.round) tut(e, 'report'); // (an observer's report on a round; the newest is the list's first)
     if (s.note) {
       const n = el('button', 'snote');
       n.type = 'button';

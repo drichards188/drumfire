@@ -25,6 +25,7 @@ import { mountCampaignObjectives } from './ui/progression.js';
 import { hideLoading } from './ui/loading.js';
 import { menuHref, DIFFICULTIES, WIP_KINDS, WIP_LINE } from './menuItems.js';
 import { Tutorials } from './tutorial.js';
+import { shouldInvite, showInvite } from './ui/invite.js';
 import { ChaseCamera } from './camera.js';
 import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
 import { ww2Theatre, OPS } from './ww2/theatre.js';
@@ -73,7 +74,9 @@ const career = new Progression(careerStorage);
 // the German career's open battle on the ridge (not the range, a lesson or the sandbox page): the lineup's WW2
 // batteries take the field beside the 1918 ones (src/ww1/ops.js RIDGE_WW2), so the theatre is built with its kinds
 const RIDGE_CAREER = WW1 && (query.get('op') ?? 'ridge') === 'ridge' && !SANDBOX && !RANGE && !query.get('tutorial') && !query.get('campaign');
-const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge', { kinds: RIDGE_CAREER ? Object.keys(career.lineupLevels('de')) : null }) ?? null : null;
+// a WW1 lesson (src/ww1/tutorial.js, the basic training): the ridge with the batteries it lends (`kinds`), as a lineup's
+const WW1_LESSON = WW1 && query.get('tutorial') ? (await optional('./ww1/tutorial.js'))?.WW1_TUTORIALS?.find((d) => d.id === query.get('tutorial')) ?? null : null;
+const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge', { kinds: RIDGE_CAREER ? Object.keys(career.lineupLevels('de')) : WW1_LESSON?.kinds ?? null }) ?? null : null;
 if (WW1 && !WW1_TH) console.warn('WW1 theatre missing: the British game stands in');
 const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
@@ -93,7 +96,7 @@ const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
 // the career's open battle (src/research.js, the German tree): the 1918 ridge, where the career's researched lineup
 // takes the field with its guns and upgrades, and the battle pays RP and battery points (null: everything else, which
 // pays nothing; the WW2 open battle and the British game are sandboxes for now, Britain hidden from the menu)
-const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || SANDBOX || RANGE ? null : WW1 && TH?.op?.kind === 'battle' ? 'de' : null;
+const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || SANDBOX || RANGE || query.get('tutorial') ? null : WW1 && TH?.op?.kind === 'battle' ? 'de' : null;
 // the career's battle is played at a threat level with its modifiers (src/threat.js; the menu chose them: ?level=&mods=)
 const LEVEL = RESEARCH_ERA ? threatOf(+query.get('level') || 1) : null;
 const MODS = RESEARCH_ERA ? parseModifiers(query.get('mods')) : [];
@@ -180,7 +183,7 @@ async function init() {
     panel: await optional('./ui/panel.js'),
     audio: await optional('./audio.js'),
     guns: await optional('./models/guns.js'),
-    looks: RESEARCH_ERA ? await optional('./models/looks.js') : null, // the lineup's upgrades on its guns (research.js)
+    looks: RESEARCH_ERA || WW1_LESSON?.levels ? await optional('./models/looks.js') : null, // the lineup's upgrades on its guns (research.js)
     world: await optional('./world/index.js'),
     craters: await optional('./craters.js'),
     render: await optional('./render/index.js'),
@@ -241,7 +244,8 @@ async function init() {
         rig.rec = 0;
         // the career's upgrades on the lineup's guns, as the hangar shows them: the paint, the relined barrel, the
         // polished breech (models/looks.js); the battle's lineup is the career's, fixed for the page
-        if (mods.looks && RESEARCH_ERA) mods.looks.applyLook(rig, p.kind, gunEraOf(p.kind), career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {});
+        // (a lesson's lent battery: its levels)
+        if (mods.looks && (RESEARCH_ERA || WW1_LESSON?.levels?.[u.kind])) mods.looks.applyLook(rig, p.kind, gunEraOf(p.kind), RESEARCH_ERA ? career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {} : WW1_LESSON.levels[u.kind]);
         rigs.set(`${u.id}:${p.i}`, rig);
       } catch (e) {
         console.warn(`buildGun(${p.kind}) failed: ${e.message}`);
@@ -359,7 +363,7 @@ async function init() {
         onSelect: (id) => unitKey(UNITS.findIndex((u) => u.id === id)),
         // (MAN on the guns card: the player's choices for the gunner go with it)
         // (the weapons off the map have no unit: their orders go straight to the sim, which keeps them to the lineup's)
-        onCommand: (id, name, args) => (name === 'support' ? !!sim?.command(null, name, args) : canCommand(id) && sim?.command(id, name, name === 'man' ? gunnerArgs(args) : args)),
+        onCommand: (id, name, args) => (name === 'support' ? !!sim?.command(null, name, args) : name === 'man' && !manOk() ? manRefused() : canCommand(id) && sim?.command(id, name, name === 'man' ? gunnerArgs(args) : args)),
         keysOff: (e) => !!gview?.claims(e), // at a gun the drill's keys are the gun's, not the console's
         onFocus: (id, task) => modeR?.focusTask?.(id, task), // a Gustav task clicked on the procedure card
         isUnlocked: (u) => canCommand(u.id),
@@ -421,7 +425,8 @@ async function init() {
   let state = 'title'; // title | playing | ended
   let freeCam = false;
   // ?unit=N is the unit id (1 to 5); without it the 1917 battle opens on the 15-inch, the Group's centrepiece
-  FIELDED = RESEARCH_ERA ? UNITS.filter((u) => career.lineupKinds(RESEARCH_ERA).includes(u.kind)) : UNITS;
+  // (a WW1 lesson: the batteries it lends, so key 1 is the first of them)
+  FIELDED = RESEARCH_ERA ? UNITS.filter((u) => career.lineupKinds(RESEARCH_ERA).includes(u.kind)) : WW1_LESSON?.kinds ? UNITS.filter((u) => WW1_LESSON.kinds.includes(u.kind)) : UNITS;
   // (?unit=N: the N-th unit in the field)
   let selected = Math.max(0, UNITS.indexOf(FIELDED[Math.max(0, Math.min(FIELDED.length - 1, Number(query.get('unit') ?? (TH ? 1 : FIELDED.findIndex((u) => u.kind === 'bl15') + 1)) - 1))]));
   if (RANGE && UNITS.some((u) => u.kind === query.get('kind'))) selected = UNITS.findIndex((u) => u.kind === query.get('kind'));
@@ -617,10 +622,19 @@ async function init() {
       audio?.ui?.('click');
     }
   };
+  // the player may go to a gun in a battle, and in a lesson that teaches it from its step on (tutorial.canMan)
+  function manOk() {
+    return state === 'playing' || (state === 'tutorial' && !!tutorial?.canMan);
+  }
+  function manRefused() {
+    if (state === 'tutorial') hud.hint(tutorial?.run?.def.gunnerFrom ? 'Not yet: the lesson comes to serving the gun later.' : 'This lesson keeps you at the console.', 2600);
+    return false;
+  }
   const toggleMan = () => {
-    if (!(WW2 || WW1) || !sim?.gunner || state !== 'playing') return;
+    if (!(WW2 || WW1) || !sim?.gunner) return;
     const st = sim.gunner.st;
     if (st) { sim.command(st.unitId, 'unman'); return; }
+    if (!manOk()) { manRefused(); return; }
     const u = UNITS[selected];
     if (canCommand(u.id)) sim.command(u.id, 'man', gunnerArgs());
   };
@@ -805,6 +819,8 @@ async function init() {
     params.weather = w;
     weather.set(w, now);
   };
+  const gunFocus = new THREE.Object3D(); // (host.closeUp's target: one gun, not the battery's centre)
+  scene.add(gunFocus);
   const tutorial = sim
     ? new Tutorials({
         sim,
@@ -827,7 +843,8 @@ async function init() {
             following = false;
             saved ??= { weather: params.weather };
             setWeather('Clear', true); // sun and shadow for the lesson; the gear menu may still pick Overcast
-            newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0 });
+            // (the basic training lends its battery, upgrades and all, and lets the player serve a gun)
+            newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0, loadout: def.loadout ?? null, manning: !!def.gunnerFrom });
             setTimeScale(1);
             hud.setScore(0);
             try {
@@ -847,8 +864,32 @@ async function init() {
             // a lesson is left for the menu, with the last lesson selected
             location.href = menuHref(query, `tutorial:${lesson}`);
           },
+          // the finished card's main button (def.after): the basic training's To battle is the career's open battle at the
+          // threat level the menu last had (a level not yet open: level 1)
+          after() {
+            let lv = 1;
+            try { lv = Math.max(1, JSON.parse(localStorage.getItem('drumfire.menu'))?.level | 0 || 1); } catch { /* level 1 */ }
+            if (!career.levelUnlocked('de', lv)) lv = 1;
+            location.href = `index.html?mode=ww1&op=ridge&play=1&level=${lv}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+          },
           select: (id) => selectUnit(UNITS.findIndex((u) => u.id === id)),
           selectedId: () => UNITS[selected].id,
+          // a close look at gun i of the selected unit, from behind its right shoulder (the basic training's loading step)
+          closeUp: (i = 0) => {
+            const u = UNITS[selected], p = sim?.unitById(u.id)?.pieces[i];
+            if (!p) return;
+            following = false;
+            freeCam = false;
+            chase.free(false);
+            chase.releaseShot();
+            gunFocus.position.set(p.pos.x, terrain.heightAt(p.pos.x, p.pos.z) + KIND[u.kind].eye * 0.7, p.pos.z);
+            gunFocus.rotation.y = headingFor(p.bearing ?? u.zero);
+            gunFocus.updateMatrixWorld();
+            chase.setTarget(gunFocus);
+            chase.goalYaw += 0.75;
+            chase.goalPitch = 0.17;
+            chase.goalDist = Math.min(26, KIND[u.kind].dist);
+          },
           cam: () => ({ yaw: chase.goalYaw, dist: chase.goalDist }),
           nudgeCam: () => {
             chase.goalYaw += 0.8;
@@ -1372,7 +1413,8 @@ async function init() {
     }
     scene.environmentIntensity = params.envIntensity * atmosphere.baseEnvIntensity * (1 - weather.state.storm * 0.35) + weather.flash * 2.5;
 
-    if (gview?.active && sim?.gunner) sim.gunner.setInput(following ? IDLE : gview.input());
+    // (a lesson's demo may work the gun's keys itself: tutorial.gunInput)
+    if (gview?.active && sim?.gunner) sim.gunner.setInput(tutorial?.gunInput ?? (following ? IDLE : gview.input()));
     fx.closeUp = !!gview?.active && !following; // at a gun, a blast near the eye throws fewer puffs (fx/artillery.js lod)
     if (dt > 0 && !left) sim?.update(dt); // (a battle left early stands still behind its summary)
     syncGunner();
@@ -1444,7 +1486,7 @@ async function init() {
       cut.r.value = chase.mode === 'unit' && !freeCam && !atGun ? 10 : 0;
       // the selected unit's own nets are drawn back over its guns (every piece, the battery spreads wide); at a gun, its own.
       // Where the sim's pieces stand (the Karl drives to its prepared positions; every other gun is where it was placed)
-      const cu = (atGun && UNITS.find((x) => x.id === sim.gunner.st.unitId)) || UNITS[selected];
+      const cu = (atGun && UNITS.find((x) => x.id === sim.gunner.st?.unitId)) || UNITS[selected]; // (st: null for the rest of a frame in which a lesson's demo left the gun)
       const places = sim?.unitById?.(cu.id)?.pieces.map((p) => p.pos) ?? piecePlacements(cu);
       for (let i = 0; i < cut.p.value.length; i++) {
         const pl = places[i];
@@ -1526,7 +1568,7 @@ async function init() {
     if (gview) {
       gview.update(sim);
       const su = UNITS[selected];
-      gview.setButton(state === 'playing' && (gview.active || (mods.ww2gunner.MANNABLE.has(su.kind) && canCommand(su.id) && !!sim?.unitById(su.id)?.alive)), gview.active);
+      gview.setButton(manOk() && (gview.active || (mods.ww2gunner.MANNABLE.has(su.kind) && canCommand(su.id) && !!sim?.unitById(su.id)?.alive)), gview.active);
     }
     if (audio) {
       ambTimer -= rawDt;
@@ -1582,6 +1624,11 @@ async function init() {
   } else if (query.get('tutorial')) {
     if (tutorial?.defs.some((d) => d.id === query.get('tutorial'))) tutorial.start(query.get('tutorial'));
     else toMenu();
+  } else if (RIDGE_CAREER && query.get('play') && shouldInvite()) {
+    // the career's battle opened from a link by a new player: the invitation to the basic training first (ui/invite.js),
+    // over the demonstration bombardment; Not now starts the battle
+    selectUnit(selected);
+    showInvite({ onDecline: () => start() });
   } else {
     selectUnit(selected);
     start();

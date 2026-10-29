@@ -52,12 +52,14 @@ export class Sim {
   // upgrades (guns.js). opposition ({ cb, assault }): the lineup's scale on the enemy's counter-battery fire and raids
   // and on the assaults (research.js opposition). Without them everything is as before.
   // range: the test range (src/ui/range.js), a scripted game the player may also serve a gun in person on.
+  // manning: a lesson that teaches serving a gun in person (src/ww1/tutorial.js): another scripted game that allows it.
   // level (1 to 10, threat.js: the career's open battle) and modifiers (threat.js MODIFIERS ids): the level sets the
   // enemy's side of the difficulty (Normal's for the player's own guns) and the day (the director, the enemy), in
   // place of `opposition`; without a level everything is as before
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, level = null, modifiers = null } = {}) {
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, manning = false, level = null, modifiers = null } = {}) {
     this.loadout = loadout;
     this.range = scripted && range;
+    this.manning = !scripted || range || manning; // (the gunner, src/ww2/gunner.js: a scripted game only on the range or in such a lesson)
     this.allowedKinds = allowedKinds != null ? new Set(allowedKinds) : loadout ? new Set(Object.keys(loadout)) : null;
     this.seed = seed;
     this.scripted = scripted;

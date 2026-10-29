@@ -9,6 +9,7 @@ import { OPS as OPS_WW1 } from '../ww1/ops.js';
 import { THREAT, MAX_LEVEL, threatOf, rollModifiers, modifierOf, SLOTS } from '../threat.js';
 import { capabilities, recommendedLevel } from '../capability.js';
 import { showSummary, loadSummary, markSeen } from './summary.js';
+import { shouldInvite, showInvite } from './invite.js';
 import './menu.css';
 
 // The main menu, laid out as a tank game's garage: a top bar with the nation tabs (Germany: the 1918 and the WW2
@@ -509,6 +510,9 @@ export function mountMenu(root = document.getElementById('menu')) {
     loaded = true;
     loading.classList.add('done');
     setTimeout(() => loading.remove(), 700);
+    // a new player's first menu: the invitation to the basic training (ui/invite.js), once the hangar stands; not over a
+    // battle's summary
+    setTimeout(() => { if (shouldInvite() && !document.querySelector('.sm-page')) showInvite(); }, 500);
   };
   setTimeout(lift, 60000);
   const hangar = createHangar($('.hg-stage'), {
@@ -527,7 +531,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   const HELP = {
     battles: { de: 'The open battle of 1918 with your career\'s batteries (it pays research points, won or lost), the WW2 open battle as a sandbox, the special weapons\' own missions, the Big Bertha demo and the test range.', '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
     campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'One-off challenges, in any order: each loans you a battery for a set task, and the first win pays research points.' },
-    tutorials: { ww1: 'No lessons of its own yet: the 1917 and WW2 lessons teach the same drill (lay from the board, range, fire for effect).', other: 'Short lessons on a quiet range, in daylight.' },
+    tutorials: { de: 'Start with the basic training: the console and serving a gun in person, on the career\'s own ridge. The WW2 lessons teach each special weapon.', other: 'Short lessons on a quiet range, in daylight.' },
   };
   const RESEARCH_HELP = {
     ww1: 'Nothing to research in this era: every battery of the Gruppe is yours from the start.',

@@ -1,5 +1,6 @@
 import { YARD } from './sector.js';
 import { setHighlight } from './ui/highlight.js';
+import { setSpotlight } from './ui/spotlight.js';
 
 // Tutorials: six lessons, each a list of steps run on the scripted range (main.js host.enter:
 // sim.newGame({ scripted: true }): no director, nothing spawns on its own, our pieces take no damage, the
@@ -9,11 +10,18 @@ import { setHighlight } from './ui/highlight.js';
 // explains and advances with Next.
 //
 // Step fields: id, title, text (string or (T) => string), goal (the objective line), hi (data-tut names to
-// pulse), enter(T), tick(T, rawDt), done(T), demo(T), limit (sim seconds before autoplay gives up).
+// pulse), enter(T), tick(T, rawDt), done(T), demo(T), limit (sim seconds before autoplay gives up), spot (the spotlight's
+// holes, below; default hi), skipIf(T) (true: the step is not needed this time and is passed over).
 // demo(T) performs the step's goal with the commands the console sends (T.act) and the actions main handles
 // (T.host), and is called every tick while the step is open in autoplay, so it guards itself with T.once.
 // Lesson fields: id, name, blurb, outro, unit (where it starts), units (the keys 1 to 5 that work), setup(T),
-// keep(T) (every tick: re-arms a lapsed mission, so a step can never stall).
+// keep(T) (every tick: re-arms a lapsed mission, so a step can never stall). The basic training's (src/ww1/tutorial.js)
+// also: kinds (the batteries its page fields), loadout (sim.newGame's: the guns and upgrades the lesson lends), gunnerFrom
+// (the step from which the player may man a gun: P, MAN), spotlight (the screen dark but for the step's `spot`, or its
+// `hi`: src/ui/spotlight.js), noSkip (every step must be done: no Skip step), after ({ label }: the finished card's main
+// button, which host.after(def) follows), instant (a step advances the moment its goal is met, and a step whose skipIf
+// turns true while it is open is passed over: nothing the player does ahead of the card can be lost in the pause), stall
+// (seconds without the goal met before the card says what holds it: the step's stuck(T), else the lesson's stuck(T, step)).
 
 const STORE = 'drumfire.tutorials';
 const yd = (m) => Math.round(m / YARD);
@@ -756,7 +764,7 @@ export class Tutorials {
     document.getElementById('tut-back').addEventListener('click', () => this.closeMenu());
     // the card's buttons must not take keyboard focus, or Space would press them instead of the console
     for (const b of this.card.querySelectorAll('button')) b.addEventListener('pointerdown', (e) => e.preventDefault());
-    this.q('#tc-next').addEventListener('click', () => (this.run?.finished ? this.nextLesson() : this.next()));
+    this.q('#tc-next').addEventListener('click', () => (this.run?.finished ? (this.run.def.after ? this.host.after?.(this.run.def) : this.nextLesson()) : this.next()));
     this.q('#tc-skip').addEventListener('click', () => (this.run?.finished ? this.start(this.run.def.id) : this.next(true)));
     this.q('#tc-exit').addEventListener('click', () => this.exit());
   }
@@ -775,6 +783,12 @@ export class Tutorials {
 
   get script() {
     return this.sim.script ?? null;
+  }
+
+  // the player may serve a gun in person (P, MAN): only in a lesson that teaches it, from its step on
+  get canMan() {
+    const run = this.run, k = run?.def.gunnerFrom ? run.def.steps.findIndex((s) => s.id === run.def.gunnerFrom) : -1;
+    return k >= 0 && (run.finished || run.i >= k);
   }
 
   // ---------------------------------------------------------------- the list
@@ -864,7 +878,7 @@ export class Tutorials {
       this.lr0[u.id] = u.stats.rounds;
     }
     this.uid = def.unit;
-    this.run = { def, i: -1, finished: false, ok: false, doneT: 0, stepT0: this.sim.time };
+    this.run = { def, i: -1, finished: false, ok: false, doneT: 0, stepT0: this.sim.time, raw: 0 };
     this.manual(def.unit);
     this.hud.setTutorial(true);
     def.setup?.(this);
@@ -874,6 +888,8 @@ export class Tutorials {
 
   stopRun() {
     setHighlight([]);
+    setSpotlight(null);
+    this.gunInput = null;
     this.script?.quiet?.();
     this.script?.clear?.();
     this.run = null;
@@ -892,16 +908,31 @@ export class Tutorials {
     const run = this.run;
     if (typeof i === 'string') i = run.def.steps.findIndex((s) => s.id === i);
     if (i < 0) return;
+    // (a step whose skipIf reads true is not needed this time: passed over, not counted as skipped)
+    while (i < run.def.steps.length && run.def.steps[i].skipIf?.(this)) i++;
     if (i >= run.def.steps.length) return this.finish();
     run.i = i;
     run.ok = false;
     run.doneT = 0;
     run.stepT0 = this.sim.time;
+    run.raw = 0; // real seconds the step has been open (the stall line)
     this.mem = { t0: this.sim.time, r0: this.u?.stats.rounds ?? 0 };
     const step = run.def.steps[i];
+    this.gunInput = null;
     step.enter?.(this);
-    setHighlight(step.hi ?? []);
+    // (a spotlit lesson's holes have their own rim: no pulse on top)
+    setHighlight(run.def.spotlight ? [] : step.hi ?? []);
+    if (run.def.spotlight) this.spot(step, true);
     this.render();
+  }
+
+  // the spotlight's holes: the step's `spot` (a list, or (T) => list, read again every frame), else its `hi`
+  spot(step, now = false) {
+    const list = (typeof step.spot === 'function' ? step.spot(this) : step.spot) ?? step.hi ?? [];
+    const key = list.join('|');
+    if (!now && key === this.spotKey) return;
+    this.spotKey = key;
+    setSpotlight(list);
   }
 
   next(skip = false) {
@@ -933,6 +964,8 @@ export class Tutorials {
     this.script?.quiet?.();
     this.script?.clear?.();
     setHighlight([]);
+    if (run.def.spotlight) setSpotlight([]); // (the card alone: the lesson is over)
+    this.gunInput = null;
     this.host.setScale(1);
     this.report = {
       id: run.def.id,
@@ -954,8 +987,15 @@ export class Tutorials {
     this.track();
     def.keep?.(this);
     step.tick?.(this, rawDt);
+    if (def.spotlight && typeof step.spot === 'function') this.spot(step);
     if (this.auto) this.autoStep(step, rawDt);
     if (this.run !== run || run.finished || run.def.steps[run.i] !== step) return;
+    run.raw += rawDt;
+    if (def.instant) {
+      // the goal met, or no longer needed (its outcome came about some other way): on at once
+      if (step.skipIf?.(this)) { this.noteStep(step, false); this.goto(run.i + 1); return; }
+      if (step.done && step.done(this)) { this.flashDone(step.title); this.noteStep(step, false); this.goto(run.i + 1); return; }
+    }
     if (step.done && !run.ok && step.done(this)) {
       run.ok = true;
       run.doneT = 0;
@@ -967,7 +1007,7 @@ export class Tutorials {
     }
     // a text that quotes the sim is refreshed a few times a second
     this.textT = (this.textT ?? 0) - rawDt;
-    if (this.textT <= 0 && typeof step.text === 'function') {
+    if (this.textT <= 0 && (typeof step.text === 'function' || (def.stall && step.done))) {
       this.textT = 0.4;
       this.render();
     }
@@ -1038,29 +1078,49 @@ export class Tutorials {
       this.q('#tc-skip').hidden = false;
       this.q('#tc-skip').disabled = false;
       const next = this.q('#tc-next');
-      next.hidden = last;
+      next.hidden = last && !def.after;
       next.disabled = false;
-      next.textContent = 'Next lesson';
+      next.textContent = def.after?.label ?? 'Next lesson';
       return;
     }
     const step = def.steps[run.i];
     this.q('.tc-step').textContent = `step ${run.i + 1} / ${n}`;
     bar.style.width = `${(run.i / n) * 100}%`;
     this.q('.tc-title').textContent = step.title;
-    this.q('.tc-text').textContent = typeof step.text === 'function' ? step.text(this) : step.text;
+    let text = typeof step.text === 'function' ? step.text(this) : step.text;
+    // a step open a while without its goal met: what holds it, read from the game
+    if (def.stall && step.done && !run.ok && run.raw > def.stall) {
+      const why = step.stuck?.(this) ?? def.stuck?.(this, step);
+      if (why) text += `\n\nSTILL WAITING: ${why}`;
+    }
+    this.q('.tc-text').textContent = text;
     const goal = this.q('.tc-goal');
     const goalText = typeof step.goal === 'function' ? step.goal(this) : step.goal;
     goal.hidden = !goalText;
     goal.querySelector('span').textContent = goalText ?? '';
-    this.q('#tc-exit').textContent = 'Exit';
+    this.q('#tc-exit').textContent = def.noSkip ? 'Exit tutorial' : 'Exit';
     const skip = this.q('#tc-skip');
     skip.textContent = 'Skip step';
-    skip.hidden = !step.done;
+    skip.hidden = !step.done || !!def.noSkip;
     skip.disabled = false;
     const next = this.q('#tc-next');
     next.hidden = false;
     next.textContent = run.i === n - 1 && !step.done ? 'Finish' : 'Next';
     next.disabled = !!step.done && !run.ok;
+  }
+
+  // an `instant` lesson's tick for the step just done, on the card a moment (the card has already moved on)
+  flashDone(title) {
+    let e = this.card.querySelector('.tc-done');
+    if (!e) {
+      e = document.createElement('div');
+      e.className = 'tc-done';
+      this.q('.tc-bar').after(e);
+    }
+    e.textContent = `\u2713 ${title}`;
+    e.classList.remove('show');
+    void e.offsetWidth;
+    e.classList.add('show');
   }
 
   // ---------------------------------------------------------------- script helpers (T)
@@ -1153,4 +1213,4 @@ export class Tutorials {
 }
 
 // the shared steps and helpers, for the WW2 mode's lessons (src/ww2/tutorial.js)
-export const LESSON_KIT = { inFlight, readyN, queued, shots, target, targetDown, taken, idle, gunsUsed, gunsLive, takeStep, rangeStep, reportStep, bracketDemo, effectStep, killStep };
+export const LESSON_KIT = { inFlight, readyN, queued, shots, target, targetDown, taken, idle, gunsUsed, gunsLive, allGuns, takeStep, rangeStep, reportStep, bracketDemo, effectStep, killStep };

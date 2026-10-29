@@ -3,7 +3,7 @@
 // has a demo, so `__drumfire.tutorial.autoplaySync({ id })` plays a lesson unattended (that is how they are tested).
 import { LESSON_KIT } from '../tutorial.js';
 
-const { shots, targetDown, takeStep, rangeStep, reportStep, bracketDemo, effectStep, killStep, idle } = LESSON_KIT;
+const { shots, targetDown, takeStep, rangeStep, reportStep, effectStep, idle } = LESSON_KIT;
 const sp = (T) => T.u?.special;
 const stepDone = (T, id) => sp(T)?.steps?.find((s) => s.id === id)?.state === 'done';
 
@@ -17,17 +17,6 @@ const correctStep = (o = {}) => ({
   done: (T) => T.corrected() || !!T.rep.last?.ok,
   demo: (T) => { const r = T.rep.last; if (r && !r.ok && r.corr) T.once('corr', () => T.act('correct', { add: r.corr.add, right: r.corr.right })); },
 });
-const bracketStep = (o = {}) => ({
-  id: 'bracket',
-  title: 'Walk the rounds onto the target',
-  text: o.text ?? 'Fire one round, read the report, correct, fire again. Two or three rounds usually bring the VB\'s "Ziel!": on target.',
-  goal: 'Range until the observer reports on target',
-  hi: ['fire', 'pad'],
-  done: (T) => !!T.rep.last?.ok || targetDown(T),
-  demo: bracketDemo,
-  limit: 900,
-});
-
 // the launch drill (src/ww2/special.js LaunchCtl): Enter starts it and the crew carries on by itself; it holds for
 // the settings, a fault and the firing key (`hold`)
 const startStep = (title, text) => ({
@@ -59,31 +48,6 @@ const resultStep = (wait) => ({
 });
 
 export const WW2_TUTORIALS = [
-  {
-    id: 'w-basics', op: 'flanders', name: 'Die Grundlagen (leFH 18)', unit: 1, units: [1, 2, 3, 4, 5, 6],
-    blurb: 'The German side: six units, a console in metres and Strich, the VB\'s reports. Range the field howitzers onto an Allied dump.',
-    outro: 'Metres and Strich, weiter and kürzer: the same loop, from the other side of the wire. The other lessons cover the special weapons.',
-    setup: (T) => T.ensure('main', 'D1', { observer: 'foo', title: 'Supply dump, Potijze', firstError: { over: 160, right: -70 } }),
-    keep: (T) => T.ensure('main', 'D1', { observer: 'foo', title: 'Supply dump, Potijze', firstError: { over: 160, right: -70 } }),
-    steps: [
-      { id: 'welcome', title: 'The ridge', text: 'You command a German artillery group on the ridge, facing the British and Canadians across the old battlefield: field and heavy howitzers, the long 17 cm gun, the mortars, the Nebelwerfer, and a giant, the Gustav railway gun.', hi: ['header'] },
-      {
-        id: 'units', title: 'Six units', text: 'Keys 1 to 6 select a unit: 1 the 10.5 cm leFH 18, 2 the 15 cm sFH 18, 3 the 17 cm K 18, 4 the 21 cm Mörser 18, 5 the Nebelwerfer, 6 the Gustav.',
-        goal: 'Press 5 to visit the Nebelwerfer, then 1 to come back', hi: ['tabs'],
-        tick: (T) => { if (T.host.selectedId() === 5) T.mem.left = true; },
-        done: (T) => !!T.mem.left && T.host.selectedId() === 1,
-        demo: (T) => { if (!T.mem.left) T.once('go', () => T.host.select(5)); else if (T.sim.time - T.mem.t0 > 2) T.once('back', () => T.host.select(1)); },
-      },
-      { id: 'metric', title: 'Metres and Strich', text: 'The board is the same map with our lines in blue and theirs in red. Ranges are in metres, the line and the elevation in Strich (6400 to the circle: 48-00 is due west). Each mission slip gives the target\'s range from the unit you have selected (red when it cannot reach); the fire order\'s reference is the map grid in kilometres, r east and h north.', hi: ['board', 'order'] },
-      takeStep({ text: 'A VB (forward observer) has called fire on a supply dump. Take the task.' }),
-      rangeStep({ text: 'Range with one gun: GUNS on 1 GUN, ROUNDS 1, Space.' }),
-      reportStep({ text: 'The VB watches the burst and telephones the fall of shot in metres.' }),
-      correctStep(),
-      bracketStep(),
-      effectStep({ n: 6 }),
-      killStep({ n: 6 }),
-    ],
-  },
   {
     id: 'w-werfer', op: 'flanders', name: 'Der Nebelwerfer', unit: 5, units: [5],
     blurb: 'Six rockets a ripple, a long reload, and a cloud of smoke that gives the battery away. Drench an Allied battery.',
