@@ -108,7 +108,7 @@ The hangar shows the batteries you have unlocked: the one you pick stands on par
 
 ## Dev mode
 
-The **Dev mode** switch in the top right corner of the menu bar is on by default for now. In battle it puts every battery in the field, researched and at its best. Your own career still earns underneath, and the hangar and the Research screen always show it; switch dev mode off to play it. The choice is saved.
+The **Dev mode** switch in the top right corner of the menu bar is off by default. Switched on, it puts every battery in the field in battle, researched and at its best. Your own career still earns underneath, and the hangar and the Research screen always show it. The choice is saved.
 
 **Unlimited points**, the switch under it, makes research and modifications free for testing: the tree order still holds, nothing is spent, and the points earned keep adding up. It is off by default and saved.
 

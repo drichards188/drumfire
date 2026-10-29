@@ -37,7 +37,7 @@ This page covers the menu, research and the campaigns, every era's units and ope
 - **Always open.** The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start, with their whole roster.
 - **Saving.** Progress is saved in the browser.
 - **WW1 German** has no career: every battery is yours from the start.
-- **Dev mode.** A switch in the top right corner of the menu bar puts every battery in the open battles, researched and fully upgraded, for testing. It is on by default for now; your own career still earns underneath and the hangar and the Research screen show it. Switch it off to play it.
+- **Dev mode.** A switch in the top right corner of the menu bar puts every battery in the open battles, researched and fully upgraded, for testing. It is off by default; your own career still earns underneath and the hangar and the Research screen show it.
 - **Unlimited points.** The switch under it makes research and modifications cost nothing (the tree order still holds), for testing. Off by default; the points you earn keep adding up underneath.
 - **Reset.** The red button beside the switches starts a new career: research, upgrades, points, battles and campaign wins back to nothing. Click it, then click "Confirm?" within 4 seconds. The switches stay as they are.
 

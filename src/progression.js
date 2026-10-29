@@ -4,8 +4,8 @@ import { SLOTS, MAX_LEVEL } from './threat.js';
 export { BATTERIES };
 // v4: one German tree and a research target (research.js); the saves before it are not carried over (a new career)
 export const SAVE_KEY = 'drumfire.campaign.v4';
-// dev mode is on until the player switches it off (the user's call for the draft builds; false again when they say so)
-export const DEV_DEFAULT = true;
+// dev mode is off until the player switches it on (it was on by default for the draft builds until 2026-10-29)
+export const DEV_DEFAULT = false;
 const LEVEL_KEYS = ['guns', ...PARTS.map((p) => p.id)];
 const treeOf = (era) => TREE_OF[era] ?? era;
 

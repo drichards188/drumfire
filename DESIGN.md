@@ -536,7 +536,7 @@ the screens; docs/PROGRESSION.md says it for players.
   cost, at least 500) and no longer grant a battery.
 - **Save** `drumfire.campaign.v4`: `{ completed, rp: { tree }, target: { tree }, progress: { kind }, researched, bp:
   { kind }, levels: { kind }, battles: { tree }, dev, devSet, free }`; older saves are not read (a new career). Dev mode
-  (`DEV_DEFAULT` on) lays every battery researched and at its top over the career in battle (`Progression.battle(era)`);
+  (`DEV_DEFAULT`, off since 2026-10-29) lays every battery researched and at its top over the career in battle (`Progression.battle(era)`);
   the career underneath still earns and the menu's screens show it.
 - **Measure** with `node tools/researchtest.mjs [seeds] [--era] [--lineup start|early|mid|full|max|part:<id>|all]`.
   Normal, all auto, 24 seeds: 1917 start 0, early 1 to 3, mid 2 to 9, full 7 to 9, max 7 to 14 wins; WW2 start 0, early 1,
@@ -2345,3 +2345,6 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
   Nor do the launch sites take the parade's barrel and breech marks (looks.js `NO_BARREL`: their `muzzle` anchor
   is the missile's nose, which wore Barrel III's canvas muzzle cover). A missile on show rests by its lowest point and its body
   (`shellModel` `low`, `MISSILE_BODY`): its model's radius is its wings' or fins' span, which floated the V-1 2.5 m up.
+- (career: dev mode off by default) `progression.js` `DEV_DEFAULT = false`: a browser without a choice of its own plays its
+  own career (the K 17 to start); a choice made with the switch (`devSet`) is kept as before. The headless tools that
+  need every battery set dev mode themselves (`shot.mjs --dev`, menushots, hangarsheet, voicetest).

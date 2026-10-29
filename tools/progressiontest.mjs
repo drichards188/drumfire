@@ -12,8 +12,10 @@ const mk = (init = []) => ({ data: new Map(init), getItem(k) { return this.data.
 const storage = mk();
 const DE = TREES.de.map(n=>n.kind);
 const career = new Progression(storage);
-assert.equal(career.dev, true, 'Dev mode is on by default');
-assert.ok(DE.every(k=>career.unlocked(k)), 'Dev mode by default fields every battery of the German tree');
+assert.equal(career.dev, false, 'Dev mode is off by default');
+career.setDev(true);
+assert.ok(DE.every(k=>career.unlocked(k)), 'Dev mode fields every battery of the German tree');
+assert.equal(new Progression(storage).dev, true, 'Switching dev mode on must survive a reload');
 career.setDev(false);
 assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must survive a reload');
 assert.deepEqual(DE.filter(k=>career.unlocked(k)), ['k17'], 'A new career owns the K 17 alone');
@@ -72,7 +74,7 @@ assert.ok(dev.opposition.cb < 1 && dev.opposition.assault < 1, 'Five batteries o
 assert.equal(reread.level('k17','guns',false), 2);
 // the saves before the German tree are not carried over: a new career
 const v3 = new Progression(mk([['drumfire.campaign.v3', JSON.stringify({ researched: ['k18','gustav'], rp: { ww2: 9999 }, devSet: true, dev: false })]]));
-assert.deepEqual([v3.researched.size, v3.rp.de, v3.dev], [0, 0, true]);
+assert.deepEqual([v3.researched.size, v3.rp.de, v3.dev], [0, 0, false]);
 assert.equal(SAVE_KEY, 'drumfire.campaign.v4');
 career.unlockAll();
 assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
@@ -144,6 +146,7 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   // the lineup: at most 5 batteries on the map and 1 off it (threat.js SLOTS), chosen in the hangar, the best of each
   // line until then; and the threat levels, each won opening the next
   const st = mk(), c = new Progression(st);
+  c.setDev(true); // (every battery open to the lineup)
   const dev = c.lineupKinds('de');
   assert.equal(dev.filter((k) => !isOffmap(k)).length, SLOTS.map);
   assert.equal(dev.filter(isOffmap).length, SLOTS.support);
