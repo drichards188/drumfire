@@ -1009,7 +1009,8 @@ async function init() {
     },
     load(unit, piece, stepName) {
       const p = asVec(piece?.pos ?? unit.pos, _p);
-      if (voices?.replacesBark(unit, piece, stepName)) return; // the voiced gun reports "ready" in German (ww2/voices.js)
+      // the German guns' "ready" is the recorded German report (ww2/voices.js), never the synthesized English bark
+      if ((WW2 || WW1) && stepName === 'ready') return;
       audio?.load?.(stepName, p, piece?.kind ?? unit.kind);
     },
     // any burst, own or enemy

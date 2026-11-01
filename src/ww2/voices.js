@@ -16,7 +16,6 @@
 //   voices.attach(sim);                 chain onto sim.events (after main has wired its own handlers)
 //   voices.update(sim);                 every frame: the watchers (fire orders, cease fire, the battery ready, the Karl) and the queues
 //   voices.toggle(); voices.enabled     on or off (V, the console's VOICES button), remembered in localStorage drumfire.voices
-//   voices.replacesBark(unit, piece, step)   true when the synthesized English "Ready!" of this piece should give way
 //
 // Two speaker channels, each one line at a time: 'gun' (the battery officer, the gun commander and the loader of the voiced
 // gun, shouted in the open: spatialised at the piece through the AudioEngine's routing, with its 343 m/s delay and its
@@ -217,11 +216,6 @@ export class CrewVoices {
 
   voiced(u, p) {
     return this.live() && u?.id === this.selectedId() && p === this.voicedPiece(u);
-  }
-
-  /** main's load handler: the synthesized English "Ready!" of the voiced gun gives way to its German report. */
-  replacesBark(u, p, step) {
-    return step === 'ready' && this.voiced(u, p) && !!this.audio?.ctx;
   }
 
   on_load(u, p, step) {
