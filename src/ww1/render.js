@@ -27,9 +27,9 @@ const RIDE_DELAY = 1.4, RIDE_TOP = 14000, RIDE_MAX = 26;
 // cradle the barrel hangs from the portal crane (m)
 const PARIS_RUN_IN = 34, PARIS_LOWER = 7;
 // the big guns' firing positions: the builder's name in guns.EXTRAS
-const SITE_OF = { max38: 'buildMax38Site', gamma: 'buildGammaSite', paris: 'buildParisSite' };
+const SITE_OF = { max38: 'buildMax38Site', gamma: 'buildGammaSite', paris: 'buildParisSite', beta: 'buildBetaSite', smw: 'buildSMWSite' };
 // the regular units' gun positions (gun_sites_ww1.js)
-const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha']);
+const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha', 'fk16', 'k16']); // (the Mörser 99's plank platform is its own emplacement, in its model)
 
 const smooth = (t, a, b) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3(0, 0, -1);
@@ -56,7 +56,14 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     const id = u.id, kind = u.kind;
     const pieces = u.pieces.map((p) => ({ i: p.i, x: p.pos.x, z: p.pos.z, bearing: p.bearing }));
     const builder = SITE_OF[kind] ? guns?.EXTRAS?.[SITE_OF[kind]] : null;
-    if (builder) {
+    if (builder && pieces.length > 1) {
+      // (the trench mortars: a pit of its own for each)
+      for (const p of pieces) slot(`${id}:${p.i}`, id, gunPositions, 4000, () => {
+        const site = builder(id * 97 + 11 + p.i * 13);
+        place(site.root, p.x, p.z, p.bearing);
+        return site;
+      }, p.i);
+    } else if (builder) {
       const p = pieces[0];
       slot(`${id}`, id, sites, kind === 'paris' ? 12000 : 8000, () => {
         const site = builder(id * 97 + 11);
@@ -138,7 +145,9 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   // ---------------------------------------------------------------- the British aircraft
   // pools per kind, built now (before main patches the scene's fog into every material) and reused
   const pools = {};
-  if (buildAircraft1918) for (const [kind, n] of [['re8', 2], ['camel', 4]]) {
+  // (and the Gothas, our own bombers of the off-map support's strike, sim/support.js: built now with the rest, since the
+  // lineup is not known yet, and only shown when a strike flies)
+  if (buildAircraft1918) for (const [kind, n] of [['re8', 2], ['camel', 4], ['gotha', 3]]) {
     pools[kind] = [];
     for (let i = 0; i < n; i++) {
       try {
@@ -152,7 +161,7 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       }
     }
   }
-  const poolFor = (kind) => pools[kind] ?? pools[/re8|spot|observ/.test(kind ?? '') ? 're8' : 'camel'] ?? [];
+  const poolFor = (kind) => (pools[kind]?.length ? pools[kind] : pools[/re8|spot|observ/.test(kind ?? '') ? 're8' : 'camel'] ?? []);
 
   // ---------------------------------------------------------------- the Paris Gun's shot
   function muzzleOf(unit, piece) {
@@ -245,7 +254,8 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     // the aircraft
     const a = s.alpha ?? 1;
     live.clear();
-    for (const pl of s.aircraft ?? []) {
+    const flying = s.support?.planes?.length ? [...(s.aircraft ?? []), ...s.support.planes] : s.aircraft ?? [];
+    for (const pl of flying) {
       if (pl.alive) live.add(pl.id);
       let v = planes.get(pl.id);
       if (!v && pl.alive) {
@@ -268,6 +278,8 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       if (v.prop) v.prop.rotation.z += rawDt * 70;
       // a Camel's four Cooper bombs go one by one as it releases them (the raid drops them 0.2 s apart)
       if (pl.fired && v.stores?.length) for (let k = 0; k < v.stores.length; k++) v.stores[k].visible = s.time < (pl.firedAt ?? 0) + 0.2 * k;
+      // a Gotha's bombs go as it drops its stick (sim/support.js: `dropped` of them)
+      if (pl.kind === 'gotha' && v.stores?.length) for (let k = 0; k < v.stores.length; k++) v.stores[k].visible = k >= (pl.dropped ?? 0) * v.stores.length / 4;
     }
     for (const [id, v] of planes) if (!live.has(id)) {
       if (v.root) v.root.visible = false;

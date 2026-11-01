@@ -572,6 +572,22 @@ The Brest Hero-Fortress memorial complex is the institutional source to consult 
 
 ---
 
+## 12. The tree's later batteries (added 2026-11-01)
+
+They fight on the German career's 1918 ridge (`src/ww1/ops.js` `RIDGE_MORE`). Real figures first, the game's after (`tables_ww2.js`).
+
+| Battery | Real | Game |
+| --- | --- | --- |
+| 21 cm K 38 | 120 kg shell, 905 m/s, 33.9 km; all round on its platform | three charges to 33.9 km; traverse 60 degrees either way |
+| 35.5 cm Haubitze M1 | 575 kg HE (926 kg concrete-piercing), 570 m/s, 20.85 km; +45 to +75 degrees | four charges to 20.8 km, high angle only; traverse widened to 30 degrees |
+| 28 cm Kurze Bruno K (E) | 240 kg shell, 820 m/s, 29.5 km; laid for line on a curved spur | three charges to 29.5 km; traverse 14 degrees either way at 0.12 degree a second (the shunting) |
+| 28 cm K5 (E) | 255 kg shell, 1,120 m/s, 62 km; a degree or so on the mount, laid on a Vögele turntable | four charges to 62 km; any bearing on the turntable at 0.4 degree a second |
+| 21 cm K 12 (E) | 107.5 kg shell, 1,500 m/s, 115 km; a 33.3 m barrel | four charges to 115 km (the map needs a fifth of it); traverse 12 degrees at 0.1 degree a second |
+| Wespe (leFH 18/2) | the leFH 18 on a Panzer II chassis, 32 rounds, 17 degrees of traverse | the leFH 18's ballistics; the hull turns it to any bearing at 9 degrees a second; two positions and shoot-and-move |
+| Hummel (sFH 18/1) | the sFH 18 on the Geschützwagen III/IV, 18 rounds, 15 degrees | the sFH 18's ballistics; the hull turns it at 7 degrees a second; two positions and shoot-and-move |
+| 21 cm Nebelwerfer 42 | five tubes, 112.6 kg rockets, 320 m/s, 7.85 km | a ripple of five, 1.8 s apart, to 7.85 km |
+| schweres Wurfgerät 40 | 28 cm Wurfkörper Spreng (82 kg) from their crates, 750 m to 1.9 km | a ripple of four to 1.93 km; traverse widened to 50 degrees |
+
 ## A. Historical departures in the game
 
 ### A1. Gun rows (`GUNS_WW2`)

@@ -6,7 +6,7 @@ import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NA
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
 import { createHangar } from './hangar.js';
-import { OPS as OPS_WW1 } from '../ww1/ops.js';
+import { OPS as OPS_WW1, RIDGE_MORE } from '../ww1/ops.js';
 import { THREAT, MAX_LEVEL, threatOf, rollModifiers, modifierOf, SLOTS } from '../threat.js';
 import { capabilities, recommendedLevel } from '../capability.js';
 import { showSummary, loadSummary, markSeen } from './summary.js';
@@ -47,9 +47,11 @@ const nameOf = (kind) => BATTERIES.find((b) => b.kind === kind)?.name ?? kind;
 const pips = (have, of) => { const p = el('span', 'rs-pips'); p.setAttribute('aria-hidden', 'true'); for (let i = 0; i < of; i++) p.append(el('i', i < have ? 'on' : null)); return p; };
 // an action button; `act` keeps the focus on it across a render
 // the test range (src/ui/range.js) with this battery selected, on its own era's map (the menu's settings passed on)
+const RIDGE_ONLY = new Set(RIDGE_MORE.map((u) => u.kind));
 const rangeHref = (era, kind) => {
   const p = new URLSearchParams(), e = gunEraOf(kind);
-  if (e !== '1917') p.set('mode', e);
+  // (the tree's batteries that only stand on the career's 1918 ridge, src/ww1/ops.js RIDGE_MORE: its range)
+  if (e !== '1917') p.set('mode', RIDGE_ONLY.has(kind) ? 'ww1' : e);
   p.set('range', 1);
   p.set('kind', kind);
   const from = new URLSearchParams(location.search);
@@ -789,7 +791,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   }
 
   // (the test range opens with the battery shown in the hangar)
-  const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'k17' : inHangar());
+  const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'rk92' : inHangar());
   const go = () => {
     if (!playable(sel)) return;
     const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow() });

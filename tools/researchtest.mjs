@@ -15,10 +15,10 @@ import { Sim } from '../src/sim/sim.js';
 import { TREES, PARTS, maxGuns, maxedLevels, loadoutOf, opposition, battleReward, nextCost } from '../src/research.js';
 import { sandboxTheatre } from '../src/campaign.js';
 import { ww1Theatre } from '../src/ww1/theatre.js';
-import { RIDGE_WW2 } from '../src/ww1/ops.js';
+import { RIDGE_WW2, RIDGE_MORE } from '../src/ww1/ops.js';
 
 const LINEUPS = {
-  start: (tree) => ({ [tree[0].kind]: { guns: 1 } }),
+  start: (tree) => ({ [(tree.find((n) => n.cost === 0 && !n.after) ?? tree[0]).kind]: { guns: 1 } }), // (the career's own first battery)
   early: (tree) => Object.fromEntries(tree.filter((n) => n.tier <= 2).map((n) => [n.kind, { guns: n.tier === 1 ? maxGuns(n.kind) : 1 }])),
   mid: (tree) => Object.fromEntries(tree.filter((n) => n.tier <= 2).map((n) => [n.kind, { guns: maxGuns(n.kind), ...Object.fromEntries(PARTS.map((p) => [p.id, 1])) }])),
   full: (tree) => Object.fromEntries(tree.map((n) => [n.kind, { guns: maxGuns(n.kind) }])),
@@ -26,18 +26,20 @@ const LINEUPS = {
 };
 // one part at its top on the full lineup (part:<id>), to see what each does
 for (const p of PARTS) LINEUPS[`part:${p.id}`] = (tree) => Object.fromEntries(tree.map((n) => [n.kind, { guns: maxGuns(n.kind), [p.id]: 3 }]));
+// set:<kind>+<kind>+...: a lineup of those batteries at full strength, no upgrades (set:...@3 every part at level 3)
+const setOf = (name) => { const [list, lv] = name.slice(4).split('@'); return () => Object.fromEntries(list.split('+').map((k) => [k, lv ? maxedLevels(k) : { guns: maxGuns(k) }])); };
 
 let heightAt, groundKindAt, flanders;
 // the era's pads go into the ground before the terrain is first sampled: the German tree's every WW2 battery on the
 // ridge (a lineup fields some of them); the 1917 tree's as before (the WW2 battle's, which it does not use)
 async function stage(era) {
-  if (era === 'de') ww1Theatre('ridge', { kinds: RIDGE_WW2.map((u) => u.kind) });
+  if (era === 'de') ww1Theatre('ridge', { kinds: [...RIDGE_WW2, ...RIDGE_MORE].map((u) => u.kind) });
   else flanders ??= sandboxTheatre('flanders');
   ({ heightAt, groundKindAt } = await import('../src/terrainHeight.js'));
 }
 
 function run({ seed, era, lineup, difficulty }) {
-  const levels = LINEUPS[lineup](TREES[era]);
+  const levels = (lineup.startsWith('set:') ? setOf(lineup) : LINEUPS[lineup])(TREES[era]);
   const th = era === 'de' ? ww1Theatre('ridge', { kinds: Object.keys(levels) }) : era === 'ww2' ? flanders : null;
   const sim = new Sim({ heightAt, groundAt: th ? groundKindAt : null, seed, theatre: th });
   const opp = opposition(era, levels);
@@ -67,7 +69,7 @@ if (!isMainThread) {
   if (!seeds.length) seeds.push(1, 2, 3);
   const all = (v, list) => (v === 'all' ? list : v.split(','));
   const eras = all(opt('--era', 'all'), Object.keys(TREES));
-  const lineups = all(opt('--lineup', 'all'), Object.keys(LINEUPS));
+  const lineups = opt('--lineup', 'all') === 'all' ? Object.keys(LINEUPS) : opt('--lineup').split(',');
   const diffs = all(opt('--difficulty', 'Normal'), ['Easy', 'Normal', 'Hard']);
   const jobs = [];
   for (const era of eras) for (const lineup of lineups) for (const difficulty of diffs) for (const seed of seeds) jobs.push({ seed, era, lineup, difficulty });

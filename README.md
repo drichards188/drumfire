@@ -10,7 +10,7 @@
 
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
-- **One German career.** The guns of 1918 and of the Second World War in one research tree, five lines from the 10 cm K 17 to the Gustav, with the V-1, V-2 and Paris Gun as off-map support.
+- **One German career.** 33 batteries in one research tree, seven lines that each run from 1914 to 1918 to the Second World War: field guns to the Hummel, the Mörser 99 to the Karl-Gerät, the Langer Max to the Gustav, trench mortars to the Nebelwerfer, and Gotha bombers, the V-1, the V-2 and the Paris Gun off the map.
 - **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
 - **Tutorials.** A basic training offered on first launch (the console and serving a gun, with a borrowed battery), and guided lessons for the WW2 special weapons.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or the 1918 guns of the career.

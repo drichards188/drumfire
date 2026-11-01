@@ -6,22 +6,26 @@
 //   LIGHT     true: drilled as a light gun (the shell and cartridge men turn with the traverse, the loader works the block)
 //   WORLD     a Set of roles that stay in the world frame (do not turn with the traverse)
 //   STAFF     the rammer staff's length in metres
+//   TIMED     true: the carriers walk on the cycle clock; BLOCK_MAN, BAG_SIDE, LOADER_AT: crews.js's tables of those names
 //   state(crew, c), mechanisms(crew, c), act(crew, man, c, h), props(crew, c)
 //             optional hooks, called like crews_heavy.js's (return true when the kind's own drill handled the step)
-import * as sfh13 from './ww1/sfh13.js';
-import * as m16 from './ww1/m16.js';
-import * as k17 from './ww1/k17.js';
-import * as max38 from './ww1/max38.js';
-import * as gamma from './ww1/gamma.js';
-import * as paris from './ww1/paris.js';
-
-const MODS = { sfh13, m16, k17, max38, gamma, paris };
+// The rest of the German tree's batteries (research.js TREES.de, 2026-11-01) bring their modules the same way, the 1914
+// to 1918 ones in ww1/ and the WW2 ones in de/; every file there is picked up by its kind's name, so a gun without one
+// is drilled by crews.js's own behaviours.
+const FILES = import.meta.glob(['./ww1/*.js', './de/*.js'], { eager: true });
+const MODS = Object.fromEntries(Object.entries(FILES).map(([path, m]) => [path.split('/').pop().replace(/\.js$/, ''), m]));
 const each = (f) => Object.fromEntries(Object.entries(MODS).map(([k, m]) => [k, f(m)]).filter(([, v]) => v != null));
 
 export const ROLES_WW1 = each((m) => m.ROLES);
 export const LIGHT_WW1 = new Set(Object.keys(each((m) => (m.LIGHT ? true : null))));
 export const WORLD_WW1 = each((m) => m.WORLD);
 export const STAFF_WW1 = each((m) => m.STAFF);
+// TIMED true: the carriers walk on the cycle clock (crews.js TIMED); BLOCK_MAN the role that works a heavy breech block;
+// BAG_SIDE metres right of the bore the cartridge man stands; LOADER_AT [out, back] (or null) where the loader works the block
+export const TIMED_WW1 = Object.keys(each((m) => (m.TIMED ? true : null)));
+export const BLOCK_MAN_WW1 = each((m) => m.BLOCK_MAN);
+export const BAG_SIDE_WW1 = each((m) => m.BAG_SIDE);
+export const LOADER_AT_WW1 = Object.fromEntries(Object.entries(MODS).filter(([, m]) => 'LOADER_AT' in m).map(([k, m]) => [k, m.LOADER_AT]));
 
 // Bertha's kind is shared with the WW2 mode (where its crew wears 1944 dress); main sets CREW_ERA.ww1 on a WW1 page
 // so every German crew there wears the 1917 dress of crew.js ('german', 'german-cap', 'german-drill').

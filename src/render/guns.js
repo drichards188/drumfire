@@ -15,7 +15,8 @@ import { CrewHD } from './crewhd.js';
 // (`rigs`, keyed `${unitId}:${pieceIndex}`) or built here when main has none.
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4, lefh18: 0.25, sfh18: 0.3, k18: 0.5, mrs18: 0.5, nbw41: 0.05, gustav: 0.6, bertha: 0.8, karl: 0.9, v1: 0, v2: 0,
-  sfh13: 0.3, m16: 0.5, k17: 0.3, max38: 0.6, gamma: 0.9, paris: 0.7 };
+  sfh13: 0.3, m16: 0.5, k17: 0.3, max38: 0.6, gamma: 0.9, paris: 0.7,
+  fk16: 0.2, k16: 0.4, m99: 0.6, rk92: 0.35, sfh93: 0.3, beta: 0.7, smw: 0.4, k38: 0.6, hm1: 0.8, bruno: 0.5, k5: 0.6, k12: 0.5, wespe: 0.3, hummel: 0.35, nbw42: 0.05, swg40: 0.05 };
 
 // How far back along the rails the railway car stands `tf` s after the shot (0..1 of rig.carRoll): a fast run
 // back against the brakes (decelerating over 1.9 s), a pause, then the slow winch-in that ends as the round
@@ -160,6 +161,19 @@ export class GunViews {
     for (const v of this.views) {
       const p = v.piece, rig = v.rig, g = GUNS[p.kind];
       const dead = p.state === 'dead';
+      // a self-propelled gun drives between its positions (src/ww1/special.js MoveCtl): the rig follows the piece over
+      // the ground, its wheels turning at its speed
+      if (p.mobile) {
+        const r = rig.root.position, dx = p.pos.x - r.x, dz = p.pos.z - r.z;
+        if (dx || dz) {
+          const y = this.terrain.heightAt(p.pos.x, p.pos.z);
+          r.x = p.pos.x; r.z = p.pos.z;
+          v.baseY = y;
+        }
+        // (the tracks run the exact ground covered, whatever the time compression; driveBy when the rig has it)
+        if (rig.driveBy) rig.driveBy(Math.hypot(dx, dz)); // (forward: the hull is turned along the road)
+        else rig.setDrive?.(dt > 0 ? Math.hypot(dx, dz) / Math.max(dt, 1e-3) : 0);
+      }
       rig.setTraverse(p.az);
       // the light guns have no depressing gear of their own in the sim: loaded at the laid elevation, which
       // at 40 degrees would run the round into the trail. The quick-loading gear (6-inch) and the loading

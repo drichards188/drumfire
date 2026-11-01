@@ -410,6 +410,21 @@ Flanders guns although in reality it sat far to the south.
 
 ---
 
+### 4.8 The tree's other 1914 to 1918 batteries (added 2026-11-01)
+
+Real figures first, the game's after the arrow. Sources: the Wikipedia articles linked in docs/HISTORY.md and Landships; the dimensions behind each model are in its file's header.
+
+| Battery | Real | Game (`tables_ww1.js`) |
+| --- | --- | --- |
+| 7.7 cm FK 16 | 7.2 kg shell, 545 to 600 m/s, about 10.7 km; traverse 4 degrees, -10 to +40; fixed rounds | 420 and 600 m/s, 10 km; traverse widened to 60 degrees; shrapnel, instant, delay |
+| 15 cm K 16 | 51.4 kg shell, 757 m/s, about 22 km; traverse 8 degrees, -3 to +42 | three charges to 22 km; traverse widened to 60 degrees |
+| 21 cm Mörser 99 | 119 kg shell, about 6.8 to 8.3 km; no recoil system: the wheels ran up two wooden ramps behind them and the gun rolled back into position by gravity; with no traversing gear it was levered back onto its line with handspikes and re-aimed after every shot, about a round in three minutes | 8.3 km on three charges; the run up the ramps and the roll back drawn from the time of the shot; a fresh laying error every round (`runback`: 0.6 % in velocity and 3.5 mils in line, one standard deviation, less with better sights) and a 28 s re-lay with the handspikes ('relay'): about a round a minute |
+| 15 cm Ringkanone C/92 | 40 kg shell, 10.5 to 12 km, 2 rounds a minute; a fortress and siege gun with no recoil system: on a fortress platform an external recoil brake, in the field two wooden ramps behind the wheels, the gun returned by gravity, levered onto its line and re-aimed after every shot; issued to the field army for want of heavy guns and in service to 1918 | 8.1 and 12 km on two charges, +2 to +38 degrees [E]; the ramp drill as the Mörser 99's (render/ramp_drill.js); `runback` 0.3 % and 2 mils; a 9 s re-lay: about three rounds a minute, quicker than the real gun so that the career's first battery carries threat level 1 alone |
+| 15 cm sFH 93 | 42 kg shell, 5.7 km with the time fuze, 6 km with the impact fuze, 2 rounds a minute; no recoil system, "in the field, only ramps were used"; 870 in store in 1914, taken to the front by reserve foot artillery and brought back as losses grew | 2.5, 4.2 and 6 km on three charges, +2 to +55 degrees [E]; the ramp drill; `runback` 0.5 % and 3 mils; a 13 s re-lay |
+| 30.5 cm Beta-Gerät | 410 kg shell, 8.2 km (the Beta 09 about 12 km with the light shell); a siege mortar on a steel bed | one shell with the 12 km reach; +40 to +75 degrees on the falling branch; the Gamma's bed controller (T relays the bed past 30 degrees either way) |
+| 25 cm schwerer Minenwerfer n.A. | 97 kg bomb (47 kg of explosive), about 300 to 1,000 m, a rifled muzzle-loader; traverse 20 degrees on its platform | 250 m to 1 km on three charges, +45 to +75 degrees; traverse widened to 50 degrees; a big crater and a wide reach against wire |
+| Gotha G.V | a twin-engined bomber, up to about 500 kg of bombs over the front | a flight of three from off the map, each a stick of four 100 kg bombs |
+
 ## 5. The British side of 1918 (targets)
 
 The figures are standard ones from the secondary literature (std.) and Wikipedia (W); they were not re-read for this
@@ -464,6 +479,9 @@ Marks as in the head of this file. "Fetched" means the page was read in this ses
 [21 cm Mörser 16](https://en.wikipedia.org/wiki/21_cm_M%C3%B6rser_16) (fetched);
 [15 cm sFH 13](https://en.wikipedia.org/wiki/15_cm_sFH_13) (fetched);
 [10 cm K 17](https://en.wikipedia.org/wiki/10_cm_K_17) (fetched);
+[15 cm Ring Kanone C/92](https://en.wikipedia.org/wiki/15_cm_Ring_Kanone_C/92) (fetched);
+[15 cm sFH 93](https://en.wikipedia.org/wiki/15_cm_sFH_93) (fetched);
+[History of War, 15cm schwere Feldhaubitze M1893](https://www.historyofwar.org/articles/weapons_15cm_schwere_feldhaubitz_M1893.html) (fetched);
 [38 cm SK L/45 gun](https://en.wikipedia.org/wiki/38_cm_SK_L/45_gun) (fetched);
 [42 cm Gamma howitzer](https://en.wikipedia.org/wiki/42_cm_Gamma_howitzer) (fetched);
 [Big Bertha (howitzer)](https://en.wikipedia.org/wiki/Big_Bertha_(howitzer)) (fetched);

@@ -16,11 +16,11 @@ import { autoCharge } from './sim/shells.js';
 import { partLayout } from './models/t/layout.js';
 import { modsOf, levelOf, maxGuns, maxedLevels, isOffmap } from './research.js';
 import { OPS } from './ww1/ops.js';
-import { RIDGE_WW2, RIDGE_ROLE_SITES } from './ww1/ops.js';
+import { RIDGE_WW2, RIDGE_MORE, RIDGE_ROLE_SITES } from './ww1/ops.js';
 import { THREAT } from './threat.js';
 
 // the kinds of site (threat.js `sites`) by target kind; a role site (sim/specialists.js) is its role's
-export const TIER = { bfield: 'soft', bdump: 'soft', bconvoy: 'soft', railyard: 'soft', hq: 'soft', bballoon: 'soft', btanks: 'armour',
+export const TIER = { bpost: 'soft', bfield: 'soft', bdump: 'soft', bconvoy: 'soft', railyard: 'soft', hq: 'soft', bballoon: 'soft', btanks: 'armour',
   bgun15: 'heavy', bgun92: 'heavy', bgun6: 'heavy', bgun60: 'heavy', bgunrail: 'heavy', mebu: 'hard' };
 export const tierOf = (t) => t?.site?.role ?? t?.role ?? TIER[t?.kind] ?? 'soft';
 export const TIERS = ['soft', 'armour', 'heavy', 'deep', 'hard'];
@@ -89,7 +89,7 @@ export function siteVerdict(batteries, site, opts) {
 }
 
 // the career's batteries on the 1918 ridge, from a lineup's levels ({ kind: { guns, shells, ... } }): the off-map ones left out
-const PITS = Object.fromEntries([...OPS.ridge.units, ...RIDGE_WW2].map((u) => [u.kind, u.pos]));
+const PITS = Object.fromEntries([...OPS.ridge.units, ...RIDGE_WW2, ...RIDGE_MORE].map((u) => [u.kind, u.pos]));
 export const batteriesOf = (levelsByKind) => Object.entries(levelsByKind).filter(([k]) => PITS[k] && !isOffmap(k))
   .map(([kind, l]) => ({ kind, guns: Math.min(maxGuns(kind), levelOf(l, 'guns')), mods: modsOf(l), pos: PITS[kind] }));
 // the ridge's sites by kind of site (the 1918 battle's, and the career's role sites)
@@ -110,7 +110,7 @@ export function capabilities(levelsByKind, opts) {
 
 // the lineup's weight in the Sperrfeuer and the Feuerwalze: the soft damage its field guns can put down a minute
 // (the super-heavies, the mortars' few shells and the off-map weapons apart, as the levels' crews fire them)
-const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18']);
+const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'smw', 'wespe', 'hummel', 'nbw42', 'swg40']);
 export function firepower(levelsByKind) {
   let f = 0;
   for (const b of batteriesOf(levelsByKind)) {
@@ -128,8 +128,8 @@ const P = (k, l) => Object.fromEntries(['shells', 'barrel', 'breech', 'sights', 
 const B = (kind, guns, parts = 0) => [kind, { guns, ...(parts ? P(kind, parts) : {}) }];
 const MAX = (kind) => [kind, maxedLevels(kind)];
 export const REFERENCE = {
-  1: Object.fromEntries([B('k17', 1)]),
-  2: Object.fromEntries([B('k17', 2)]),
+  1: Object.fromEntries([B('rk92', 1)]), // (the career's first battery since 2026-11-01; the K 17 before)
+  2: Object.fromEntries([B('rk92', 2)]),
   3: Object.fromEntries([B('k17', 2), B('sfh13', 2)]),
   4: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4), B('m16', 1)]),
   5: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4, 1), B('lefh18', 4), B('m16', 2)]),

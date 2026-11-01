@@ -28,10 +28,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 export const SHELL_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'fh15', 'm21', 'fk77', 'm42', 'm42l',
   'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'bertha', 'q25', 'm55', 'rp3', 'bomb', 's76', 's122', 's152', 'v1', 'v2',
-  'sfh13', 'm16', 'k17', 'max38', 'gamma', 'paris', 'b18', 'b45', 'fk16', 'cooper'];
+  'sfh13', 'm16', 'k17', 'max38', 'gamma', 'paris', 'b18', 'b45', 'fk16', 'cooper',
+  // the rest of the German tree (research.js TREES.de)
+  'k16', 'm99', 'beta', 'smw', 'gotha', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40', 'rk92', 'sfh93'];
 
 // the missiles' builder (another file, may be absent): buildShell('v1' | 'v2') delegates to it
 const MISSILES = import.meta.glob('./v/de/missiles.js', { eager: true });
+const ROCKETS = import.meta.glob('./v/de/rockets.js', { eager: true });
+const rocket = (kind, seg) => Object.values(ROCKETS)[0].buildRocket(kind, seg);
 
 // d: calibre (m), L: overall length (m), og: ogive length in calibres, rho: ogive radius in calibres,
 // band: where the driving band sits (fraction of L from the base), paint, stripe, nose colours.
@@ -71,6 +75,19 @@ const SPEC = {
   b18: { d: 0.0838, L: 0.35, og: 1.6, rho: 2.4, band: 0.12, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
   b45: { d: 0.114, L: 0.42, og: 1.5, rho: 2.2, band: 0.1, paint: 0xb89a2a, stripe: 0x8a1c14, nose: 'brass' },
   fk16: { d: 0.077, L: 0.34, og: 1.6, rho: 2.5, band: 0.12, paint: 0x23262a, stripe: 0xb03a22, nose: 'steel' },
+  // the rest of the German tree: 1914 to 1918 in the WW1 yellow-banded grey, WW2 field grey with a black band
+  k16: { d: 0.149, L: 0.66, og: 2.0, rho: 3.4, band: 0.1, paint: 0x585d58, stripe: 0xc8a82a, nose: 'steel' }, // 15 cm Gr 16 mit Haube, 51.4 kg
+  rk92: { d: 0.149, L: 0.54, og: 1.4, rho: 2.0, band: 0.1, paint: 0x5b5f55, stripe: 0xc8a82a, nose: 'steel' }, // the old 15 cm Granate of the Ringkanone, 40 kg
+  sfh93: { d: 0.149, L: 0.56, og: 1.4, rho: 2.0, band: 0.1, paint: 0x5b5f55, stripe: 0xc8a82a, nose: 'steel' }, // the sFH 93's 15 cm Granate, 42 kg
+  m99: { d: 0.211, L: 0.74, og: 1.3, rho: 2.0, band: 0.1, paint: 0x4f534d, stripe: 0xc8a82a, nose: 'steel' }, // the old 21 cm Granate, 119 kg
+  beta: { d: 0.305, L: 1.2, og: 1.4, rho: 2.1, band: 0.1, paint: 0x4b4f4b, stripe: 0xc8a82a, nose: 'steel' }, // 30.5 cm Granate, 410 kg
+  k38: { d: 0.211, L: 0.95, og: 2.2, rho: 4, band: 0.1, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // 21 cm Gr 35, 120 kg
+  hm1: { d: 0.356, L: 1.45, og: 1.6, rho: 2.6, band: 0.09, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // 35.5 cm Sprenggranate, 575 kg
+  bruno: { d: 0.283, L: 1.2, og: 2.0, rho: 3.4, band: 0.09, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // 28 cm Sprenggranate L/4,4
+  k5: { d: 0.283, L: 1.28, og: 2.3, rho: 4.5, band: 0.08, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // 28 cm Gr 35, 255 kg, pre-engraved
+  k12: { d: 0.211, L: 1.05, og: 2.4, rho: 6.0, band: 0.07, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // 21 cm Gr 35 (K 12), 107.5 kg
+  wespe: { d: 0.105, L: 0.45, og: 1.6, rho: 2.6, band: 0.12, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // the leFH 18's round
+  hummel: { d: 0.149, L: 0.63, og: 1.7, rho: 2.8, band: 0.1, paint: 0x5a5f52, stripe: 0x2a2b27, nose: 'steel' }, // the sFH 18's round
 };
 
 const matCache = new Map();
@@ -184,6 +201,15 @@ const CART = {
   max38: { l: 0.78, r: 0.17, brass: false, case: 0.856, cr: 0.19 }, // the silk fore charge bag ahead of the brass main charge case (380 x 856 mm)
   gamma: { l: 0.45, r: 0.19, brass: false, case: 0.95, cr: 0.205 }, // the 42 cm Gamma: a fore charge bag ahead of the brass main case, 1.4 m
   paris: { l: 0.75, r: 0.12, brass: false, case: 1.1, cr: 0.14 }, // the brass Hauptkartusche and the silk Vorkartusche (up to 196 kg)
+  // the rest of the German tree; the FK 16's round is fixed (the crew carries the whole round: the case is never drawn
+  // alone), the trench mortar's charge is a bag dropped down the muzzle, the rockets carry their own propellant
+  fk16: { l: 0.23, r: 0.043, brass: true }, k16: { l: 0.6, r: 0.08, brass: true }, m99: { l: 0.24, r: 0.1, brass: false },
+  rk92: { l: 0.45, r: 0.075, brass: false }, sfh93: { l: 0.22, r: 0.08, brass: false }, // the old guns' silk cartridge bags
+  beta: { l: 0.4, r: 0.14, brass: false, case: 0.6, cr: 0.155 }, smw: { l: 0.16, r: 0.09, brass: false }, gotha: { l: 0.1, r: 0.02, brass: false },
+  k38: { l: 0.55, r: 0.1, brass: false, case: 0.4, cr: 0.115 }, hm1: { l: 0.5, r: 0.17, brass: false, case: 0.8, cr: 0.19 },
+  bruno: { l: 0.6, r: 0.13, brass: false, case: 0.8, cr: 0.15 }, k5: { l: 0.7, r: 0.13, brass: false, case: 1.0, cr: 0.15 },
+  k12: { l: 0.8, r: 0.11, brass: false, case: 1.2, cr: 0.13 }, wespe: { l: 0.18, r: 0.062, brass: true }, hummel: { l: 0.27, r: 0.083, brass: true },
+  nbw42: { l: 0.1, r: 0.02, brass: false }, swg40: { l: 0.1, r: 0.02, brass: false },
 };
 export function buildCartridge(kind, { charges = 1 } = {}) {
   const c = CART[kind];
@@ -327,6 +353,40 @@ const CUSTOM = {
       { geometry: merge(body), material: M.paint(0x5a5a48) },
       { geometry: merge(tail), material: M.paint(0x5a5a48) },
       { geometry: merge(band), material: M.paint(0x8a1c14) },
+    ], L, R);
+  },
+  // the 25 cm schwerer Minenwerfer's Mine (97 kg, 1916): a stubby drum about 0.75 m, a round nose with its fuze, a flat
+  // base, the two rows of copper studs that ride the rifling
+  smw(seg) {
+    const L = 0.76, R = 0.123, n = Math.max(8, seg);
+    const body = [revolve([[0, 0.0001], [0, R * 0.92], [0.02, R], [0.5, R], [0.58, R * 0.92], [0.66, R * 0.7], [0.71, R * 0.42], [0.73, 0.03]], L, n)];
+    const studs = [];
+    if (seg >= 12) for (const z0 of [0.12, 0.4]) for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + z0;
+      studs.push(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 6).translate(0, R + 0.004, 0).rotateZ(a).translate(0, 0, L / 2 - z0));
+    }
+    studs.push(revolve([[0.25, R + 0.001], [0.27, R + 0.001]], L, n));
+    const fz = [revolve([[0.73, 0.03], [0.75, 0.024], [L, 0.0]], L, 10)];
+    return done([
+      { geometry: merge(body), material: M.paint(0x4f534d) },
+      { geometry: merge(studs), material: M.copper() },
+      { geometry: merge(fz), material: M.brass() },
+    ], L, R);
+  },
+  // the 21 cm Wurfgranate 42 and the 28 cm Wurfkörper Spreng: the rocket launchers' own builders (v/de/rockets.js)
+  nbw42: (seg) => rocket('nbw42', seg),
+  swg40: (seg) => rocket('swg40', seg),
+  // the Gotha's 100 kg P.u.W. bomb (1917): a streamlined steel body about 1.7 m with its cruciform tail, the nose fuze
+  gotha(seg) {
+    const L = 1.72, R = 0.11, n = Math.max(8, seg);
+    const body = [revolve([[0.38, 0.03], [0.45, R * 0.55], [0.62, R * 0.92], [0.78, R], [1.25, R], [1.45, R * 0.85], [1.6, R * 0.55], [1.68, R * 0.25], [1.7, 0.02]], L, n)];
+    const tail = [revolve([[0.0, 0.02], [0.38, 0.03]], L, 8)];
+    for (let i = 0; i < 4; i++) tail.push(fin(0.12, 0.4, 0.004, L / 2 - 0.2, i * Math.PI / 2));
+    const fz = [revolve([[1.7, 0.02], [L, 0.0]], L, 8)];
+    return done([
+      { geometry: merge(body), material: M.paint(0x6a6d62) },
+      { geometry: merge(tail), material: M.paint(0x6a6d62) },
+      { geometry: merge(fz), material: M.steel() },
     ], L, R);
   },
   v1: (seg) => missile('v1', seg),

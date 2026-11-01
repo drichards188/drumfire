@@ -1,5 +1,5 @@
 // Headless screenshot and console capture, private to whoever runs it (no shared browser).
-//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--dev]
+//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--dev] [--lineup k5,wespe,...]
 // <path> is relative to the dev server (http://localhost:5201), e.g. "/" or "/models.html?kind=bl15in".
 // --until polls the expression (up to 60 s) before --wait starts; --eval runs after the wait and its result is printed.
 // Console errors and page errors are printed so a broken module shows up immediately.
@@ -19,8 +19,9 @@ const size = opt('--size', '1600x900').split('x').map(Number);
 const wait = Number(opt('--wait', '3000'));
 const evalExpr = opt('--eval', null);
 const until = opt('--until', null);
-const dev = args.includes('--dev');
-if (dev) args.splice(args.indexOf('--dev'), 1);
+const lineup = opt('--lineup', null); // --lineup k5,wespe,...: dev mode with that career lineup (the German tree)
+const dev = args.includes('--dev') || !!lineup;
+if (args.includes('--dev')) args.splice(args.indexOf('--dev'), 1);
 const [path = '/', out = 'shots/shot.png'] = args;
 
 // (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
@@ -35,7 +36,7 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 // No hot reload: another agent's save would otherwise reload the page in the middle of a capture.
-if (dev) await page.addInitScript(() => { try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true })); } catch {} });
+if (dev) await page.addInitScript((de) => { try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true, ...(de ? { lineup: { de } } : {}) })); } catch {} }, lineup ? lineup.split(',') : null);
 await page.addInitScript(() => {
   const Orig = window.WebSocket;
   window.WebSocket = function (url, proto) {

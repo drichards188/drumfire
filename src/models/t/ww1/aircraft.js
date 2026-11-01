@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { V, box, xTube, zTube, yTube, rod, loft, xf, zLathe, Parts, projectUV, vehicleMats, tyreGeometry } from '../../kit.js';
+import { buildShell } from '../../shells.js';
 
 // British aircraft of the WW1 German mode (DESIGN.md "WW1 German mode"): the Royal Aircraft
 // Factory R.E.8, the two-seat artillery spotter (RAF 4a V12 with its big air scoop and the two exhaust stacks
@@ -8,6 +9,12 @@ import { V, box, xTube, zTube, yTube, rod, loft, xf, zLathe, Parts, projectUV, v
 // propeller inside its open-bottomed cowling, the hump over the twin Vickers, a flat upper wing with its cut-out
 // over a lower wing with 5 degrees of dihedral, four 20 lb Cooper bombs under the fuselage). PC10 khaki-green over
 // clear doped linen, Type A roundels (blue, white, red), rudder stripes blue-white-red.
+// And the German side's own: the Gotha G.V twin-engined bomber of 1917 (the off-map support's strike, sim/support.js;
+// models/v/de/gotha.js parks one in the hangar): 23.7 m span, 12.4 m long, 4.3 m high; two Mercedes D.IVa in nacelles
+// between the wings driving pusher propellers, the outer upper wing swept back a little, the nose gunner's ring ahead of
+// the pilot, the rear gunner's ring behind the wings over the "Gotha tunnel" (the trough in the fuselage's floor his
+// gun fired down and back through), twin main wheels under each nacelle, printed five-colour lozenge fabric, the 1918
+// straight-sided crosses; four 100 kg P.u.W. bombs on the rack under the fuselage (models/shells.js 'gotha').
 //
 // buildAircraft1918(kind) -> the interface of models/t/ww2/aircraft.js buildAircraft:
 //   root     Group; model space nose toward -Z, metres, real sizes
@@ -20,6 +27,8 @@ import { V, box, xTube, zTube, yTube, rod, loft, xf, zLathe, Parts, projectUV, v
 //   parts    [Mesh] every mesh of the airframe (to char or hide)
 //   length, span, height (parked), kind, setParked(on), setGear(k)
 //   crew     [Object3D] the heads of the pilot (and the observer), to hide on the ground if wanted
+//   props    [Object3D] every propeller (the Gotha's two; the second follows `prop`'s turning when it is drawn)
+//   guns     [Group] the gunners' machine guns on their rings ({ name, userData: { ring } }: the ring's centre), the Gotha's
 
 const TAU = Math.PI * 2;
 const PC10 = 0x5a5838, CDL = 0xd6caa0, GREY = 0x9a9c96, PLY = 0x9a7048, WOOD = 0x8a6a40;
@@ -369,7 +378,222 @@ function camel() {
   return { A, prop, stores, crew: [head(m, 0, 0.55, -0.32)], main: [0.75, -1.41, wz], tail: [0, -0.38, 2.45], length: 5.72, span: 8.53 };
 }
 
-const BUILDERS = { re8, camel };
+// ------------------------------------------------------------------------------------------- Gotha G.V
+// Printed lozenge fabric: a mosaic of irregular-looking hexagons in five colours, darker above than below, one canvas
+// tile of 1.4 m that wraps (the cells repeat across the tile's edges)
+const LOZ_UP = ['#3d3f5c', '#4b5a3f', '#7a6a42', '#6b4a3a', '#57415f'], LOZ_DN = ['#8d97aa', '#a89c7c', '#9d8ca3', '#82988a', '#b2aa92'];
+let LOZ = null;
+function lozengeTexture(cols, seed) {
+  const S = 256, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  const C = 7, R = 8, W = S / C, H = S / (R * 0.75); // cells across and down, a cell's width and height
+  let h = seed;
+  const rnd = () => { h = (h * 1103515245 + 12345) & 0x7fffffff; return h / 0x7fffffff; };
+  const col = [];
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) col.push(cols[Math.floor(rnd() * cols.length)]);
+  for (let j = -1; j <= R; j++) for (let i = -1; i <= C; i++) {
+    const jj = (j + R) % R, ii = (i + C) % C, cx = (i + (jj % 2) * 0.5) * W, cy = j * H * 0.75;
+    g.fillStyle = col[jj * C + ii];
+    g.beginPath();
+    // a hexagon stretched along the span, its sides a little uneven as the printed rolls' cells were
+    const k = ((ii * 7 + jj * 3) % 5) * 0.03;
+    g.moveTo(cx, cy - H / 2); g.lineTo(cx + W / 2 + 0.6, cy - H * (0.25 - k)); g.lineTo(cx + W / 2 + 0.6, cy + H * (0.25 + k));
+    g.lineTo(cx, cy + H / 2); g.lineTo(cx - W / 2 - 0.6, cy + H * (0.25 - k)); g.lineTo(cx - W / 2 - 0.6, cy - H * (0.25 + k));
+    g.closePath();
+    g.fill();
+  }
+  for (let i = 0; i < 300; i++) { // the weave
+    g.fillStyle = `rgba(${rnd() < 0.5 ? '0,0,0' : '255,255,255'},0.035)`;
+    g.fillRect(rnd() * S, rnd() * S, 2 + rnd() * 8, 1 + rnd() * 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+function gothaMats() {
+  if (LOZ) return LOZ;
+  const std = (o) => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.02, vertexColors: true, ...o });
+  LOZ = { ...mats(), lozU: std({ map: lozengeTexture(LOZ_UP, 17) }), lozL: std({ map: lozengeTexture(LOZ_DN, 29) }) };
+  return LOZ;
+}
+const LOZ_TILE = 1.4;
+// the lozenge skin: faces turned up and sideways take the upper print, those turned down (or below()) the lower
+function lozSkin(A, g, { split = -0.35, below = null } = {}) {
+  g = g.index ? g.toNonIndexed() : g;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const p = g.attributes.position.array, n = g.attributes.normal.array, up = [[], []], dn = [[], []];
+  for (let i = 0; i < p.length; i += 9) {
+    const ny = (n[i + 1] + n[i + 4] + n[i + 7]) / 3;
+    const dst = (below ? below(p[i], p[i + 1], p[i + 2]) : ny < split) ? dn : up;
+    for (let k = 0; k < 9; k++) { dst[0].push(p[i + k]); dst[1].push(n[i + k]); }
+  }
+  for (const [[pp, nn], key] of [[up, 'lozU'], [dn, 'lozL']]) {
+    if (!pp.length) continue;
+    const b = new THREE.BufferGeometry();
+    b.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3));
+    b.setAttribute('normal', new THREE.Float32BufferAttribute(nn, 3));
+    projectUV(b, LOZ_TILE);
+    A.add(key, b, { uv: true });
+  }
+}
+// the 1918 straight-sided cross (Balkenkreuz) with its white border: arm length `s` from the middle, on a face
+// 'y' (up), '-y' (down), 'x+' or 'x-' (the sides)
+function balken(A, x, y, z, s, face) {
+  const w = s * 0.42, rot = { 'x+': [0, Math.PI / 2, 0], 'x-': [0, -Math.PI / 2, 0], y: [-Math.PI / 2, 0, 0], '-y': [Math.PI / 2, 0, 0] }[face];
+  const bar = (len, wid, tint, d) => {
+    A.add('decal', new THREE.PlaneGeometry(len, wid).applyMatrix4(xf(0, 0, d)).applyMatrix4(xf(x, y, z, rot[0], rot[1], rot[2])), { tint });
+    A.add('decal', new THREE.PlaneGeometry(wid, len).applyMatrix4(xf(0, 0, d)).applyMatrix4(xf(x, y, z, rot[0], rot[1], rot[2])), { tint });
+  };
+  bar(s * 2 + 0.16, w + 0.16, 0xe8e4d8, 0.002);
+  bar(s * 2, w, 0x141414, 0.004);
+}
+// a Parabellum MG 14 on a gunner's ring: the post and its cradle at the ring's edge, the gun with its slim cooling
+// jacket pointing ahead (-Z), the drum magazine, the spade grips; its own Group, origin at the ring's centre
+function parabellum(m, ring, name) {
+  const g = new THREE.Group(), P = new Parts(m);
+  g.name = name;
+  P.add('dark', new THREE.TorusGeometry(ring, 0.028, 6, 24).rotateX(Math.PI / 2));
+  P.add('dark', yTube(0, 0.32, 0.02, 0.02, 8, 0, -ring * 0.6));
+  P.add('dark', box(0.06, 0.06, 0.14, 0, 0.33, -ring * 0.6));
+  P.add('dark', zTube(-ring * 0.6 - 0.55, -ring * 0.6 + 0.35, 0.026, 0.026, 10, 0, 0.38)); // the receiver and the jacket
+  P.add('dark', zTube(-ring * 0.6 - 0.62, -ring * 0.6 - 0.55, 0.012, 0.012, 6, 0, 0.38)); // the muzzle
+  P.add('dark', box(0.07, 0.1, 0.18, 0, 0.36, -ring * 0.6 + 0.2));
+  P.add('dark', xTube(0.03, 0.12, 0.08, 0.08, 14, 0.38, -ring * 0.6 + 0.08)); // the drum
+  P.add('dark', box(0.12, 0.06, 0.04, 0, 0.33, -ring * 0.6 + 0.4)); // the spade grips
+  P.build(g);
+  g.userData.ring = ring;
+  g.userData.muzzle = [0, 0.38, -ring * 0.6 - 0.62];
+  g.userData.breech = [0, 0.38, -ring * 0.6 + 0.3];
+  return g;
+}
+
+function gotha() {
+  const m = gothaMats(), A = new Air();
+  A.P = new Parts(m);
+  const PLY = 0x6f5c44;
+  // fuselage: a deep slab-sided box, the nose gunner's cockpit at the front, the pilot's ahead of the wings, the rear
+  // gunner's behind them; the plywood nose
+  const tab = [
+    { z: -5.7, y: -0.05, w: 0.3, t: 0.3, b: 0.36, p: 3 }, { z: -5.2, y: 0, w: 0.5, t: 0.46, b: 0.6, p: 4 }, { z: -4.0, y: 0, w: 0.6, t: 0.56, b: 0.7, p: 5 },
+    { z: -1.5, y: 0, w: 0.62, t: 0.58, b: 0.72, p: 5 }, { z: 0.8, y: 0.05, w: 0.55, t: 0.55, b: 0.64, p: 5 }, { z: 3.0, y: 0.15, w: 0.36, t: 0.42, b: 0.38, p: 4.5 },
+    { z: 5.5, y: 0.25, w: 0.16, t: 0.22, b: 0.17, p: 3.5 }, { z: 6.65, y: 0.3, w: 0.05, t: 0.1, b: 0.06, p: 2.5 },
+  ];
+  const zs = [-5.7, -5.2, -4.6, -4.0, -3.2, -2.4, -1.5, -0.4, 0.8, 1.9, 3.0, 4.2, 5.5, 6.65];
+  for (let i = 0; i < zs.length - 1; i++) {
+    const z0 = zs[i], z1 = zs[i + 1], g = loft([fring(station(tab, z0)), fring(station(tab, z1))], { top: i === zs.length - 2, bottom: i === 0, crease: 0.8 });
+    if (z1 <= -4.6) A.add('flat', g, { tint: PLY });
+    else lozSkin(A, g, { below: (x, y, z) => { const s = station(tab, z); return y - s.y < -0.88 * s.b; } });
+  }
+  // the cockpits: the nose gunner's ring, the pilot's opening with its windscreen, the rear gunner's ring; their
+  // padded rims; the tunnel's opening under the rear gunner
+  A.add('flat', box(0.62, 0.02, 0.62, 0, 0.47, -4.9), { tint: 0x1c1a18 });
+  A.add('dark', new THREE.TorusGeometry(0.4, 0.04, 6, 20).rotateX(Math.PI / 2).translate(0, 0.475, -3.55));
+  A.add('flat', box(0.6, 0.02, 0.7, 0, 0.57, -3.55), { tint: 0x1c1a18 });
+  A.add('glass', box(0.62, 0.22, 0.02, 0, 0.7, -3.98, -0.35));
+  A.add('flat', box(0.66, 0.02, 0.66, 0, 0.6, 1.3), { tint: 0x1c1a18 });
+  A.add('flat', box(0.5, 0.02, 1.4, 0, station(tab, 2.2).y - station(tab, 2.2).b - 0.002, 2.2), { tint: 0x1c1a18 });
+  // a pitot and the wind-driven generator's little propeller on the nose
+  A.add('dark', zTube(-6.0, -5.6, 0.012, 0.012, 6, 0.32, 0.1));
+  // wings: the upper with its centre section and the outer panels swept back, the lower on the fuselage's floor
+  const up = [[0, -1.9, 2.25], [3.4, -1.9, 2.25], [11.5, -1.45, 2.15], [11.85, -1.3, 1.8]].map(([x, z, c], i) => ({ x, z, c, y: 1.85 + (i ? (x - 3.4) * 0.017 : 0), th: 0.07 }));
+  const lo = [[0.55, -1.7, 2.05], [3.4, -1.7, 2.05], [10.6, -1.45, 1.95], [10.85, -1.32, 1.65]].map(([x, z, c], i) => ({ x, z, c, y: -0.62 + (i ? (x - 3.4) * 0.035 : 0), th: 0.07 }));
+  for (const s of [-1, 1]) for (const st of [up, lo]) for (let i = 0; i < st.length - 1; i++) {
+    const a = st[i], b = st[i + 1];
+    lozSkin(A, loft([wring(s * a.x, a.z, a.c, a.y, a.th), wring(s * b.x, b.z, b.c, b.y, b.th)], { crease: 0.9 }), { split: 0 });
+  }
+  // the upper wing's horn balances at the tips (the ailerons overhang the wing's end)
+  for (const s of [-1, 1]) {
+    const t = wingAt(up, 11.6);
+    A.add('flat', box(0.5, 0.05, 0.45, s * 12.0, t.mid, -1.3 + 1.8 - 0.1), { tint: 0x3d3f5c });
+  }
+  // the engine nacelles between the wings: the Mercedes D.IVa's six cylinders standing out of the top, the radiator
+  // across the front, the exhaust pipe up over the upper wing, the pusher propeller behind
+  const NX = 2.95, NY = 0.55, props = [];
+  const ntab = [
+    { z: -2.55, y: NY, w: 0.32, t: 0.38, b: 0.42, p: 3 }, { z: -2.2, y: NY, w: 0.38, t: 0.44, b: 0.5, p: 4 }, { z: -0.6, y: NY, w: 0.38, t: 0.44, b: 0.5, p: 4 },
+    { z: 0.6, y: NY + 0.05, w: 0.24, t: 0.3, b: 0.32, p: 3 }, { z: 1.0, y: NY + 0.06, w: 0.1, t: 0.12, b: 0.12, p: 2.5 },
+  ];
+  for (const s of [-1, 1]) {
+    const nz = [-2.55, -2.2, -1.4, -0.6, 0.6, 1.0];
+    for (let i = 0; i < nz.length - 1; i++) {
+      const ring = (z) => fring(station(ntab, z)).map((v) => v.setX(v.x + s * NX));
+      A.add('metal', loft([ring(nz[i]), ring(nz[i + 1])], { top: i === nz.length - 2, bottom: i === 0, crease: 0.8 }), { tint: i < 2 ? 0x8a8a84 : 0x5a5e66 });
+    }
+    A.add('dark', box(0.62, 0.62, 0.06, s * NX, NY, -2.58), { tint: 0x7a7a74 }); // the radiator
+    for (let k = 0; k < 8; k++) A.add('dark', box(0.6, 0.012, 0.02, s * NX, NY - 0.27 + k * 0.077, -2.62));
+    for (let k = 0; k < 6; k++) A.add('steel', yTube(NY + 0.38, NY + 0.62, 0.075, 0.075, 10, s * NX, -1.95 + k * 0.24)); // the cylinders
+    A.add('dark', zTube(-2.0, -0.8, 0.04, 0.04, 8, s * (NX + 0.22), NY + 0.55));
+    A.add('dark', rod(V(s * (NX + 0.22), NY + 0.55, -0.8), V(s * (NX + 0.25), 2.3, -0.5), 0.05, 8)); // the exhaust up past the wing
+    // the struts: the nacelle's four to each wing, the main undercarriage below
+    for (const dx of [-0.32, 0.32]) for (const z of [-1.7, -0.2]) {
+      A.add('flat', strut(V(s * NX + dx, NY + 0.38, z), V(s * NX + dx * 1.2, wingAt(up, NX).yb, z - 0.1)), { tint: WOOD });
+      A.add('flat', strut(V(s * NX + dx, NY - 0.45, z), V(s * NX + dx * 1.3, wingAt(lo, NX).y, z + 0.05)), { tint: WOOD });
+    }
+    // twin wheels under each nacelle on a V of struts from the lower wing, their axle
+    const wy = -1.85, wz = -1.2;
+    for (const dx of [-0.38, 0.38]) wheel(A, s * NX + dx, wy, wz, 0.5, 0.15);
+    A.add('dark', xTube(s * NX - 0.5, s * NX + 0.5, 0.04, 0.04, 8, wy, wz));
+    for (const dx of [-0.25, 0.25]) {
+      A.add('dark', strut(V(s * NX + dx, wingAt(lo, NX).yb, -1.9), V(s * NX + dx * 0.5, wy, wz), 0.035, 0.08));
+      A.add('dark', strut(V(s * NX + dx, wingAt(lo, NX).yb, -0.4), V(s * NX + dx * 0.5, wy, wz), 0.035, 0.08));
+    }
+    const pr = propeller(m, 2, 1.5, { chord: 0.26, pitch: 0.45, hub: 0.12 });
+    pr.position.set(s * NX, NY + 0.06, 1.15);
+    pr.rotation.y = Math.PI; // a pusher: the blades' faces toward the tail
+    props.push(pr);
+    // interplane struts: two bays outboard of the engines; the flying and landing wires
+    for (const x of [6.6, 10.0]) {
+      const u = wingAt(up, x), l = wingAt(lo, x);
+      for (const f of [0.15, 0.75]) A.add('flat', strut(V(s * x, l.y, l.z + f * l.c), V(s * x, u.yb, u.z + f * u.c)), { tint: WOOD });
+      A.add('steel', wire(V(s * (x - 3.4), l.y, l.z + 0.4), V(s * x, u.yb, u.z + 0.4)));
+      A.add('steel', wire(V(s * (x - 3.4), wingAt(up, x - 3.4).yb, u.z + 0.4), V(s * x, l.y, l.z + 0.4)));
+    }
+    // cabane struts from the fuselage to the upper centre section
+    for (const z of [-1.7, -0.3]) A.add('flat', strut(V(s * 0.45, 0.5, z), V(s * 0.75, wingAt(up, 0.75).yb, z - 0.05)), { tint: WOOD });
+    // the crosses: on the upper wing's top and the lower wing's underside near the tips, on the fuselage's sides
+    balken(A, s * 9.6, wingAt(up, 9.6).y + 0.015, up[0].z + 1.1 + 0.18, 0.75, 'y');
+    balken(A, s * 8.6, wingAt(lo, 8.6).yb - 0.015, lo[0].z + 1.0 + 0.15, 0.7, '-y');
+    const f = station(tab, 3.6);
+    balken(A, s * (f.w + 0.012), f.y + 0.02, 3.6, 0.33, s > 0 ? 'x+' : 'x-');
+  }
+  // tail: the tailplane, the fin and the balanced rudder (white with the cross), the tail skid
+  for (const s of [-1, 1]) {
+    const tp = [{ x: 0.1, z: 5.0, c: 1.35, y: 0.38, th: 0.06 }, { x: 2.5, z: 5.15, c: 1.2, y: 0.38, th: 0.05 }, { x: 2.8, z: 5.4, c: 0.8, y: 0.38, th: 0.05 }];
+    for (let i = 0; i < tp.length - 1; i++) lozSkin(A, loft([wring(s * tp[i].x, tp[i].z, tp[i].c, tp[i].y, tp[i].th), wring(s * tp[i + 1].x, tp[i + 1].z, tp[i + 1].c, tp[i + 1].y, tp[i + 1].th)], { crease: 0.9 }), { split: 0 });
+  }
+  const fn = [{ y: 0.4, z: 5.2, c: 1.25, th: 0.07 }, { y: 1.3, z: 5.75, c: 0.75, th: 0.07 }, { y: 1.55, z: 6.05, c: 0.45, th: 0.06 }];
+  for (let i = 0; i < fn.length - 1; i++) lozSkin(A, loft([fin(fn[i].y, fn[i].z, fn[i].c, fn[i].th), fin(fn[i + 1].y, fn[i + 1].z, fn[i + 1].c, fn[i + 1].th)], { crease: 0.9 }));
+  A.fin([{ y: -0.05, z: 6.45, c: 0.55, th: 0.06 }, { y: 1.5, z: 6.3, c: 0.8, th: 0.06 }, { y: 1.95, z: 6.4, c: 0.55, th: 0.05 }], { upper: 0xe0dccc, lower: 0xe0dccc });
+  for (const s of [-1, 1]) balken(A, s * 0.03, 0.85, 6.72, 0.3, s > 0 ? 'x+' : 'x-');
+  A.add('dark', rod(V(0, 0.12, 5.75), V(0, -0.8, 6.0), 0.035, 6));
+  A.add('dark', box(0.08, 0.04, 0.3, 0, -0.8, 6.05));
+  // the bomb rack under the fuselage between the undercarriages and its four 100 kg P.u.W. bombs, each its own Group
+  A.add('dark', box(0.9, 0.05, 1.9, 0, -0.75, -0.9));
+  const stores = [], bomb = buildShell('gotha', 12);
+  for (const x of [-0.33, -0.11, 0.11, 0.33]) {
+    const g = new THREE.Group();
+    for (const part of bomb.parts) g.add(new THREE.Mesh(part.geometry, part.material));
+    g.position.set(x, -0.9, -0.95);
+    stores.push(g);
+  }
+  // the gunners' Parabellums on their rings, the nose's and the rear's
+  const nose = parabellum(m, 0.36, 'noseGun'), rear = parabellum(m, 0.38, 'rearGun');
+  nose.position.set(0, 0.47, -4.9);
+  rear.position.set(0, 0.6, 1.3);
+  rear.rotation.y = Math.PI * 0.85; // (trained back over the tail's quarter)
+  // the second propeller follows the first: render code spins `prop` only
+  const [pl, prR] = props;
+  prR.children[0].onBeforeRender = () => { prR.rotation.z = pl.rotation.z; };
+  return {
+    A, prop: pl, props, stores, guns: [nose, rear], crew: [head(m, 0, 0.8, -4.85), head(m, 0, 0.68, -3.5), head(m, 0, 0.86, 1.4)],
+    main: [NX + 0.38, -2.35, -1.2], tail: [0, -0.82, 6.05], length: 12.4, span: 23.7,
+  };
+}
+
+const BUILDERS = { re8, camel, gotha };
 export const AIRCRAFT_KINDS_1918 = Object.keys(BUILDERS);
 
 export function buildAircraft1918(kind = 're8') {
@@ -380,14 +604,15 @@ export function buildAircraft1918(kind = 're8') {
   root.name = 'aircraft-' + kind;
   root.add(body);
   const parts = [...b.A.P.build(body)];
-  body.add(b.prop);
+  for (const p of b.props ?? [b.prop]) body.add(p);
   for (const s of b.stores) body.add(s);
   for (const c of b.crew) body.add(c);
+  for (const g of b.guns ?? []) body.add(g);
   // parked: rotate about x so the wheels and the tail skid both touch y = 0
   const [, my, mz] = b.main, [, ty, tz] = b.tail;
   const pitch = Math.atan2(ty - my, tz - mz);
   const out = {
-    root, body, prop: b.prop, gear: null, stores: b.stores, crew: b.crew, parts, length: b.length, span: b.span, kind,
+    root, body, prop: b.prop, props: b.props ?? [b.prop], guns: b.guns ?? [], gear: null, stores: b.stores, crew: b.crew, parts, length: b.length, span: b.span, kind,
     setParked(on) {
       if (on) {
         body.rotation.set(pitch, 0, 0);

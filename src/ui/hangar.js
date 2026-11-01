@@ -38,7 +38,9 @@ const BLOCK = { files: 12, ranks: 3 }; // a big detachment forms up in blocks of
 const RAIL_HEAD = 0.5; // the hangar's track for the 18-inch car: the rail head above the ground
 // the railway guns' track beds in front of them, in the gun's frame (x from, x to): their men form up either side
 // (the Gustav's two gun tracks at +-2.4 m and the delivery track at +7.6 m, src/ww2/gustav_layout.js; the 18-inch's bed)
-const BED = { gustav: [-6, 11], rail: [-3.4, 3.4] };
+const BED = { gustav: [-6, 11], rail: [-3.4, 3.4], bruno: [-3.4, 3.4], k12: [-3.4, 3.4] };
+// the railway guns whose site can lay its track alone under the parade gun
+const RAIL_SITE = { bruno: 'buildBrunoSite', k12: 'buildK12Site' };
 // a site whose model runs far past its working heart (the V-2's fire control halftrack about 100 m off): the parade
 // forms up round the heart, x and z in the model's frame, and the rest stands beyond the ranks
 const CORE = { v2: { x: [-11.5, 11.5], z: [-14, 27] } };
@@ -278,6 +280,10 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       site.root.traverse((o) => { if (o.parent?.parent === site.root && o.name !== 'track') o.visible = false; });
       root.add(site.root);
     } else if (kind === 'rail') root.add(track(box.min.z - 30, box.max.z + 30));
+    // the Bruno and the K 12 on their own firing curve's track (railway_kit.js, the track alone)
+    else if (RAIL_SITE[kind] && guns.EXTRAS[RAIL_SITE[kind]]) {
+      try { root.add(guns.EXTRAS[RAIL_SITE[kind]](1, { trackOnly: true }).root); } catch (e) { console.warn('hangar: track', e.message); }
+    }
     root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     const t = { root, box, muzzle, breech, loaded };
     templates.set(key, t);
@@ -352,7 +358,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
   // part. Returns { group, width, depth } with the group's left edge at x = 0, or null
   const MAIN_CASE = { gustav: 'gustavc', bertha: 'm42c' };
   function powder(kind, supply = 0) {
-    if (kind === 'nbw41') return null;
+    if (kind === 'nbw41' || kind === 'nbw42' || kind === 'swg40' || kind === 'gotha') return null; // (rockets carry their own; bombs need none)
     const { THREE, shells, mesher, mats } = three;
     let c;
     try { c = shells.buildCartridge(kind); } catch { return null; }
@@ -680,7 +686,9 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       // the barrel's and the breech's spot: the gun's own mark at level III (the muzzle cover from the front quarter,
       // the open breech from behind and above, where no shield or crew stands in the way), the kit before that
       const cal = (three.GUNS[b.kind]?.calibre ?? 6) * 0.0254;
-      if (t.muzzle && lv.barrel >= 3) spot('barrel', t.muzzle.x + ox, t.muzzle.y, t.muzzle.z, Math.max(0.9, cal * 6), [40, -40, 65, -65, 90, -90], [14, 24, 36]);
+      // (not too close for the small calibres: under 1.5 m the near plane and the shield cut the view; the Gotha's
+      // "muzzle" is its nose gun, so its barrel spot is the kit's below)
+      if (t.muzzle && lv.barrel >= 3 && b.kind !== 'gotha') spot('barrel', t.muzzle.x + ox, t.muzzle.y, t.muzzle.z, Math.max(1.5, cal * 6), [40, -40, 65, -65, 90, -90], [14, 24, 36]);
       if (t.breech && lv.breech >= 3) {
         // the open breech and the round on its tray between them
         const c = t.loaded ? t.breech.clone().lerp(t.loaded, 0.5) : t.breech, r = Math.max(1, cal * 4, t.loaded ? t.breech.distanceTo(t.loaded) * 0.75 + 0.4 : 0);

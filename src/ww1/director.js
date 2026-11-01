@@ -17,7 +17,7 @@ const OBS_AIR = ['Flieger FA 6', 'Flieger FA 9', 'Flieger FA 213'];
 const sectorName = (id) => SECTORS.find((s) => s.id === id).name;
 const laneOf = (id) => ({ B: -1200, C: 2400 }[id]);
 export const PREP = 180; // the Feuervorbereitung before our infantry goes, s
-const GUNS_SHRAPNEL = new Set(['k17', 'lefh18']); // (the leFH 18's Doppelzünder: the career's battle, ops.js RIDGE_WW2)
+const GUNS_SHRAPNEL = new Set(['k17', 'lefh18', 'fk16', 'wespe', 'rk92']); // (the leFH 18's Doppelzünder: the career's battle, ops.js RIDGE_WW2; the FK 16 and the Wespe in RIDGE_MORE)
 // the share of our assault that must reach the British line (the British game's 50, 60, 70 percent, narrowed: the
 // walk behind the Feuerwalze costs about the same on every difficulty, so a wider spread would decide the game by
 // the difficulty alone; Easy still forgives a ragged Feuerwalze)
@@ -40,7 +40,7 @@ const IDENTITY = { dmg: 1, disp: 1, load: 1, ammo: 1 };
 // the mortars and the long guns stay on the batteries and the depots), and how far beyond the line each lays its
 // rounds so that its shorts fall clear of our men, 85 m behind the line: two and a half spreads and its lethal
 // radius less 40 m
-export const FEUERWALZE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18']);
+export const FEUERWALZE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'fk16', 'wespe', 'hummel', 'rk92', 'sfh93']);
 export function walzeMargin(u, x, z) {
   const g = GUNS[u.kind], sc = SHELLS[g?.shell ?? u.kind];
   if (!g || !sc) return 0;
@@ -148,7 +148,7 @@ export class DirectorWW1 extends DirectorWW2 {
     if (!t) return null;
     if (sim.level && !this.offers(t)) return null; // (the day may have sent it to another site)
     const kind = t.kind;
-    let observer = over.observer ?? (kind === 'btanks' || kind === 'bballoon' ? 'foo' : this.dayObserver('map'));
+    let observer = over.observer ?? (kind === 'btanks' || kind === 'bballoon' || kind === 'bpost' ? 'foo' : this.dayObserver('map'));
     let x = t.pos.x, z = t.pos.z, mkind = over.kind ?? 'destroy', title = over.title ?? `Zerstörungsfeuer: ${t.name}`;
     if (BRIT_BATTERIES.has(kind)) {
       mkind = over.kind ?? 'cb';

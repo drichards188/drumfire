@@ -13,7 +13,7 @@ import { gustavLayout } from '../ww2/gustav_layout.js';
 
 const P = (x, z) => ({ x, z });
 // the guns that never answer the Sperrfeuer (too slow, too few shells, or off the map; the career's Gustav and Karl too)
-export const SUPER_WW1 = new Set(['bertha', 'max38', 'gamma', 'paris', 'gustav', 'karl', 'v1', 'v2']);
+export const SUPER_WW1 = new Set(['bertha', 'max38', 'gamma', 'paris', 'gustav', 'karl', 'v1', 'v2', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
 const BRIT = Object.fromEntries(UNITS.map((u) => [u.kind, u]));
 
 // unit definitions follow sector.js UNITS (id, kind, name, callsign, battery, pos, zero, pieces [{ kind, dx, dz }])
@@ -184,6 +184,99 @@ export const RIDGE_WW2 = [
     role: 'The railway gun: a 1,350 t gun assembled on its curved track, with a handful of 4.8 t shells.',
   },
 ];
+// The rest of the German tree (research.js TREES.de, 2026-11-01): the earlier and lighter 1914 to 1918 batteries and
+// the later WW2 ones, on the ridge only when the lineup names them, as RIDGE_WW2. Placed clear of the villages, the
+// woods, the Karl's road between its stops and the other pits: the trench mortar and the Wurfgerät forward between our
+// front and support trenches (their reach is a kilometre or two), the railway guns far back on their own spurs, the
+// self-propelled guns with a second position each (`positions`, special.js MoveCtl: T drives there).
+export const RIDGE_MORE = [
+  {
+    id: 14, kind: 'fk16', name: '7.7 cm FK 16', callsign: 'Franz', battery: '3. Batterie, Feldartillerie-Regiment 50', pos: P(6000, -2500), zero: 270 * DEG, era: 'ww1',
+    pieces: [{ kind: 'fk16', dx: 0, dz: -45 }, { kind: 'fk16', dx: 4, dz: -15 }, { kind: 'fk16', dx: 2, dz: 15 }, { kind: 'fk16', dx: -3, dz: 45 }],
+    role: 'Field guns: quick and plentiful, shrapnel over infantry in the open, the Sperrfeuer and the Feuerwalze. Light shells: nothing hard.',
+  },
+  {
+    id: 15, kind: 'k16', name: '15 cm K 16', callsign: 'Otto', battery: 'Fußartillerie-Batterie 452 (15 cm Kanonen)', pos: P(10200, -2900), zero: 272 * DEG, era: 'ww1',
+    pieces: [{ kind: 'k16', dx: 0, dz: -25 }, { kind: 'k16', dx: 3, dz: 25 }],
+    role: 'Long heavy guns: 51 kg shells to 22 km, the British heavies, the railhead and the depots behind them.',
+  },
+  {
+    id: 16, kind: 'm99', name: '21 cm Mörser 99', callsign: 'Paula', battery: 'Fußartillerie-Batterie 71 (alte Mörser)', pos: P(7300, 2600), zero: 264 * DEG, era: 'ww1',
+    pieces: [{ kind: 'm99', dx: 0, dz: -22 }, { kind: 'm99', dx: 3, dz: 22 }],
+    role: 'The old mortar without a recoil system: it runs up its ramps at every shot, rolls back by its own weight and is levered back onto its line, so each round falls like a ranging round. Slow, but a 119 kg shell.',
+  },
+  {
+    id: 17, kind: 'beta', name: '30.5 cm Beta-Gerät', callsign: 'Ida', battery: 'Kurze Marinekanonen-Batterie 6', pos: P(9900, 2400), zero: 265 * DEG, era: 'ww1',
+    pieces: [{ kind: 'beta', dx: 0, dz: 0 }], special: 'beta', resupply: 1,
+    role: 'The 30.5 cm siege mortar on its steel bed: 410 kg shells on concrete, heavies and dumps; T relays the bed past its arc.',
+  },
+  {
+    id: 18, kind: 'smw', name: '25 cm schwerer Minenwerfer', callsign: 'Moritz', battery: 'Minenwerfer-Kompanie 204', pos: P(4650, 3400), zero: 272 * DEG, era: 'ww1',
+    pieces: [{ kind: 'smw', dx: 0, dz: -20 }, { kind: 'smw', dx: 2, dz: 20 }],
+    role: 'Heavy trench mortars behind our front trench: a 97 kg bomb a kilometre at most. Their wire, their front trenches, the pillboxes opposite, the Sperrfeuer.',
+  },
+  {
+    id: 19, kind: 'k38', name: '21 cm K 38', callsign: 'Kurt', battery: 'schwere Artillerie-Abteilung 767 (mot.)', pos: P(11800, -3800), zero: 272 * DEG,
+    pieces: [{ kind: 'k38', dx: 0, dz: -32 }, { kind: 'k38', dx: 3, dz: 32 }],
+    role: 'The long 21 cm gun: 120 kg shells to 34 km, counter-battery on the British heavies and the depots far behind.',
+  },
+  {
+    id: 20, kind: 'hm1', name: '35.5 cm Haubitze M1', callsign: 'Hugo', battery: 'schwere Artillerie-Abteilung 641', pos: P(10300, 4200), zero: 266 * DEG,
+    pieces: [{ kind: 'hm1', dx: 0, dz: 0 }],
+    role: 'The 35.5 cm siege howitzer on its firing platform: 575 kg shells plunging onto concrete, heavies and the HQ.',
+  },
+  {
+    id: 21, kind: 'bruno', name: '28 cm Kurze Bruno K (E)', callsign: 'Theodor', battery: 'Eisenbahn-Artillerie-Batterie 690', pos: P(14800, -3500), zero: 272 * DEG,
+    pieces: [{ kind: 'bruno', dx: 0, dz: 0 }],
+    role: 'The railway gun on its firing curve: 240 kg shells to 29 km. It lays for line by shunting along the curve, slowly.',
+  },
+  {
+    id: 22, kind: 'k5', name: '28 cm K5 (E)', callsign: 'Leopold', battery: 'Eisenbahn-Artillerie-Batterie 712', pos: P(15600, 2600), zero: 268 * DEG,
+    pieces: [{ kind: 'k5', dx: 0, dz: 0 }],
+    role: 'The finest railway gun of the war on its Vögele turntable: any bearing, but the turntable turns slowly. 255 kg shells anywhere on the map.',
+  },
+  {
+    id: 23, kind: 'k12', name: '21 cm K 12 (E)', callsign: 'Kaiser', battery: 'Eisenbahn-Artillerie-Batterie 701', pos: P(17800, -900), zero: 270 * DEG,
+    pieces: [{ kind: 'k12', dx: 0, dz: 0 }],
+    role: 'The longest gun ever on rails, 33 m of barrel, on its siding far behind the ridge: everything on the map is in reach, the depots and HQs far behind the British line first.',
+  },
+  {
+    id: 24, kind: 'wespe', name: '10.5 cm Wespe', callsign: 'Wespe', battery: '1. Batterie, Panzer-Artillerie-Regiment 74', pos: P(6600, -1900), zero: 270 * DEG,
+    pieces: [{ kind: 'wespe', dx: 0, dz: -40 }, { kind: 'wespe', dx: 4, dz: -13 }, { kind: 'wespe', dx: 2, dz: 13 }, { kind: 'wespe', dx: -3, dz: 40 }],
+    special: 'move', resupply: 1,
+    positions: [{ id: 'a', name: 'Stellung A', pos: P(6600, -1900) }, { id: 'b', name: 'Stellung B', pos: P(6250, -3000) }],
+    role: 'Self-propelled field howitzers: fire, then drive to the other position (T) before the counter-battery fire comes down.',
+  },
+  {
+    id: 25, kind: 'hummel', name: '15 cm Hummel', callsign: 'Hummel', battery: '4. Batterie, Panzer-Artillerie-Regiment 74', pos: P(7700, 500), zero: 268 * DEG,
+    pieces: [{ kind: 'hummel', dx: 0, dz: -48 }, { kind: 'hummel', dx: 5, dz: -16 }, { kind: 'hummel', dx: 2, dz: 16 }, { kind: 'hummel', dx: -4, dz: 48 }],
+    special: 'move', resupply: 1,
+    positions: [{ id: 'a', name: 'Stellung A', pos: P(7700, 500) }, { id: 'b', name: 'Stellung B', pos: P(7450, -350) }],
+    role: 'Self-propelled heavy howitzers: the sFH 18 on a tank chassis. Fire, then move (T) before their guns answer.',
+  },
+  {
+    id: 26, kind: 'nbw42', name: '21 cm Nebelwerfer 42', callsign: 'Nebel', battery: 'Werfer-Batterie (21 cm)', pos: P(5900, -1600), zero: 270 * DEG,
+    pieces: [{ kind: 'nbw42', dx: 0, dz: -22 }, { kind: 'nbw42', dx: 2, dz: 0 }, { kind: 'nbw42', dx: -1, dz: 22 }],
+    role: 'Five-tube rocket launchers: ripples of 112 kg rockets to 7.8 km. Slow to reload, and the smoke gives them away.',
+  },
+  {
+    id: 27, kind: 'swg40', name: 'schweres Wurfgerät 40', callsign: 'Stuka', battery: 'Werfer-Batterie (Wurfgerät)', pos: P(4900, -2300), zero: 272 * DEG,
+    pieces: [{ kind: 'swg40', dx: 0, dz: -25 }, { kind: 'swg40', dx: 2, dz: 0 }, { kind: 'swg40', dx: -1, dz: 25 }],
+    role: 'Heavy rockets fired from their crates: four 82 kg rockets a frame, 750 m to 1.9 km. Their trenches, wire and the pillboxes opposite.',
+  },
+  // the old guns without a recoil system, out of the fortresses and the depots (2026-11-01): the Ringkanone heads the
+  // long-range guns' line and is the career's first battery, the sFH 93 stands before the sFH 13 in the field line
+  {
+    id: 28, kind: 'rk92', name: '15 cm Ringkanone C/92', callsign: 'Richard', battery: 'Fußartillerie-Batterie 304 (15 cm Ringkanonen)', pos: P(8400, -300), zero: 271 * DEG, era: 'ww1',
+    pieces: [{ kind: 'rk92', dx: 0, dz: -20 }, { kind: 'rk92', dx: 3, dz: 20 }],
+    role: 'The old fortress gun without a recoil system: it runs up its ramps at every shot, rolls back by its own weight and is levered back onto its line, so each round falls like a ranging round. 40 kg shells to 12 km: the batteries, the roads and the depots.',
+  },
+  {
+    id: 29, kind: 'sfh93', name: '15 cm sFH 93', callsign: 'Siegfried', battery: 'Reserve-Fußartillerie-Batterie 18', pos: P(6600, 700), zero: 270 * DEG, era: 'ww1',
+    pieces: [{ kind: 'sfh93', dx: 0, dz: -48 }, { kind: 'sfh93', dx: 4, dz: -16 }, { kind: 'sfh93', dx: 2, dz: 16 }, { kind: 'sfh93', dx: -3, dz: 48 }],
+    role: 'The old heavy field howitzer without a recoil system, off its ramps and re-laid after every shot: 42 kg shells to 6 km on the 18-pounders, the tanks and the Sperrfeuer.',
+  },
+];
 // the Karl's prepared stops (its controller, ww2/special.js KarlCtl: set up in the first)
 export const RIDGE_POSITIONS = [
   { id: 'a', name: 'Stellung A, northern approach', pos: P(5700, 1800), cover: 0.7 },
@@ -201,11 +294,24 @@ export const RIDGE_ROLE_SITES = [
   { id: 'V3', kind: 'mebu', name: 'Concrete shelter, Ypres', pos: P(-2600, 1200), bearing: 95 * DEG, r: 30, role: 'hard' },
 ];
 
+// the British forward posts in their front line (Lewis guns and a Stokes mortar), within a kilometre or two of our trench
+// mortars and the Wurfgerät: in the career's battle only when the lineup brings one of those (ww1Theatre), so their
+// short reach has work beyond the Sperrfeuer and the Feuerwalze
+export const FORWARD_KINDS = new Set(['smw', 'swg40']);
+export const RIDGE_FORWARD = [
+  { id: 'P1', kind: 'bpost', name: 'Forward post, Zouave Wood front', pos: P(3960, 3250), bearing: 92 * DEG, r: 25 },
+  { id: 'P2', kind: 'bpost', name: 'Forward post, Hooge crater', pos: P(4060, 2650), bearing: 88 * DEG, r: 25 },
+  { id: 'P3', kind: 'bpost', name: 'Forward post, Westhoek', pos: P(4000, -2150), bearing: 85 * DEG, r: 25 },
+  { id: 'P4', kind: 'bpost', name: 'Forward post, Frezenberg spur', pos: P(3880, -2750), bearing: 88 * DEG, r: 25 },
+];
+
 // the levelled ground under the career's WW2 batteries (sizes as ww2Pads; the Karl's arrival and its stops as
 // sandboxTheatre's), for those in the field only
 export function ridgeWW2Pads(units) {
   const pads = [];
-  const size = { gustav: [55, 190], karl: [40, 50], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6] };
+  const size = { gustav: [55, 190], karl: [40, 50], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6],
+    fk16: [8, 10], k16: [9, 12], m99: [10, 12], rk92: [9, 12], sfh93: [8, 10], beta: [26, 26], smw: [7, 7], k38: [10, 12], hm1: [22, 22], bruno: [24, 60], k5: [26, 26],
+    k12: [22, 80], wespe: [7, 9], hummel: [8, 10], nbw42: [6, 6], swg40: [6, 6] };
   for (const u of units) {
     const big = size[u.kind] ?? [8, 8];
     for (const p of u.pieces) pads.push({ x: u.pos.x + p.dx, z: u.pos.z + p.dz, rx: big[0], rz: big[1], heading: -(p.bearing ?? u.zero), blend: u.kind === 'karl' ? 25 : 20 });
@@ -216,6 +322,16 @@ export function ridgeWW2Pads(units) {
       pads.push({ x: u.pos.x + m.x * c + m.z * s, z: u.pos.z - m.x * s + m.z * c, rx: 35, rz: L.RUN / 2 + 12, heading: th + L.A0, blend: 25, ref: { x: u.pos.x, z: u.pos.z } });
     }
     if (u.kind === 'karl') for (const q of RIDGE_POSITIONS) pads.push({ x: q.pos.x, z: q.pos.z, rx: 12, rz: 16, heading: -u.zero, blend: 20 });
+    // the Bruno's and the K 12's lead tracks behind their firing curves (railway_kit.js: in the gun's frame, x right,
+    // z back, the curve bending left): [x, z, half width, half length]
+    for (const [x, z, rx, rz] of { bruno: [[-14, 72, 12, 24]], k12: [[-13, 80, 12, 24]] }[u.kind] ?? []) {
+      const b = u.zero;
+      pads.push({ x: u.pos.x - Math.sin(b) * z + Math.cos(b) * x, z: u.pos.z + Math.cos(b) * z + Math.sin(b) * x, rx, rz, heading: -b, blend: 20 });
+    }
+    // the K5's approach spur, 72 m back from its turntable along the zero line (models/v/de/k5.js buildK5Site)
+    if (u.kind === 'k5') { const b = u.zero; pads.push({ x: u.pos.x - Math.sin(b) * 48, z: u.pos.z + Math.cos(b) * 48, rx: 6, rz: 26, heading: -b, blend: 20 }); }
+    // the self-propelled guns' other positions: each vehicle's ground, as at the first
+    if (u.positions) for (const q of u.positions.slice(1)) for (const p of u.pieces) pads.push({ x: q.pos.x + p.dx, z: q.pos.z + p.dz, rx: big[0], rz: big[1], heading: -u.zero, blend: 20 });
   }
   return pads;
 }

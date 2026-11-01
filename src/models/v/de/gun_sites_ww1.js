@@ -39,6 +39,10 @@ const PITS = {
   k17: { front: 3.4, side: 4.3, rear: 5.0, a1: 72, a2: 135, gate: 12, wall: 0.75, plat: { x: 1.5, z0: -1.3, z1: 1.5 }, arc: [3.4, 4.4, 64],
     net: { x: 4.1, z0: 1.3, z1: 4.7, hBack: 2.8, hFront: 2.55 }, pile: { phi: 95, r: 3.6, bask: [106, 113, 3.7], crate: [121, 3.45] }, niche: -100, dug: -1, shell: { r: 0.053, len: 0.5, cols: 5, tiers: 2 } },
 };
+// the tree's other 1918 field guns (2026-11-01): the FK 16 a smaller K 17's, the K 16 a longer one's (its trail 10.4 m
+// overall against the K 17's 9; the rounds 7.7 cm and 15 cm)
+PITS.fk16 = { ...PITS.k17, front: 3.0, side: 3.8, rear: 4.6, arc: [3.1, 4.1, 64], shell: { r: 0.04, len: 0.34, cols: 6, tiers: 2 } };
+PITS.k16 = { ...PITS.k17, front: 3.8, side: 4.6, rear: 5.8, arc: [3.9, 5.0, 64], net: { x: 4.4, z0: 1.4, z1: 5.2, hBack: 2.9, hFront: 2.65 }, pile: { phi: 95, r: 3.9, bask: [106, 113, 4.0], crate: [121, 3.75] }, shell: { r: 0.075, len: 0.66, cols: 4, tiers: 2 } };
 const PAINT = 0x5a5e55, BAND = 0xc8a82a, BRASS = 0x8a7236;
 
 export function buildGunSite1918(kind, seed = 1) {

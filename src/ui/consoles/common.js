@@ -49,6 +49,7 @@ export const KIND_SHORT = {
   bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly',
   lefh18: '10.5 cm', sfh18: '15 cm sFH', k18: '17 cm', mrs18: '21 cm', nbw41: '15 cm NbW',
   gustav: '80 cm', bertha: '42 cm', karl: '60 cm', v1: 'V-1', v2: 'V-2',
+  k38: '21 cm K', hm1: '35.5 cm', bruno: '28 cm Bruno', k5: '28 cm K5', k12: '21 cm K 12', wespe: 'Wespe', hummel: 'Hummel', nbw42: '21 cm NbW', swg40: 'sWG 40',
 };
 
 // Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns
@@ -68,6 +69,16 @@ export const KINDS = {
   gustav: { pieces: 1, title: '80 CM SCHWERER GUSTAV', note: 'Railway gun on its firing curve: 4.8 t shells to 47 km, a handful of rounds. Every shot counts', rounds: [1], fuzes: ['instant', 'delay'], charges: 3, deep: true },
   bertha: { pieces: 1, title: '42 CM BIG BERTHA', note: 'The giant siege howitzer: 810 kg shells to 12 km against the hardest targets', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
   karl: { pieces: 1, title: '60 CM KARL-GERÄT', note: 'Siege mortar: 2.2 t shells at 3 to 6.5 km, 4 degrees of traverse: turn the whole vehicle', rounds: [1], fuzes: ['instant', 'delay'], charges: 3 },
+  // the rest of the German tree (research.js TREES.de), fought on the career's ridge
+  k38: { pieces: 2, title: '21 CM KANONE 38', note: 'Two long heavy guns, 120 kg shells to 34 km: counter-battery and the depots far behind', rounds: [1, 2, 3, 4], fuzes: ['instant', 'delay'], charges: 3, deep: true },
+  hm1: { pieces: 1, title: '35.5 CM HAUBITZE M1', note: 'The siege howitzer on its platform: 575 kg shells to 21 km, high angle only, against concrete and the heavies', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4, deep: true },
+  bruno: { pieces: 1, title: '28 CM KURZE BRUNO (E)', note: 'Railway gun on its firing curve: 240 kg shells to 29 km. It lays for line by shunting along the curve: slowly', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
+  k5: { pieces: 1, title: '28 CM K5 (E)', note: 'Railway gun on its Vögele turntable: any bearing, but the turntable turns slowly. 255 kg shells anywhere on the map', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4, deep: true },
+  k12: { pieces: 1, title: '21 CM K 12 (E)', note: 'The longest gun on rails, on its curve far behind the ridge: everything on the map is in reach. Slow to lay for line', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4, deep: true },
+  wespe: { pieces: 4, title: '10.5 CM WESPE', note: 'Four self-propelled field howitzers: the leFH 18 on a tank chassis. Fire, then move (T) before their guns answer', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 6 },
+  hummel: { pieces: 4, title: '15 CM HUMMEL', note: 'Four self-propelled heavy howitzers: the sFH 18 on a tank chassis. Fire, then move (T) before their guns answer', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 5 },
+  nbw42: { pieces: 3, title: '21 CM NEBELWERFER 42', note: 'Three five-tube launchers: a round is a ripple of five 112 kg rockets to 7.8 km. Slow to reload, the smoke gives you away', rounds: [1, 2, 3], fuzes: ['instant'], charges: 1 },
+  swg40: { pieces: 3, title: 'SCHWERES WURFGERÄT 40', note: 'Three frames of four heavy rockets fired from their crates: 82 kg rockets, 750 m to 1.9 km. A drenching at short range', rounds: [1, 2], fuzes: ['instant'], charges: 1 },
   v1: { pieces: 1, title: 'V-1 LAUNCH SITE', note: 'Walter catapult: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },
   v2: { pieces: 1, title: 'V-2 FIRING TABLE', note: 'A4 mobile battery: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },
 };

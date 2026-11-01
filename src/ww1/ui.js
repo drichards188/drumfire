@@ -18,9 +18,17 @@ export const WW1_KINDS = {
   k17: { pieces: 2, title: '10 CM KANONE 17', note: 'Two long guns, 18.5 kg shells to 16 km: the rear, the roads, the balloon; shrapnel on the traffic', rounds: [1, 2, 4, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2, deep: true },
   max38: { pieces: 1, title: '38 CM SK L/45 "LANGER MAX"', note: 'A naval gun on its railway mounting: 750 kg shells anywhere on the map, a slow cycle', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
   gamma: { pieces: 1, title: '42 CM GAMMA-MÖRSER', note: 'The fortress mortar on its concrete bed: 1,160 kg shells, high angle only, a narrow arc', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
+  fk16: { pieces: 4, title: '7.7 CM FELDKANONE 16', note: 'Battery of four field guns, 7 kg shells, very quick: shrapnel over infantry, the Sperrfeuer and the Feuerwalze; nothing hard', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'shrapnel', 'delay'], charges: 2 },
+  k16: { pieces: 2, title: '15 CM KANONE 16', note: 'Two long heavy guns, 51 kg shells to 22 km: the British heavies, the railhead, the depots', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3, deep: true },
+  m99: { pieces: 2, title: '21 CM MÖRSER 99', note: 'Two old mortars without a recoil system: they run back at every shot and are laid afresh, so every round falls like a ranging round. Slow; 119 kg shells', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3 },
+  rk92: { pieces: 2, title: '15 CM RINGKANONE C/92', note: 'Two old fortress guns without a recoil system: they run up their ramps at every shot and are levered back onto their line, so every round falls like a ranging round. 40 kg shells to 12 km', rounds: [1, 2, 4], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2, deep: true },
+  sfh93: { pieces: 4, title: '15 CM sFH 93', note: 'Battery of four old heavy field howitzers without a recoil system: off their ramps and laid afresh every round. 42 kg shells to 6 km: the field batteries, the tanks, the Sperrfeuer', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3 },
+  beta: { pieces: 1, title: '30.5 CM BETA-GERÄT', note: 'The siege mortar on its steel bed: 410 kg shells to 12 km, high angle only; T relays the bed past its arc', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4 },
+  smw: { pieces: 2, title: '25 CM SCHWERER MINENWERFER', note: 'Two heavy trench mortars behind our front trench: 97 kg bombs to 1,000 m. Their wire, their trenches, the pillboxes opposite, the Sperrfeuer', rounds: [1, 2, 3, 4], fuzes: ['instant', 'delay'], charges: 3 },
   paris: { pieces: 1, title: 'PARIS-GESCHÜTZ', note: 'The long-range gun: one shell at a time at military targets 120 km off the map, on the Armee\'s orders; every round wears the bore', rounds: [1], fuzes: ['instant'], charges: 1, deep: true },
 };
-const SHORT = { bertha: '42 cm M', m16: '21 cm Mrs', sfh13: '15 cm sFH', k17: '10 cm K', max38: '38 cm SK', gamma: '42 cm γ', paris: 'Paris' };
+const SHORT = { bertha: '42 cm M', m16: '21 cm Mrs', sfh13: '15 cm sFH', k17: '10 cm K', max38: '38 cm SK', gamma: '42 cm γ', paris: 'Paris',
+  fk16: '7.7 cm FK', k16: '15 cm K', m99: '21 cm M99', rk92: '15 cm RK', sfh93: '15 cm sFH 93', beta: '30.5 cm β', smw: '25 cm sMW' };
 
 export function ww1Ui(th) {
   const battle = (th.op?.kind ?? 'battle') === 'battle';

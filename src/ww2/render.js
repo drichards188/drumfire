@@ -15,10 +15,12 @@
 //   w.audio = audio                          (set once the engine exists)
 import * as THREE from 'three';
 import { headingFor } from '../sector.js';
+import { GUNS } from '../sim/tables.js';
 import { buildGermanGunSite } from '../models/v/de/gun_sites.js';
 import { buildGermanBatteryWorks } from '../models/v/de/battery_works.js';
 import { disposeDetached } from '../render/dispose.js';
 import { poseVSite, vFraming } from '../render/crews_vweap.js';
+import { nbwRounds } from '../render/crews_de.js';
 import { VCUT } from '../models/v/de/vweap_kit.js';
 import { CUTAWAY } from '../world/mats.js';
 import { RUN as V1_RUN } from '../models/v/de/v1.js';
@@ -28,6 +30,14 @@ import { createWorks } from './gustav_works.js';
 // the V-weapon sites' woods are cut away along the camera's line like the world's nets (the same uniforms)
 VCUT.a = CUTAWAY.a; VCUT.b = CUTAWAY.b; VCUT.r = CUTAWAY.r;
 
+// the rocket launchers: a round is a ripple from their tubes or crates (their own blast, rounds shown in the rig,
+// a burning motor's trail for the first moments of flight)
+const ROCKETS = new Set(['nbw41', 'nbw42', 'swg40']);
+// the rest of the German tree's batteries with an emplacement of their own instead of a field pit (guns.EXTRAS: the
+// railway guns' curves and turntable, the H M1's platform); the self-propelled guns have none, they drive between
+// positions (src/ww1/special.js MoveCtl)
+const SITE_OF = { bruno: 'buildBrunoSite', k5: 'buildK5Site', k12: 'buildK12Site', hm1: 'buildHM1Site' };
+const NO_PIT = new Set(['wespe', 'hummel']);
 const AIR = import.meta.glob('../models/t/ww2/aircraft.js', { eager: true });
 const buildAircraft = Object.values(AIR)[0]?.buildAircraft ?? null;
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3(0, 0, -1);
@@ -120,13 +130,22 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
         return site;
       });
     }
-    if (kind === 'v1' || kind === 'v2') continue;
+    const own = SITE_OF[kind] ? guns?.EXTRAS?.[SITE_OF[kind]] : null;
+    if (own) {
+      const p = pieces[0];
+      slot(id, id, sites, kind === 'hm1' ? 6000 : 12000, () => {
+        const site = own(id * 97 + 11);
+        place(site.root, p.x, p.z, p.bearing);
+        return site;
+      });
+    }
+    if (kind === 'v1' || kind === 'v2' || NO_PIT.has(kind)) continue;
     const works = kind === 'karl'
       ? stops.map((q, i) => ({ key: `${id}:${q.id}`, origin: q.pos, pieces: () => [{ x: q.pos.x, z: q.pos.z }], seed: id * 79 + i, karl: true }))
       : [{ key: `${id}`, origin: { ...u.pos }, pieces: () => fielded(id, pieces).map((p) => ({ x: p.x, z: p.z })), seed: id * 79 }];
     for (const q of works) slot(q.key, id, batteryWorks, 4000, () => buildGermanBatteryWorks({ kind, origin: q.origin, bearing: zero,
       pieces: q.pieces(), terrain, seed: q.seed, woodland }), { works: !q.karl });
-    if (kind === 'gustav') continue;
+    if (kind === 'gustav' || own) continue;
     const spots = kind === 'karl'
       ? stops.map((q, i) => ({ key: `${id}:position:${q.id}`, x: q.pos.x, z: q.pos.z, bearing: zero, seed: id * 37 + i }))
       : pieces.map((p) => ({ key: `${id}:${p.i}`, x: p.x, z: p.z, bearing: p.bearing, seed: id * 37 + p.i, pi: p.i }));
@@ -213,7 +232,7 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   // a shot the shared blast does not suit: a rocket from its tube, the V-1's catapult, the A4's main stage
   function fire(unit, piece, shell, night) {
     const kind = piece?.kind ?? unit.kind;
-    if (kind === 'nbw41') {
+    if (ROCKETS.has(kind)) {
       const rig = rigOf(unit, piece.i);
       const m = rig?.anchors?.muzzles?.[shell?.tube ?? 0] ?? rig?.anchors?.muzzle;
       if (m) {
@@ -472,14 +491,18 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       if (!mine(u)) continue;
       if (u.special) poseSpecial(u, rawDt);
       if (u.kind === 'v1' || u.kind === 'v2') { const rig = rigOf(u); if (rig?.layout && u.special?.steps) vCamera(u, rig, s, rawDt); }
-      if (u.kind === 'nbw41') for (const p of u.pieces) {
+      if (ROCKETS.has(u.kind)) for (const p of u.pieces) {
         const rig = rigOf(u, p.i);
         if (!rig?.setRounds) continue;
+        // (the Nebelwerfers' count is the crew drill's own, crews_de.js nbwRounds, so the rockets go in with the men; the
+        // Wurfgerät's crates are set by its crew's props while they are carried, render/de/swg40.js)
+        if (u.kind !== 'swg40') { rig.setRounds(nbwRounds(p, s.alpha ?? 0)); continue; }
+        if (p.job?.step === 'shell') continue;
+        const full = GUNS[p.kind]?.salvo?.n ?? 4;
         let n = 0;
-        if (p.state === 'recoil' && p.ripple) n = Math.max(0, (p.tubes ?? 6) - p.ripple.i);
-        else if (p.loaded || p.state === 'ready') n = p.tubes ?? 6;
-        else if (p.job?.step === 'shell') n = Math.floor(6 * Math.min(1, p.job.t / Math.max(0.01, p.job.dur)));
-        else if (p.job && p.job.i > 1) n = p.tubes ?? 6;
+        if (p.state === 'recoil' && p.ripple) n = Math.max(0, (p.tubes ?? full) - p.ripple.i);
+        else if (p.loaded || p.state === 'ready') n = p.tubes ?? full;
+        else if (p.job && p.job.i > 1) n = p.tubes ?? full;
         rig.setRounds(n);
       }
     }
@@ -487,8 +510,8 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
     if (fx.trail && dt > 0) {
       for (const sh of s.shells) {
         if (!sh.alive || !sh.own) continue;
-        if (sh.kind === 'nbw41') {
-          sh.burning = sh.t < 1.8;
+        if (ROCKETS.has(sh.kind)) {
+          sh.burning = sh.t < (GUNS[sh.kind]?.rocket?.burn ?? 1.8);
           if (sh.burning) fx.trail(sh.pos, sh.vel, 'rocket', dt);
         } else if ((sh.kind === 'v1' && !sh.engineOff) || (sh.kind === 'v2' && sh.burning)) {
           // the flame comes out of the tail: the V-1's pipe 4 m behind the middle and 0.7 m up, the A4's nozzle 7 m

@@ -11,19 +11,21 @@
 // battery researched only after the one before it in its line (`after`), the lines never crossing. `rank` is its
 // weight class (I field, II heavy, III super-heavy, IV the giants and the weapons off the map), as War Thunder's ranks
 // (it scales the upgrade costs). The first battery of every line can be researched from the start; a career owns only
-// the K 17 (the line `guns`, cost 0). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
+// the 15 cm Ringkanone C/92 (the line `guns`, cost 0; the K 17 until 2026-11-01, which older saves keep: progression.js). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
 // open battle as off-map support: picked, given a target, they fire in their own time. The British 1917 tree is kept
 // for when Britain comes back; the menu does not show it for now.
 import { UNITS } from './sector.js';
 import { OPS } from './ww2/ops.js';
-import { OPS as OPS_WW1 } from './ww1/ops.js';
+import { OPS as OPS_WW1, RIDGE_MORE } from './ww1/ops.js';
 
 export const LINES = {
   de: [
+    { id: 'howitzers', name: 'Field artillery', de: 'Feldartillerie' },
     { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
-    { id: 'howitzers', name: 'Field howitzers', de: 'Feldhaubitzen' },
-    { id: 'mortars', name: 'Mortars and siege', de: 'Mörser' },
-    { id: 'rockets', name: 'Rockets', de: 'Werfer' },
+    { id: 'railway', name: 'Railway guns', de: 'Eisenbahngeschütze' },
+    { id: 'mortars', name: 'Mortars', de: 'Mörser' },
+    { id: 'siege', name: 'Siege guns', de: 'Belagerungsgeschütze' },
+    { id: 'rockets', name: 'Trench mortars and rockets', de: 'Minenwerfer und Werfer' },
     { id: 'support', name: 'Off-map support', de: 'Fernwaffen' },
   ],
   '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
@@ -38,21 +40,39 @@ export const TREES = {
     { kind: 'rail', line: 'all', tier: 4, after: 'bl60', cost: 2000 },
   ],
   de: [
-    { kind: 'k17', line: 'guns', tier: 1, after: null, cost: 0 },
-    { kind: 'k18', line: 'guns', tier: 2, after: 'k17', cost: 1100 },
-    { kind: 'max38', line: 'guns', tier: 3, after: 'k18', cost: 2400 },
-    { kind: 'paris', line: 'guns', tier: 4, after: 'max38', cost: 4000, offmap: true },
-    { kind: 'gustav', line: 'guns', tier: 4, after: 'paris', cost: 5000 },
-    { kind: 'sfh13', line: 'howitzers', tier: 1, after: null, cost: 450 },
+    // each line runs from the guns of 1914 to 1918 to those of the second war, heavier as it goes (docs/PROGRESSION.md)
+    { kind: 'fk16', line: 'howitzers', tier: 1, after: null, cost: 300 },
+    { kind: 'sfh93', line: 'howitzers', tier: 1, after: 'fk16', cost: 350 },
+    { kind: 'sfh13', line: 'howitzers', tier: 1, after: 'sfh93', cost: 450 },
     { kind: 'lefh18', line: 'howitzers', tier: 1, after: 'sfh13', cost: 600 },
     { kind: 'sfh18', line: 'howitzers', tier: 2, after: 'lefh18', cost: 1100 },
-    { kind: 'm16', line: 'mortars', tier: 2, after: null, cost: 900 },
+    { kind: 'wespe', line: 'howitzers', tier: 2, after: 'sfh18', cost: 1500 },
+    { kind: 'hummel', line: 'howitzers', tier: 2, after: 'wespe', cost: 2000 },
+    { kind: 'rk92', line: 'guns', tier: 1, after: null, cost: 0 },
+    { kind: 'k17', line: 'guns', tier: 1, after: 'rk92', cost: 350 },
+    { kind: 'k16', line: 'guns', tier: 2, after: 'k17', cost: 700 },
+    { kind: 'k18', line: 'guns', tier: 2, after: 'k16', cost: 1100 },
+    { kind: 'k38', line: 'guns', tier: 3, after: 'k18', cost: 2000 },
+    { kind: 'max38', line: 'railway', tier: 3, after: null, cost: 2400 },
+    { kind: 'bruno', line: 'railway', tier: 3, after: 'max38', cost: 2800 },
+    { kind: 'k5', line: 'railway', tier: 3, after: 'bruno', cost: 3400 },
+    { kind: 'paris', line: 'railway', tier: 4, after: 'k5', cost: 4000, offmap: true },
+    { kind: 'k12', line: 'railway', tier: 4, after: 'paris', cost: 4600 },
+    { kind: 'gustav', line: 'railway', tier: 4, after: 'k12', cost: 5000 },
+    { kind: 'm99', line: 'mortars', tier: 2, after: null, cost: 600 },
+    { kind: 'm16', line: 'mortars', tier: 2, after: 'm99', cost: 900 },
     { kind: 'mrs18', line: 'mortars', tier: 2, after: 'm16', cost: 1300 },
-    { kind: 'gamma', line: 'mortars', tier: 3, after: 'mrs18', cost: 2400 },
-    { kind: 'bertha', line: 'mortars', tier: 3, after: 'gamma', cost: 2800 },
-    { kind: 'karl', line: 'mortars', tier: 4, after: 'bertha', cost: 4000 },
-    { kind: 'nbw41', line: 'rockets', tier: 1, after: null, cost: 450 },
-    { kind: 'v1', line: 'support', tier: 4, after: null, cost: 3000, offmap: true },
+    { kind: 'hm1', line: 'mortars', tier: 3, after: 'mrs18', cost: 2600 },
+    { kind: 'beta', line: 'siege', tier: 3, after: null, cost: 2000 },
+    { kind: 'gamma', line: 'siege', tier: 3, after: 'beta', cost: 2400 },
+    { kind: 'bertha', line: 'siege', tier: 3, after: 'gamma', cost: 2800 },
+    { kind: 'karl', line: 'siege', tier: 4, after: 'bertha', cost: 4000 },
+    { kind: 'smw', line: 'rockets', tier: 1, after: null, cost: 300 },
+    { kind: 'nbw41', line: 'rockets', tier: 1, after: 'smw', cost: 450 },
+    { kind: 'swg40', line: 'rockets', tier: 2, after: 'nbw41', cost: 800 },
+    { kind: 'nbw42', line: 'rockets', tier: 2, after: 'swg40', cost: 1200 },
+    { kind: 'gotha', line: 'support', tier: 3, after: null, cost: 2000, offmap: true },
+    { kind: 'v1', line: 'support', tier: 4, after: 'gotha', cost: 3000, offmap: true },
     { kind: 'v2', line: 'support', tier: 4, after: 'v1', cost: 4500, offmap: true },
   ],
 };
@@ -66,11 +86,11 @@ export const nextInLine = (kind) => TREES[eraOfKind(kind)]?.find((n) => n.after 
 // the batteries that fight from off the map (off-map support): never in a gun pit
 export const isOffmap = (kind) => !!nodeOf(kind)?.offmap;
 // the era a gun belongs to, for its look (models/looks.js camouflage, the crews' dress)
-const WW1_KINDS = new Set(OPS_WW1.ridge.units.concat(OPS_WW1.paris.units).map((u) => u.kind));
+const WW1_KINDS = new Set([...OPS_WW1.ridge.units, ...OPS_WW1.paris.units, ...RIDGE_MORE.filter((u) => u.era === 'ww1')].map((u) => u.kind).concat('gotha'));
 export const gunEraOf = (kind) => (TREES['1917'].some((n) => n.kind === kind) ? '1917' : WW1_KINDS.has(kind) ? 'ww1' : 'ww2');
 
 // a battery's full strength: the gun pits of its open battle position (the sandbox Karl is the Karl operation's)
-const DEFS = [...UNITS, ...OPS.flanders.units, OPS.karl.units[0], ...OPS_WW1.ridge.units, ...OPS_WW1.paris.units];
+const DEFS = [...UNITS, ...OPS.flanders.units, OPS.karl.units[0], ...OPS_WW1.ridge.units, ...OPS_WW1.paris.units, ...RIDGE_MORE];
 export const maxGuns = (kind) => DEFS.find((d) => d.kind === kind)?.pieces.length ?? 1;
 
 // The parts. Each level replaces the one before (fx[k][level - 1]); the keys are the sim's multipliers (guns.js):
@@ -136,6 +156,9 @@ export const DETACHMENT = {
   lefh18: { men: 6 }, sfh18: { men: 7 }, k18: { men: 10 }, mrs18: { men: 10 }, nbw41: { men: 5 }, karl: { men: 21 }, gustav: { men: 250 },
   k17: { men: 8, est: true }, sfh13: { men: 8, est: true }, m16: { men: 10, est: true }, max38: { men: 40, est: true },
   bertha: { men: 120, est: true }, gamma: { men: 250, est: true }, paris: { men: 80 },
+  fk16: { men: 6 }, k16: { men: 9, est: true }, m99: { men: 10, est: true }, rk92: { men: 8, est: true }, sfh93: { men: 8, est: true }, beta: { men: 40, est: true }, smw: { men: 8, est: true },
+  k38: { men: 12, est: true }, hm1: { men: 30, est: true }, bruno: { men: 40, est: true }, k5: { men: 70, est: true }, k12: { men: 80, est: true },
+  wespe: { men: 5 }, hummel: { men: 6 }, nbw42: { men: 6 }, swg40: { men: 6, est: true }, gotha: { men: 3 },
 };
 export const detachmentOf = (kind, drill = 8) => DETACHMENT[kind]?.men ?? drill;
 // the men of one gun for a battery's levels: its detachment and its relief crews

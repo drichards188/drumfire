@@ -17,7 +17,7 @@ const brg = (r) => `${Math.round((((r / DEG) % 360) + 360) % 360)}°`;
 const span = (s, long) => (s < 120 ? `${Math.ceil(s)}${long ? ' seconds' : ' s'}` : `${Math.round(s / 60)}${long ? ' minutes' : ' min'}`);
 
 export class GunsCard {
-  constructor({ onBed = null, onMan = null } = {}) {
+  constructor({ onBed = null, onMove = null, onMan = null } = {}) {
     this.onMan = onMan;
     // (no subtitle: the header above names the gun and the battery)
     const c = card('THE GUNS', '', 'guns');
@@ -34,7 +34,13 @@ export class GunsCard {
     this.bedBar = new Bar({ cls: 'bedbar' });
     this.bedBtn = new Btn({ main: 'BETTUNG UMLEGEN', sub: 'T: relay the bed', cls: 'bedbtn', onClick: () => onBed?.() });
     this.bed.append(this.bedText, this.bedBar.el, this.bedBtn.el);
-    c.body.append(this.list, this.bed, this.ammo, sw);
+    // the self-propelled guns' positions (src/ww1/special.js MoveCtl): where they stand, and the move to the other one
+    this.mv = el('div', 'gbed');
+    this.mvText = el('i', null, '');
+    this.mvBar = new Bar({ cls: 'bedbar' });
+    this.mvBtn = new Btn({ main: 'STELLUNGSWECHSEL', sub: 'T: move to the other position', cls: 'bedbtn', onClick: () => onMove?.() });
+    this.mv.append(this.mvText, this.mvBar.el, this.mvBtn.el);
+    c.body.append(this.list, this.bed, this.mv, this.ammo, sw);
     this.rows = [];
     this.n = -1;
   }
@@ -138,6 +144,21 @@ export class GunsCard {
       setCls(this.bedBar.el, 'hide', !moving);
       this.bedBtn.enable(!moving && !!o.target && Math.abs(off) > 2 * DEG);
       this.bedBtn.el.title = moving ? 'The bed is being relaid.' : !o.target ? 'Lay on a target first: the bed is relaid onto its line.' : `Relay the bed onto the target's line (${brg(o.line)})${bed.dur ? `: the gun is out of action for about ${span(bed.dur, true)}` : ''}.`;
+    }
+    const mv = unit.special?.kind === 'move' ? unit.special : null;
+    setCls(this.mv, 'on', !!mv);
+    if (mv) {
+      const here = mv.positions.find((q) => q.id === mv.posId), to = mv.positions.find((q) => q.id === mv.to);
+      const moving = mv.state !== 'set';
+      const total = moving ? 2 * 10 + (mv.drive ?? 0) : 1;
+      const done = mv.state === 'mount' ? mv.t : mv.state === 'drive' ? 10 + mv.t : mv.state === 'dismount' ? 10 + (mv.drive ?? 0) + mv.t : 0;
+      setText(this.mvText, moving
+        ? `${{ mount: 'Mounting up', drive: 'Driving', dismount: 'Dismounting' }[mv.state]} for ${to?.name ?? 'the new position'}: ${unit.gate ?? ''}. The guns cannot fire.`
+        : `In ${here?.name ?? 'position'}. ${(unit.signature ?? 0) > 0.4 ? 'The enemy has us located: move before their guns answer.' : 'Fire, then move before the enemy locates you.'}`);
+      this.mvBar.set(moving ? done / total : 0);
+      setCls(this.mvBar.el, 'hide', !moving);
+      this.mvBtn.enable(!moving && mv.positions.length > 1);
+      this.mvBtn.el.title = moving ? 'On the move.' : 'Drive the battery to its other position: the enemy loses it, but the guns are out of action for a couple of minutes and the new position needs ranging again.';
     }
     const a = unit.ammo || {};
     setText(this.he, a.he != null ? String(a.he) : '--');

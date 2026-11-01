@@ -71,7 +71,7 @@ const ORDER = ['light', 'field', 'med', 'heavy', 'huge']; // the British game's 
 export const classOf = (cal) => (cal < 4 ? 'light' : cal < 5.5 ? 'field' : cal < 7.5 ? 'med' : cal < 12 ? 'heavy' : cal < 20 ? 'huge' : 'colossal');
 
 // Calibre (in) of a shell kind when the shell object carries none; flight voices pick their kind from shell.kind.
-const KIND_CAL = { lefh18: 4.13, sfh18: 5.87, k18: 6.79, mrs18: 8.3, nbw41: 6.24, bertha: 16.5, karl: 23.6, gustav: 31.5, v1: 22, v2: 26, q25: 3.45, m55: 5.5, rp3: 3, s76: 3, s122: 4.8, s152: 6 };
+const KIND_CAL = { lefh18: 4.13, sfh18: 5.87, k18: 6.79, mrs18: 8.3, nbw41: 6.24, k38: 8.3, hm1: 14, bruno: 11.1, k5: 11.1, k12: 8.3, wespe: 4.13, hummel: 5.87, nbw42: 8.3, swg40: 11, fk16: 3.03, k16: 5.88, m99: 8.3, rk92: 5.87, sfh93: 5.87, beta: 12, smw: 9.8, gotha: 6, bertha: 16.5, karl: 23.6, gustav: 31.5, v1: 22, v2: 26, q25: 3.45, m55: 5.5, rp3: 3, s76: 3, s122: 4.8, s152: 6 };
 const ROCKET_KINDS = { nbw41: 1, rp3: 1 }; // the moaning rush instead of a shell's whistle
 const COLOSSAL_KINDS = { gustav: 1, karl: 1 };
 

@@ -8,6 +8,9 @@ export const SAVE_KEY = 'drumfire.campaign.v4';
 export const DEV_DEFAULT = false;
 const LEVEL_KEYS = ['guns', ...PARTS.map((p) => p.id)];
 const treeOf = (era) => TREE_OF[era] ?? era;
+// the starting batteries of the saves written before `start` was saved (they owned these without researching them)
+const OLD_START = ['k17'];
+const START = 2; // the saves' mark: careers begun with the C/92 (an older save has none)
 
 // The career, per tree: the research points put into each battery (`progress`), the battery the battles' RP go to
 // (`target`, always one while anything is left to research), the batteries researched, each battery's points and the
@@ -35,6 +38,8 @@ export class Progression {
       const data = JSON.parse(storage?.getItem(SAVE_KEY) || 'null');
       for (const m of CAMPAIGN) if (Array.isArray(data?.completed) && data.completed.includes(m.id)) this.completed.add(m.id);
       for (const k of data?.researched ?? []) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
+      // a career begun before the Ringkanone C/92 headed the guns' line (2026-11-01) started with the K 17: it keeps it
+      if (data && !data.start) for (const k of OLD_START) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
       for (const e of Object.keys(this.rp)) this.rp[e] = Math.max(0, Math.round(+data?.rp?.[e] || 0));
       for (const [k, v] of Object.entries(data?.progress ?? {})) if (nodeOf(k)) this.progress[k] = Math.max(0, Math.round(+v || 0));
       for (const e of Object.keys(this.target)) if (nodeOf(data?.target?.[e]) && eraOfKind(data.target[e]) === e) this.target[e] = data.target[e];
@@ -155,7 +160,7 @@ export class Progression {
   // War Thunder's crew slots: at most SLOTS.map batteries on the map and SLOTS.support off it, chosen in the hangar from
   // the batteries the career has (dev mode: every one). Until the player chooses: the best of each line (the last it
   // has researched), then more field howitzers (the Sperrfeuer's guns), then the heaviest; off the map the dearest.
-  // So a new career fields its K 17, and a full one a lineup that can still answer the red rockets.
+  // So a new career fields its Ringkanone C/92, and a full one a lineup that can still answer the red rockets.
   lineupKinds(era) {
     const tree = treeOf(era), have = (TREES[tree] ?? []).filter((n) => this.unlocked(n.kind));
     const chosen = this.lineup[tree];
@@ -284,7 +289,7 @@ export class Progression {
       if (!this.storage) throw new Error('Storage unavailable');
       this.storage.setItem(SAVE_KEY, JSON.stringify({ completed: [...this.completed], rp: this.rp, target: this.target, progress: this.progress,
         researched: [...this.researched], bp: this.bp, levels: this.levels, battles: this.battles, lineup: this.lineup, threat: this.threat,
-        dev: this.dev, devSet: this.devSet, free: this.free }));
+        dev: this.dev, devSet: this.devSet, free: this.free, start: START }));
       this.saved = true;
     } catch { this.saved = false; }
   }

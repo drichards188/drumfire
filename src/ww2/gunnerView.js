@@ -32,6 +32,20 @@ export const POST_ROLE = {
   // the Nebelwerfer (render/crews_de.js): no commander's figure (his eye is the launcher's own, the rig's), the firer
   // at the firing box in the slit trench (rig.anchors.cover) once the crew has taken cover
   nbw41: { cmd: null, lay: 'layer', load: 'loader', fire: 'firer' },
+  // the rest of the German tree (render/ww1/<kind>.js and render/de/<kind>.js ROLES)
+  fk16: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  k16: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  m99: { cmd: 'officer', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  rk92: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  sfh93: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
+  beta: { cmd: 'officer', lay: 'layer', load: 'loader2', fire: 'lanyard' },
+  smw: { cmd: 'officer', lay: 'layer', load: 'bomb1', fire: 'lanyard' },
+  k38: { cmd: 'officer', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  hm1: { cmd: 'sergeant', lay: 'layer', load: 'loader1', fire: 'lanyard' },
+  bruno: { cmd: 'chief', lay: 'layer', load: 'rammer1', fire: 'lanyard' },
+  k12: { cmd: 'chief', lay: 'layer', load: 'rammer1', fire: 'lanyard' },
+  k5: { cmd: 'chief', lay: 'layer', load: 'rammer1', fire: 'lanyard' },
+  nbw42: { cmd: null, lay: 'layer', load: 'loader', fire: 'firer' },
 };
 // each post's view: what the eye turns to by default (the muzzle, the breech, or 'gun': the middle of the barrel), and
 // how far the camera sits behind (back) and above (up) the man's eyes so his hands and the work are in the

@@ -39,23 +39,25 @@ export const STAFF_DE = { lefh18: 1.7, sfh18: 2.1, k18: 2.9, mrs18: 2.9, nbw41: 
 
 // ---------------------------------------------------------------- the Nebelwerfer
 
-const OFF = 0.12, SLOT = (1 - OFF) / 7, TRIP = 2 * SLOT; // rocket i's trip starts at OFF + i * SLOT of the 'shell' step and lasts TRIP
+// rocket i's trip starts at OFF + i * SLOT of the 'shell' step and lasts TRIP = 2 SLOT; SLOT shares the step out
+// among the launcher's n tubes (the 15 cm launcher's six, the 21 cm's five)
+const OFF = 0.12, slotOf = (n) => (1 - OFF) / (n + 1);
 const IN = 0.72; // share of a trip at which the rocket is home in its tube
 const RIPPLE_END = 0.18; // the sim's recoil kick before the run out (sim/guns.js), after the last rocket
 
 // Rockets in the tubes for the piece's state (0..n): empty after the ripple, filled one by one in the 'shell' step,
 // full from then until the ripple, which empties them in its order. The render layer may call it for rig.setRounds.
 export function nbwRounds(p, alpha = 0, kStep = null) {
-  const g = GUNS[p.kind] ?? GUNS.nbw41, n = p.tubes ?? g.salvo?.n ?? 6;
+  const g = GUNS[p.kind] ?? GUNS.nbw41, full = g.salvo?.n ?? 6, n = p.tubes ?? full;
   if (p.state === 'dead') return 0;
   if (p.ripple) return Math.max(0, n - p.ripple.i);
   const j = p.job;
   if (j) {
     if (j.step === 'open') return 0;
     if (j.step === 'shell') {
-      const k = kStep ?? clamp01((j.t + alpha * STEP) / Math.max(0.01, j.dur));
+      const k = kStep ?? clamp01((j.t + alpha * STEP) / Math.max(0.01, j.dur)), SLOT = slotOf(full);
       let c = 0;
-      for (let i = 0; i < 6; i++) if (k >= OFF + i * SLOT + IN * TRIP) c++;
+      for (let i = 0; i < full; i++) if (k >= OFF + i * SLOT + IN * 2 * SLOT) c++;
       return Math.min(n, c);
     }
     return p.loaded || j.i > 0 ? n : 0;
@@ -77,6 +79,7 @@ function frame(crew, c) {
   const rig = crew.rig;
   _inv.copy(rig.root.matrixWorld).invert();
   const tubes = rig.anchors.tubes;
+  F.n = Math.min(6, tubes?.length ?? 6); F.slot = slotOf(F.n); // (tubes in the cluster; their share of the 'shell' step)
   for (let i = 0; i < 6; i++) {
     const o = tubes?.[i];
     if (o) o.getWorldPosition(F.rear[i]).applyMatrix4(_inv); else F.rear[i].copy(crew.B);
@@ -201,7 +204,7 @@ function nbLoader(crew, m, c, h) {
   let busy = false;
   if (s === 'open' || s === 'prime') {
     // the latches opened (open), then the igniter leads clipped on (prime), tube by tube
-    const j = Math.min(5, Math.floor(k * 6)), r = F.rear[j], phase = Math.min(0.999, k * 6 % 1);
+    const j = Math.min(F.n - 1, Math.floor(k * F.n)), r = F.rear[j], phase = Math.min(0.999, k * F.n % 1);
     const w = s === 'open' ? smooth(phase, 0.05, 0.2) * (1 - smooth(phase, 0.72, 0.95)) : smooth(phase, 0.08, 0.25) * (1 - smooth(phase, 0.7, 0.95));
     busy = true;
     m.put(h.x, h.y, h.z, face, 'operate', crew.idleT + m.seed);
@@ -209,10 +212,10 @@ function nbLoader(crew, m, c, h) {
   } else if (s === 'shell') {
     // the rocket coming in: both hands feed it into the tube at the rear plate as the carrier walks it home, then the
     // right hand drops the latch over its base
-    for (let i = 0; i < 6; i++) {
-      const u = (k - OFF - i * SLOT) / TRIP;
+    for (let i = 0; i < F.n; i++) {
+      const u = (k - OFF - i * F.slot) / (2 * F.slot);
       if (u < 0.5 || u > 0.82) continue;
-      const r = F.rear[order ? 5 - i : i] ?? F.rear[0];
+      const r = F.rear[order ? F.n - 1 - i : i] ?? F.rear[0];
       const feed = smooth(u, 0.5, 0.56) * (1 - smooth(u, 0.68, 0.73)), latch = smooth(u, 0.71, 0.75) * (1 - smooth(u, 0.78, 0.82));
       _v.copy(r).addScaledVector(crew.u, -0.1);
       busy = true;
@@ -237,7 +240,7 @@ function nbRocket(crew, m, c, h) {
   if (inCover(crew, m, c, 3 + ci, stack, faceStack, ROCKET_VIA, true)) return;
   const rig = crew.rig, s = c.s, k = c.k, L = crew.slen;
   let trip = -1, u = 0;
-  if (s === 'shell') for (let i = ci; i < 6; i += 2) { const uu = (k - OFF - i * SLOT) / TRIP; if (uu >= 0 && uu < 1) { trip = i; u = uu; } }
+  if (s === 'shell') for (let i = ci; i < F.n; i += 2) { const uu = (k - OFF - i * F.slot) / (2 * F.slot); if (uu >= 0 && uu < 1) { trip = i; u = uu; } }
   if (trip < 0) {
     // waiting at the crates (before the first trip, between and after the loading), facing them
     m.put(stack.x, 0, stack.z, faceStack, 'stand', crew.idleT + m.seed);
@@ -246,12 +249,12 @@ function nbRocket(crew, m, c, h) {
   const goP = crew.plan(m, 'nbgo', crew.l0, stack.x, stack.z, F.hand.x - crew.rt.x * 0.65 - crew.bd.x * 0.6, F.hand.z - crew.rt.z * 0.65 - crew.bd.z * 0.6, 0.45, false, false, 'work', 0.28, { x: F.hand.x, z: F.hand.z });
   const backP = crew.plan(m, 'nbback', crew.l0, F.hand.x, F.hand.z, stack.x, stack.z, 0.3, false, false, 'work', 0.28,
     { x: F.hand.x + crew.rt.x * 1.05 - crew.bd.x * 0.45, z: F.hand.z + crew.rt.z * 1.05 - crew.bd.z * 0.45, head: true });
-  const tube = F.rear[rig.loadOrder ? 5 - trip : trip] ?? F.rear[0];
+  const tube = F.rear[rig.loadOrder ? F.n - 1 - trip : trip] ?? F.rear[0];
   let have = true, pose = 'carry';
   const faceTube = headingOf(tube.x - F.hand.x, tube.z - F.hand.z);
   const lift = smooth(u, 0.025, 0.16);
   // the walks at an even pace (drill_pace.js): out with the rocket, arriving as the window closes, back at a walk
-  const tripS = TRIP * (c.p.job?.dur ?? 30);
+  const tripS = 2 * F.slot * (c.p.job?.dur ?? 30);
   if (u < 0.16) { m.put(stack.x, 0, stack.z, faceStack, 'lift', lift); pose = 'lift'; }
   else if (u < 0.44) m.follow(goP, paced(u, 0.16, 0.44, tripS, goP.len, 1.25, 0.35, true), 0, 'carryWalk', faceStack, faceTube);
   else if (u < 0.76) {
@@ -303,4 +306,4 @@ function nbProps(crew, c) {
 }
 
 export const DE_ACT = { nbFirer, nbLayer, nbLoader, nbRocket };
-export const DE_PROPS = { nbw41: nbProps };
+export const DE_PROPS = { nbw41: nbProps, nbw42: nbProps };

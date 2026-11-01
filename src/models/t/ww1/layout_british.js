@@ -30,6 +30,8 @@ export function layoutBritish(kind, { alt = 800 } = {}) {
       return [{ x: -30, z: -4, y: 0 }, { x: -10, z: 4, y: 0 }, { x: 10, z: -3, y: 0 }, { x: 30, z: 5, y: 0 }];
     case 'bballoon': // the Caquot at `alt` over the site, its winch lorry down the cable (the balloon rides downwind)
       return [{ x: 0, z: 0, y: alt }, { x: -alt * 0.5, z: 0, y: 0 }];
+    case 'bpost': // two Lewis gun bays in the fire trench and the Stokes mortar's pit behind them (british.js forwardPost)
+      return [{ x: -12, z: -2, y: 0 }, { x: 10, z: -3, y: 0 }, { x: -2, z: 12, y: 0 }];
     case 'bdump': // five stacks: 18-pr boxes, 6-inch shells, cartridge boxes, 9.2-inch shells, mixed stores
       return [{ x: -18, z: -10, y: 0 }, { x: 3, z: -17, y: 0 }, { x: 20, z: -3, y: 0 }, { x: -8, z: 9, y: 0 }, { x: 13, z: 17, y: 0 }];
     default:

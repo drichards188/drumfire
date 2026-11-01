@@ -32,6 +32,8 @@ node tools/hangarsheet.mjs --era all --jobs 3                 # the menu hangar'
 node tools/rangetest.mjs                                      # the test range: every WW2 gun served in person fires, alone in the field; exits 1 on a failure
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
+node tools/shot.mjs "/?mode=ww1&play=1" shots/x.png --lineup k5,wespe,m99   # the same in a career battle with that lineup (dev mode)
+node tools/researchtest.mjs 1 2 3 --era de --lineup set:k38+hummel+wespe+nbw42+k5   # career battles with a named lineup (@3: every part at its top)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
 node tools/voicetest.mjs --op flanders --unit 1 --seconds 200  # the German crew voices in a battle (--op ridge: WW1), headless: the lines in order and their rules
 ```

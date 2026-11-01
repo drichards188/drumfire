@@ -22,6 +22,25 @@ export const BATTERIES = [
   { kind: 'gamma', era: 'ww1', name: '42 cm Gamma-Mörser', role: 'Fortress mortar on its concrete bed: the heaviest shell' },
   { kind: 'bertha', era: 'ww1', name: '42 cm Dicke Bertha', role: 'Siege howitzer: few shells, slow, terrible' },
   { kind: 'paris', era: 'ww1', name: 'Paris Gun', role: 'Off-map support: one shell at a time, 120 km away' },
+  // the rest of the German tree (research.js TREES.de, 2026-11-01); era 'de': the career's ridge only, no campaign
+  // mission earns them (CAMPAIGN below reads the 1917 and WW2 rosters)
+  { kind: 'fk16', era: 'de', name: '7.7 cm FK 16', role: 'Field gun: quick, shrapnel over infantry, the Sperrfeuer', range: 10000 },
+  { kind: 'k16', era: 'de', name: '15 cm K 16', role: 'Long heavy gun: 51 kg shells to 22 km', range: 22000 },
+  { kind: 'm99', era: 'de', name: '21 cm Mörser 99', role: 'Old mortar without a recoil system: every round laid afresh', range: 8300 },
+  { kind: 'beta', era: 'de', name: '30.5 cm Beta-Gerät', role: 'Siege mortar on its steel bed: 410 kg shells on concrete', range: 12000 },
+  { kind: 'smw', era: 'de', name: '25 cm schwerer Minenwerfer', role: 'Heavy trench mortar: 97 kg bombs at a kilometre', range: 1000 },
+  { kind: 'rk92', era: 'de', name: '15 cm Ringkanone C/92', role: 'Old fortress gun without a recoil system: off its ramps, re-laid every round', range: 12000 },
+  { kind: 'sfh93', era: 'de', name: '15 cm sFH 93', role: 'Old heavy field howitzer without a recoil system: off its ramps, re-laid every round', range: 6000 },
+  { kind: 'gotha', era: 'de', name: 'Gotha bomber strike', role: 'Off-map support: three Gothas bomb a point on the map', range: 0 },
+  { kind: 'k38', era: 'de', name: '21 cm K 38', role: 'Long heavy gun: 120 kg shells to 34 km', range: 33900 },
+  { kind: 'hm1', era: 'de', name: '35.5 cm Haubitze M1', role: 'Siege howitzer: 575 kg shells plunging onto concrete', range: 20800 },
+  { kind: 'bruno', era: 'de', name: '28 cm Kurze Bruno', role: 'Railway gun on its firing curve: 240 kg shells to 29 km', range: 29500 },
+  { kind: 'k5', era: 'de', name: '28 cm K5 (E)', role: 'Railway gun on its turntable: any bearing, slowly', range: 62000 },
+  { kind: 'k12', era: 'de', name: '21 cm K 12 (E)', role: 'The longest gun on rails: everything on the map in reach', range: 115000 },
+  { kind: 'wespe', era: 'de', name: '10.5 cm Wespe', role: 'Self-propelled field howitzer: fire, then move', range: 10700 },
+  { kind: 'hummel', era: 'de', name: '15 cm Hummel', role: 'Self-propelled heavy howitzer: fire, then move', range: 13300 },
+  { kind: 'nbw42', era: 'de', name: '21 cm Nebelwerfer 42', role: 'Five-tube rocket launcher: 112 kg rockets to 7.8 km', range: 7850 },
+  { kind: 'swg40', era: 'de', name: 'schweres Wurfgerät 40', role: 'Heavy rockets fired from their crates at short range', range: 1930 },
 ];
 export const rosterFor = era => BATTERIES.filter(b => b.era === era);
 export const CAMPAIGN = ['1917', 'ww2'].flatMap(era => rosterFor(era).slice(1).map((b, i) => ({

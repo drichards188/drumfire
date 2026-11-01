@@ -1,5 +1,5 @@
 // The career open battle's threat levels (Helldivers 2's difficulties: the player picks one before battle; docs/
-// PROGRESSION.md, DESIGN.md "Threat levels"). Node-safe data. Level 1 is comfortable for a new career's lone K 17; level
+// PROGRESSION.md, DESIGN.md "Threat levels"). Node-safe data. Level 1 is comfortable for a new career's lone Ringkanone C/92; level
 // 10 challenges a full lineup at its best. A level sets the battle, never the player's own guns: the day's length, the
 // enemy's pressure, the kinds of target, the modifiers, the pay. Every level is open from the start: the player
 // picks any.
@@ -18,11 +18,11 @@
 //            the share of our men that must reach the British line at X-Zeit, `cover` the Feuerwalze's bursts on each
 //            lane in 20 s that keep the garrison's heads down (ww1/infantry.js; 6 without a level)
 export const THREAT = [
-  { n: 1, name: 'Ruhige Front', en: 'Quiet front', fits: 'K 17, one gun', pay: 1, modifiers: 0,
+  { n: 1, name: 'Ruhige Front', en: 'Quiet front', fits: 'Ringkanone C/92, one gun', pay: 1, modifiers: 0,
     sub: 'Morning only: soft targets in reach, no attacks, little to fear.',
     lines: ['Dawn and the morning, about 15 minutes: finish one fire mission and hold the line.', 'Field batteries, dumps, the HQ and the traffic on their roads.', 'No attacks, almost no counter-battery fire, no aircraft.'],
     day: 'morning', need: 1, attacks: 0, assault: 0.4, cb: 0.25, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.4, dmg: 0.5, sig: 0.6, zero: 0.5, cover: 6 },
-  { n: 2, name: 'Stellungskrieg', en: 'Trench routine', fits: 'K 17, two guns', pay: 1, modifiers: 0,
+  { n: 2, name: 'Stellungskrieg', en: 'Trench routine', fits: 'Ringkanone C/92, two guns', pay: 1, modifiers: 0,
     sub: 'Into the afternoon: one small attack and its Sperrfeuer.',
     lines: ['The morning and the afternoon: finish two fire missions and hold the line.', 'One small British attack: answer the red rockets.', 'Light counter-battery fire.'],
     day: 'day', need: 2, attacks: 1, assault: 0.45, cb: 0.4, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.3, dmg: 0.6, sig: 0.7, zero: 0.5, cover: 6 },

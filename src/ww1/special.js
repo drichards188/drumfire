@@ -24,7 +24,7 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 // the gun and its bed swing from `from` to `to` in the middle of the work (the render layer turns the rig, its pit or
 // site and the camera with piece.bearing) and `unit.gate` says how long is left. A duration of 0 relays it at once.
 // TODO restore the wait: the relay is instant for now (asked for on 2026-10-20); it was { bertha: 100, gamma: 100 }.
-export const REBED = { bertha: 0, gamma: 0 };
+export const REBED = { bertha: 0, gamma: 0, beta: 0 };
 // a duration in the console's words: seconds under two minutes, whole minutes above
 const span = (s, long) => (s < 120 ? `${Math.ceil(s)}${long ? ' seconds' : ' s'}` : `${Math.round(s / 60)}${long ? ' minutes' : ' min'}`);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -106,9 +106,119 @@ class BedCtl {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ shoot and move
+// The self-propelled guns (Wespe, Hummel: GUNS special 'move') have two prepared positions (`def.positions`, ops.js
+// RIDGE_MORE). 'move' { id? } (T; default the other one) drives the battery there: the crews mount (MOUNT s), the
+// vehicles drive across (SPEED m/s, each to its own spot, hull along the road), then dismount and lay again. The
+// enemy loses them as they go (the signature drops to nothing: what they had located is an empty position), but the
+// guns are out of action meanwhile and the new position is surveyed in a hurry (a fresh map error, MOVE_BIAS of a new
+// lay's). An auto crew moves by itself once the enemy has it located and its shells are coming close.
+// unit.special = { kind: 'move', state: 'set' | 'mount' | 'drive' | 'dismount', t, dur, posId, to, positions, moves }
+const MOUNT = 10, SPEED = 9, MOVE_BIAS = 0.6;
+class MoveCtl {
+  constructor(sim, u) {
+    this.sim = sim;
+    this.u = u;
+  }
+
+  reset() {
+    const u = this.u, ps = u.def.positions ?? [];
+    u.special = { kind: 'move', state: 'set', t: 0, dur: 0, posId: ps[0]?.id ?? null, to: null, positions: ps, moves: 0, from: null };
+    // each vehicle's place in a position, from the unit's centre (as piecePlacements lays them out)
+    this.offsets = u.pieces.map((p) => ({ dx: p.pos.x - u.pos.x, dz: p.pos.z - u.pos.z }));
+    for (const p of u.pieces) p.mobile = true;
+    u.gate = null;
+  }
+
+  other() {
+    const st = this.u.special;
+    return st.positions.find((q) => q.id !== st.posId) ?? null;
+  }
+
+  move(id, auto = false) {
+    const sim = this.sim, u = this.u, st = u.special;
+    const q = id ? st.positions.find((x) => x.id === id) : this.other();
+    if (st.state !== 'set') { if (!auto) sim.radio(`${u.callsign}: already on the move.`, 'warn'); return false; }
+    if (!q || q.id === st.posId) { if (!auto) sim.radio(`${u.callsign}: no other position to go to.`, 'warn'); return false; }
+    if (!auto && u.mode === 'auto') u.mode = 'manual';
+    sim.guns.cease(u);
+    const live = u.pieces.filter((p) => p.state !== 'dead');
+    const d = Math.hypot(q.pos.x - u.pos.x, q.pos.z - u.pos.z);
+    Object.assign(st, { state: 'mount', t: 0, dur: MOUNT, to: q.id, drive: d / SPEED, from: { x: u.pos.x, z: u.pos.z }, dest: q.pos });
+    // the round in the breech stays there; the cycle in hand is given up
+    for (const p of live) if (p.state === 'loading' || p.state === 'laying' || p.state === 'ready') { p.state = 'idle'; p.job = null; }
+    u.signature = 0;
+    for (const p of u.pieces) p.fixed = true; // (the hulls are turned by place() alone until they are in position)
+    this.gate();
+    sim.radio(`${u.callsign}: Stellungswechsel to ${q.name}. Out of action for about ${Math.round((MOUNT * 2 + d / SPEED) / 10) * 10} seconds.`, 'info');
+    sim.events.special?.(u, 'move', st);
+    return true;
+  }
+
+  gate() {
+    const u = this.u, st = u.special;
+    if (st.state === 'set') { u.gate = null; u.stowed = false; return; }
+    const left = st.state === 'mount' ? st.dur - st.t + st.drive + MOUNT : st.state === 'drive' ? st.dur - st.t + MOUNT : st.dur - st.t;
+    u.gate = `Stellungswechsel, ${Math.ceil(left)} s to go`;
+    u.stowed = true; // (the guns at their rest, not laid, while the crews mount and drive)
+  }
+
+  command(name, a) {
+    if (name !== 'move') return false;
+    return this.move(a.id ?? null);
+  }
+
+  // every vehicle at fraction k of its way from its place at the old position to its place at the new one, its hull
+  // turned along the road
+  place(k) {
+    const u = this.u, st = u.special, f = st.from, d = st.dest;
+    const road = bearingOf(d.x - f.x, d.z - f.z);
+    for (const p of u.pieces) {
+      const o = this.offsets[p.i];
+      p.pos.x = f.x + (d.x - f.x) * k + o.dx;
+      p.pos.z = f.z + (d.z - f.z) * k + o.dz;
+      p.pos.y = this.sim.heightAt(p.pos.x, p.pos.z);
+      if (p.state !== 'dead') p.az = wrap(p.bearing - road);
+    }
+  }
+
+  update(dt) {
+    const sim = this.sim, u = this.u, st = u.special;
+    if (st.state === 'set') {
+      // an auto crew moves when the enemy has it and the rounds come close, between series
+      if (u.mode === 'auto' && u.alive && u.signature > 0.5 && sim.time - u.underFire < 20 && !u.pieces.some((p) => p.rounds > 0 && p.state !== 'dead')) this.move(null, true);
+      return;
+    }
+    st.t += dt;
+    u.signature = 0;
+    if (st.state === 'mount' && st.t >= st.dur) Object.assign(st, { state: 'drive', t: 0, dur: st.drive });
+    if (st.state === 'drive') {
+      const k = Math.min(1, st.t / Math.max(0.01, st.dur));
+      this.place(k);
+      if (k >= 1) Object.assign(st, { state: 'dismount', t: 0, dur: MOUNT });
+    }
+    if (st.state === 'dismount' && st.t >= st.dur) {
+      st.state = 'set';
+      st.posId = st.to;
+      st.moves++;
+      u.pos.x = st.dest.x; u.pos.z = st.dest.z; u.pos.y = sim.heightAt(u.pos.x, u.pos.z);
+      for (const p of u.pieces) p.fixed = false; // (the hulls turn from the road onto the line as they lay)
+      // a new position: surveyed in a hurry, so the map error of the lay is drawn again
+      const o = u.order;
+      if (o.target) {
+        u.bias = sim.guns.drawBias(u, o.target.x, o.target.z, MOVE_BIAS);
+        sim.guns.recompute(u);
+      }
+      sim.radio(`${u.callsign}: in position at ${st.positions.find((q) => q.id === st.posId)?.name ?? 'the new position'}. Ready to lay.`, 'info');
+      sim.events.special?.(u, 'ready');
+    }
+    this.gate();
+  }
+}
+
 // ------------------------------------------------------------------------------------------------ the module
 // (the German career's battle fields the WW2 Gustav, assembled on its curve, and the set-up Karl too: ops.js RIDGE_WW2)
-const CTL = { bertha: BedCtl, gamma: BedCtl, paris: ParisCtl, gustav: GustavCtl, karl: KarlCtl };
+const CTL = { bertha: BedCtl, gamma: BedCtl, beta: BedCtl, move: MoveCtl, paris: ParisCtl, gustav: GustavCtl, karl: KarlCtl };
 
 export class SpecialWW1 {
   constructor(sim) {

@@ -39,7 +39,9 @@ const now = () => performance.now() / 1000;
 // the guns whose shell comes on a tray, up a lift or by crane, and those with bag charges and a primer tube (WW1: the
 // Mörser 16 is loaded from a tray as the Mrs 18; the Langer Max's shell comes up the well hoist and the Gamma's up its
 // incline car, both with a main and fore charges; the K 17 and the sFH 13 load by hand with a brass case)
-const TRAY = new Set(['k18', 'mrs18', 'bertha', 'm16']);
+const TRAY = new Set(['k18', 'mrs18', 'bertha', 'm16', 'k38', 'm99']);
+// the rocket launchers: a ripple from cover, no charge to call (the 21 cm and the Wurfgerät as the 15 cm)
+const WERFER = new Set(['nbw41', 'nbw42', 'swg40']);
 const LIFT = new Set(['gustav', 'max38', 'gamma']);
 const BAGS = new Set(['k18', 'mrs18', 'bertha', 'gustav', 'karl', 'max38', 'gamma']);
 const KARL_STAGE = { driving: 'k_drive', emplace: 'k_emplace', pivot: 'k_pivot', lowering: 'k_lower', down: 'k_down', raising: 'k_raise' };
@@ -249,7 +251,7 @@ export class CrewVoices {
     s.shotVolley = p.volley;
     const m = u.missionId != null ? this.sim.missionById(u.missionId) : null;
     if (m && (m.kind === 'sos' || m.kind === 'barrage')) return; // no observer waits for these
-    const id = u.kind === 'nbw41' ? 'shot_nbw' : (u.order?.rounds ?? 1) > 1 ? 'shot_ffe' : 'shot';
+    const id = WERFER.has(u.kind) ? 'shot_nbw' : (u.order?.rounds ?? 1) > 1 ? 'shot_ffe' : 'shot';
     this.say([id], { ch: 'tel', priority: 2, key: 'shot', unit: u.id });
   }
 
@@ -405,7 +407,7 @@ export class CrewVoices {
     // the guns of this order (a ready gun has often fired it already, in the same step: its rounds are counted down)
     const sel = u.pieces.filter((p) => p.volley === u.volleys && p.state !== 'dead');
     if (!sel.length) return;
-    const live = u.pieces.filter((p) => p.state !== 'dead'), rounds = u.order?.rounds ?? 1, werfer = u.kind === 'nbw41';
+    const live = u.pieces.filter((p) => p.state !== 'dead'), rounds = u.order?.rounds ?? 1, werfer = WERFER.has(u.kind);
     const t = now();
     // the Sperrfeuer and the barrage: one call, not one each time the crew sets the guns going again
     if (m?.kind === 'sos' || m?.kind === 'barrage') {
@@ -435,7 +437,7 @@ export class CrewVoices {
   }
 
   fuzeLine(u, fuze) {
-    if (u.kind === 'nbw41') return null;
+    if (WERFER.has(u.kind)) return null;
     return { instant: 'fz_instant', delay: 'fz_delay', shrapnel: 'fz_time' }[fuze] ?? null;
   }
 

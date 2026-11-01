@@ -7,7 +7,7 @@ import { CrewField, newPoly, polyAt, finishPoly } from './crewfield.js';
 import { crewForRoleDE } from '../models/v/crew.js';
 import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crews_de.js';
 import { ROLES_HEAVY, heavyBuild, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
-import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
+import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, TIMED_WW1, BLOCK_MAN_WW1, BAG_SIDE_WW1, LOADER_AT_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
 // a node and every parent up to the rig's root are visible (an anchor whose part the rig has hidden is not)
 const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent) if (!n.visible) return false; return !!node; };
 
@@ -61,16 +61,16 @@ const V_CARRY = 1.1, V_BAG = 1.2, V_WALK = 1.3, V_PAIR = 0.9, PAIR_OMEGA = 1.3, 
 // kinds whose carriers walk on the cycle clock (GunCrew.timeline): they set off in the step before the one their round
 // is for, at a walking pace, instead of covering the whole way inside a 1 to 2 s step at a run
 // (the German field and heavy guns; the British guns keep their step-bound drill for now)
-const TIMED = new Set(['lefh18', 'sfh18', 'k17', 'sfh13', 'k18', 'mrs18', 'm16']);
+const TIMED = new Set(['lefh18', 'sfh18', 'k17', 'sfh13', 'k18', 'mrs18', 'm16', ...TIMED_WW1]);
 // the man who works the breech block of these heavies (the rammers stand 3 m back on the K 18's platform: their
 // hands used to stretch the whole way to the handle)
-const BLOCK_MAN = { k18: 'lanyard', mrs18: 'lanyard', m16: 'lanyard' };
+const BLOCK_MAN = { k18: 'lanyard', mrs18: 'lanyard', m16: 'lanyard', ...BLOCK_MAN_WW1 };
 // how far right of the bore the cartridge man stands to put the case in (metres; 0.5 by default): nearer the bore where
 // his way in would otherwise rub past the shell man walking back
 // where the light guns' loader works the block from: [out to his side, back] of the handle's mid stroke; null: from his
 // post (the sFH 13's breech sits between its wheels over the box trail, with nowhere to stand within an arm of it)
-const LOADER_AT = { sfh13: null };
-const BAG_SIDE = { lefh18: 0.32, sfh18: 0.32, k17: 0.3, sfh13: 0.3 };
+const LOADER_AT = { sfh13: null, ...LOADER_AT_WW1 };
+const BAG_SIDE = { lefh18: 0.32, sfh18: 0.32, k17: 0.3, sfh13: 0.3, ...BAG_SIDE_WW1 };
 const _pp = { x: 0, z: 0 }, _pp2 = { x: 0, z: 0 }, _pp3 = { x: 0, z: 0 };
 
 function propOf(built) {

@@ -89,6 +89,12 @@ export function mountConsole(ctx) {
   };
   // the WW1 mode's 42 cm guns: relay the bed onto the ordered target's line (src/ww1/special.js 'rebed'; T)
   const bed = () => {
+    // the self-propelled guns (src/ww1/special.js MoveCtl): T drives them to their other position
+    if (U?.special?.kind === 'move') {
+      if (U.special.state !== 'set') say('Already on the move.');
+      else send('move', {});
+      return true;
+    }
     const b = U?.special?.bed;
     if (!b) return false;
     if (b.state === 'moving') say('The bed is already being relaid.');
@@ -149,7 +155,7 @@ export function mountConsole(ctx) {
   const rtab = new RangeTable();
   // the WW2 gunner: MAN on a gun's row takes the player to it in person, LEAVE back (src/ww2/gunner.js; not a fire
   // order, so the battery keeps its mode)
-  const guns = new GunsCard({ onBed: () => bed(), onMan: (i, leave) => send(leave ? 'unman' : 'man', leave ? {} : { piece: i }) });
+  const guns = new GunsCard({ onBed: () => bed(), onMove: () => bed(), onMan: (i, leave) => send(leave ? 'unman' : 'man', leave ? {} : { piece: i }) });
   const missions = new MissionList({ shared, take });
   const pad = new MessagePad({ apply: (s) => act('apply', s), clear: () => mail.clear() });
 
@@ -202,7 +208,7 @@ export function mountConsole(ctx) {
     else if (now - toastT < 3200) st = toast;
     else if (unit.mode === 'hold') st = 'HOLDING: cease fire. Press A or MANUAL to go on.';
     else if (unit.gate && (!prob || prob === unit.gate)) { // (a gated gun's unreachable target says CANNOT FIRE below)
-      const cardName = { gustav: 'PREPARATION', karl: 'KARL', paris: unit.special?.ready === false ? 'STELLUNGSBAU' : 'FEUERABLAUF' }[unit.kind] ?? (unit.special?.bed ? null : 'PROCEDURE');
+      const cardName = { gustav: 'PREPARATION', karl: 'KARL', paris: unit.special?.ready === false ? 'STELLUNGSBAU' : 'FEUERABLAUF' }[unit.kind] ?? (unit.special?.bed || unit.special?.kind === 'move' ? null : 'PROCEDURE');
       st = `NOT READY: ${unit.gate}.${cardName ? ` See the ${cardName} card.` : ' See THE GUNS.'}`;
     }
     else if (!o.target) st = 'AWAITING A TARGET. Click the board, or Tab and Enter for a mission.';

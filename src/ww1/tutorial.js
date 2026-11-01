@@ -1,7 +1,7 @@
 // The German career's basic training: the first lesson a new player is offered (src/ui/invite.js), on the career's own
 // ridge (the WW1 German page, ?mode=ww1&tutorial=training) and run by the same Tutorials class as every lesson
 // (src/tutorial.js). The Gruppe lends the player a battery well above a new career's: the WW2 21 cm Mörser 18 pair
-// "Julius" (src/ww1/ops.js RIDGE_WW2) with every upgrade, so the career's first battle with its one 10 cm K 17 feels the
+// "Julius" (src/ww1/ops.js RIDGE_WW2) with every upgrade, so the career's first battle with its one 15 cm Ringkanone C/92 feels the
 // difference. Two halves: the console (take a call, range one gun, read the VB, correct, bracket, fire for effect) and
 // the gun in person (man it, lay, fire, read back a new command, load, fire again, leave), then both guns finish the
 // second target. The screen is dark but for each step's work (`spotlight`) and every step must be done (`noSkip`);
@@ -412,7 +412,7 @@ export const WW1_TUTORIALS = [
     stall: 20, stuck: (T) => (G(T) ? live(T) : problem(T) || null),
     after: { label: 'To battle' },
     blurb: 'How the game is played, step by step: lay the guns from the console, range on the observer\'s reports, fire for effect, then serve a gun in person. With a borrowed battery of two 21 cm Mörser 18, every upgrade fitted.',
-    outro: 'That was a borrowed battery: two 21 cm Mörser 18, every upgrade fitted. Your own career starts with a single 10 cm K 17 and its 18 kg shells.\n\nEvery battle pays research points. Research the mortar line (Mörser 16, then Mörser 18), then buy the second gun and the parts with the battery\'s own points, and Julius is yours.',
+    outro: 'That was a borrowed battery: two 21 cm Mörser 18, every upgrade fitted. Your own career starts with a single 15 cm Ringkanone C/92, an old gun with no recoil system: it runs up its ramps at every shot and has to be laid afresh.\n\nEvery battle pays research points. Research the mortar line (Mörser 16, then Mörser 18), then buy the second gun and the parts with the battery\'s own points, and Julius is yours.',
     setup: (T) => T.ensure('main', MAIN_SITE, MAIN),
     keep: (T) => {
       const p0 = T.u?.pieces[0];

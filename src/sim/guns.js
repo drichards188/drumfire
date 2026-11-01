@@ -308,6 +308,7 @@ export class Guns {
     const crewK = clamp((p.crewNeed ?? p.crewMax) / Math.max(1, p.crew), 1, 2.6) * (sim.attract ? 0.6 : 1);
     let dur = st.dur * crewK * (u.mods ? u.mods.load : 1) * (sim.drillK ?? 1);
     if (st.step === 'depress') dur = Math.max(dur, Math.abs(p.el - g.loadEl) / g.elRate);
+    if (st.step === 'relay' && !(p.firedAt > -900)) dur = 0.3; // (not yet fired: it stands laid on its line already)
     p.job = { step: st.step, t: 0, dur, i: p.ji, n: g.load.length };
     sim.events.load?.(u, p, st.step);
   }
@@ -527,6 +528,13 @@ export class Guns {
     const slope = elSlope(p.kind, o.charge, D);
     let brg = p.bearing - p.az + cl + br / D + sim.gauss() * g.disp.l * dk * wearK;
     let el = p.el + slope * bo + sim.gauss() * 0.00015;
+    // a gun without a recoil system (the Mörser 99) rolled back off its lay at every shot and was laid afresh by eye: a
+    // new error each round, smaller with better sights (its own draws: the other guns' rounds are as before)
+    if (g.runback && !sl) {
+      const bk = u.mods ? u.mods.bias : 1;
+      v *= 1 + sim.gauss() * g.runback.r * bk;
+      brg += sim.gauss() * g.runback.l * bk;
+    }
     if (sl && o.fuze !== 'shrapnel') {
       const s = solveLanding(sim, p, ch, shellK(p.kind), slope, D, p.el, p.bearing - p.az, sl.at);
       if (s && sl.first) {

@@ -196,9 +196,9 @@ export function buildGermanGunSite(kind, seed = 1) {
   const rnd = mulberry32(seed * 173 + 43), P = new Parts(mats());
   const root = new THREE.Group();
   root.name = `${kind}-position`;
-  const heavy = kind === 'k18' || kind === 'mrs18' || kind === 'bertha';
+  const heavy = kind === 'k18' || kind === 'mrs18' || kind === 'bertha' || kind === 'k38';
   const mobile = kind === 'karl';
-  const rocket = kind === 'nbw41';
+  const rocket = kind === 'nbw41' || kind === 'nbw42' || kind === 'swg40';
   // the leFH 18's trails swing with a traverse past 25 degrees (its carriage group): at 60 degrees a spade reaches
   // 3.9 m out, so its walls (posts at side - 0.69) stand wider
   const side = kind === 'bertha' ? 7.3 : heavy ? 5.7 : rocket ? 3.2 : mobile ? 7.5 : kind === 'sfh18' ? 4.2 : kind === 'lefh18' ? 4.7 : 3.5;

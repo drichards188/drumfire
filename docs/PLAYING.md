@@ -20,15 +20,15 @@ This page covers the menu, research and the campaigns, every era's units and ope
 
 ## Research, upgrades and the campaign
 
-- **Start small.** Germany is one career: you start with the **10 cm Kanone 17** with **one gun** and no upgrades. The open battle of 1918 (the ridge) fields the batteries you have researched, 1918 and WW2 guns together, with the guns and parts they have earned.
+- **Start small.** Germany is one career: you start with the **15 cm Ringkanone C/92**, an old fortress gun, with **one gun** and no upgrades. The open battle of 1918 (the ridge) fields the batteries you have researched, 1918 and WW2 guns together, with the guns and parts they have earned.
 - **Every battle pays**, won or lost: research points (RP) to the battery you are researching, and battery points to each battery for its own fire. Leaving early pays what was earned so far.
-- **Research.** The Research screen (top bar) shows the tree in five lines (long-range guns, field howitzers, mortars and siege, rockets, off-map support). A line is researched in order; the first of every line is open from the start. Click a battery, then "Research this battery": every battle's RP go to it until it is done, and the rest goes on to the next one in its line. See docs/PROGRESSION.md for the lines and costs.
+- **Research.** The Research screen (top bar) shows the tree in seven lines (field artillery, long-range guns, railway guns, mortars, siege guns, trench mortars and rockets, off-map support), each running from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order; the first of every line is open from the start. Click a battery, then "Research this battery": every battle's RP go to it until it is done, and the rest goes on to the next one in its line. See docs/PROGRESSION.md for the lines and costs.
 - **Your lineup.** At most 5 batteries on the map and 1 off-map support take the field: swap them in the hangar's slot bar, or "Leave out of battle" beside the battery. Dev mode opens every battery to the lineup but keeps the 5 slots.
 - **Threat levels.** The career's open battle is played at a level from 1 to 10, picked in the battle chooser; all ten are open from the start. See docs/PROGRESSION.md.
-- **Off-map support.** The V-1, the V-2 and the Paris Gun fight in the open battle from off the map. Their tiles sit under the battery tabs, marked OFF-MAP SUPPORT. Click a ready tile, then click the board where it is to fall (a point, or a target's symbol). It prepares (PREP), flies (AIR) and strikes in its own time, then reloads for a long time (RLD; about 9 to 13 minutes, less with its breech and relief crews upgraded).
+- **Off-map support.** The Gotha strike, the V-1, the V-2 and the Paris Gun fight in the open battle from off the map. Their tiles sit under the battery tabs, marked OFF-MAP SUPPORT. Click a ready tile, then click the board where it is to fall (a point, or a target's symbol). It prepares (PREP), flies (AIR) and strikes in its own time, then reloads for a long time (RLD; about 9 to 13 minutes, less with its breech and relief crews upgraded).
   - **Changing or stopping it.** Click a preparing tile, then the board, to give it a new point; its × stands it down with no reload.
   - **On the board.** Each weapon's aim shows as a ring two spreads across with its countdown, and the last strike stays marked for a minute and a half.
-  - **The arrival.** The V-1 comes in low and buzzing and dives in silence once its motor cuts. The V-2 is not heard until it strikes. The Paris shell falls steeply. F rides it in while it is over the map (when the selected battery has no shell of its own in the air).
+  - **The arrival.** Three Gothas cross the map from the east at 1,800 m and each drops a stick of four bombs across the point. The V-1 comes in low and buzzing and dives in silence once its motor cuts. The V-2 is not heard until it strikes. The Paris shell falls steeply. F rides it in while it is over the map (when the selected battery has no shell of its own in the air).
   - **When it can't fire.** A tile that can't take an order (in the air, reloading) says why on the radio.
 - **Upgrades.** In the hangar's modifications panel (or on the Research screen), a researched battery spends its own points on more guns (up to its full battery) and on seven parts with three levels each: shells (damage), barrel (accuracy), breech and loading gear (reload), sights and survey (first round and laying), camouflage (less for the enemy to locate), ammunition supply, and relief crews (more men at each gun to take turns at the heavy work: reserves against casualties, and a little faster loading). Any order.
 - **The enemy follows your strength.** A small lineup meets less counter-battery fire and smaller attacks.
@@ -65,6 +65,7 @@ A quiet range on the era's own battle map, in daylight, with one gun of the batt
 - **The card** on the left of the 3D view has three tabs. **Targets:** every target on the map, nearest first, with its range and whether the gun reaches it; **Mission** gives it an observed mission (the aeroplane reports each fall), **Lay** lays it on the target, and the board works as in battle. **Upgrades:** the seven parts at any level; a change starts the range again with them (their effect, not their look). **Debug:** an invulnerable gun and endless ammunition (both on), no errors (no wind, calibration, map error or dispersion), and buttons for hostile fire on the gun, an attack with its SOS, a convoy, a train, clearing the range and copying a link to the setup.
 - **In person.** On the WW2 guns that can be served in person, P (or Man the gun) puts you at the gun and the drill fires it, as in battle; the card steps aside while you are there.
 - **Keys** are the battle's: Space fires, `[` and `]` change the time, H hides the panels. Another gun: go back to the menu and use Try on the range on its card.
+- **Any battery of the German tree** takes the range on the 1918 ridge: `/?range=1&mode=ww1&kind=<kind>` (for example `kind=k5` or `kind=wespe`).
 
 ## 1917 British: the Heavy Artillery Group
 
@@ -162,7 +163,7 @@ The V-1 and V-2 sites have a launch console of their own in place of the usual o
 
 ### Serving a gun in person
 
-Press **P**, or **MAN** on a gun's row of the guns card, to take a place in the detachment of a gun of the selected battery: any German gun of the open battles, the 1918 ones on the ridge (K 17, sFH 13, 21 cm Mörser 16, Langer Max, Gamma, Bertha) as well as the WW2 ones (leFH 18, sFH 18, K 18, 21 cm Mörser 18, Nebelwerfer, Gustav, Karl-Gerät). Not the V-1, the V-2 or the Paris Gun: their own missions have drills of their own. The view goes to first person at that man's eyes; the console beside it still commands the whole Gruppe. P (or LEAVE) takes you back; the crew carries on where you left it.
+Press **P**, or **MAN** on a gun's row of the guns card, to take a place in the detachment of a gun of the selected battery: any German gun of the open battles, the 1918 ones on the ridge (K 17, sFH 13, 21 cm Mörser 16, Langer Max, Gamma, Bertha) as well as the WW2 ones (leFH 18, sFH 18, K 18, 21 cm Mörser 18, Nebelwerfer, Gustav, Karl-Gerät), and the rest of the tree's: FK 16, K 16, Mörser 99, Beta-Gerät, schwerer Minenwerfer, K 38, H M1, Kurze Bruno, K5, K 12 and Nebelwerfer 42 (the railway guns lay by a powered drive, as the Gustav). Not the Wespe and the Hummel (they drive off), nor the Wurfgerät. Not the V-1, the V-2 or the Paris Gun: their own missions have drills of their own. The view goes to first person at that man's eyes; the console beside it still commands the whole Gruppe. P (or LEAVE) takes you back; the crew carries on where you left it.
 
 - **The posts.** 1 Geschützführer (reads back each new fire command, hold E), 2 Richtkanonier (A and D traverse, W and S elevate, Shift fine), 3 Ladekanonier (open, shell, ram, cartridge, close: hold E), 4 Abzugskanonier (fit the primer, then the pull: hold E). The heavies' barrel first runs down to its loading angle (S at post 2).
 - **The gun card.** At the top, the one thing to do now and its key (or the post to go to, or that the crew is on it), with the hold's progress. Below it, the fire command for your gun beside the gun's own lay (Seite and Erhöhung in Strich, what is left to lay and the key that lays it, the charge, the fuze), whether it is read back and whether Feuer is ordered, and the drill step by step in the colours of the posts that work them. The keys listed first are those of your post.
@@ -202,7 +203,12 @@ The battle's roster, smallest calibre first (keys 1 to 6):
 5. the 42 cm M-Gerät "Dicke Bertha"
 6. the 42 cm Gamma-Mörser (fixed on its bed, set up and ready)
 
-- **The beds.** Bertha and the Gamma turn only 11.5 and 23 degrees either way on their beds. For a target beyond, press T (or BETTUNG UMLEGEN on the guns card) to relay the bed onto its line.
+- **The beds.** Bertha, the Gamma and the Beta-Gerät turn only 11.5, 23 and 30 degrees either way on their beds. For a target beyond, press T (or BETTUNG UMLEGEN on the guns card) to relay the bed onto its line.
+- **The rest of the tree.** A career's lineup can also bring the Ringkanone C/92 (the career's first battery), the FK 16, the sFH 93, the K 16, the Mörser 99, the Beta-Gerät and the schwerer Minenwerfer of 1914 to 1918, and the WW2 K 38, 35.5 cm H M1, Kurze Bruno, K5, K 12, Wespe, Hummel, Nebelwerfer 42 and schweres Wurfgerät 40. Each stands in its own place on the ridge:
+  - **Ringkanone C/92, sFH 93 and Mörser 99.** No recoil system: at every shot the gun runs up two ramps behind its wheels and rolls back down by its own weight, a little off its line. The crew levers it back with handspikes and lays it again, so every round lands like a ranging round.
+  - **Minenwerfer and Wurfgerät.** Dug in just behind our front trench, a kilometre and two of reach. With either in the lineup, British forward posts (Lewis guns and a Stokes mortar) appear opposite as targets.
+  - **Railway guns.** The Kurze Bruno and the K 12 lay for line by shunting along their curved spurs; the K5 turns on its turntable to any bearing. All of them turn slowly: a target across the map costs minutes.
+  - **Wespe and Hummel.** Self-propelled: press T (or STELLUNGSWECHSEL on the guns card) to drive to the other position. The enemy loses the battery on the way, but it cannot fire for a couple of minutes and has to range again. On auto the crew moves by itself once it is found.
 - **The day** runs like the WW2 Flanders battle: Einschießen at dawn, the Artilleriekampf, the British attack (Sperrfeuer, S), night and Störungsfeuer.
 - **X-Zeit.** A three-minute Feuervorbereitung and the Feuerwalze for our own assault, which needs the barrage kept dense on every lane.
 
@@ -301,7 +307,7 @@ For the selected unit; clicking the buttons does the same.
 | S | SOS: every gun that can reach it lays on the alarmed sector's line |
 | Backspace, Delete | cease fire |
 | `.` | apply the pencilled correction of the newest observer report |
-| T | WW1 German: relay the bed of Bertha or the Gamma onto the ordered target's line |
+| T | WW1 German: relay the bed of Bertha, the Gamma or the Beta-Gerät onto the ordered target's line; drive the Wespe or the Hummel to its other position |
 
 - **The artillery board.** Clicking the board lays the guns on that point; clicking a known target takes its mission; dragging pans and the wheel zooms the board.
 - **Manual first.** Any control the AI crew would undo (laying, firing, charge) switches the unit to manual first.

@@ -32,6 +32,7 @@ export function expectedLayout(kind, { alt = 800 } = {}) {
     case 'bballoon': return [{ x: 0, z: 0, y: alt }, { x: -alt * 0.5, z: 0, y: 0 }];
     case 'bdump': return [{ x: -18, z: -10, y: 0 }, { x: 3, z: -17, y: 0 }, { x: 20, z: -3, y: 0 }, { x: -8, z: 9, y: 0 }, { x: 13, z: 17, y: 0 }];
     case 'bconvoy': return [{ x: -9, z: 5, y: 0 }, { x: 11, z: -7, y: 0 }, { x: 2, z: 12, y: 0 }, { x: -5, z: -12, y: 0 }];
+    case 'bpost': return [{ x: -12, z: -2, y: 0 }, { x: 10, z: -3, y: 0 }, { x: -2, z: 12, y: 0 }];
   }
   return [];
 }

@@ -18,6 +18,7 @@ import { ww2Theatre } from '../src/ww2/theatre.js';
 import { ww1Theatre } from '../src/ww1/theatre.js';
 import { sandboxTheatre } from '../src/campaign.js';
 import { GUNS } from '../src/sim/tables.js';
+import { RIDGE_MORE } from '../src/ww1/ops.js';
 import { DRIVEN } from '../src/ww2/gunner.js';
 
 const args = process.argv.slice(2);
@@ -25,8 +26,10 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const seeds = args.filter((a, i) => /^\d+$/.test(a) && !/^--/.test(args[i - 1] ?? '')).map(Number);
 if (!seeds.length) seeds.push(1, 2, 3);
 const kindArg = opt('--kind', 'all');
-const WW1_KINDS = new Set(['k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha']);
-const asked = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl', 'nbw41', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha'] : kindArg.split(',');
+// the ridge's kinds: the 1918 battle's, and the rest of the German tree's (src/ww1/ops.js RIDGE_MORE, fielded by name)
+const MORE = new Set(RIDGE_MORE.map((u) => u.kind));
+const WW1_KINDS = new Set(['k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha', ...MORE]);
+const asked = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl', 'nbw41', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'smw', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42'] : kindArg.split(',');
 // this process runs one era's guns (--era ww1: the 1918 ones, on the ridge); the 1918 ones asked for with the WW2
 // ones go to a second process, run after this one's
 const ERA1 = args.includes('--era') && opt('--era', 'ww2') === 'ww1';
@@ -37,7 +40,7 @@ const opOf = (kind) => (WW1_KINDS.has(kind) ? 'ridge' : kind === 'karl' ? opt('-
 // the open battle's Karl is the game's extra (src/campaign.js sandboxTheatre: set up, its crew turns the hull); made
 // once, as it adds the Karl's pads to the terrain
 let sandbox = null;
-const theatre = (kind) => (WW1_KINDS.has(kind) ? ww1Theatre('ridge') : kind === 'karl' && opOf(kind) === 'flanders' ? (sandbox ??= sandboxTheatre('flanders')) : ww2Theatre(opOf(kind)));
+const theatre = (kind) => (MORE.has(kind) ? ww1Theatre('ridge', { kinds: [kind] }) : WW1_KINDS.has(kind) ? ww1Theatre('ridge') : kind === 'karl' && opOf(kind) === 'flanders' ? (sandbox ??= sandboxTheatre('flanders')) : ww2Theatre(opOf(kind)));
 const asArg = opt('--assist', 'both');
 const assists = asArg === 'both' ? [true, false] : [asArg === 'on'];
 const diffArg = opt('--difficulty', 'Normal');
@@ -60,7 +63,9 @@ for (const kind of kinds) for (const assist of assists) for (const difficulty of
       radio: (t, k) => { if (LOG) console.log(`  [${sim.time.toFixed(0).padStart(5)}] ${k.padEnd(6)} ${t}`); },
       gunner: (what) => { if (what === 'lapse') lapsed++; if (what === 'unman') left++; },
     };
-    sim.newGame({ difficulty, seed });
+    // (the tree's later batteries as a career fields them: with a loadout the lineup's day gives them work, the
+    // trench mortars their forward posts, sim/lineup.js)
+    sim.newGame({ difficulty, seed, ...(MORE.has(kind) ? { loadout: { [kind]: { guns: 9, mods: null } } } : {}) });
     for (const u of sim.units) u.mode = 'auto';
     const u = sim.units.find((q) => q.kind === kind);
     if (!u) { console.log(`no ${kind} in the battle`); fails++; continue; }

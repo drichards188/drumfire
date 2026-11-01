@@ -15,25 +15,27 @@ import { autoCharge } from '../sim/shells.js';
 import { bearingOf } from '../sector.js';
 import { FEUERWALZE, walzeMargin } from './director.js';
 
-export const SUPER = new Set(['bertha', 'gamma', 'max38', 'gustav', 'karl']);
-const HEAVY = new Set(['m16', 'bertha', 'gamma', 'max38', 'mrs18', 'gustav', 'karl']);
+export const SUPER = new Set(['bertha', 'gamma', 'max38', 'gustav', 'karl', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
+const HEAVY = new Set(['m16', 'bertha', 'gamma', 'max38', 'mrs18', 'gustav', 'karl', 'm99', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
 const BIG = new Set(['bgun15', 'bgun92', 'bgunrail', 'bgun6', 'hq', 'railyard', 'bdump', 'btanks', 'mebu']);
-const LONG = new Set(['k17', 'k18']); // the long guns: counter-battery, the rear, the traffic
-const TRAFFIC = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'k18']); // the guns quick enough for the road
-const SOFT_ONLY = new Set(['k17', 'k18', 'lefh18']); // too light a shell for the tanks and concrete
-const FIELD = new Set(['sfh13', 'lefh18', 'sfh18']); // the Sperrfeuer and the Feuerwalze
+const LONG = new Set(['k17', 'k18', 'k16', 'k38', 'rk92']); // the long guns: counter-battery, the rear, the traffic
+const RAIL = new Set(['max38', 'gustav', 'bruno', 'k5', 'k12']); // the railway guns: the railhead and the HQ first
+const ROCKETS = new Set(['nbw41', 'nbw42', 'swg40']); // ripples that drench an area: batteries, tanks, traffic
+const TRAFFIC = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'k18', 'fk16', 'k16', 'wespe', 'hummel']); // the guns quick enough for the road
+const SOFT_ONLY = new Set(['k17', 'k18', 'lefh18', 'fk16', 'wespe']); // too light a shell for the tanks and concrete
+const FIELD = new Set(['sfh13', 'lefh18', 'sfh18', 'fk16', 'wespe', 'hummel', 'sfh93']); // the Sperrfeuer and the Feuerwalze
 
 export class CrewsWW1 extends Crews {
   suits(u, m) {
     const t = m.targetId ? this.sim.targetById(m.targetId) : null;
     // (the Karl's gate passes: it drives, turns and lowers onto the target)
-    if (u.kind === 'paris' || (u.gate && u.kind !== 'karl')) return false;
+    if (u.kind === 'paris' || (u.gate && u.kind !== 'karl')) return false; // (a self-propelled battery on the move too)
     // a threat level's Feuerwalze: the field guns and howitzers (any gun but the super-heavies when the lineup has none)
     if (m.kind === 'barrage' && this.sim.level && !FEUERWALZE.has(u.kind) && this.sim.units.some((q) => q.alive && FEUERWALZE.has(q.kind))) return false;
     if (m.kind === 'sos' || m.kind === 'barrage') return !SUPER.has(u.kind);
     if (SUPER.has(u.kind)) return !!t && BIG.has(t.kind);
-    if (t?.kind === 'bballoon' || m.alt > 0) return u.kind === 'k17';
-    if (u.kind === 'nbw41') return !t || t.battery || t.kind === 'btanks' || t.kind === 'bconvoy';
+    if (t?.kind === 'bballoon' || m.alt > 0) return u.kind === 'k17' || u.kind === 'rk92'; // (the long guns with shrapnel)
+    if (ROCKETS.has(u.kind)) return !t || t.battery || t.kind === 'btanks' || t.kind === 'bconvoy' || t.kind === 'mebu' || t.kind === 'bpost';
     if (t?.kind === 'bconvoy') return TRAFFIC.has(u.kind);
     if (t && TARGETS[t.kind]?.hardness === 'hard') return !SOFT_ONLY.has(u.kind);
     return true;
@@ -48,12 +50,12 @@ export class CrewsWW1 extends Crews {
 
   // the Karl driving, turning or lowering: the crew waits for it rather than giving the task up
   ranging(u, ai, m) {
-    if (u.gate && u.kind === 'karl') { ai.wait = this.sim.time + 3; return; }
+    if (u.gate && (u.kind === 'karl' || u.special?.kind === 'move')) { ai.wait = this.sim.time + 3; return; }
     super.ranging(u, ai, m);
   }
 
   ffe(u, ai, m) {
-    if (u.gate && u.kind === 'karl') { ai.wait = this.sim.time + 3; return; }
+    if (u.gate && (u.kind === 'karl' || u.special?.kind === 'move')) { ai.wait = this.sim.time + 3; return; }
     ai.seriesAt = this.sim.time;
     super.ffe(u, ai, m);
   }
@@ -111,12 +113,13 @@ export class CrewsWW1 extends Crews {
     const k = t?.kind;
     if (m.kind === 'cb') s += LONG.has(u.kind) ? 12 : HEAVY.has(u.kind) ? 6 : 0;
     if (k === 'bgun15' || k === 'bgunrail' || k === 'bgun92') s += SUPER.has(u.kind) ? 16 : 0;
-    if (k === 'railyard' || k === 'hq') s += u.kind === 'max38' || u.kind === 'gustav' || LONG.has(u.kind) ? 18 : SUPER.has(u.kind) ? 8 : -4;
-    if (k === 'bdump') s += SUPER.has(u.kind) || u.kind === 'm16' || u.kind === 'mrs18' ? 8 : 0;
-    if (k === 'btanks') s += u.kind === 'sfh13' || u.kind === 'm16' || u.kind === 'sfh18' || u.kind === 'mrs18' || u.kind === 'nbw41' ? 10 : 0;
-    if (k === 'bconvoy') s += u.kind === 'k17' || u.kind === 'lefh18' ? 8 : -4;
+    if (k === 'railyard' || k === 'hq') s += RAIL.has(u.kind) || LONG.has(u.kind) ? 18 : SUPER.has(u.kind) ? 8 : -4;
+    if (k === 'bdump') s += SUPER.has(u.kind) || u.kind === 'm16' || u.kind === 'mrs18' || u.kind === 'm99' ? 8 : 0;
+    if (k === 'btanks') s += u.kind === 'sfh13' || u.kind === 'm16' || u.kind === 'sfh18' || u.kind === 'mrs18' || u.kind === 'm99' || u.kind === 'sfh93' || u.kind === 'hummel' || ROCKETS.has(u.kind) ? 10 : 0;
+    if (k === 'bconvoy') s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' || u.kind === 'wespe' ? 8 : -4;
     if (k === 'bballoon') s += 20;
-    if (k === 'bfield') s += FIELD.has(u.kind) || u.kind === 'nbw41' ? 8 : SUPER.has(u.kind) ? -20 : 0;
+    if (k === 'bfield') s += FIELD.has(u.kind) || ROCKETS.has(u.kind) ? 8 : SUPER.has(u.kind) ? -20 : 0;
+    if (k === 'mebu' || k === 'bpost') s += u.kind === 'smw' || u.kind === 'swg40' ? 14 : 0; // (the posts and pillboxes opposite: the trench mortars' work)
     if (m.kind === 'barrage') s += FIELD.has(u.kind) ? 8 : 4;
     if (m.role) s += 10; // a deep or heavy target (sim/specialists.js): only the guns made for it can serve it
     return s;

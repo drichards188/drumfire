@@ -23,6 +23,9 @@ export const SUPPORT = {
   v1: { name: 'V-1', prep: 110, reload: 540, offmap: 45, spread: 110, word: 'flying bomb' },
   v2: { name: 'V-2', prep: 170, reload: 780, offmap: 60, spread: 80, word: 'rocket' },
   paris: { name: 'Paris Gun', prep: 75, reload: 600, offmap: 80, spread: 60, word: 'shell' },
+  // a flight of three Gotha bombers (1917): the aircraft come over the map from the east at 1,800 m and each drops a
+  // stick of 100 kg bombs across the aim point (GOTHA below). `spread` is the flight's error about the aim.
+  gotha: { name: 'Gotha strike', prep: 150, reload: 720, offmap: 50, spread: 50, word: 'raid' },
 };
 export const SUPPORT_KINDS = Object.keys(SUPPORT);
 export const supportKinds = (loadout) => (loadout ? SUPPORT_KINDS.filter((k) => loadout[k]) : []);
@@ -31,12 +34,16 @@ export const supportKinds = (loadout) => (loadout ? SUPPORT_KINDS.filter((k) => 
 const V1 = { from: 9000, alt: 420, speed: 175, cut: 1100, turn: 0.9, top: 240 };
 const V2 = { alt: 30000, off: 0.18, speed: 900 };
 const PARIS = { alt: 11000, angle: 55, speed: 780 };
+// the Gothas: in from 5 km east at 1,800 m and 42 m/s (150 km/h), three in a vee 60 m apart, each a stick of four
+// bombs 0.7 s apart, released where its bombs will fall across its share of the aim (a bomb falls about 19 s)
+const GOTHA = { from: 5000, alt: 1800, speed: 42, planes: 3, bombs: 4, dt: 0.7, gap: 60, home: 70 };
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export class Support {
   constructor(sim, kinds) {
     this.sim = sim;
     this.rng = mulberry32((sim.seed ^ 0x0ff3a9) >>> 0);
+    this.planes = []; // the Gothas over the map ({ id, kind, pos, prev, vel, alive, t, ... }, drawn by ww1/render.js)
     this.assets = kinds.map((kind) => {
       const m = sim.loadout?.[kind]?.mods ?? null;
       return { kind, name: SUPPORT[kind].name, state: 'ready', t: 0, dur: 0, aim: null, at: null, shellId: null, last: null, told: null,
@@ -109,6 +116,17 @@ export class Support {
 
   update(dt) {
     const sim = this.sim;
+    // Gothas flying home after their raid
+    for (const a of this.assets) if (a.raid?.over) {
+      for (const pl of a.raid.planes) if (pl.alive) {
+        pl.prev.x = pl.pos.x; pl.prev.y = pl.pos.y; pl.prev.z = pl.pos.z;
+        pl.pos.x += pl.vel.x * dt; pl.pos.z += pl.vel.z * dt;
+        pl.gone += dt;
+        if (pl.gone > GOTHA.home) pl.alive = false;
+      }
+      this.planes = this.planes.filter((pl) => pl.alive);
+      if (!a.raid.planes.some((pl) => pl.alive)) a.raid = null;
+    }
     for (const a of this.assets) {
       if (a.state === 'preparing' || a.state === 'reloading') {
         a.t = Math.max(0, a.t - dt);
@@ -119,6 +137,10 @@ export class Support {
           sim.radio(`${a.name}: ready again.`, 'info');
           sim.events.support?.(a, 'ready');
         }
+      } else if (a.state === 'flight' && a.kind === 'gotha') {
+        a.t = Math.max(0, a.t - dt);
+        if (!a.raid) { if (a.t <= this.approach(a.kind)) this.arriveGotha(a); continue; }
+        this.flyGotha(a, dt);
       } else if (a.state === 'flight') {
         // off the map first, then the projectile over it, flown here (guided: sim.moveShells leaves it alone); `t` the
         // whole flight's time left
@@ -143,7 +165,8 @@ export class Support {
     a.state = 'flight';
     a.t = a.dur = over;
     a.shellId = null;
-    sim.radio(a.kind === 'v1' ? `${a.name} away from its ramp: over the target in about ${mmss(over)}.`
+    sim.radio(a.kind === 'gotha' ? `${a.name}: the Gothas are off. Over ${this.ref(a.aim.x, a.aim.z)} in about ${mmss(over)}.`
+      : a.kind === 'v1' ? `${a.name} away from its ramp: over the target in about ${mmss(over)}.`
       : a.kind === 'v2' ? `${a.name} away: it falls on ${this.ref(a.aim.x, a.aim.z)} in about ${mmss(over)}, unheard until it strikes.`
         : `${a.name}: Feuer! The shell falls on ${this.ref(a.aim.x, a.aim.z)} in about ${mmss(over)}.`, 'info');
     sim.events.support?.(a, 'launch');
@@ -151,6 +174,7 @@ export class Support {
 
   // the seconds the projectile is over the map
   approach(kind) {
+    if (kind === 'gotha') return GOTHA.from / GOTHA.speed + 25;
     if (kind === 'v1') return V1.from / V1.speed + 6;
     if (kind === 'v2') return Math.hypot(V2.alt, V2.alt * V2.off) / V2.speed;
     return PARIS.alt / Math.sin(PARIS.angle * Math.PI / 180) / PARIS.speed;
@@ -221,6 +245,75 @@ export class Support {
       sim.burst(s, p, false);
       this.landed(a, s);
     }
+  }
+
+  // the Gothas come onto the map: three aircraft in a vee from the east along a line through the drawn aim point
+  arriveGotha(a) {
+    const sim = this.sim, P = a.at, b = (this.rng() - 0.5) * 0.5; // (a little off due east)
+    const ux = -Math.cos(b), uz = -Math.sin(b), rx = -uz, rz = ux; // along the run (west) and to its right
+    a.raid = { planes: [], bombs: [], ux, uz, done: 0 };
+    for (let i = 0; i < GOTHA.planes; i++) {
+      const side = i === 0 ? 0 : i === 1 ? -1 : 1, back = i === 0 ? 0 : GOTHA.gap * 0.7;
+      const x = P.x - ux * (GOTHA.from + back) + rx * side * GOTHA.gap, z = P.z - uz * (GOTHA.from + back) + rz * side * GOTHA.gap;
+      const y = sim.heightAt(P.x, P.z) + GOTHA.alt + side * 12;
+      const pl = { id: sim.nextId('p'), kind: 'gotha', german: true, pos: { x, y, z }, prev: { x, y, z }, vel: { x: ux * GOTHA.speed, y: 0, z: uz * GOTHA.speed },
+        alive: true, t: 0, sp: GOTHA.speed, side, aim: { x: P.x + rx * side * GOTHA.gap * 0.6, z: P.z + rz * side * GOTHA.gap * 0.6 }, dropped: 0, nextDrop: 0, gone: 0 };
+      a.raid.planes.push(pl);
+      this.planes.push(pl);
+    }
+    sim.events.support?.(a, 'arrive', null);
+  }
+
+  // the flight over the map: each Gotha flies its line, drops its stick so that it falls across its aim, flies on and
+  // leaves; the bombs fall under gravity (and a little drag) and burst through sim.burst
+  flyGotha(a, dt) {
+    const sim = this.sim, R = a.raid;
+    for (const pl of R.planes) {
+      if (!pl.alive) continue;
+      pl.t += dt;
+      pl.prev.x = pl.pos.x; pl.prev.y = pl.pos.y; pl.prev.z = pl.pos.z;
+      pl.pos.x += pl.vel.x * dt; pl.pos.z += pl.vel.z * dt;
+      // how far short of its aim along the run: the bombs' throw forward is the speed times the fall's time
+      const fall = Math.sqrt((2 * Math.max(50, pl.pos.y - sim.heightAt(pl.aim.x, pl.aim.z))) / G);
+      const short = (pl.aim.x - pl.pos.x) * R.ux + (pl.aim.z - pl.pos.z) * R.uz - GOTHA.speed * fall;
+      const half = ((GOTHA.bombs - 1) * GOTHA.dt * GOTHA.speed) / 2;
+      if (pl.dropped < GOTHA.bombs && short <= half && sim.time >= pl.nextDrop) {
+        pl.dropped++;
+        pl.nextDrop = sim.time + GOTHA.dt;
+        const q = { x: pl.pos.x, y: pl.pos.y - 1.5, z: pl.pos.z };
+        const s = {
+          id: sim.nextId('s'), own: true, guided: true, support: 'gotha', unitId: null, piece: null, kind: 'gotha', calibre: SHELLS.gotha?.calibre ?? 6,
+          pos: { ...q }, prev: { ...q }, vel: { x: pl.vel.x, y: 0, z: pl.vel.z }, fuze: 'instant', t: 0, t0: sim.time, tof: fall,
+          aim: { x: pl.aim.x, z: pl.aim.z }, alive: true, k: 0, dmgK: a.mods.dmg !== 1 ? a.mods.dmg : undefined,
+        };
+        sim.shells.push(s);
+        R.bombs.push(s);
+      }
+      if (pl.dropped >= GOTHA.bombs) pl.gone += dt;
+      if (pl.gone > GOTHA.home) pl.alive = false;
+    }
+    for (const s of R.bombs) {
+      if (!s.alive) continue;
+      s.prev.x = s.pos.x; s.prev.y = s.pos.y; s.prev.z = s.pos.z;
+      s.t += dt;
+      s.vel.y -= G * dt; // (no drag: the release point above assumes none, and over 19 s a little moved the stick 140 m)
+      s.pos.x += s.vel.x * dt; s.pos.y += s.vel.y * dt; s.pos.z += s.vel.z * dt;
+      const h = sim.heightAt(s.pos.x, s.pos.z);
+      if (s.pos.y <= h) {
+        s.pos.y = h;
+        sim.burst(s, { x: s.pos.x, y: h, z: s.pos.z }, false);
+        s.alive = false;
+        R.done++;
+      }
+    }
+    // every bomb down: the raid's report, then the long wait for the next (the aircraft fly home meanwhile)
+    if (R.done >= GOTHA.planes * GOTHA.bombs) {
+      const fell = R.bombs.map((s) => s.burstAt ?? s.pos);
+      const mx = fell.reduce((v, p) => v + p.x, 0) / fell.length, mz = fell.reduce((v, p) => v + p.z, 0) / fell.length;
+      this.landed(a, { burstAt: { x: mx, z: mz } });
+      a.raid = { ...R, bombs: [], over: true };
+    }
+    this.planes = this.planes.filter((pl) => pl.alive);
   }
 
   // the burst: what it hit, then the reload

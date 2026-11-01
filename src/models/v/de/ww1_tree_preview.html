@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WW1 tree guns preview</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #202428; overflow: hidden; font: 12px monospace; color: #cfd6dc; }
+  canvas { display: block; }
+  #info { position: fixed; left: 8px; top: 6px; pointer-events: none; text-shadow: 0 0 3px #000; white-space: pre; }
+</style>
+</head>
+<body>
+<div id="info"></div>
+<!-- The 1914 to 1918 batteries of the German tree with their firing positions (m99, smw, beta), dev server only:
+       ?kind=smw|beta|m99  &site=0 (the gun alone)  &cam=az,el,dist (az 0 from the front, 90 from the right)
+       &az=<traverse rad>  &el=<elevation rad>  &recoil=k  &ty=<camera target height>  &seed=N -->
+<script type="module" src="./ww1_tree_preview.js"></script>
+</body>
+</html>

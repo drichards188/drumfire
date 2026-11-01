@@ -75,15 +75,16 @@ const career = new Progression(careerStorage);
 // batteries take the field beside the 1918 ones (src/ww1/ops.js RIDGE_WW2), so the theatre is built with its kinds
 const RIDGE_CAREER = WW1 && (query.get('op') ?? 'ridge') === 'ridge' && !SANDBOX && !RANGE && !query.get('tutorial') && !query.get('campaign');
 // a WW1 lesson (src/ww1/tutorial.js, the basic training): the ridge with the batteries it lends (`kinds`), as a lineup's
+// (and the test range, ?range=1&mode=ww1&kind=: the ridge with that battery, any of the German tree's on the map)
 const WW1_LESSON = WW1 && query.get('tutorial') ? (await optional('./ww1/tutorial.js'))?.WW1_TUTORIALS?.find((d) => d.id === query.get('tutorial')) ?? null : null;
-const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge', { kinds: RIDGE_CAREER ? Object.keys(career.lineupLevels('de')) : WW1_LESSON?.kinds ?? null }) ?? null : null;
+const WW1_TH = WW1 ? (await optional('./ww1/theatre.js'))?.ww1Theatre?.(query.get('op') ?? 'ridge', { kinds: RIDGE_CAREER ? Object.keys(career.lineupLevels('de')) : WW1_LESSON?.kinds ?? (RANGE && query.get('kind') ? [query.get('kind')] : null) }) ?? null : null;
 if (WW1 && !WW1_TH) console.warn('WW1 theatre missing: the British game stands in');
 const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
 const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
 // the WW2 batteries on a WW1 page (the career's ridge): their models, pictures and sounds load beside the 1918 ones
-const WW2_GUNS = new Set(['lefh18', 'sfh18', 'nbw41', 'k18', 'mrs18', 'karl', 'gustav']);
+const WW2_GUNS = new Set(['lefh18', 'sfh18', 'nbw41', 'k18', 'mrs18', 'karl', 'gustav', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40']);
 const WW2_ON_RIDGE = WW1 && UNITS.some((u) => WW2_GUNS.has(u.kind));
 // back to the menu (src/ui/menu.js), with this page's entry selected
 const MENU = menuHref(query, RANGE ? `range:${WW2 || WW1 ? 'de' : '1917'}` : CAMPAIGN_MISSION ? `campaign:${CAMPAIGN_MISSION.id}` : query.get('tutorial') ? `tutorial:${query.get('tutorial')}` : WW2 ? `op:${TH.opId}` : WW1 ? `ww1:${TH?.opId ?? 'ridge'}` : 'battle:ypres');
@@ -131,10 +132,28 @@ const KIND = {
   max38: { eye: 4.5, dist: 85, calibre: 15 },
   gamma: { eye: 4, dist: 50, calibre: 16.5 },
   paris: { eye: 5, dist: 135, calibre: 8.3 },
+  // the rest of the German tree (research.js TREES.de)
+  fk16: { eye: 1.8, dist: 80, calibre: 3.03 },
+  k16: { eye: 2.4, dist: 70, calibre: 5.87 },
+  m99: { eye: 2.6, dist: 60, calibre: 8.3 },
+  rk92: { eye: 2.4, dist: 62, calibre: 5.87 },
+  sfh93: { eye: 2.2, dist: 90, calibre: 5.87 },
+  beta: { eye: 3.4, dist: 48, calibre: 12 },
+  smw: { eye: 1.4, dist: 45, calibre: 9.8 },
+  k38: { eye: 3.2, dist: 80, calibre: 8.3 },
+  hm1: { eye: 4.2, dist: 55, calibre: 14 },
+  bruno: { eye: 4.5, dist: 75, calibre: 11 },
+  k5: { eye: 5, dist: 90, calibre: 11 },
+  k12: { eye: 5.5, dist: 115, calibre: 8.3 },
+  wespe: { eye: 2.6, dist: 80, calibre: 4.13 },
+  hummel: { eye: 3, dist: 90, calibre: 5.87 },
+  nbw42: { eye: 1.4, dist: 60, calibre: 8.3 },
+  swg40: { eye: 1.2, dist: 55, calibre: 11 },
 };
 // how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
 const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sfh18: 10, k18: 14, mrs18: 14, nbw41: 6, gustav: 40, bertha: 14, karl: 16, v1: 30, v2: 20,
-  sfh13: 10, m16: 13, k17: 10, max38: 34, gamma: 16, paris: 45 };
+  sfh13: 10, m16: 13, k17: 10, max38: 34, gamma: 16, paris: 45,
+  fk16: 8, k16: 12, m99: 12, rk92: 11, sfh93: 10, beta: 16, smw: 7, k38: 15, hm1: 18, bruno: 30, k5: 36, k12: 45, wespe: 8, hummel: 9, nbw42: 6, swg40: 6 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 

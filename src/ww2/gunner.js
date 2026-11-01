@@ -43,22 +43,28 @@ const POST_IDS = new Set(POSTS.map((p) => p.id));
 // the guns a player can serve in person: every German gun of the open battles (the WW2 batteries; on the German
 // career's 1918 ridge also the K 17, the sFH 13, the 21 cm Mörser 16 and the bed-mounted giants, Langer Max, Gamma and
 // Bertha); not the V-1 and V-2 sites and the Paris Gun, whose own missions have drills of their own
-export const MANNABLE = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha']);
+// The rest of the German tree (2026-11-01) too, but the Wespe and the Hummel (their move to another position would
+// carry the player off with the gun) and the Wurfgerät (its crates are carried by four men, no one loader's post)
+export const MANNABLE = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha',
+  'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'smw', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42']);
 // the guns whose laying gear is powered: the Gustav shunted along its curve and elevated by motor, the Karl's
 // hydraulic elevation and traverse. Their rates are slow (minutes from the loading angle to the lay), so the layer
 // starts the drive and it stops itself on the mark. The Gamma and the Langer Max on their beds too: over a minute
 // of hand wheels for a lay (the Gamma's 0.6 and 1.6 degrees a second, the Max's 48 degrees of traverse at 1); Bertha's
 // is under one (0.9 and 2.2), so its layer cranks
-export const DRIVEN = new Set(['gustav', 'karl', 'gamma', 'max38']);
+// (the railway guns of the tree too: the Bruno and the K 12 shunted along their curves, the K5's turntable)
+export const DRIVEN = new Set(['gustav', 'karl', 'gamma', 'max38', 'bruno', 'k5', 'k12']);
 // which post works which step of the loading cycle, and the step in the player's words
-export const STEP_POST = { depress: 'lay', open: 'load', shell: 'load', ram: 'load', cartridge: 'load', close: 'load', prime: 'fire', lay: 'lay', cover: 'fire' };
+export const STEP_POST = { relay: 'lay', depress: 'lay', open: 'load', shell: 'load', ram: 'load', cartridge: 'load', close: 'load', prime: 'fire', lay: 'lay', cover: 'fire' };
 export const STEP_EN = {
-  depress: 'run the barrel down to the loading angle', open: 'open the breech', shell: 'bring up the shell', ram: 'ram the shell',
+  relay: 'lever the gun back onto its line with the handspikes', depress: 'run the barrel down to the loading angle', open: 'open the breech', shell: 'bring up the shell', ram: 'ram the shell',
   cartridge: 'put in the cartridge', close: 'close the breech', prime: 'fit the primer', lay: 'lay the gun', cover: 'take the crew into cover',
 };
 // a launcher's own (the Nebelwerfer's: the loader connects the igniters, the firer fires from cover)
-const STEP_POST_KIND = { nbw41: { prime: 'load' } };
-const STEP_EN_KIND = { nbw41: { open: 'clear the tubes', shell: 'load the six rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' } };
+const STEP_POST_KIND = { nbw41: { prime: 'load' }, nbw42: { prime: 'load' } };
+const STEP_EN_KIND = { nbw41: { open: 'clear the tubes', shell: 'load the six rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' },
+  nbw42: { open: 'clear the tubes', shell: 'load the five rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' },
+  smw: { cartridge: 'put the charge down the muzzle', shell: 'lift the bomb into the muzzle', ram: 'push the bomb home' } };
 export const stepPost = (kind, step) => STEP_POST_KIND[kind]?.[step] ?? STEP_POST[step] ?? 'load';
 export const stepEn = (kind, step) => STEP_EN_KIND[kind]?.[step] ?? STEP_EN[step] ?? step;
 export const GUNNER_CMDS = new Set(['man', 'post', 'unman', 'assist', 'drive']);

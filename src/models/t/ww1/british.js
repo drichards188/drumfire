@@ -24,6 +24,7 @@ import { buildQF18, limber18, wagonBody18 } from './qf18.js';
 //             two carriage limbers and the command post behind
 //   bballoon  a Caquot kite balloon (three lobed tail fins, the rigging girdle, RFC roundels, the basket) at `alt`,
 //             its winch lorry down the cable; burns and falls as the German Drachen does (balloon.js)
+//   bpost     a forward post in the British front line: two Lewis gun bays and a Stokes mortar pit
 //   bdump     five stacks (18-pr boxes, 6-inch shells, cartridge boxes, 9.2-inch shells, mixed stores) behind sandbag
 //             traverses under tarpaulins, a 60 cm light railway siding with loaded trucks and a petrol tractor
 // Crew figures stay outside the damageable parts (their geometry is shared per outfit and must not be charred).
@@ -357,7 +358,63 @@ function britishDump() {
   return finishTarget(root, parts);
 }
 
+// A forward post in the British front line (the career's ridge, for the trench mortars and the Wurfgerät: ops.js
+// RIDGE_FORWARD): two Lewis gun posts in sandbagged bays of the fire trench and a Stokes mortar in its pit behind them,
+// each a part; the gunners by them (outside the parts, as at the gun sites).
+function lewis(P, x, z, ry) {
+  const m = new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z), at = (g) => g.applyMatrix4(m);
+  P.add('dark', at(zTube(-0.6, 0.35, 0.05, 0.05, 10, 1.32, 0))); // the cooling jacket's barrel shroud
+  P.add('dark', at(box(0.1, 0.12, 0.42, 0, 1.3, 0.48))); // the receiver
+  P.add('dark', at(new THREE.CylinderGeometry(0.13, 0.13, 0.04, 16).translate(0, 1.4, 0.32))); // the pan magazine
+  P.add('wood', at(box(0.06, 0.12, 0.3, 0, 1.28, 0.82))); // the butt
+  for (const sx of [-1, 1]) P.add('dark', at(rod(V(0, 1.3, -0.45), V(sx * 0.22, 1.05, -0.55), 0.012, 4))); // the bipod on the parapet
+}
+function stokes(P, x, z) {
+  P.add('dark', box(0.45, 0.06, 0.45, x, 0.03, z)); // the baseplate
+  P.add('dark', yTube(0, 1.25, 0.045, 0.045, 10, 0, 0).applyMatrix4(new THREE.Matrix4().makeRotationX(-0.75)).translate(x, 0.08, z)); // the tube at 45 degrees
+  for (const sx of [-1, 1]) P.add('dark', rod(V(x + sx * 0.05, 0.7, z - 0.62), V(x + sx * 0.32, 0.0, z - 0.85), 0.014, 4)); // the bipod
+  for (let i = 0; i < 6; i++) P.add('dark', zTube(-0.2, 0.2, 0.04, 0.04, 8, x + 0.7 + (i % 3) * 0.1, 0.04 + Math.floor(i / 3) * 0.08, z + 0.4)); // bombs by the pit
+}
+function forwardPost(opts = {}) {
+  const root = new THREE.Group(), r = rng(31), lay = layoutBritish('bpost'), parts = [];
+  lay.forEach((l, i) => {
+    const part = new THREE.Group();
+    part.position.set(l.x, 0, l.z);
+    part.rotation.y = (r() - 0.5) * 0.2;
+    const P = new FParts('earth');
+    if (i < 2) {
+      // a sandbagged bay of the fire trench: the parapet toward us (local -Z), the fire step, the Lewis gun on it
+      sandbagWall(P, -2.2, -1.1, 2.2, -1.1, { courses: 4, seed: 40 + i });
+      sandbagWall(P, -2.4, -1.1, -2.4, 1.2, { courses: 3, seed: 44 + i });
+      sandbagWall(P, 2.4, -1.1, 2.4, 1.2, { courses: 3, seed: 48 + i });
+      P.add('wood', box(4.2, 0.08, 0.5, 0, 0.45, -0.7)); // the fire step's boards
+      for (const sx of [-1.8, 0, 1.8]) P.add('wood', yTube(0, 1.1, 0.05, 0.05, 5, sx, -1.2)); // revetment posts
+      lewis(P, -0.3, -0.7, (r() - 0.5) * 0.4);
+      boxStack(P, 1.4, 0.2, 1, 2, 1, 0, { w: 0.4, h: 0.2, d: 0.3, tint: 0x6a5a40, key: 'wood', rnd: r });
+    } else {
+      // the Stokes mortar's pit behind the trench: a sandbag ring, the bombs in their boxes
+      pit(P, 2.4, { courses: 2, gap: 1.0, seed: 60, earth: EARTH });
+      stokes(P, 0, 0.2);
+      boxStack(P, -1.2, 0.8, 2, 1, 2, Math.PI / 2, { w: 0.5, h: 0.22, d: 0.32, tint: 0x6a5a40, key: 'wood', rnd: r });
+    }
+    P.build(part, { dirt: 0.6 });
+    damageable(part, { scorch: 4, char: 0.85, sink: 0.15, bits: [] });
+    root.add(part);
+    parts.push(part);
+    // two of the post's men by it (outside the damageable part)
+    if (opts.crew !== false) for (let k = 0; k < 2; k++) {
+      const fig = buildCrewman(crewForRole(k ? 'layer' : 'ammo1', i * 2 + k));
+      fig.root.position.set(l.x + (k ? -0.5 : 1.0), i < 2 ? 0.45 : 0, l.z + (i < 2 ? -0.4 : 0.9));
+      fig.root.rotation.y = Math.PI;
+      fig.pose('stand', 0, 1);
+      root.add(fig.root);
+    }
+  });
+  return finishTarget(root, parts);
+}
+
 export const BUILD = {
+  bpost: forwardPost,
   bgun15: (o) => gunSite('bgun15', o),
   bgun92: (o) => gunSite('bgun92', o),
   bgun6: (o) => gunSite('bgun6', o),
