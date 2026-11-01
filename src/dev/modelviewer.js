@@ -5,6 +5,7 @@ import { buildGun, GUN_KINDS, GUN_KINDS_WW2, GUN_KINDS_WW1, loadGuns } from '../
 import { GUNS } from '../sim/tables.js';
 import { crewForRoleWW1 } from '../render/crews_ww1.js';
 import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole } from '../models/v/crew.js';
+import '../models/v/crew_hd.js'; // registers the close tier (&hd=1)
 
 // Standalone model viewer for the guns, the crews, and (when the field models agent's files exist) the
 // shells and targets.
@@ -17,6 +18,8 @@ import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole } from 
 //   &ortho=right|left|front|rear|top  orthographic blueprint view, 1 m grid behind the model (5 m lines darker)
 //   &night=1 dims the sun.  Crew: &pose=walk &t=0.25 &anim=1 &outfit=gunner|gunner-tunic|officer|german|stretcher
 //   &headgear=.. &vest=.. &pattern=.. &skin=0..3 &mix=1 (varied outfits along ?all=crew)
+//   &look=x,y,z the point the camera orbits (default the middle of everything shown)
+//   ?all=de the six German outfits (1917 and 1944) in a row; &hd=1 their close first-person tier (crew_hd.js)
 const q = new URLSearchParams(location.search);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -112,9 +115,9 @@ function addItem(kind, x) {
     const at = kind.indexOf('@'), kOutfit = at > 0 ? kind.slice(at + 1) : null;
     if (at > 0) kind = kind.slice(0, at);
     const o = kOutfit ? { outfit: kOutfit, skin: items.length % 4 } : q.get('mix') === '1' ? CREW_OUTFITS[items.length % CREW_OUTFITS.length]
-      : q.get('outfit') ? { outfit: q.get('outfit') }
+      : q.get('outfit') ? { outfit: q.get('outfit'), skin: Number(q.get('skin') || 0), ...(q.get('headgear') ? { headgear: q.get('headgear') } : {}) }
         : { headgear: q.get('headgear') || undefined, vest: q.get('vest') || undefined, pattern: q.get('pattern') || undefined, skin: Number(q.get('skin') || 0) };
-    const fig = buildCrewman(o);
+    const fig = buildCrewman(q.get('hd') === '1' ? { ...o, tier: 'hd' } : o); // &hd=1: the close first-person tier (crew_hd.js)
     root = fig.root;
     const name = kind.startsWith('crew:') ? kind.slice(5) : (crewPose || 'stand');
     rig = { crew: fig, pose: name };
@@ -203,6 +206,7 @@ const all = q.get('all');
 let list;
 if (all === 'guns') list = GUN_KINDS;
 else if (all === 'outfits') list = ['gunner', 'gunner-tunic', 'officer', 'german', 'german-cap', 'german-drill', 'stretcher'].map((o) => `crew:${q.get('pose') || 'stand'}@${o}`);
+else if (all === 'de') list = ['german', 'german-cap', 'german-drill', 'german44', 'german44-gaiters', 'german44-cap'].map((o) => `crew:${q.get('pose') || 'stand'}@${o}`);
 else if (all === 'crew') list = CREW_POSES.map((p) => 'crew:' + p);
 else if (q.get('shell')) list = ['shell:' + q.get('shell')];
 else if (q.get('target')) list = ['target:' + q.get('target')];
@@ -213,7 +217,7 @@ else list = [q.get('kind') || 'bl15'];
 let xo = 0;
 for (const k of list) {
   addItem(k, xo);
-  xo += all === 'crew' || all === 'outfits' ? 1.3 : 24;
+  xo += all === 'crew' || all === 'outfits' || all === 'de' ? 1.3 : 24;
 }
 // the Gustav's firing position around the first item, in its frame (heavy models agent):
 //   &site=gustav&stage=survey:1,track:1,cranes:1,ammo:1,flak:1,camo:1   (with kind=gustav: &pose=assembly:0.6)
@@ -235,6 +239,7 @@ for (const it of items) bb.union(it.box);
 bb.getCenter(center);
 const size = bb.getSize(new THREE.Vector3());
 const cam = (q.get('cam') || '').split(',').map(Number);
+if (q.get('look')) center.fromArray(q.get('look').split(',').map(Number)); // &look=x,y,z: the point the camera orbits
 const dist = cam[2] || Math.max(size.length() * 1.1, 4);
 const az = (cam[0] ?? 35) * Math.PI / 180, el = (isNaN(cam[1]) ? 18 : cam[1]) * Math.PI / 180;
 camera.position.set(center.x + dist * Math.sin(az) * Math.cos(el), center.y + dist * Math.sin(el), center.z - dist * Math.cos(az) * Math.cos(el));

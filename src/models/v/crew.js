@@ -160,6 +160,14 @@ const WHITE_UV = [4 / TEX, 4 / TEX]; // a patch kept at multiplier 1: flat-colou
 let texture = null, material = null;
 const geoCache = new Map();
 
+// The skeleton's numbers and the palette for other geometry tiers (crew_hd.js, the close first-person figures),
+// which bind to these very bones: read only, so every pose and drill works on any tier unchanged.
+export const CREW_FRAME = Object.freeze({ BI, L_TH, L_SH, L_UA, L_FA, SH_X, SH_Y, SH_Z, HIP_X, HIP_Y, ANKLE_Y, TILE, COL });
+// tiers by name: { geometry(o) -> BufferGeometry | null (null: the tier has nothing for this outfit), material() }
+const TIERS = {};
+export function registerCrewTier(name, tier) { TIERS[name] = tier; }
+export const crewTier = (name) => TIERS[name] ?? null;
+
 function emrTexture() {
   const G = TEX / CELL;
   const r = rng(1944);
@@ -814,7 +822,8 @@ export function crewGeometry(opts = {}) {
 
 export function buildCrewman(opts = {}) {
   const o = options(opts);
-  const geo = crewGeometry(o);
+  const T = opts.tier ? TIERS[opts.tier] : null, tg = T?.geometry(o) ?? null;
+  const geo = tg ?? crewGeometry(o);
   const bones = {}, list = [];
   for (const name of CREW_BONES) {
     const b = new THREE.Bone();
@@ -824,7 +833,7 @@ export function buildCrewman(opts = {}) {
     bones[name] = b;
     list.push(b);
   }
-  const mesh = new THREE.SkinnedMesh(geo, crewMaterial());
+  const mesh = new THREE.SkinnedMesh(geo, tg ? T.material() : crewMaterial());
   mesh.name = 'crewman';
   mesh.add(bones.hips);
   mesh.updateMatrixWorld(true);
@@ -845,9 +854,24 @@ export function buildCrewman(opts = {}) {
     pose: (name, t = 0, blend = 1) => solvePose(fig, name, t, blend),
     reach: (side, point, blend = 1, fingers = null, palm = null, pole = null) => reach(fig, side, point, blend, fingers, palm, pole),
     dispose: () => mesh.skeleton.dispose(),
+    tier: tg ? opts.tier : null,
+    // another geometry tier on the same skeleton (null: the standard one); false when the tier has nothing for the
+    // outfit (or is not built yet: ready(o) says), and the figure keeps what it has
+    setTier: (name) => setTier(fig, name),
   };
   fig.pose('stand', 0, 1);
   return fig;
+}
+
+function setTier(fig, name) {
+  if ((fig.tier ?? null) === (name ?? null)) return true;
+  const T = name ? TIERS[name] : null;
+  const g = T ? T.geometry(fig.outfit) : crewGeometry(fig.outfit);
+  if (!g) return false;
+  fig.mesh.geometry = g;
+  fig.mesh.material = T ? T.material() : crewMaterial();
+  fig.tier = T ? name : null;
+  return true;
 }
 
 // the varied outfits buildCrew cycles through (a loading crew is mostly caps and hi-vis vests)

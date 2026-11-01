@@ -5,6 +5,7 @@ import { buildGun } from '../models/guns.js';
 import { GunCrew } from './crews.js';
 import { VCrew, VKINDS } from './crews_vweap.js';
 import { smooth } from './anim.js';
+import { CrewHD } from './crewhd.js';
 
 // Gun rigs posed from the sim every frame: traverse and elevation from piece.az and piece.el, the
 // recoil from the time since the shot (a fast run back on the buffers, a pause, the slow run out on
@@ -71,6 +72,11 @@ export class GunViews {
     this.muzzle = { x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: -1, calibre: 6 };
     this.camera = null;
     this.selected = null;
+    // pov: { unitId, pi } of the gun the player serves in person (main sets it while the first-person view is up), or
+    // null; that gun's crew is drawn in the close tier (crewhd.js) and detail away from the battery thins out
+    this.pov = null;
+    this.povDetail = true; // (false: the first-person view without the close tier and the thinning, to compare)
+    try { this.crewHD = new CrewHD(scene); } catch (e) { console.warn('crew HD tier:', e.message); this.crewHD = null; }
     this.build(sim);
     this.allViews = [...this.views];
   }
@@ -148,6 +154,9 @@ export class GunViews {
     const alpha = sim.alpha ?? 0;
     const now = sim.time + alpha * STEP;
     const cam = this.camera;
+    const pov = this.povDetail ? this.pov : null, at = pov ? this.byKey.get(`${pov.unitId}:${pov.pi}`) : null;
+    // at a gun in person: meshes far from the battery need more than a pixel to be drawn (render/detail.js)
+    this.detail?.setFocus?.(at ? at.rig.root.position : null);
     for (const v of this.views) {
       const p = v.piece, rig = v.rig, g = GUNS[p.kind];
       const dead = p.state === 'dead';
@@ -189,6 +198,10 @@ export class GunViews {
           v.dist = d;
           const sel = this.selected != null && v.unit.id === this.selected;
           level = d < 140 || (sel && d < 450) ? 2 : d < 420 ? 1 : 0;
+          // at a gun in person the other batteries' crews are not drawn beyond 60 m; that gun's crew, and the
+          // battery's other guns' within 25 m, get the close tier
+          if (at && v.unit.id !== pov.unitId && d > 60) level = 0;
+          this.crewHD?.want(v.crew, !!at && !dead && v.unit.id === pov.unitId && (v === at || d < 25));
         }
         if (dead) level = 0;
         if (level !== v.lvl) {
@@ -201,5 +214,6 @@ export class GunViews {
         }
       }
     }
+    this.crewHD?.update();
   }
 }

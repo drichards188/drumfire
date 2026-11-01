@@ -14,6 +14,7 @@ All in `src/`, with no model or texture files.
 - **No man's land** in 1917 carries shattered trees, broken limbers, fallen timber and torn wire among the shell holes.
 - **Guns.** Models for the five British kinds and for the German guns and launch sites of both German modes (from the 10.5 cm leFH 18 to the 80 cm Gustav, the Karl-Gerät, the V-1 catapult, the A4 on its Meillerwagen, the Langer Max, the Gamma and the Paris Gun with their positions), with their loading machinery.
 - **Crews** in several poses: carrying, hauling, ramming, laying, lanyard, covering ears.
+- **Close crews.** When you serve a German gun in person, its crew switches to a far more detailed figure: faces, fists with fingers, cloth folds, pockets and buttons, belt kit, helmets with liners and chin straps, boots with heels. Away from the gun everyone uses the light figure, and while you are at the gun, small far-off detail and the other batteries' crews are not drawn.
 - **Targets:** German guns, pillboxes, dumps, the kite balloon with its winch, the chateau HQ; Allied and Soviet batteries, tanks and forts; British 18-pounders and Mark IV tanks.
 - **Traffic and aircraft:** crossroads traffic and trains, and the enemy's aircraft (Typhoons and Il-2s, RE8s and Camels).
 - **Infantry:** British and German infantry as instanced soldiers who fall and are thrown by bursts.

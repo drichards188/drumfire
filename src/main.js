@@ -302,6 +302,9 @@ async function init() {
     update: (...a) => { for (const r of both) r.update?.(...a); },
     framing: (id) => ww2r.framing?.(id) ?? ww1r.framing?.(id) ?? null,
   } : ww2r ?? ww1r;
+  // the batteries' emplacements and works (the WW2 and WW1 render layers) take part in the sub-pixel cull like the gun
+  // rigs, so at a gun in person the far field thins out with them (render/guns.js pov, render/detail.js setFocus)
+  if (renderLayer?.detail) scene.traverse((o) => { if (/-position(-1918)?$|-battery-works$/.test(o.name)) renderLayer.detail.add(`site:${o.uuid}`, o); });
 
   patchSceneFog(scene);
 
@@ -1434,6 +1437,8 @@ async function init() {
         else if (rig.pivots?.recoil) rig.pivots.recoil.position.z = (rig.recoilLength ?? 1) * Math.max(0, r);
       }
     }
+    // at a gun in person (not riding a shell): its crew in the close tier, the far field thinned (render/guns.js pov)
+    if (renderLayer?.guns) renderLayer.guns.pov = gview?.active && !following && sim?.gunner?.st ? sim.gunner.st : null;
     if (sim) renderLayer?.update?.(dt, rawDt, sim, fx, camera);
     if (sim) modeR?.update?.(dt, rawDt, sim, camera);
     // a V-weapon site frames each new step of its drill and its launch (ww2/render.js), only while the camera

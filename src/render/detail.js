@@ -14,6 +14,8 @@ import * as THREE from 'three';
 //   detail.remove(key)           gives the meshes back their layers
 //   detail.update(camera)        every frame: a third of the meshes per frame, everything after a camera cut
 //   detail.enabled = false       draws everything again (for comparisons)
+//   detail.setFocus(p, r, px)    a point (Vector3, or null to clear) beyond r metres of which the limit is px pixels:
+//                                the gunner's first-person view keeps its battery and thins out the far field
 
 const REF = 720; // half the height in pixels of the view the limit is set for (1440 rows: generous on 1080p)
 const _c = new THREE.Vector3();
@@ -30,6 +32,17 @@ export class DetailCull {
     this._i = 0;
     this._all = true;
     this._last = new THREE.Vector3(Infinity, 0, 0);
+    this.focus = null;
+    this._focus = new THREE.Vector3();
+    this.focusR = 300;
+    this.farPx = 3;
+  }
+
+  setFocus(p, r = 300, px = 3) {
+    const on = !!p;
+    if (on !== !!this.focus) this._all = true; // judged afresh at the change
+    this.focus = on ? this._focus.copy(p) : null;
+    this.focusR = r; this.farPx = px;
   }
 
   add(key, root) {
@@ -88,6 +101,7 @@ export class DetailCull {
     const cam = camera.position;
     // the angle a sphere of minPx pixels' radius subtends, for this field of view
     const t = (this.minPx * Math.tan(THREE.MathUtils.degToRad(camera.fov ?? 50) / 2)) / REF;
+    const f = this.focus, fr2 = this.focusR * this.focusR, tf = (t * this.farPx) / this.minPx;
     // a camera cut (a new unit, a shell to ride) is judged at once, otherwise a slice a frame
     if (this._last.distanceToSquared(cam) > 30 * 30) this._all = true;
     this._last.copy(cam);
@@ -105,7 +119,8 @@ export class DetailCull {
       _c.copy(s.center).applyMatrix4(m);
       const d = Math.max(0.01, _c.distanceTo(cam) - r);
       // what is shown stays until it is 15 % under the limit, so a mesh on the edge does not flicker
-      const on = r > d * t * (it.on ? 0.85 : 1);
+      const lim = f && _c.distanceToSquared(f) > fr2 ? tf : t;
+      const on = r > d * lim * (it.on ? 0.85 : 1);
       if (on === it.on) continue;
       it.on = on;
       it.o.layers.mask = on ? it.mask : 0;
