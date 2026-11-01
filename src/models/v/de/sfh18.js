@@ -292,9 +292,11 @@ export function buildSFH18({ scheme = 'dgelb' } = {}) {
   crew(rig, 'layer', -1.42, 0.66, L90, 'lay');
   crew(rig, 'sight', 1.42, 0.66, R90, 'lay');
   crew(rig, 'loader', -0.12, 2.5, 0, 'ram');
-  crew(rig, 'rammer', -0.45, 3.2, 0, 'ram');
-  crew(rig, 'shell', 0.5, 3.75, R90, 'carry');
-  crew(rig, 'cartridge', -0.5, 4.3, L90, 'carry');
+  // the ammunition men between the trails: the shell man to the right, the cartridge man behind the rammer, so their
+  // ways to the breech run side by side instead of crossing the rammer's place
+  crew(rig, 'rammer', -0.7, 3.2, 0, 'ram');
+  crew(rig, 'shell', 1.15, 3.5, 0, 'carry');
+  crew(rig, 'cartridge', -0.05, 4.4, 0, 'carry');
   crew(rig, 'lanyard', 1.85, 1.25, R90, 'lanyard');
 
   hb(rig, -1.15, 0, -3.85, 1.15, 1.8, 1.0);

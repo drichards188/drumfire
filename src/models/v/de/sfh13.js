@@ -223,8 +223,10 @@ export function buildSFH13({ scheme = 'bunt' } = {}) {
   crew(rig, 'officer', -2.5, 0.3, L90, 'point'); // clear of the trail's swing at full traverse
   crew(rig, 'layer', -0.85, 0.95, L90, 'lay');
   crew(rig, 'sight', 0.85, 0.95, R90, 'lay');
-  crew(rig, 'loader', 0.62, 1.55, 0, 'ram');
-  crew(rig, 'rammer', -0.66, 1.75, 0, 'ram');
+  // the loader left of the breech, clear of the recoil (crews.js steps him up to the block), the rammer behind it: the
+  // shell and the case come up the right
+  crew(rig, 'loader', -0.7, 1.6, 0, 'ram');
+  crew(rig, 'rammer', -0.35, 2.4, 0, 'ram');
   crew(rig, 'shell', 1.15, 2.2, R90, 'carry');
   crew(rig, 'cartridge', 1.0, 3.05, R90, 'carry');
   crew(rig, 'lanyard', 1.3, 1.25, R90, 'lanyard');

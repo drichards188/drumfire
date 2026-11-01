@@ -413,13 +413,17 @@ function build(G, { scheme = 'dgelb' } = {}) {
   crew(rig, 'officer', -3.2, 2.0, L90, 'point');
   crew(rig, 'layer', -1.18, 0.55, L90, 'lay', FOOT);
   crew(rig, 'elevator', 1.18, 0.55, R90, 'operate', FOOT);
-  crew(rig, 'lanyard', 1.25, 2.7, R90, 'lanyard', DECK);
+  // (beside the breech on the right walkway: further back he stood in the carrying pair's way onto the deck, and he
+  // works the block from here, crews.js BLOCK_MAN)
+  crew(rig, 'lanyard', 1.3, 1.95, R90, 'lanyard', DECK);
   crew(rig, 'loader1', -1.15, 3.3, 0, 'carry', DECK);
   crew(rig, 'loader2', -1.15, 4.3, 0, 'carry', DECK);
   crew(rig, 'rammer1', -0.28, 4.6, 0, 'ram', DECK);
   crew(rig, 'rammer2', 0.28, 4.6, 0, 'ram', DECK);
-  crew(rig, 'ammo1', 3.9, 3.0, R90, 'stand');
-  crew(rig, 'ammo2', 3.9, 4.8, R90, 'crouch');
+  // the ammunition numbers off to the side of the shell stack, clear of the place where the carrying pair takes up
+  // its shell (they stood in it)
+  crew(rig, 'ammo1', 4.8, 2.1, R90, 'stand');
+  crew(rig, 'ammo2', 4.5, 5.0, R90, 'crouch');
 
   hb(rig, -1.45, 0, -2.5, 1.45, 3.0, 1.0);
   hb(rig, -1.65, 0, 1.0, 1.65, 2.7, 5.9);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { smooth, ramp, lerp, wrapPi, headingOf } from './anim.js';
+import { CREW_GAITS } from '../models/v/crew.js';
 
 // Loading choreography roles of the super-heavy German pieces (render/crews.js merges these into its ROLES):
 // role (the rig's crew spot) -> behaviour. The behaviours are crews.js's: cmd, lay, wheel, lan, guide0/1
@@ -96,10 +97,28 @@ function drill(crew) {
   if (crew.kind === 'karl') {
     const deck = { loader1: [-0.82, 3.9], loader2: [0.9, 3.28], rammer1: [-0.5, 4.75], rammer2: [0.88, 4.75], rammer3: [-0.88, 5.67], rammer4: [0.88, 5.67] };
     for (const m of crew.men) if (deck[m.role]) [m.sx, m.sz] = deck[m.role];
+    // the clearance search pushed the men at the handwheels and the lanyard up to 2 m off their places (the traverser
+    // to the front of the side platform, the lanyard man across the deck into the first loader): they stand where the
+    // rig puts them, at the wheels on the side platforms and behind the breech on the right
+    for (const r of ['layer', 'traverser', 'lanyard']) { const m = crew.byRole.get(r); if (m) { m.sx = m.spot.x; m.sz = m.spot.z; } }
   }
   if (crew.kind === 'bertha') {
-    const slinger = crew.byRole.get('cart');
-    if (slinger) slinger.sx = 2.5;
+    // The demo's places (src/bertha/crew.js) on the loading stage: the right loader at the wedge's crank, the left one
+    // across the tray from him, the rammers and the bagman at the back either side of the tray's run, the crane man at
+    // the winch on the jib's post, the cart man on the ground at the shell cart. The layers stand on their footboards
+    // (0.3 m over the bed: src/bertha/model.js), at the wheels; the clearance search had put them off the boards and on
+    // the bed, their legs through the plates. [x, z, heading, height over the spot]
+    const home = {
+      layer: [-1.66, 1.42, -Math.PI / 2, 0.3], elevator: [1.69, 1.32, Math.PI / 2, 0.3],
+      loader1: [-1.0, 2.6, -Math.PI / 2 + 0.35], loader2: [1.0, 2.42, -0.2],
+      rammer1: [-1.0, 3.6, 0], rammer2: [0.9, 4.65, 0], bagman: [-0.9, 4.57, 0],
+      kran: [1.33, 3.38, -0.98], cart: [2.5, 3.0, -Math.PI / 2],
+    };
+    for (const m of crew.men) {
+      const hm = home[m.role];
+      if (!hm) continue;
+      [m.sx, m.sz, m.hh, m.hy = 0] = hm;
+    }
   }
   const root = new THREE.Group();
   root.name = 'crew-heavy-equipment';
@@ -149,6 +168,11 @@ export function heavyState(crew, c) {
     const start = crew.aT - crew.half - 0.04;
     const seated = end - crew.half - 0.04;
     crew.staffA = lerp(start, seated, crew.ramK) - (seated - start) * smooth(k, 0.79, 0.98);
+  } else if (c.s === 'cartridge' && crew.kind === 'bertha') {
+    // the bagman lays the charge on the tray and the rammers, still at their places behind it, drive it home with
+    // the staff: from where the ram left the head (the shell's base on the tray) to the bag seated in the chamber
+    const start = crew.aT - crew.half - 0.04;
+    crew.staffA = lerp(start, BAG_SEAT, smooth(k, 0.58, 0.8)) - (BAG_SEAT - start) * smooth(k, 0.83, 0.97);
   }
   d.work = c.s === 'shell' || c.s === 'ram' || c.s === 'cartridge';
   return true;
@@ -206,6 +230,7 @@ export function heavyMechanisms(crew, c) {
     crew.hoist.position.y = height;
     crew.craneA = angle; crew.craneY = height;
     crew.pick.copy(d.pickup);
+    if (crew.kind === 'bertha') berthaWheels(crew, c);
   }
   rig.update?.(0);
   rig.root.updateMatrixWorld(true);
@@ -280,6 +305,7 @@ export function heavyAct(crew, m, c, h) {
       busy ? 'operate' : 'stand', busy ? c.now * 1.1 + m.seed : crew.idleT + m.seed);
     return true;
   }
+  if (crew.kind === 'bertha' && berthaAct(crew, m, c, h, d)) return true;
   if (m.beh === 'ram') {
     if (crew.kind !== 'bertha') {
       // Keep the central delivery rails clear. The front pair works the rammer drive; the rear pair
@@ -295,6 +321,7 @@ export function heavyAct(crew, m, c, h) {
     } else berthaRammer(crew, m, c, h);
     return true;
   }
+  if ((m.beh === 'guide0' || m.beh === 'guide1') && crew.kind === 'karl') { karlGuide(crew, m, c, h, d); return true; }
   if (m.beh === 'guide0' || m.beh === 'guide1') {
     const side = m.beh === 'guide0' ? -1 : 1;
     const open = s === 'open' || s === 'close';
@@ -342,8 +369,15 @@ export function heavyAct(crew, m, c, h) {
   }
   if (m.beh === 'signal') {
     const active = s === 'shell' || s === 'ram' && k < 0.65;
-    const look = active ? d.hook : crew.T;
-    m.put(h.x, h.y, h.z, headingOf(look.x - h.x, look.z - h.z), active ? 'signal' : 'stand', 0.12);
+    if (crew.kind === 'gustav') {
+      const look = active ? d.hook : crew.T;
+      m.put(h.x, h.y, h.z, headingOf(look.x - h.x, look.z - h.z), active ? 'signal' : 'stand', 0.12);
+      return true;
+    }
+    // he turns from the tray to the hook as the lift begins and back as it is clear (no snap at the steps' ends)
+    const w = s === 'shell' ? smooth(k, 0, 0.08) : s === 'ram' ? 1 - smooth(k, 0.55, 0.72) : 0;
+    const toT = headingOf(crew.T.x - h.x, crew.T.z - h.z), toH = headingOf(d.hook.x - h.x, d.hook.z - h.z);
+    m.put(h.x, h.y, h.z, toT + wrapPi(toH - toT) * w, active ? 'signal' : 'stand', active ? 0.12 + c.now * 0.6 : crew.idleT + m.seed);
     return true;
   }
   if (m.beh === 'sling' || m.beh === 'shove') {
@@ -378,53 +412,364 @@ export function heavyAct(crew, m, c, h) {
 // the first 0.75 m behind its head and the second 1.35 m, never past the back of the stage, and the staff runs
 // through their hands a grip and a heave at a time. They come over at the start of the ram and go back to their
 // places as the bags come up.
-const BERTHA_RAM = { rammer1: { side: -1, gap: 0.75, rear: 0.3 }, rammer2: { side: 1, gap: 1.35, rear: 0.9 } };
+const BERTHA_RAM = { rammer1: { side: -1, rear: 0.3 }, rammer2: { side: 1, rear: 0.8 } };
 const GRIP = 0.45; // the staff travel per heave
-const _st = new THREE.Vector3();
+const BAG_SEAT = 0.1; // the staff's head with the charge seated in the chamber (axial, from the breech face)
+const STRIDE = CREW_GAITS.walk.stride, SIDE = CREW_GAITS.sidestep.stride, CSTRIDE = CREW_GAITS.carryWalk.stride;
+const _st = new THREE.Vector3(), _hm = { x: 0, y: 0, z: 0, h: 0 };
 
-function berthaStation(crew, r, head, out) {
+// a rammer's place behind the tray: fixed for the whole stroke, so his feet stay planted in the lunge while the staff
+// runs through his hands (it used to follow the staff's head, and the feet skated a metre a cycle)
+function berthaStation(crew, r, out) {
   const tz = crew.rig.berthaModel?.trayZ, rear = crew.aT - (tz ? (tz.z1 - tz.z0) / 2 : 0.9);
-  const a = Math.max(rear - 0.98, Math.min(rear - r.rear, head - r.gap));
+  const a = rear - r.rear;
   crew.trayAt(a, out);
-  out.x += crew.rt.x * r.side * 0.34; out.z += crew.rt.z * r.side * 0.34;
+  out.x += crew.rt.x * r.side * 0.31; out.z += crew.rt.z * r.side * 0.31;
   return a;
 }
 
+// A short move from a to b (root space) a fraction e of the way, facing hd the whole time: sideways steps when the move
+// is mostly to his side, forward (or backward) steps otherwise, the gait's cycle run by the distance actually covered
+// so the feet stay planted. Returns false when he is not moving (the caller poses him).
+function shuffle(m, ax, az, bx, bz, e, y, hd) {
+  const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz);
+  if (!(e > 0.002 && e < 0.998) || d < 0.04) return false;
+  const fw = -(dx * Math.sin(hd) + dz * Math.cos(hd)), rt = dx * Math.cos(hd) - dz * Math.sin(hd);
+  const x = lerp(ax, bx, e), z = lerp(az, bz, e);
+  if (Math.abs(rt) > Math.abs(fw)) m.put(x, y, z, hd, 'sidestep', (rt * e) / SIDE);
+  else m.put(x, y, z, hd, 'walk', (fw * e) / STRIDE);
+  return true;
+}
+
+function berthaHome(crew, m, h) {
+  _hm.x = h.x; _hm.z = h.z; _hm.y = h.y + (m.hy ?? 0);
+  _hm.h = m.hh != null ? m.hh + crew.az : h.h;
+  return _hm;
+}
+
 function berthaRammer(crew, m, c, h) {
-  const s = c.s, k = c.k, r = BERTHA_RAM[m.role] ?? BERTHA_RAM.rammer2;
+  const s = c.s, k = c.k, r = BERTHA_RAM[m.role] ?? BERTHA_RAM.rammer2, H = berthaHome(crew, m, h);
   const fwd = headingOf(crew.u.x, crew.u.z);
   const start = crew.aT - crew.half - 0.04; // the staff's head against the shell's base before the stroke
-  // to the station and back: a short shuffle, still facing the breech (backwards or sideways steps, not a turn)
-  const shuffle = (into) => {
-    berthaStation(crew, r, start, _st);
-    const kk = into ? smooth(k, 0, 0.12) : 1 - smooth(k, 0, 0.12);
-    const x = lerp(h.x, _st.x, kk), z = lerp(h.z, _st.z, kk);
-    const moving = kk > 0.01 && kk < 0.99;
-    m.put(x, h.y, z, h.h + wrapPi(fwd - h.h) * kk, moving ? 'walk' : into ? 'ramLow' : 'stand',
-      moving ? Math.hypot(_st.x - h.x, _st.z - h.z) * kk / 1.15 : crew.idleT + m.seed);
-  };
-  if (s === 'cartridge' && k < 0.12) return shuffle(false);
-  if (s !== 'ram' || crew.staffA == null) return m.put(h.x, h.y, h.z, h.h, 'stand', crew.idleT + m.seed);
-  if (k < 0.12) return shuffle(true);
-  const a = berthaStation(crew, r, crew.staffA, _st);
+  const a = berthaStation(crew, r, _st);
+  // in at the start of the ram, out once the charge is home (the close): side steps facing the breech, about 0.6 m in a
+  // second, turning to face it on the way in and back to his place's heading on the way out
+  // (in over the last second of the shell's landing and the first of the ram, about 0.7 m: at a walk, not the dash
+  // the first tenth of the ram alone made of it)
+  // Out again over the end of the charge's stroke and the first second of the close, sideways first: the tray runs back
+  // through their places as the block closes (render/guns.js loadPose).
+  const dur = c.p.job?.dur ?? 1, tIn = s === 'shell' ? (k - 1) * dur : s === 'ram' ? k * dur : -9;
+  const tOut = s === 'cartridge' ? (k - 1) * dur : s === 'close' ? k * dur : -9;
+  const inK = s === 'shell' || s === 'ram' ? smooth(tIn, -1.0, 0.7) : s === 'cartridge' || s === 'close' ? 1 - smooth(tOut, -0.4, 0.9) : 0;
+  const hd = H.h + wrapPi(fwd - H.h) * Math.min(1, inK * 1.6);
+  if (inK < 0.999) {
+    if (!shuffle(m, H.x, H.z, _st.x, _st.z, inK, H.y, hd)) {
+      if (inK < 0.5) m.put(H.x, H.y, H.z, H.h, 'stand', crew.idleT + m.seed);
+      else m.put(_st.x, H.y, _st.z, hd, 'stand', 0);
+    }
+    return;
+  }
+  if (crew.staffA == null) return m.put(_st.x, H.y, _st.z, fwd, 'ramLow', 0);
   // each heave: the hands go along with the wood for 80% of GRIP while he lunges into it, then let go and take a
   // fresh hold behind as he straightens (the pose's cycle: lunge over its first half, recover over the second)
   const phase = ((((crew.staffA - start) / GRIP) % 1) + 1) % 1, push = phase < 0.8;
   const travel = push ? phase : 0.8 * (1 - smooth(phase, 0.8, 1));
-  m.put(_st.x, h.y, _st.z, fwd, 'ramLow', push ? 0.5 * smooth(phase, 0, 0.8) : 0.5 + 0.5 * smooth(phase, 0.8, 1));
-  const hold = windowK(k, 0.12, 0.17, 0.97, 1) * (1 - windowK(phase, 0.8, 0.85, 0.95, 1));
-  for (const [hand, off] of [['L', 0.15], ['R', 0.42]]) {
-    crew.trayAt(Math.min(crew.staffA - 0.1, a + off + travel * GRIP), q);
+  const moving = s === 'ram' ? k > 0.14 && k < 0.98 : k > 0.58 && k < 0.97;
+  m.put(_st.x, H.y, _st.z, fwd, 'ramLow', moving ? (push ? 0.5 * smooth(phase, 0, 0.8) : 0.5 + 0.5 * smooth(phase, 0.8, 1)) : 0);
+  const hold = (s === 'ram' ? smooth(k, 0.1, 0.15) : 1) * (1 - (moving ? windowK(phase, 0.8, 0.85, 0.95, 1) : 0));
+  // (the hand nearer the staff leads: the right one for the man on its left, the left one for the man on its right)
+  for (const [hand, off] of r.side < 0 ? [['L', 0.15], ['R', 0.34]] : [['R', 0.15], ['L', 0.32]]) {
+    crew.trayAt(Math.min(crew.staffA - 0.1, a + off + (moving ? travel * GRIP : 0)), q);
     m.hand(hand, q.x, q.y, q.z, hold); // (the stoop brings the staff in reach: reachable() measures from a standing man)
+  }
+}
+
+// ---------------------------------------------------------------- the rest of Bertha's detachment
+
+// The model's handwheels turn with what they drive (as the demo's page turns them): line and elevation with the
+// carriage's lay, the wedge's crank with the block, the crane's winch with the hook (a whole number of turns a cycle,
+// so it is back where it started and the crane man's hands never jump).
+function berthaWheels(crew, c) {
+  const W = crew.rig.berthaModel?.wheels;
+  if (!W) return;
+  const s = c.s, k = c.k;
+  W.trav && (W.trav.node.rotation.x = -c.p.az * 160);
+  W.elev && (W.elev.node.rotation.x = c.p.el * 70);
+  const bk = s === 'open' ? k : s === 'close' ? 1 - k : s === 'shell' || s === 'ram' || s === 'cartridge' ? 1 : 0;
+  W.wedge && (W.wedge.node.rotation.x = -bk * 9);
+  W.crane && (W.crane.node.rotation.x = craneTurns(c) * Math.PI * 2);
+  crew.wedgeK = bk;
+}
+
+// the crane winch's turns through the cycle (the hoist's run: down, the test lift, up, the slew, down onto the tray,
+// the hook clear; the hook back over the cart in the ram), 9 in all
+function craneTurns(c) {
+  const k = c.k;
+  if (c.s === 'shell') return 1.2 * smooth(k, 0, 0.12) + 0.2 * smooth(k, 0.24, 0.29) + 1.6 * smooth(k, 0.35, 0.5) + 0.4 * smooth(k, 0.51, 0.73) + 1.6 * smooth(k, 0.76, 0.91) + 0.5 * smooth(k, 0.96, 1);
+  if (c.s === 'ram') return 5.5 + 3.5 * smooth(k, 0, 0.62);
+  return 0;
+}
+
+// both hands on a handwheel's rim at ten and two (right: the rim angle of the right hand, 0 at the top), working hand
+// over hand as the wheel turns (src/bertha/crew.js wheelGrip)
+function wheelGrip(crew, m, name, right, w, max = 0) {
+  const W = crew.rig.berthaModel?.wheels?.[name];
+  if (!W || w <= 0.01) return;
+  const rot = W.node.rotation.x;
+  for (const [side, a, ph] of [['R', right, 0], ['L', -right, Math.PI]]) {
+    // the grip points are taken in the wheel's mounting, not in the turning wheel: in the wheel's own frame they went
+    // round with it, a full turn every few seconds, and spent half of it out of reach under the hub
+    const ang = a + 0.4 * Math.sin(rot + ph), o = W.node.position;
+    point(crew, W.node.parent, q, o.x - 0.03, o.y + Math.cos(ang) * W.R, o.z + Math.sin(ang) * W.R);
+    if (max) reachable(m, side, q, w, max); else m.hand(side, q.x, q.y, q.z, w);
+  }
+}
+
+function berthaAct(crew, m, c, h, d) {
+  const s = c.s, k = c.k, p = c.p;
+  switch (m.beh) {
+    case 'lay': case 'wheel': {
+      // on the footboard at his handwheel: winding while the carriage or the barrel moves, else at ease beside it
+      const H = berthaHome(crew, m, h), lay = m.beh === 'lay';
+      const moving = Math.abs(p.cmd.az - p.az) > 3e-4 || Math.abs(p.cmd.el - p.el) > 3e-4 || s === 'lay' || s === 'depress';
+      const busy = lay ? moving && (Math.abs(p.cmd.az - p.az) > 3e-4 || s === 'lay') : moving;
+      // At the shot they stay on their boards with both hands on the wheel, braced: turned away from the gun they swung
+      // their legs through the carriage beside the board, and hunched over their ears their heads went into the dials.
+      m.noEars = true;
+      const hold = busy || crew.ears > 0.5;
+      m.put(H.x, H.y, H.z, H.h, hold ? 'operate' : 'stand', busy ? c.now * 0.9 : crew.idleT + m.seed);
+      // (the big elevation wheel is held nearer the top: at ten and two its far side was out of reach)
+      if (hold) wheelGrip(crew, m, lay ? 'trav' : 'elev', lay ? 1.0 : -0.6, busy ? 1 : smooth(crew.ears, 0.5, 0.8));
+      return true;
+    }
+    case 'guide0': case 'guide1': berthaGuide(crew, m, c, h, d); return true;
+    case 'ram': berthaRammer(crew, m, c, h); return true;
+    case 'winch': {
+      // the crane man at the winch on the jib's post: hauling while the hook moves, watching the load
+      const H = berthaHome(crew, m, h), on = s === 'shell' ? k < 0.12 || (k > 0.24 && k < 0.29) || (k > 0.35 && k < 0.91) || k > 0.96 : s === 'ram' && k < 0.62;
+      // the winch rides the jib round its post: he keeps facing it
+      const W = crew.rig.berthaModel?.wheels?.crane;
+      const hd = W ? (point(crew, W.node, _st), headingOf(_st.x - H.x, _st.z - H.z)) : H.h;
+      m.put(H.x, H.y, H.z, hd, on ? 'operate' : 'stand', on ? craneTurns(c) * 0.5 : crew.idleT + m.seed);
+      wheelGrip(crew, m, 'crane', 1.2, on ? 1 : 0, 0.76);
+      return true;
+    }
+    case 'sling': {
+      // the cart man: crouched at the shell to hook it on, steadying it as it comes off the cart, then watching it go
+      const H = berthaHome(crew, m, h), tgt = d.pickup;
+      const face = headingOf(tgt.x - H.x, tgt.z - H.z);
+      const hook = s === 'shell' && k > 0.08 && k < 0.3;
+      // steadying only while the shell is still within his reach (arms up at nothing once it had risen past them)
+      const steady = s === 'shell' && k >= 0.3 && k < 0.47 && d.visible && Math.hypot(d.shell.x - H.x, d.shell.y - H.y - 1.45, d.shell.z - H.z) < 0.95;
+      // he follows the shell with his eyes as it goes over, and turns back to the cart as it is rammed
+      const lw = s === 'shell' ? smooth(k, 0.47, 0.6) : s === 'ram' ? 1 - smooth(k, 0.1, 0.4) : 0;
+      const look = headingOf(crew.T.x - H.x, crew.T.z - H.z); // (where the shell is going: the swinging load flipped his head about)
+      // (the tray is behind him: he looks over his shoulder, always the same way round, never through the half turn
+      // where the shorter way flips sides)
+      let dl = wrapPi(look - face);
+      if (dl < -2.0) dl += Math.PI * 2;
+      dl = Math.min(dl, 2.4);
+      m.put(H.x, H.y, H.z, steady ? face : face + dl * lw,
+        hook ? 'crouch' : steady ? 'reachUp' : 'stand', hook || steady ? k * 2 : crew.idleT + m.seed);
+      if (hook || steady) {
+        const src = d.visible ? d.shell : tgt, w = hook ? windowK(k, 0.08, 0.13, 0.25, 0.3) : windowK(k, 0.3, 0.33, 0.42, 0.47);
+        q.set(H.x - src.x, 0, H.z - src.z).normalize().multiplyScalar(crew.srad * 1.05);
+        for (const [hand, off] of [['L', 0.16], ['R', -0.16]]) {
+          w > 0.01 && reachable(m, hand, _st.set(src.x + q.x + crew.rt.z * off, src.y + 0.02, src.z + q.z - crew.rt.x * off), w, 0.72);
+        }
+      }
+      return true;
+    }
+    case 'bag': berthaBagman(crew, m, c, h); return true;
+  }
+  return false;
+}
+
+// The two loaders: the right one cranks the wedge open and shut (the model's crank, following the block out to the
+// right); both step in beside the tray as the shell comes down onto it, hands on its flanks as it lands, and step back
+// as the rammers come up. Always facing the tray (the turn to the shell only when it is close), so no heading snaps at
+// the steps' boundaries; the steps in and out take a second or more (they used to run back in half a second).
+function berthaGuide(crew, m, c, h, d) {
+  const s = c.s, k = c.k, side = m.beh === 'guide0' ? -1 : 1, H = berthaHome(crew, m, h);
+  // the right loader's place follows the wedge's crank out to the right as the block opens
+  const wk = side > 0 ? 0.42 * (crew.wedgeK ?? 0) : 0;
+  const hx = H.x + crew.rt.x * wk, hz = H.z + crew.rt.z * wk;
+  // his work place beside the landing shell, level with its middle
+  const off = crew.srad + 0.72, wx = crew.T.x + crew.rt.x * side * off, wz = crew.T.z + crew.rt.z * side * off;
+  const e = s === 'shell' ? smooth(k, 0.6, 0.74) : s === 'ram' ? 1 - smooth(k, 0, 0.25) : 0;
+  const x = lerp(hx, wx, e), z = lerp(hz, wz, e);
+  const dS = d.visible ? d.shell.distanceTo(crew.T) : 9, near = 1 - smooth(dS, 1.1, 2);
+  const toT = headingOf(crew.T.x - x, crew.T.z - z), toS = d.visible ? headingOf(d.shell.x - x, d.shell.z - z) : toT;
+  const crank = side > 0 && (s === 'open' || s === 'close');
+  // at rest he keeps his place's heading; he turns to the tray as he steps in, to the shell once it is close
+  const face = toT + wrapPi(toS - toT) * near;
+  // at the crank he turns a little after it as the block runs out to the right (it ends 0.7 m out past him)
+  const base = side > 0 ? H.h - 0.55 * (crew.wedgeK ?? 0) : H.h;
+  const hd = crank ? base : base + wrapPi(face - base) * Math.max(smooth(e, 0, 0.5), near);
+  if (shuffle(m, hx, hz, wx, wz, e, H.y, hd)) return;
+  const weight = s === 'shell' && near > 0.5 ? windowK(k, 0.82, 0.9, 0.96, 0.995) : 0;
+  const reach = s === 'shell' && near > 0.2 && k > 0.74 && k < 0.9;
+  m.put(x, H.y, z, hd, crank ? 'operate' : weight > 0 ? 'push' : reach && d.shell.y > H.y + 1.75 ? 'reachUp' : 'stand',
+    crank ? k * 2 : weight > 0 ? 0.25 : crew.idleT + m.seed);
+  if (crank) wheelGrip(crew, m, 'wedge', 1.2, windowK(k, 0, 0.06, 0.94, 1), 0.74);
+  else if (reach || weight > 0) {
+    // palms on the near flank: steadying the shell as it is lowered, then as it settles on the tray
+    const w = weight > 0 ? weight : windowK(k, 0.74, 0.78, 0.86, 0.9);
+    for (const [hand, a] of [['L', -0.22], ['R', 0.22]]) {
+      q.copy(d.shell).addScaledVector(crew.u, -crew.half * 0.3 + a);
+      q.x += crew.rt.x * side * crew.srad * 0.95; q.z += crew.rt.z * side * crew.srad * 0.95; q.y += 0.03;
+      reachable(m, hand, q, w, 0.72);
+    }
+  }
+}
+
+// The bagman (the demo's second loader with the bags, src/bertha/crew.js): the next charge lies on the stage in front
+// of him; in the cartridge step he lifts it, carries it up the left of the stage, lays it on the empty tray from the
+// side and walks back while the rammers drive it home with the staff (heavyState). Field-frame places on the stage.
+const RACK_B = { x: -0.72, z: 4.15 }, VIA_B = { x: -0.92, z: 3.55 };
+const _r1 = { x: 0, z: 0 }, _r2 = { x: 0, z: 0 }, _r3 = { x: 0, z: 0 }, _pt3 = { x: 0, z: 0, h: 0 };
+const _path = [{ x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }];
+void _r3;
+
+// a point and the heading of travel u (0..1) of the way along a polyline of n points
+function along(pts, n, u, out) {
+  let tot = 0;
+  for (let i = 0; i < n - 1; i++) tot += Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z);
+  let dd = Math.min(1, Math.max(0, u)) * tot;
+  const R = 0.3; // the heading turns over the last and first 0.3 m either side of a corner, not on the spot
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i], b = pts[i + 1], l = Math.hypot(b.x - a.x, b.z - a.z);
+    if (dd <= l || i === n - 2) {
+      const t = l > 0 ? Math.min(1, dd / l) : 1;
+      out.x = lerp(a.x, b.x, t); out.z = lerp(a.z, b.z, t); out.h = headingOf(b.x - a.x, b.z - a.z);
+      if (i < n - 2 && l - dd < R) {
+        const c = pts[i + 2], hn = headingOf(c.x - b.x, c.z - b.z);
+        out.h += wrapPi(hn - out.h) * 0.5 * smooth(R - (l - dd), 0, R);
+      }
+      if (i > 0 && dd < R) {
+        const z = pts[i - 1], hp = headingOf(a.x - z.x, a.z - z.z);
+        out.h = hp + wrapPi(out.h - hp) * (0.5 + 0.5 * smooth(dd, 0, R));
+      }
+      break;
+    }
+    dd -= l;
+  }
+  out.len = tot;
+  return out;
+}
+
+function berthaBagman(crew, m, c, h) {
+  const s = c.s, k = s === 'cartridge' ? c.k : -1, H = berthaHome(crew, m, h), bag = crew.bag, len = crew.bagLen, br = 0.19;
+  const rack = crew.rootXZ(m, RACK_B, _r1);
+  const faceRack = headingOf(rack.x - H.x, rack.z - H.z);
+  // his place beside the tray's middle on the left, facing across it
+  const layA = crew.aT;
+  crew.trayAt(layA, _st);
+  const px = _st.x - crew.rt.x * 0.62, pz = _st.z - crew.rt.z * 0.62, faceTray = headingOf(crew.rt.x, crew.rt.z);
+  const via = crew.rootXZ(m, VIA_B, _r2);
+  const pts = _path;
+  let pose = 'stand', t = crew.idleT + m.seed, x = H.x, z = H.z, hd = faceRack, held = 0, lift = 1;
+  if (k >= 0 && k < 0.1) { pose = 'lift'; lift = smooth(k, 0, 0.1); t = lift; held = smooth(k, 0.015, 0.045); }
+  else if (k >= 0.1 && k < 0.4) {
+    pts[0].x = H.x; pts[0].z = H.z; pts[1].x = via.x; pts[1].z = via.z; pts[2].x = px; pts[2].z = pz;
+    const u = smooth(k, 0.1, 0.4) * 0.9 + ((k - 0.1) / 0.3) * 0.1; // an easy start and stop, never quite standing still
+    const P = along(pts, 3, u, _pt3);
+    x = P.x; z = P.z;
+    hd = P.h;
+    hd = faceRack + wrapPi(hd - faceRack) * smooth(u, 0, 0.12);
+    hd += wrapPi(faceTray - hd) * smooth(u, 0.88, 1);
+    pose = 'carryWalk'; t = (u * P.len) / CSTRIDE; held = 1;
+  } else if (k >= 0.4 && k < 0.6) {
+    // he stoops to lay it in the trough (the lift played part of the way back) and lets go
+    x = px; z = pz; hd = faceTray;
+    if (k < 0.55) { pose = 'lift'; t = 1 - 0.45 * smooth(k, 0.4, 0.5) + 0.45 * smooth(k, 0.5, 0.55); } else pose = 'stand';
+    held = 1 - smooth(k, 0.47, 0.52);
+  }
+  else if (k >= 0.6 && k < 0.95) {
+    // back: he turns round where he stands, then walks; the last third of the way he turns to face his bag again
+    pts[0].x = px; pts[0].z = pz; pts[1].x = via.x; pts[1].z = via.z; pts[2].x = H.x; pts[2].z = H.z;
+    const u = k < 0.67 ? 0 : smooth(k, 0.67, 0.95) * 0.9 + ((k - 0.67) / 0.28) * 0.1;
+    const P = along(pts, 3, u, _pt3);
+    x = P.x; z = P.z;
+    hd = faceTray + wrapPi(P.h - faceTray) * smooth(k, 0.6, 0.69);
+    hd += wrapPi(faceRack - hd) * smooth(u, 0.7, 1);
+    if (k < 0.67) { pose = 'stand'; t = crew.idleT + m.seed; } else { pose = 'walk'; t = (u * P.len) / STRIDE; }
+  }
+  m.put(x, H.y, z, hd, pose, t);
+  // the charge: on the stage at his feet, then in his arms, then laid on the tray and driven home ahead of the staff
+  const fx = -Math.sin(m.h), fz = -Math.cos(m.h);
+  // (it lies across his way to it, so he lifts it by its ends without turning it)
+  // (it stands on end, so he takes it by its sides at knee height and turns it level as he straightens)
+  let cx = rack.x, cy = H.y + len / 2, cz = rack.z, yaw = faceRack - Math.PI / 2, pitch = Math.PI / 2, vis = true, under = 1, e = 1;
+  if (k >= 0 && k < 0.4) {
+    const hx = m.x + fx * 0.42, hz = m.z + fz * 0.42, hy = H.y + 1.07;
+    e = k < 0.1 ? smooth(lift, 0.3, 1) : 1;
+    cx = lerp(rack.x, hx, e); cz = lerp(rack.z, hz, e); cy = lerp(H.y + len / 2, hy, e);
+    const y0 = faceRack - Math.PI / 2, y1 = m.h - Math.PI / 2;
+    yaw = y0 + wrapPi(y1 - y0) * e;
+    pitch = (Math.PI / 2) * (1 - e);
+    under = e;
+  } else if (k >= 0.4) {
+    const hx = m.x + fx * 0.42, hz = m.z + fz * 0.42, hy = H.y + 1.07;
+    // laid down from his arms onto the trough, then (once the staff's head reaches it) pushed up into the chamber
+    const e = smooth(k, 0.4, 0.5), a = crew.staffA != null ? Math.max(layA, crew.staffA + len / 2) : layA;
+    crew.trayAt(a, _st);
+    _st.addScaledVector(Y, -crew.srad + br); // (the tray's shell centre is the shell's: the bag lies lower in the trough)
+    cx = lerp(hx, _st.x, e); cy = lerp(hy, _st.y, e); cz = lerp(hz, _st.z, e);
+    yaw = (m.h - Math.PI / 2) + wrapPi(crew.az - (m.h - Math.PI / 2)) * e;
+    pitch = Math.asin(crew.u.y) * e;
+    vis = k < 0.95;
+  }
+  _st.set(cx, cy, cz);
+  crew.placeProp(bag, _st, yaw, pitch, vis);
+  if (held > 0.01) {
+    const nx = -Math.sin(yaw) * Math.cos(pitch), ny = Math.sin(pitch), nz = -Math.cos(yaw) * Math.cos(pitch);
+    // carried: under its two ends; on end at the rack: on its sides, level with its top third
+    const sx = Math.cos(m.h), sz = -Math.sin(m.h);
+    for (const [hand, sg] of [['L', -1], ['R', 1]]) {
+      const ax = cx + nx * len * 0.38 * sg, ay = cy + ny * len * 0.38 * sg - br * 0.85 * under, az = cz + nz * len * 0.38 * sg;
+      const bx = cx + sx * br * 1.05 * sg, by = cy + len * 0.15, bz = cz + sz * br * 1.05 * sg;
+      m.hand(hand, lerp(bx, ax, e), lerp(by, ay, e), lerp(bz, az, e), held);
+    }
+  }
+}
+
+// The Karl's two loaders: at their geared breech controls for the wedge (facing the way they stand, so the turn to the
+// breech at the start of the step is gone), in beside the tray's rear end as the shell is lowered onto it, palms on
+// its flanks as it lands, back to their places at a walk as the rammer drive comes up (they used to step back in half
+// a second); at the controls again to feed the charge.
+function karlGuide(crew, m, c, h, d) {
+  const s = c.s, k = c.k, side = m.beh === 'guide0' ? -1 : 1;
+  const open = s === 'open' || s === 'close', feed = s === 'cartridge' && k >= 0.64;
+  q.copy(crew.T).addScaledVector(crew.u, -crew.half * 0.45);
+  const off = crew.srad + 0.46, wx = q.x + crew.rt.x * side * off, wz = q.z + crew.rt.z * side * off;
+  const e = s === 'shell' ? smooth(k, 0.66, 0.8) : s === 'ram' ? 1 - smooth(k, 0, 0.15) : 0;
+  const x = lerp(h.x, wx, e), z = lerp(h.z, wz, e);
+  const dS = d.visible ? d.shell.distanceTo(crew.T) : 9, near = 1 - smooth(dS, 1.4, 2.6);
+  const toT = headingOf(crew.T.x - x, crew.T.z - z), toS = d.visible ? headingOf(d.shell.x - x, d.shell.z - z) : toT;
+  const hd = h.h + wrapPi(toT + wrapPi(toS - toT) * near - h.h) * Math.max(smooth(e, 0, 0.5), near * smooth(e, 0, 0.3));
+  if (shuffle(m, h.x, h.z, wx, wz, e, h.y, hd)) return;
+  const weight = s === 'shell' && near > 0.5 ? windowK(k, 0.84, 0.9, 0.96, 0.995) : 0;
+  m.put(x, h.y, z, hd, open || feed ? 'operate' : weight > 0 ? 'push' : 'stand',
+    open ? k * 2 : feed ? smooth(k, 0.7, 0.91) : weight > 0 ? 0.25 : crew.idleT + m.seed);
+  if (open) control(crew, m, h, (s === 'open' ? k : 1 - k) * 2, windowK(k, 0, 0.08, 0.92, 1), 'breech');
+  else if (feed) control(crew, m, h, smooth(k, 0.7, 0.91), windowK(k, 0.64, 0.7, 0.91, 0.98), 'breech');
+  else if (weight > 0) {
+    // palms on the near flank; nobody tries to take a two-ton shell's weight by hand
+    for (const [hand, a] of [['L', -0.22], ['R', 0.22]]) {
+      q.copy(d.shell).addScaledVector(crew.u, -crew.half * 0.45 + a);
+      q.x += crew.rt.x * side * crew.srad * 0.92; q.z += crew.rt.z * side * crew.srad * 0.92; q.y += 0.03;
+      reachable(m, hand, q, weight);
+    }
   }
 }
 
 // Do not draw a locked hand if the work point is beyond the man's actual arm span. This is especially
 // important for the men below Karl's carrier deck and the observers beside Gustav's raised platform.
-function reachable(m, hand, target, weight) {
+function reachable(m, hand, target, weight, max = 0.84) {
   const shoulderY = m.y + 1.42 * m.root.scale.x;
   const distance = Math.hypot(target.x - m.x, target.y - shoulderY, target.z - m.z);
-  if (distance > 0.84 * m.root.scale.x) return;
+  if (distance > max * m.root.scale.x) return;
   m.hand(hand, target.x, target.y, target.z, weight);
 }
 
@@ -448,13 +793,18 @@ function control(crew, m, h, turns, weight, kind) {
     d.controls.set(m.role, ctl);
   }
   // A small control station is fixed relative to the man's safe working place, not the moving block.
-  const heading = m.h;
-  ctl.root.position.set(h.x - Math.sin(heading) * 0.46, h.y, h.z - Math.cos(heading) * 0.46);
+  const heading = m.h, g = crew.kind === 'gustav';
+  // (elsewhere than the Gustav the station stands 0.36 m off, not 0.46: at 0.46 the far half of the rim was out of a
+  // man's reach and the hands stopped 13 cm short of it)
+  const off = g ? 0.46 : 0.36;
+  ctl.root.position.set(h.x - Math.sin(heading) * off, h.y, h.z - Math.cos(heading) * off);
   ctl.root.rotation.y = heading;
   ctl.wheel.rotation.z = turns * Math.PI * 2;
   ctl.root.updateWorldMatrix(true, true);
   for (const [hand, offset] of [['L', 0], ['R', Math.PI]]) {
-    const a = turns * Math.PI * 2 + offset;
+    // the Gustav's men keep their hands on the turning rim; the others hold it at ten and two and work it hand over
+    // hand (a hand going right round the rim twisted the arm through the body at the bottom of the turn)
+    const a = g ? turns * Math.PI * 2 + offset : Math.PI / 2 + (hand === 'L' ? 1 : -1) * (1.0 + 0.35 * Math.sin(turns * Math.PI * 2 + offset));
     point(crew, ctl.root, q, Math.cos(a) * 0.19, 1.02 + Math.sin(a) * 0.19, 0.04);
     m.hand(hand, q.x, q.y, q.z, weight);
   }
@@ -526,3 +876,6 @@ export function heavyProps(crew, c) {
   }
   return true;
 }
+
+// the walking and reaching helpers, for the other kinds' own drills (render/ww1/paris.js)
+export { shuffle, reachable, along, wheelGrip };

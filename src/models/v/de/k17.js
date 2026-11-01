@@ -260,8 +260,10 @@ export function buildK17({ scheme = 'bunt' } = {}) {
   // the right from the stack, the gun-layer's second on the right with the lanyard
   crew(rig, 'officer', -2.9, 0.9, L90, 'point');
   crew(rig, 'layer', -1.05, 0.95, L90, 'lay');
-  crew(rig, 'loader', 0.95, 1.75, 0, 'ram');
-  crew(rig, 'rammer', -0.95, 2.3, 0, 'ram');
+  // the loader left of the breech, clear of the recoil (crews.js steps him up to the block), the rammer behind it: the
+  // ammunition comes up the right
+  crew(rig, 'loader', -0.95, 1.75, 0, 'ram');
+  crew(rig, 'rammer', -0.45, 2.6, 0, 'ram');
   crew(rig, 'shell', 1.35, 2.6, R90, 'carry');
   crew(rig, 'cartridge', 1.25, 3.4, R90, 'carry');
   crew(rig, 'lanyard', 1.2, 1.1, R90, 'lanyard');

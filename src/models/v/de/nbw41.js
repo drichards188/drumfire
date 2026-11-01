@@ -177,13 +177,15 @@ export function buildNbW41({ scheme = 'dgelb' } = {}) {
     if (i % 2 === 0) W.add('sandbag', box(0.4, 0.16, 0.5, px, 0.26, z + 0.25, 0, 0, 0));
   }
   W.add('soil', box(0.9, 0.06, 4.6, COVER.x + 1.3, 0.02, COVER.z, 0, 0, 0.08)); // spoil, thrown up toward the launcher
-  W.add('dark', box(0.22, 0.14, 0.12, px - 0.3, 0.07, COVER.z - 0.55)); // the firing box (Glühzündgerät)
-  W.add('steel', box(0.04, 0.03, 0.04, px - 0.3, 0.155, COVER.z - 0.55));
-  W.add('dark', xTube(px - 0.19, px - 0.13, 0.012, 0.012, 6, 0.08, COVER.z - 0.55)); // the cable's plug
+  // the firing box (Glühzündgerät) on a sandbag in front of the firer, where his hand reaches it kneeling
+  W.add('sandbag', box(0.4, 0.26, 0.46, px - 0.27, 0.13, COVER.z - 0.55, 0, 0, 0.03));
+  W.add('dark', box(0.22, 0.14, 0.12, px - 0.27, 0.33, COVER.z - 0.55));
+  W.add('steel', box(0.04, 0.03, 0.04, px - 0.27, 0.415, COVER.z - 0.55));
+  W.add('dark', xTube(px - 0.16, px - 0.1, 0.012, 0.012, 6, 0.34, COVER.z - 0.55)); // the cable's plug
   // the firing cable: from the turntable (where the lead comes down the right side plate) along the ground,
   // under the trail, out to the trench
   W.add('rubber', cable([V(0.05, AXY + 0.06, 0.12), V(0.12, 0.28, 0.24), V(0.16, 0.02, 0.46), V(0.05, 0.015, 0.95),
-    V(-0.55, 0.015, 1.3), V(-2.4, 0.015, 1.65), V(-5, 0.015, 1.35), V(-8, 0.015, 2.05), V(-10.2, 0.015, 1.7), V(px - 0.18, 0.02, COVER.z - 0.55)], 0.008, 140, 4));
+    V(-0.55, 0.015, 1.3), V(-2.4, 0.015, 1.65), V(-5, 0.015, 1.35), V(-8, 0.015, 2.05), V(-10.2, 0.015, 1.7), V(px - 0.02, 0.03, COVER.z - 0.55), V(px - 0.1, 0.34, COVER.z - 0.55)], 0.008, 140, 4));
   const remote = new THREE.Group();
   remote.name = 'remote';
   root.add(remote);
@@ -372,9 +374,9 @@ export function buildNbW41({ scheme = 'dgelb' } = {}) {
   rig.anchors.cover = [0, 1, 2, 3, 4].map((i) => ({ x: COVER.x - 0.1 * (i % 2), z: COVER.z - 1.4 + i * 0.75 }));
   rig.loadEl = 10 * DEG;
 
-  crew(rig, 'firer', COVER.x, COVER.z - 0.55, L90, 'crouch');
+  crew(rig, 'firer', COVER.x - 0.06, COVER.z - 0.55, L90, 'crouch');
   crew(rig, 'layer', -0.75, 0.45, L90, 'lay');
-  crew(rig, 'loader', -0.3, 1.9, 0, 'stand');
+  crew(rig, 'loader', -0.4, 0.93, 0, 'stand'); // by the left rear corner of the tubes, inside the trail legs, out of the rockets' line: feeds them in, latches
   crew(rig, 'rocket0', 1.3, 1.9, R90, 'stand');
   crew(rig, 'rocket1', 1.9, 2.4, R90, 'stand');
 

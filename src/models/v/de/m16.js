@@ -252,11 +252,12 @@ export function buildM16({ scheme = 'bunt' } = {}) {
   crew(rig, 'officer', -2.6, -2.0, L90, 'point');
   crew(rig, 'layer', -1.7, 0.65, 0, 'lay'); // outside the wheel, the pair's place at the tray is behind it
   crew(rig, 'elevator', 1.0, 1.3, R90, 'operate');
-  crew(rig, 'lanyard', 1.6, 2.0, R90, 'lanyard');
+  crew(rig, 'lanyard', 1.85, 2.3, R90, 'lanyard'); // (clear of the traversing number at his handwheel)
   crew(rig, 'loader1', -1.6, 2.9, 0, 'carry');
   crew(rig, 'loader2', -1.6, 3.7, 0, 'carry');
-  crew(rig, 'rammer1', -0.6, 4.4, 0, 'ram');
-  crew(rig, 'rammer2', 0.6, 4.4, 0, 'ram');
+  // (within a staff's length of the breech: from 4.4 m back the cartridge's stroke left their hands)
+  crew(rig, 'rammer1', -0.55, 3.7, 0, 'ram');
+  crew(rig, 'rammer2', 0.55, 3.7, 0, 'ram');
   crew(rig, 'ammo1', 4.4, 2.0, R90, 'stand');
   crew(rig, 'ammo2', 4.0, 1.0, R90, 'carry');
 

@@ -886,13 +886,14 @@ export function buildCrew(n, opts = {}) {
 // ---------------------------------------------------------------- poses
 
 export const CREW_POSES = ['stand', 'walk', 'carry', 'carryWalk', 'carryShoulder', 'crouch', 'reachUp', 'push', 'climb', 'signal', 'operate', 'sidestep', 'stoopWalk',
-  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead'].filter((p, i, a) => a.indexOf(p) === i);
+  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead', 'run'].filter((p, i, a) => a.indexOf(p) === i);
 export const CREW_GAITS = {
   walk: { stride: 1.25, period: 0.98 }, // metres the root moves per cycle, seconds per cycle at a natural pace
   carryWalk: { stride: 0.9, period: 1.1 },
   climb: { rise: 0.6, period: 2.6 }, // metres the root rises per cycle
   sidestep: { stride: 0.4, period: 1.0 }, // metres the root moves sideways per cycle
   stoopWalk: { stride: 0.6, period: 1.15 },
+  run: { stride: 2.0, period: 0.68 }, // a steady run (2.9 m/s), the Nebelwerfer crew to and from the slit trench
 };
 
 // The pose specification each pose function fills in (root space unless noted). Torso angles are
@@ -1013,6 +1014,16 @@ const POSES = {
     for (let i = 0; i < 2; i++) {
       const s = SIDE[i], a = S.arms[i], sw = s * 0.36 * c; // right arm forward with the left leg
       a.ua.set(sw, 0, s * 0.1); a.fa = 0.28 + 0.22 * Math.max(0, sw / 0.36); a.hand.set(0.1, 0, s * 0.05);
+    }
+  },
+  // run: cycle, a steady run with a short flight phase between the steps (CREW_GAITS.run.stride per cycle): leaning
+  // into it from the hips, the knees higher, the arms bent near a right angle and swinging against the legs
+  run(S, t) {
+    const c = walkLegs(S, t, CREW_GAITS.run.stride, 0.38, 0.915, 0.035, 0.2);
+    S.hipsRot.x = -0.1; S.spine.x = -0.1; S.chest.x = -0.03; S.neck.x = 0.12; S.head.x = 0.02;
+    for (let i = 0; i < 2; i++) {
+      const s = SIDE[i], a = S.arms[i], sw = s * 0.5 * c;
+      a.ua.set(sw - 0.05, 0, s * 0.14); a.fa = 1.35 + 0.25 * Math.max(0, sw / 0.5); a.hand.set(0.1, 0, s * 0.1);
     }
   },
   carry(S, t, fig) {

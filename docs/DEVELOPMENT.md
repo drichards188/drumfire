@@ -83,6 +83,7 @@ Page-local viewers (dev server only):
 - **The German guns** in `src/models/v/de/`: `heavy_preview.html?kind=gustav|karl|bertha`, `vpreview.html` for the V-weapons, `gamma_preview.html`, `max38_preview.html`, `paris_preview.html`, `k17_preview.html`, `ww1_field_preview.html`.
 - **The 1918 British targets and aircraft** in `src/models/t/ww1/`: `preview.html`, `aircraft_preview.html`.
 - **Clearance checks:** `/src/render/clipcheck.html`, `/src/render/crewcheck.html`, `gamma_clip.html` and `paris_clip.html` (in `src/models/v/de/`), and `/src/models/v/crew_motion.html`.
+- **Crew drills:** `node tools/crewaudit.mjs lefh18,k18 --scn 0,1` runs `crewcheck.html` headless (any kind with a crew): clearance plus a motion audit per man (top speed, pace jumps, teleports, heading snaps, pose flicker, sliding feet, hands short of their grips); `--shots shell@0.5,ram@0.4 --cams "30,24,6" --out shots/x.png` saves a contact sheet.
 
 ## Reference method
 

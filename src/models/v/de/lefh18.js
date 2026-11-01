@@ -301,7 +301,7 @@ export function buildLeFH18({ scheme = 'dgelb', brake = true, wheels = 'wood' } 
   // lies in the ring instead of hanging in the air over the cradle's tail (0.19 m above its floor).
   const sh = buildShell('lefh18'), mid = BR - 0.02;
   rig.anchors.tray = node(el, 'tray', 0, 0, mid);
-  rig.anchors.shellStack = node(root, 'shellStack', 2.2, 0.1, 1.9);
+  rig.anchors.shellStack = node(root, 'shellStack', 1.3, 0.1, 3.5);
   trayShells(rig, node(el, 'trayShell', 0, -(sh.radius + 0.02), mid - sh.length / 2 - 0.02), 'lefh18'); // (the model viewer's round, same place)
   rig.recoilLength = 1.19; // 46.8 in at low elevation, 39.3 in at the top (Catalog of Enemy Ordnance)
   rig.loadEl = 4 * DEG; // GUNS.lefh18.loadEl
@@ -315,9 +315,12 @@ export function buildLeFH18({ scheme = 'dgelb', brake = true, wheels = 'wood' } 
   crew(rig, 'officer', -2.5, 1.4, L90, 'point');
   crew(rig, 'layer', -1.05, 0.8, L90, 'lay');
   crew(rig, 'loader', -0.35, 1.8, 0, 'ram');
-  crew(rig, 'rammer', -0.4, 2.3, 0, 'ram');
-  crew(rig, 'shell', 2.0, 1.2, R90, 'carry');
-  crew(rig, 'cartridge', 1.1, 3.0, R90, 'carry');
+  crew(rig, 'rammer', -0.6, 2.7, 0, 'ram');
+  // the ammunition men wait between the trails behind the gun, the ready rounds at their feet (Bundesarchiv photos of
+  // leFH 18 and sFH 18 detachments in action: the crew works between the trails, stepping over them; outside the right
+  // trail the shell man's way to the breech went round the spade, 9 m in a 2 s step)
+  crew(rig, 'shell', 1.3, 2.7, 0, 'carry');
+  crew(rig, 'cartridge', -0.1, 3.9, 0, 'carry');
   crew(rig, 'lanyard', 1.3, 0.7, R90, 'lanyard');
 
   hb(rig, -1.0, 0, -3.0, 1.0, 1.8, 0.6);

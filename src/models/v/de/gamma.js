@@ -584,9 +584,9 @@ export function buildGamma() {
   spot('layer', -1.62, D, -0.4, E, 'lay'); // the sight and the line handwheel, left walkway
   spot('elevator', 1.74, D, -0.35, Wst, 'operate'); // the elevating handwheel, right walkway
   spot('lanyard', 1.72, D, 2.75, Wst, 'lanyard');
-  spot('winch', -1.74, D, 0.5, Math.PI, 'operate'); // the lift's winch crank, at the left walkway's rear
-  spot('loader1', -0.6, D, 3.62, 0, 'stand'); // steadies the shell as it is rolled across onto the tray
-  spot('loader2', 1.24, D, 1.62, Wst, 'stand'); // works the wedge's crank, primes
+  spot('winch', -1.9, D, 0.64, Math.PI, 'crouch'); // kneels to the lift's winch crank (hip high, outboard end of the drum), left walkway's rear
+  spot('loader1', -0.45, D, 3.67, 0, 'stand'); // behind the tray's rear end: steadies the shell's base as it is rolled across onto the tray
+  spot('loader2', 1.0, D, 1.3, Wst, 'stand'); // beside the breech ring, in reach of the wedge's crank and the lock: works the crank, primes
   spot('rammer1', -0.45, D, 4.55, 0, 'ram');
   spot('rammer2', 0.45, D, 4.55, 0, 'ram');
   spot('rammer3', -0.45, D, 5.2, 0, 'ram');
