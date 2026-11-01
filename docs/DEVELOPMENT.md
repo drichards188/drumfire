@@ -14,6 +14,7 @@ npm run preview  # serve the built bundle on http://localhost:4173
 - **Browser.** A browser with WebGL2 is required.
 - **Sharing.** Build the game and put the contents of `dist/` at the root of a web server.
 - **Any folder.** `vite.config.js` sets `base: './'` and the menu's links, stills and back links are relative (`index.html?...`, `bertha.html`, `menu/<id>.jpg`), so the build runs at the root of a site or in a subfolder (itch.io, a GitHub Pages project page), but not from `file://` (module scripts and the audio worker need a server). For itch.io, zip the contents of `dist/` (`index.html` at the zip's root) and upload it as an HTML game.
+- **Saves on itch.io.** itch serves every HTML game from one origin (`html-classic.itch.zone/html/<upload id>/`), so a new upload keeps the players' localStorage but shares it with every other game there. `src/saves.js` (started by `boot.js` before anything reads a save) mirrors the `drumfire.*` keys into IndexedDB on every write and puts them back when localStorage comes up empty, and gives the menu its Export save and Import save file buttons.
 
 ## Tools
 
@@ -123,7 +124,7 @@ Page-local viewers (dev server only):
 index.html           the main menu and the game page (src/boot.js picks which)
 bertha.html          the Big Bertha demo
 models.html, ui.html, audio.html, world.html, fx.html   dev pages
-src/boot.js          menu or game: a URL with play, tutorial or sandbox is a game; first the WebGL check (src/ui/gpu.js)
+src/boot.js          the WebGL check (src/ui/gpu.js) before anything else loads, then menu or game: a URL with play, tutorial or sandbox is a game
 src/menuItems.js     the menu's entries; src/ui/menu.js the menu (hangar, research, the mission dropdown), src/ui/hangar.js its 3D gun view, src/ui/loading.js the loading screen
 src/progression.js, campaign-data.js, campaign.js   the career, the batteries and missions, the mission scenarios
 src/main.js          orchestration, settings (lil-gui), keys, frame order

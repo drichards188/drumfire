@@ -1,12 +1,12 @@
-// Can this browser draw the game? Asked by boot.js before anything of the game loads, with a throwaway WebGL2
-// context, and when the answer is no, a card saying how to turn graphics acceleration on. Chrome and Edge with
+// Can this browser draw the game? The first thing every page runs (boot.js, bertha/boot.js import nothing else until
+// it answers), with a throwaway WebGL2 context, and when the answer is no, a card saying how to turn graphics
+// acceleration on. Chrome and Edge with
 // acceleration off give no WebGL at all (they stopped falling back to the SwiftShader software renderer in
 // Chrome 137); Firefox, or a browser that has blocklisted the GPU, may still give one drawn on the CPU, where
 // the game crawls.
 import './menu.css';
 
 const SOFTWARE = /swiftshader|llvmpipe|softpipe|lavapipe|software|basic render/i;
-const DISMISSED = 'drumfire.gpu-notice'; // the software card, once put away, stays away for the session
 
 // the renderer of a fresh WebGL2 context with these attributes, or null when the browser gives none
 function probe(attributes) {
@@ -48,7 +48,7 @@ function howTo() {
   return { steps: ["Turn on hardware (graphics) acceleration in the browser's settings", 'Restart the browser'], check: null };
 }
 
-function showNotice(state, renderer) {
+function showNotice(state, renderer, onPlay) {
   const { steps, check } = howTo();
   const root = document.createElement('div');
   root.id = 'gpu';
@@ -72,22 +72,18 @@ function showNotice(state, renderer) {
   root.addEventListener('click', (e) => {
     const act = e.target.closest('button')?.dataset.act;
     if (act === 'retry') location.reload();
-    if (act === 'play') {
-      try { sessionStorage.setItem(DISMISSED, '1'); } catch { /* storage may be blocked */ }
-      root.remove();
-    }
+    if (act === 'play') { root.remove(); onPlay(); }
   });
   document.body.append(root);
   root.querySelector('button').focus();
 }
 
 // Checks the browser and, unless the game will be drawn on the graphics card, puts up the card: for 'none' one that
-// stays (the game cannot start), for 'software' one with Play anyway. Headless tools draw with SwiftShader on
-// purpose and never see the latter. Returns the state; boot.js starts no game on 'none'.
+// stays (the game cannot start), for 'software' one with Play anyway, asked again on every page load so no menu, lesson
+// or battle starts behind it. Headless tools draw with SwiftShader on purpose and never see the latter. Resolves with
+// the state once the page may go on: at once on a GPU, on Play anyway for 'software', never for 'none'.
 export function checkGpu() {
   const [state, renderer] = status();
-  let dismissed = false;
-  try { dismissed = sessionStorage.getItem(DISMISSED) === '1'; } catch { /* storage may be blocked */ }
-  if (state === 'none' || (state === 'software' && !navigator.webdriver && !dismissed)) showNotice(state, renderer);
-  return state;
+  if (state === 'gpu' || (state === 'software' && navigator.webdriver)) return Promise.resolve(state);
+  return new Promise((resolve) => showNotice(state, renderer, () => resolve(state)));
 }

@@ -370,6 +370,13 @@ body.menu #view, body.menu #panel { display: none; }
 }
 .mn-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; border-top: 1px solid #9b906343; padding-top: 14px; }
 .mn-save { color: #828d7b; font: 9px var(--mono); }
+/* the save file's two buttons beside the saved line */
+.mn-files { display: inline-flex; gap: 4px; }
+.mn-file {
+  height: 20px; padding: 0 9px; cursor: pointer; font: 9px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid #a49b6966; background: #c2bc930d; color: #b9b59e;
+}
+.mn-file:hover { border-color: #c2a464; color: #e0c78e; }
 /* the dev mode switch: off it reads as a quiet outlined chip, on it lights amber */
 .dev-unlock { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #a49b6966; background: #c2bc930d; color: #c9c5ae; padding: 6px 10px; font: 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; cursor: pointer; }
 .dev-unlock:hover { border-color: #c2a464; color: #e0c78e; }

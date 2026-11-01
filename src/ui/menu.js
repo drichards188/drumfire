@@ -1,4 +1,5 @@
 import { Progression } from '../progression.js';
+import { exportSave, importSave } from '../saves.js';
 import { CAMPAIGN, BATTERIES } from '../campaign-data.js';
 import { TREES, LINES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
 import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf } from '../menuItems.js';
@@ -29,6 +30,11 @@ const SWITCHES = '<div class="mn-switches"><div class="mn-sw-stack">'
   + '<button class="dev-unlock" data-switch="dev" type="button" aria-pressed="false" title="Dev mode puts every battery in the open battles, researched and fully upgraded, for testing; switch it off to play your own career. Saved in this browser."><span class="dev-light"></span>Dev mode <b class="dev-state">OFF</b></button>'
   + '<button class="dev-unlock" data-switch="free" type="button" aria-pressed="false" title="Unlimited points: research and modifications cost nothing (the tree order still holds), for testing. Saved in this browser."><span class="dev-light"></span>Unlimited points <b class="dev-state">OFF</b></button>'
   + '</div><button class="mn-reset" type="button" title="Reset the career: research, upgrades, points, battles and campaign wins back to a new career. The switches stay. Click twice to confirm.">Reset</button></div>';
+
+// the save as a file, beside the "Saved in this browser" line (src/saves.js): kept by the player, it survives cleared
+// browser data and a browser that will not store anything in itch.io's frame
+const SAVE_FILE = '<span class="mn-files"><button type="button" class="mn-file" data-file="export" title="Download your career (research, upgrades, points, lessons, menu choices) as a small file. Keep it to carry the career to another browser or computer, or to get it back if this browser\'s data is cleared.">Export save</button>'
+  + '<button type="button" class="mn-file" data-file="import" title="Load a career from a saved file. It replaces the career in this browser.">Import save</button></span>';
 
 const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -487,15 +493,16 @@ export function mountMenu(root = document.getElementById('menu')) {
     <div class="hg-preview" hidden><span>Preview: the full battery</span><button type="button" class="rs-act" data-act="back-research">Back to research</button></div>
     <section class="hg-info" aria-label="Battery"></section>
     <aside class="hg-mods" aria-label="Modifications"></aside>
-    <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span></div></footer>
+    <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span>${SAVE_FILE}</div></footer>
   </main>
   <div class="mn-rsv" data-for="research" hidden>
     <header class="rsv-head"><div><small class="mn-kicker">FIELD COMMAND</small><h1 class="rsv-title">Research</h1></div></header>
     <p class="rsv-help"></p>
     <div class="rsv-body"></div>
     <ul class="mn-roster" hidden></ul>
-    <footer class="mn-foot"><span class="mn-save"></span></footer>
-  </div>`;
+    <footer class="mn-foot"><span class="mn-save"></span>${SAVE_FILE}</footer>
+  </div>
+  <input type="file" class="mn-file-in" accept=".json,application/json" hidden>`;
   const $ = (s) => root.querySelector(s);
   const $$ = (s) => root.querySelectorAll(s);
   const list = $('.mn-list'), drop = $('.mn-drop'), modeBtn = $('.mn-mode');
@@ -836,6 +843,21 @@ export function mountMenu(root = document.getElementById('menu')) {
     render();
     resetBtn.textContent = 'Done';
     setTimeout(() => { if (!armed) resetBtn.textContent = 'Reset'; }, 1500);
+  });
+  // the save file: Export downloads it; Import reads one back and reloads the page, so everything reads it afresh
+  const saveNote = (t) => { for (const s of $$('.mn-save')) s.textContent = t; clearTimeout(saveNote.t); saveNote.t = setTimeout(render, 4000); };
+  const fileIn = $('.mn-file-in');
+  for (const b of $$('[data-file]')) b.addEventListener('click', () => {
+    if (b.dataset.file === 'import') { fileIn.value = ''; fileIn.click(); return; }
+    saveNote(exportSave() ? 'Save file downloaded' : 'Nothing saved yet to export');
+  });
+  fileIn.addEventListener('change', async () => {
+    const f = fileIn.files?.[0];
+    if (!f) return;
+    const why = await importSave(f);
+    if (why) { saveNote(`Import failed: ${why}`); return; }
+    saveNote('Save loaded');
+    location.reload();
   });
   modeBtn.addEventListener('click', () => setOpen(!open));
   $('.mn-drop-close').addEventListener('click', () => { setOpen(false); modeBtn.focus(); });
