@@ -31,7 +31,7 @@ As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** 
 
 The career's open battle is played at a **threat level** from 1 to 10 (as Helldivers 2's difficulties), picked in the battle chooser beside To battle. Level 1 is a quiet morning a lone K 17 can carry; level 10 asks everything of a full lineup at its best. A level sets the battle, never your own guns: how long the day runs, the attacks and their size, the counter-battery fire, the aircraft, the kinds of target, the deadlines, and its pay (×1 up to ×4).
 
-- **In order:** playing a level to its end, won or lost, opens the next (leaving early does not). Dev mode opens all ten.
+- **All open:** every level can be played from the start, in any order.
 - **Modifiers:** from level 5 one, from level 8 two, rolled for each battle and shown before it: ground mist, enemy air superiority, a shell shortage, enemy sound ranging, poor intelligence, rain.
 - **The card** for each level says what its day holds and the lineup it fits.
 - The other battles (the WW2 sandbox, the special weapons' operations, the campaign) keep Easy, Normal and Hard.

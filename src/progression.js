@@ -208,11 +208,11 @@ export class Progression {
   }
 
   // ------------------------------------------------------------------ the threat levels (threat.js)
+  // every level is open from the start (they were once played in order; `threat` still records the highest reached)
   levelUnlocked(era, n) {
-    return this.dev || n <= this.threat[treeOf(era)];
+    return n >= 1 && n <= MAX_LEVEL;
   }
-  // a level played to its end, won or lost: the next one opens (returns the level opened, or 0); the levels are played
-  // in order, so only the highest open one opens another
+  // a level played to its end, won or lost: the record of the highest reached moves on (returns it, or 0)
   playedLevel(era, n) {
     const tree = treeOf(era);
     if (!(tree in this.threat) || n !== this.threat[tree] || n >= MAX_LEVEL) return 0;

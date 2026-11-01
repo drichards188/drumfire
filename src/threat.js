@@ -1,8 +1,8 @@
 // The career open battle's threat levels (Helldivers 2's difficulties: the player picks one before battle; docs/
 // PROGRESSION.md, DESIGN.md "Threat levels"). Node-safe data. Level 1 is comfortable for a new career's lone K 17; level
 // 10 challenges a full lineup at its best. A level sets the battle, never the player's own guns: the day's length, the
-// enemy's pressure, the kinds of target, the modifiers, the pay. Playing a level to its end, won or lost, unlocks the
-// next (progression.js): they are played in order.
+// enemy's pressure, the kinds of target, the modifiers, the pay. Every level is open from the start: the player
+// picks any.
 //
 // The display fields (n, name, en, sub, lines, fits, pay, modifiers) are the menu's, the loading screen's and the end
 // card's. The battle fields (day, attacks, assault, cb, raids, spotters, heavies, tanks, sites, deadline, dmg, sig,
