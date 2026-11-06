@@ -10,7 +10,8 @@
 // Germany is one tree (the 1917 and the WW2 guns together, as War Thunder's nations): lines of one type each, a
 // battery researched only after the one before it in its line (`after`), the lines never crossing. `rank` is its
 // weight class (I field, II heavy, III super-heavy, IV the giants and the weapons off the map), as War Thunder's ranks
-// (it scales the upgrade costs). The first battery of every line can be researched from the start; a career owns only
+// (it scales the upgrade costs). The first battery of a rank I line can be researched from the start; a line that starts
+// higher opens once its `via`, a battery in the line beside it, is researched; a career owns only
 // the 15 cm Ringkanone C/92 (the line `guns`, cost 0; the K 17 until 2026-11-01, which older saves keep: progression.js). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
 // open battle as off-map support: picked, given a target, they fire in their own time. The British 1917 tree is kept
 // for when Britain comes back; the menu does not show it for now.
@@ -19,18 +20,20 @@ import { OPS } from './ww2/ops.js';
 import { OPS as OPS_WW1, RIDGE_MORE } from './ww1/ops.js';
 
 export const LINES = {
+  // in this order on the Research screen: a line that starts above rank I stands beside the line of its `via`
   de: [
     { id: 'howitzers', name: 'Field artillery', de: 'Feldartillerie' },
-    { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
-    { id: 'railway', name: 'Railway guns', de: 'Eisenbahngeschütze' },
     { id: 'mortars', name: 'Mortars', de: 'Mörser' },
     { id: 'siege', name: 'Siege guns', de: 'Belagerungsgeschütze' },
+    { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
+    { id: 'railway', name: 'Railway guns', de: 'Eisenbahngeschütze' },
     { id: 'rockets', name: 'Rockets', de: 'Werfer' },
     { id: 'support', name: 'Off-map support', de: 'Fernwaffen' },
   ],
   '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
 };
-// the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: the starting battery)
+// the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: the starting battery);
+// `via` (the first of a line above rank I): a battery in the line beside it, researched before this line opens
 export const TREES = {
   '1917': [
     { kind: 'bl6', line: 'all', tier: 1, after: null, cost: 0 },
@@ -53,24 +56,24 @@ export const TREES = {
     { kind: 'k16', line: 'guns', tier: 2, after: 'k17', cost: 700 },
     { kind: 'k18', line: 'guns', tier: 2, after: 'k16', cost: 1100 },
     { kind: 'k38', line: 'guns', tier: 3, after: 'k18', cost: 2000 },
-    { kind: 'max38', line: 'railway', tier: 3, after: null, cost: 2400 },
+    { kind: 'max38', line: 'railway', tier: 3, after: null, via: 'k16', cost: 2400 },
     { kind: 'bruno', line: 'railway', tier: 3, after: 'max38', cost: 2800 },
     { kind: 'k5', line: 'railway', tier: 3, after: 'bruno', cost: 3400 },
     { kind: 'paris', line: 'railway', tier: 4, after: 'k5', cost: 4000, offmap: true },
     { kind: 'k12', line: 'railway', tier: 4, after: 'paris', cost: 4600 },
     { kind: 'gustav', line: 'railway', tier: 4, after: 'k12', cost: 5000 },
-    { kind: 'm99', line: 'mortars', tier: 2, after: null, cost: 600 },
+    { kind: 'm99', line: 'mortars', tier: 2, after: null, via: 'sfh13', cost: 600 },
     { kind: 'm16', line: 'mortars', tier: 2, after: 'm99', cost: 900 },
     { kind: 'mrs18', line: 'mortars', tier: 2, after: 'm16', cost: 1300 },
     { kind: 'hm1', line: 'mortars', tier: 3, after: 'mrs18', cost: 2600 },
-    { kind: 'beta', line: 'siege', tier: 3, after: null, cost: 2000 },
+    { kind: 'beta', line: 'siege', tier: 3, after: null, via: 'm16', cost: 2000 },
     { kind: 'gamma', line: 'siege', tier: 3, after: 'beta', cost: 2400 },
     { kind: 'bertha', line: 'siege', tier: 3, after: 'gamma', cost: 2800 },
     { kind: 'karl', line: 'siege', tier: 4, after: 'bertha', cost: 4000 },
     { kind: 'nbw41', line: 'rockets', tier: 1, after: null, cost: 450 },
     { kind: 'swg40', line: 'rockets', tier: 2, after: 'nbw41', cost: 800 },
     { kind: 'nbw42', line: 'rockets', tier: 2, after: 'swg40', cost: 1200 },
-    { kind: 'gotha', line: 'support', tier: 3, after: null, cost: 2000, offmap: true },
+    { kind: 'gotha', line: 'support', tier: 3, after: null, via: 'swg40', cost: 2000, offmap: true },
     { kind: 'v1', line: 'support', tier: 4, after: 'gotha', cost: 3000, offmap: true },
     { kind: 'v2', line: 'support', tier: 4, after: 'v1', cost: 4500, offmap: true },
   ],
@@ -80,6 +83,9 @@ export const RESEARCH_ERAS = Object.keys(TREES);
 export const TREE_OF = { '1917': '1917', ww1: 'de', ww2: 'de', de: 'de' };
 export const nodeOf = (kind) => RESEARCH_ERAS.map((e) => TREES[e].find((n) => n.kind === kind)).find(Boolean) ?? null;
 export const eraOfKind = (kind) => RESEARCH_ERAS.find((e) => TREES[e].some((n) => n.kind === kind)) ?? null;
+// what must be researched before a battery: the one before it in its line, and for the first of a line above rank I
+// its `via` in the line beside it
+export const needsOf = (kind) => { const n = nodeOf(kind); return n ? [n.after, n.via].filter(Boolean) : []; };
 // the battery after this one in its line (null at the line's end)
 export const nextInLine = (kind) => TREES[eraOfKind(kind)]?.find((n) => n.after === kind) ?? null;
 // the batteries that fight from off the map (off-map support): never in a gun pit

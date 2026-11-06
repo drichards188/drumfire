@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Progression, SAVE_KEY } from '../src/progression.js';
-import { TREES, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus, isOffmap } from '../src/research.js';
+import { TREES, LINES, nodeOf, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus, isOffmap } from '../src/research.js';
 import { SLOTS, MAX_LEVEL, threatOf } from '../src/threat.js';
 import { GUNS } from '../src/sim/tables.js';
 import { BATTERIES, CAMPAIGN } from '../src/campaign-data.js';
@@ -21,6 +21,18 @@ assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must s
 assert.deepEqual(DE.filter(k=>career.unlocked(k)), ['rk92'], 'A new career owns the 15 cm Ringkanone C/92 alone');
 assert.equal(career.targetOf('de'), 'fk16', 'A new career researches the cheapest open battery (the FK 16)');
 assert.equal(career.targetOf('ww1'), 'fk16', 'The 1918 and the WW2 eras share the German tree');
+// only rank I lines are open from the start; a line that starts higher opens with its `via`, in the line beside it
+{
+  const ids = LINES.de.map((l) => l.id);
+  for (const n of TREES.de.filter((q) => !q.after)) {
+    if (n.tier === 1) { assert.ok(!n.via, `${n.kind}: a rank I line needs nothing`); assert.equal(career.researchBlock(n.kind) === '' || career.owns(n.kind), true, `${n.kind} is open from the start`); continue; }
+    const v = nodeOf(n.via);
+    assert.ok(v && v.line !== n.line, `${n.kind}: a line above rank I names a battery of another line`);
+    assert.equal(Math.abs(ids.indexOf(v.line) - ids.indexOf(n.line)), 1, `${n.kind}: its via stands in the column beside it`);
+    assert.ok(career.researchBlock(n.kind), `${n.kind} is closed to a new career`);
+  }
+  assert.ok(TREES.de.every((n) => career.researchBlock(n.kind) === '' ? n.tier === 1 : true), 'A new career can research nothing above rank I');
+}
 // every mission, operation and lesson is open from the start, in any order
 assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
 assert.equal(career.canPlay('earn-nothing'), false);
@@ -133,6 +145,9 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   assert.match(c.researchBlock('mrs18'), /21 cm Mörser 16 first/, 'The tree order still holds');
   assert.equal(c.research('mrs18'), false);
   assert.equal(c.research('m16'), false, 'The Mörser 99 comes first');
+  assert.match(c.researchBlock('m99'), /15 cm sFH 13 first/, 'The mortars open with the sFH 13 beside them');
+  assert.equal(c.research('m99'), false);
+  for (const k of ['fk16', 'sfh93', 'sfh13']) assert.equal(c.research(k), true);
   assert.equal(c.research('m99'), true);
   assert.equal(c.research('m16'), true);
   assert.equal(c.research('mrs18'), true);

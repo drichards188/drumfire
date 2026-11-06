@@ -2,7 +2,7 @@ import { Progression } from '../progression.js';
 import { exportSave, importSave } from '../saves.js';
 import { BATTERIES } from '../campaign-data.js';
 import { TREES, LINES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
-import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
+import { menuItems, hrefOf, GUIDE, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
 import { createHangar } from './hangar.js';
@@ -56,10 +56,61 @@ const rangeHref = (era, kind) => {
   for (const k of ['quality', 'hour', 'weather']) if (from.get(k)) p.set(k, from.get(k));
   return `index.html?${p}`;
 };
-const rangeBtn = (era, kind) => actBtn('Try on the range', `range:${kind}`, isOffmap(kind) ? 'off-map support fires only in battle' : '', () => { location.href = rangeHref(era, kind); });
+// the off-map weapons with a special mission of their own are not on the range (one gun alone in its pit): their
+// "Try it" opens the mission's guided first run (menuItems.js GUIDE) instead; the Gotha strike has none
+const TRY_GUIDE = { paris: 'ww1:paris', v1: 'op:v1', v2: 'op:v2' };
+const guideHref = (kind) => {
+  const t = TRY_GUIDE[kind] && menuItems(null, {}).find((i) => i.key === `tutorial:${GUIDE[TRY_GUIDE[kind]]}`);
+  return t ? hrefOf(t, null, new URLSearchParams(location.search)) : null;
+};
+const rangeBtn = (era, kind) => {
+  const g = guideHref(kind);
+  if (g) {
+    const b = actBtn('Try it · guided run', `range:${kind}`, '', () => { location.href = g; });
+    b.title = 'Its special mission\'s guided first run: a lesson, nothing scored';
+    return b;
+  }
+  return actBtn('Try on the range', `range:${kind}`, isOffmap(kind) ? 'off-map support: it can only be called in an open battle' : '', () => { location.href = rangeHref(era, kind); });
+};
 // a progress bar (0 to 1)
 const bar = (k) => { const b = el('span', 'rs-bar'), f = el('i'); f.style.width = `${Math.round(Math.min(1, k) * 100)}%`; b.append(f); return b; };
 const lineOf = (kind) => LINES[eraOfKind(kind)]?.find((l) => l.id === nodeOf(kind)?.line);
+// what a locked battery waits for (on the Research screen an arrow points from it)
+const afterText = (career, kind) => `After the ${nameOf(career.blockerOf(kind))}`;
+// The Research tree's arrows: an SVG over the grid (sized by CSS to the grid, never by its own drawing, which would
+// hold the tree at an old width), drawn from where the nodes landed and again whenever the tree changes size. Down a line, bottom edge to top edge; across to the line beside it (a `via`), out of the side, along
+// the gap between the columns and into the other side. `state(link)` gives its look: 'own' (both researched), 'open'
+// (the next to research) or 'shut'.
+const SVG = 'http://www.w3.org/2000/svg';
+function treeArrows(box, nodes, links, state) {
+  const svg = document.createElementNS(SVG, 'svg');
+  svg.classList.add('rs-arrows');
+  svg.setAttribute('aria-hidden', 'true');
+  const draw = () => {
+    const o = box.getBoundingClientRect();
+    const head = ['shut', 'open', 'own'].map((k) => `<marker id="rs-head-${k}" class="${k}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z"/></marker>`).join('');
+    const paths = links.map((l) => {
+      const a = nodes[l.from]?.getBoundingClientRect(), b = nodes[l.to]?.getBoundingClientRect();
+      if (!a || !b) return '';
+      const ax = a.left - o.left, ay = a.top - o.top, bx = b.left - o.left, by = b.top - o.top;
+      let d;
+      if (Math.abs(ax - bx) < 2) d = `M${ax + a.width / 2} ${ay + a.height}V${by - 1}`;
+      else {
+        const right = bx > ax, x0 = right ? ax + a.width : ax, x1 = right ? bx - 1 : bx + b.width + 1, xm = (x0 + x1) / 2;
+        const y0 = ay + a.height / 2, y1 = by + Math.min(b.height / 2, 18);
+        d = `M${x0} ${y0}H${xm}V${y1}H${x1}`;
+      }
+      const k = state(l);
+      return `<path class="${k}" d="${d}" marker-end="url(#rs-head-${k})"/>`;
+    });
+    // the lit paths last, so they lie over the dim ones
+    const order = ['shut', 'open', 'own'];
+    svg.innerHTML = `<defs>${head}</defs>` + paths.map((p, i) => [p, order.indexOf(state(links[i]))]).sort((p, q) => p[1] - q[1]).map((p) => p[0]).join('');
+  };
+  const ro = new ResizeObserver(() => { if (!box.isConnected) { ro.disconnect(); return; } draw(); });
+  ro.observe(box);
+  return svg;
+}
 const actBtn = (text, act, why, onClick) => {
   const b = el('button', 'rs-act', text);
   b.type = 'button';
@@ -132,44 +183,75 @@ function researchBlock(career, kind, onChange) {
 function researchView(career, era, shown, onShow, onChange, onHangar) {
   const tree = TREES[era], kind = shownIn(era, shown), node = nodeOf(kind), tgt = career.targetOf(era);
   const root = el('div', 'rs');
-  const side = el('div', 'rs-side');
-  const purse = el('div', 'rs-purse');
+  // the strip over the tree: what is being researched and how far it has got, and the one rule to know
+  const head = el('div', 'rs-head');
+  const purse = el('div', 'rs-purse'), what = el('div'), how = el('div', 'rs-purse-p');
   if (tgt) {
     const n = nodeOf(tgt);
-    purse.append(el('small', null, 'Researching'), el('b', null, nameOf(tgt)), bar(career.researchShare(tgt)),
-      el('small', null, `${num(n.cost - career.costLeft(tgt))} of ${num(n.cost)} RP · ${career.battles[era]} ${career.battles[era] === 1 ? 'battle' : 'battles'} fought`));
-  } else purse.append(el('small', null, 'Research'), el('b', null, 'Every battery researched'), el('small', null, `${num(career.rp[era])} RP to spare`));
-  side.append(purse);
-  if (career.dev) side.append(el('p', 'rs-note', 'Dev mode is on: any battery can join the lineup, and in battle each is at its best. This is your own career; switch dev mode off to play it.'));
-  const cols = el('div', 'rs-tree');
-  cols.style.setProperty('--lines', LINES[era].length);
-  for (const line of LINES[era]) {
-    const col = el('div', 'rs-line');
+    what.append(el('small', null, 'Researching'), el('b', null, nameOf(tgt)));
+    how.append(bar(career.researchShare(tgt)), el('small', null, `${num(n.cost - career.costLeft(tgt))} of ${num(n.cost)} RP · ${career.battles[era]} ${career.battles[era] === 1 ? 'battle' : 'battles'} fought`));
+  } else {
+    what.append(el('small', null, 'Research'), el('b', null, 'Every battery researched'));
+    how.append(el('small', null, `${num(career.rp[era])} RP to spare`));
+  }
+  purse.append(what, how);
+  head.append(purse, el('p', 'rs-help', 'Every battle\'s research points go to the battery you are researching. Follow the arrows: each battery opens the next.'));
+  if (career.dev) head.append(el('p', 'rs-note', 'Dev mode is on: every battery can join the lineup, at its best in battle.'));
+  root.append(head);
+  const side = el('div', 'rs-side');
+  // the tree as War Thunder draws it: a column per line, a horizontal band per rank (I at the top), and an arrow from
+  // each battery to the ones it opens (down its line, and across to the line beside it for a `via`)
+  const lines = LINES[era], ranks = [...new Set(tree.map((n) => n.tier))].sort((a, b) => a - b);
+  const rows = Object.fromEntries(ranks.map((t) => [t, Math.max(...lines.map((l) => tree.filter((q) => q.line === l.id && q.tier === t).length))]));
+  const cols = el('div', 'rs-tree'), wrap = el('div', 'rs-tree-wrap');
+  cols.style.setProperty('--lines', lines.length);
+  let row = 2;
+  const start = {};
+  for (const t of ranks) {
+    start[t] = row;
+    const band = el('div', 'rs-band');
+    band.style.gridRow = `${row} / span ${rows[t]}`;
+    band.append(el('span', null, ROMAN[t - 1]));
+    band.title = `Rank ${ROMAN[t - 1]}`;
+    cols.append(band);
+    row += rows[t];
+  }
+  const nodes = {};
+  lines.forEach((line, c) => {
     const h = el('div', 'rs-line-n');
+    h.style.gridColumn = c + 2;
     h.append(el('b', null, line.name), el('small', null, line.de ?? ''));
-    col.append(h);
+    cols.append(h);
+    const seen = {};
     for (const n of tree.filter((q) => q.line === line.id)) {
       const own = career.owns(n.kind), why = career.researchBlock(n.kind), on = n.kind === tgt;
       const b = el('button', 'rs-node');
       b.type = 'button';
       b.dataset.act = `show:${n.kind}`;
+      b.style.gridColumn = c + 2;
+      b.style.gridRow = start[n.tier] + (seen[n.tier] = (seen[n.tier] ?? -1) + 1);
       b.classList.toggle('own', own);
       b.classList.toggle('ready', !own && !why);
       b.classList.toggle('target', on);
       b.classList.toggle('on', n.kind === kind);
       b.setAttribute('aria-pressed', String(n.kind === kind));
+      b.classList.toggle('shut', !own && !!why);
+      b.title = `Rank ${ROMAN[n.tier - 1]} · ${nameOf(n.kind)}${why && !own ? ` · ${afterText(career, n.kind)}` : ''}`;
       const name = el('b', null, nameOf(n.kind));
       if (WIP_KINDS.has(n.kind)) name.append(wipBadge());
-      b.append(el('span', 'rs-rank', ROMAN[n.tier - 1]), name);
+      b.append(name);
       if (on) b.append(bar(career.researchShare(n.kind)));
       b.append(el('small', null, own ? (maxGuns(n.kind) > 1 ? `${career.level(n.kind, 'guns', false)} of ${maxGuns(n.kind)} guns` : 'Researched')
-        : on ? `Researching · ${Math.round(career.researchShare(n.kind) * 100)}%` : why ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
+        : on ? `Researching · ${Math.round(career.researchShare(n.kind) * 100)}%` : `${num(n.cost)} RP`));
       b.addEventListener('click', () => onShow(n.kind));
-      col.append(b);
+      cols.append(b);
+      nodes[n.kind] = b;
     }
-    cols.append(col);
-  }
-  side.append(cols, el('p', 'rs-help', 'Each line is researched in order, and the first of every line is open from the start. Every open battle pays research points to the battery you are researching, won or lost, and each battery its own points for its upgrades.'));
+  });
+  const links = tree.flatMap((n) => [n.after, n.via].filter(Boolean).map((from) => ({ from, to: n.kind })));
+  cols.append(treeArrows(cols, nodes, links, (l) => (career.owns(l.to) ? 'own' : career.owns(l.from) ? 'open' : 'shut')));
+  wrap.append(cols);
+  side.append(wrap);
   root.append(side);
   // the battery shown, with its picture from the game
   const card = el('section', 'rs-card');
@@ -180,13 +262,13 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
     pic.setAttribute('aria-label', `The ${nameOf(kind)} firing`);
     card.append(pic);
   }
-  const head = el('header', 'rs-card-head');
+  const chead = el('header', 'rs-card-head');
   const title = el('div');
   title.append(el('small', null, `Rank ${ROMAN[node.tier - 1]} · ${lineOf(kind)?.name ?? ''} · ${BATTERIES.find((b) => b.kind === kind)?.role ?? ''}`), el('h3', null, nameOf(kind)));
   const acts = el('div', 'rs-head-acts');
   acts.append(actBtn('Preview the full battery', `preview:${kind}`, '', () => onHangar(kind)), rangeBtn(era, kind));
-  head.append(title, acts);
-  card.append(head, career.owns(kind) ? modsBlock(career, kind, onChange) : researchBlock(career, kind, onChange));
+  chead.append(title, acts);
+  card.append(chead, career.owns(kind) ? modsBlock(career, kind, onChange) : researchBlock(career, kind, onChange));
   root.append(card);
   return root;
 }
@@ -306,7 +388,7 @@ function hangarInfo(career, era, kind, preview = false, onLineup = null) {
   // the test range: any battery, earned or not, with any upgrades, nothing paid
   const tr = rangeBtn(era, kind);
   tr.classList.add('hg-range');
-  tr.title = 'Fire it on the test range: any target, any upgrades, nothing scored';
+  if (!guideHref(kind) && !isOffmap(kind)) tr.title = 'Fire it on the test range: any target, any upgrades, nothing scored';
   box.append(tr);
   box.append(el('p', 'hg-state', sandbox ? 'Yours from the start: the WW1 German era is a sandbox.' : own ? `Researched${career.inLineup(kind) ? `: in your lineup for the open battle${isOffmap(kind) ? ', as off-map support' : ''}` : ', not in your lineup'}.`
     : career.dev ? `${career.inLineup(kind) ? 'In your lineup' : 'Not in your lineup'} by dev mode: your own career has not researched it${career.researchBlock(kind) ? ` (${career.researchBlock(kind)})` : ''}.` : `Not researched: ${career.researchBlock(kind)}.`));
@@ -346,7 +428,7 @@ function slotCards(career, era, kind, onPick, kinds = kindsOf(era)) {
     b.append(name);
     if (own && !sandbox && maxGuns(k) > 1) b.append(pips(career.level(k, 'guns', false), maxGuns(k)));
     b.append(el('small', null, sandbox ? 'Yours' : own ? (isOffmap(k) ? 'Off-map support' : `${career.level(k, 'guns', false)} of ${maxGuns(k)} ${maxGuns(k) === 1 ? 'gun' : 'guns'}`)
-      : career.targetOf(era) === k ? `Researching · ${Math.round(career.researchShare(k) * 100)}%` : why ? `After the ${nameOf(n.after)}` : `${num(n.cost)} RP`));
+      : career.targetOf(era) === k ? `Researching · ${Math.round(career.researchShare(k) * 100)}%` : why ? afterText(career, k) : `${num(n.cost)} RP`));
     b.addEventListener('click', () => onPick(k));
     return b;
   });
@@ -490,7 +572,6 @@ export function mountMenu(root = document.getElementById('menu')) {
     <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span>${SAVE_FILE}</div></footer>
   </main>
   <div class="mn-rsv" data-for="research" hidden>
-    <header class="rsv-head"><div><small class="mn-kicker">FIELD COMMAND</small><h1 class="rsv-title">Research</h1></div></header>
     <p class="rsv-help"></p>
     <div class="rsv-body"></div>
     <ul class="mn-roster" hidden></ul>
@@ -532,7 +613,6 @@ export function mountMenu(root = document.getElementById('menu')) {
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
   const RESEARCH_HELP = {
     ww1: 'Nothing to research in this era: every battery of the Gruppe is yours from the start.',
-    other: 'Pick the battery to research: every battle\'s research points go to it. Each line is researched in order. A battery takes the field with one gun; its own points buy its other guns and better parts.',
   };
   const shown = () => shownIn(era, memo.rs?.[era]);
   // the battery in the hangar: the one chosen if it is in the lineup, else the lineup's first; or the one previewed
@@ -589,6 +669,7 @@ export function mountMenu(root = document.getElementById('menu')) {
       if (b.dataset.view === 'research') b.querySelector('.mn-view-n').textContent = TREES[era] ? (t ? `${Math.round(career.researchShare(t) * 100)}%` : 'done') : '';
     }
     for (const w of $$('[data-for]')) w.hidden = w.dataset.for !== view;
+    root.classList.toggle('on-research', view === 'research');
     for (const b of $$('[data-era]')) { b.classList.toggle('on', b.dataset.era === era); b.setAttribute('aria-pressed', String(b.dataset.era === era)); }
     // the chooser's button: what To battle plays (marked until the basic training is done)
     const fresh = !items.find((i) => i.key === 'tutorial:training')?.done, dot = modeBtn.querySelector('.mn-dot');
@@ -775,7 +856,8 @@ export function mountMenu(root = document.getElementById('menu')) {
   function renderResearch() {
     hangar.setActive(false);
     const sandbox = !TREES[era];
-    $('.rsv-help').textContent = sandbox ? RESEARCH_HELP.ww1 : RESEARCH_HELP.other;
+    $('.rsv-help').textContent = sandbox ? RESEARCH_HELP.ww1 : '';
+    $('.rsv-help').hidden = !sandbox;
     $('.mn-roster').hidden = !sandbox;
     $('.rsv-body').hidden = sandbox;
     if (sandbox) {

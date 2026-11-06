@@ -1,5 +1,5 @@
 import { BATTERIES, CAMPAIGN, missionById } from './campaign-data.js';
-import { TREES, TREE_OF, nodeOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
+import { TREES, TREE_OF, nodeOf, needsOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
 import { SLOTS, MAX_LEVEL } from './threat.js';
 export { BATTERIES };
 // v4: one German tree and a research target (research.js); the saves before it are not carried over (a new career)
@@ -77,12 +77,17 @@ export class Progression {
   unlocked(kind) {
     return !!nodeOf(kind) && (this.dev || this.owns(kind));
   }
-  // why a battery cannot be researched now ('' when it can: the one before it in its line is the career's)
+  // what still stands before a battery's research (the one before it in its line, or a line's `via` beside it), or null
+  blockerOf(kind) {
+    return needsOf(kind).find((k) => !this.owns(k)) ?? null;
+  }
+  // why a battery cannot be researched now ('' when it can: what must come before it is the career's)
   researchBlock(kind) {
     const n = nodeOf(kind);
     if (!n) return 'not in a research tree';
     if (this.owns(kind)) return 'researched';
-    if (n.after && !this.owns(n.after)) return `research the ${BATTERIES.find((b) => b.kind === n.after)?.name ?? n.after} first`;
+    const b = this.blockerOf(kind);
+    if (b) return `research the ${BATTERIES.find((q) => q.kind === b)?.name ?? b} first`;
     return '';
   }
   // the RP still wanted, and how far it has got (0 to 1)

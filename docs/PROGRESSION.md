@@ -9,7 +9,14 @@ You start with one gun of the **15 cm Ringkanone C/92** and no upgrades, and fig
 
 ## The tree
 
-Seven lines, one type each, and each runs from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order, and lines never cross; the first battery of every line is open from the start. The rank (I to IV) is the battery's weight class and scales its upgrade costs.
+Seven lines, one type each, and each runs from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order, and lines never cross. The lines that start at rank I (field artillery, long-range guns, rockets) are open from the start; the others open once you research a battery in the line beside them:
+
+- **Mortars** after the 15 cm sFH 13 (field artillery).
+- **Siege guns** after the 21 cm Mörser 16 (mortars).
+- **Railway guns** after the 15 cm K 16 (long-range guns).
+- **Off-map support** after the schweres Wurfgerät 40 (rockets).
+
+The rank (I to IV) is the battery's weight class and scales its upgrade costs.
 
 | Line | Batteries in order (rank, RP) |
 | --- | --- |

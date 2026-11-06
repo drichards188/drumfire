@@ -309,11 +309,14 @@ body.menu #view, body.menu #panel { display: none; }
 .hg-bench > .rs-act { justify-self: start; }
 
 /* the Research screen: the tree beside the battery shown, on the folio's paper */
-.mn-rsv { position: relative; width: var(--mn-w); margin: 0 auto; padding: 30px 0 40px; }
-.rsv-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 28px; flex-wrap: wrap; }
-.rsv-title { font: normal 40px var(--serif); color: #ece2c6; margin-top: 8px; line-height: 1; }
-.rsv-help { margin: 16px 0 14px; font-size: 12px; line-height: 1.5; color: #acb09e; }
-.mn-rsv .rsv-body, .mn-rsv .mn-roster { padding: 24px; border: 1px solid #9b906343; background: linear-gradient(145deg, #242922e6, #151b17ee); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 20px 70px #0006; }
+/* the Research screen: one screenful under the top bar (wider than the hangar's column: the tree wants the room), a
+   strip with the research under way, the tree in its own scrolling pane and the battery shown in a full-height pane
+   beside it; under 1000 px wide or 560 px high it flows down the page instead */
+#menu.on-research { --mn-w: min(1760px, calc(100% - 48px)); }
+.mn-rsv { position: relative; width: var(--mn-w); margin: 0 auto; padding: 16px 0 12px; }
+.rsv-help { margin: 0 0 14px; font-size: 12px; line-height: 1.5; color: #acb09e; }
+.rsv-help[hidden] { display: none; }
+.mn-rsv .mn-roster { padding: 24px; border: 1px solid #9b906343; background: linear-gradient(145deg, #242922e6, #151b17ee); }
 .mn-roster { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start; }
 .mn-roster li { padding: 12px; border: 1px solid #a49b6933; color: #aaa998; }
 .mn-roster b, .mn-roster small { display: block; }
@@ -322,37 +325,62 @@ body.menu #view, body.menu #panel { display: none; }
 .mn-roster li.available { border-color: #a49b6977; color: #e0d3aa; }
 /* the Research tab (menu.js researchView): the battery being researched, the tree in its lines (a column each, in the
    order they are researched), the battery shown with its guns and parts */
-.rs { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-.rs-side { display: grid; gap: 14px; align-content: start; }
-.rs-purse { display: grid; gap: 5px; font: 11px var(--mono); letter-spacing: .08em; color: #c9c5ae; }
-.rs-purse b { font: normal 22px var(--serif); color: #f0d999; }
-.rs-purse > small:first-child { letter-spacing: .22em; text-transform: uppercase; color: #aaa88b; }
+.rs { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 25vw, 450px); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'head card' 'tree card'; gap: 12px 16px; }
+.rs-side, .rs-card { border: 1px solid #9b906343; background: linear-gradient(145deg, #242922e6, #151b17ee); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 20px 70px #0006; }
+.rs-head { grid-area: head; display: flex; align-items: center; gap: 12px 28px; flex-wrap: wrap; min-width: 0; }
+.rs-head .rs-help { flex: 1 1 280px; font-size: 13px; line-height: 1.45; }
+.rs-head .rs-note { flex: 1 1 100%; }
+.rs-side { grid-area: tree; min-height: 0; overflow: auto; padding: 0 16px 14px; scrollbar-color: #6d6f5e transparent; }
+.rs-purse { display: flex; align-items: center; gap: 8px 20px; flex-wrap: wrap; font: 11px var(--mono); letter-spacing: .08em; color: #c9c5ae; }
+.rs-purse > div { display: grid; gap: 3px; }
+.rs-purse-p { width: clamp(180px, 18vw, 300px); }
+.rs-purse b { font: normal 22px/1.1 var(--serif); color: #f0d999; }
+.rs-purse > div:first-child > small { letter-spacing: .22em; text-transform: uppercase; color: #aaa88b; }
 .rs-bar { display: block; height: 5px; background: #4a4d40; box-shadow: inset 0 0 0 1px #6d6f5e; }
 .rs-bar i { display: block; height: 100%; background: #d2b77d; }
 .rs-on { font: 11px/1.5 var(--mono); color: #f0c36a; }
 .rs-purse small, .rs-pts small { font-size: 9px; color: #8f957f; }
 .rs-note { font: italic 12px/1.5 var(--serif); color: #e8d5a0; padding: 8px 10px; border: 1px solid #c2a46455; background: #b7a3631a; }
-.rs-tree { display: grid; grid-template-columns: repeat(var(--lines, 4), minmax(0, 1fr)); gap: 8px; }
-.rs-line { display: grid; gap: 6px; align-content: start; }
-.rs-line-n { display: grid; gap: 2px; min-height: 34px; align-content: end; padding-bottom: 2px; border-bottom: 1px solid #a49b6933; }
+/* the research tree: a rank gutter and a column per line, a horizontal band per rank, arrows (SVG) under the nodes */
+/* (no scroll box of its own: the pane scrolls both ways, so the line names stick to the pane's top) */
+.rs-tree-wrap { min-width: 0; }
+.rs-tree {
+  position: relative; display: grid; grid-template-columns: 26px repeat(var(--lines, 4), minmax(0, 1fr)); grid-auto-rows: minmax(var(--rs-row), auto);
+  grid-template-rows: auto; column-gap: 18px; row-gap: clamp(6px, .9vh, 12px); --rs-row: clamp(40px, 4.9vh, 52px); min-width: 640px; padding-bottom: 6px;
+}
+.rs-band { grid-column: 1 / -1; margin: -4px 0; background: #c2bc9308; border-top: 1px solid #a49b6926; border-bottom: 1px solid #a49b6926; display: flex; align-items: flex-start; }
+.rs-band:nth-of-type(2n) { background: #c2bc9312; }
+.rs-band span { width: 26px; padding-top: 8px; text-align: center; font: 11px var(--mono); letter-spacing: .08em; color: #c2a464; }
+.rs-line-n { grid-row: 1; display: grid; gap: 2px; min-height: 34px; align-content: end; padding: 10px 0 5px; position: sticky; top: 0; z-index: 2; background: #1f241e; box-shadow: 0 6px 0 #1f241e; }
 .rs-line-n b { font: 9px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: #c9c5ae; font-weight: normal; }
 .rs-line-n small { font: italic 11px var(--serif); color: #8f957f; }
 .rs-rank { font: 9px var(--mono); letter-spacing: .14em; color: #8f957f; }
+.rs-arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+.rs-arrows path { fill: none; stroke-width: 1.5; }
+.rs-arrows path.shut { stroke: #6d6f5e; }
+.rs-arrows path.open { stroke: #f0c36a; stroke-width: 2; }
+.rs-arrows path.own { stroke: #b9a671; stroke-width: 2; }
+.rs-arrows marker.shut path { fill: #6d6f5e; }
+.rs-arrows marker.open path { fill: #f0c36a; }
+.rs-arrows marker.own path { fill: #b9a671; }
+.rs-tree > .rs-node { position: relative; z-index: 1; justify-self: stretch; width: 100%; }
+.rs-node.shut small { color: #747a69; }
 .rs-node {
-  display: grid; gap: 4px; align-content: start; text-align: left; padding: 10px 10px; min-height: 58px; cursor: pointer; min-width: 0;
-  border: 1px solid #a49b6933; background: #c2bc930a; color: #9a9a88;
+  display: grid; gap: 4px; align-content: start; text-align: left; padding: 7px 9px; min-height: var(--rs-row, 52px); cursor: pointer; min-width: 0;
+  border: 1px solid #a49b6933; background: #1d231dee; color: #9a9a88;
 }
 .rs-node b { font: normal 12px var(--serif); overflow-wrap: anywhere; }
 .rs-node small { font: 9px var(--mono); color: #8f957f; }
 .rs-node:hover { border-color: #a99d6788; color: #ddd8c5; }
-.rs-node.own { border-color: #a49b6977; color: #e0d3aa; background: #c2bc9314; }
+.rs-node.own { border-color: #a49b6977; color: #e0d3aa; background: #2a2d22f0; }
 .rs-node.own small { color: #9fbf86; }
 .rs-node.ready small { color: #f0c36a; }
 .rs-node.target { border-color: #c79a4a; }
 .rs-node.target small { color: #f0c36a; }
-.rs-node.on { border-color: #d2b77d; background: #b7a3632a; box-shadow: 0 0 0 1px #d2b77d; color: #f2e6c4; }
-.rs-card { display: grid; gap: 10px; }
-.rs-pic { aspect-ratio: 16 / 7; background: #151b17 center / cover no-repeat; border: 1px solid #a49b6944; filter: saturate(.9); }
+.rs-node.on { border-color: #d2b77d; background: #3a3826f2; box-shadow: 0 0 0 1px #d2b77d; color: #f2e6c4; }
+.rs-card { grid-area: card; display: grid; gap: 12px; align-content: start; min-height: 0; overflow: auto; padding: 0 0 18px; scrollbar-color: #6d6f5e transparent; }
+.rs-card > :not(.rs-pic) { margin: 0 18px; }
+.rs-pic { aspect-ratio: 16 / 8; background: #151b17 center / cover no-repeat; border-bottom: 1px solid #a49b6944; filter: saturate(.9); }
 .rs-card-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .rs-card-head small { font: 9px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #aaa88b; }
 .rs-card-head h3 { font: normal 21px var(--serif); color: #ece2c6; margin-top: 4px; }
@@ -377,16 +405,25 @@ body.menu #view, body.menu #panel { display: none; }
 .rs-act:disabled { cursor: default; border-color: #a49b6944; background: none; color: #7f8573; }
 .rs-top { font: 9px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #9fbf86; white-space: nowrap; }
 @media (max-width: 999px) {
-  .rs { grid-template-columns: minmax(0, 1fr); }
+  .rs { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'tree' 'card'; }
 }
 @media (max-width: 560px) {
-  .rs-tree { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rs-line-n { min-height: 0; }
   .rs-part { grid-template-columns: minmax(0, 1fr) auto; }
   .rs-part > :last-child { grid-column: 2; grid-row: 1; }
   .rs-part-fx { grid-column: 1 / -1; grid-row: 2; }
 }
 .mn-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; border-top: 1px solid #9b906343; padding-top: 14px; }
+.mn-rsv .mn-foot { margin-top: 10px; padding-top: 8px; }
+@media (min-width: 1000px) and (min-height: 560px) {
+  /* one screenful: the panes scroll, the page does not */
+  /* the menu a column, so the screen takes whatever the top bar leaves (one row or two) */
+  #menu.on-research:not([hidden]) { display: flex; flex-direction: column; }
+  .mn-rsv { flex: 1 1 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .mn-rsv > .rsv-help { grid-row: 1; }
+  .mn-rsv > .rsv-body, .mn-rsv > .mn-roster { grid-row: 2; }
+  .mn-rsv > .mn-foot { grid-row: 3; }
+  .mn-rsv .rsv-body, .mn-rsv .rs { min-height: 0; height: 100%; }
+}
 .mn-save { color: #828d7b; font: 9px var(--mono); }
 /* the save file's two buttons beside the saved line */
 .mn-files { display: inline-flex; gap: 4px; }
@@ -446,8 +483,8 @@ body.menu #view, body.menu #panel { display: none; }
   .mn-status { justify-items: start; }
   .mn-label { display: block; }
   .mn-label small { display: block; margin-top: 3px; text-align: left; }
-  .mn-rsv .rsv-body, .mn-rsv .mn-roster { padding: 16px; }
-  .rsv-title { font-size: 32px; }
+  .mn-rsv .mn-roster { padding: 16px; }
+  .rs-side { padding: 0 10px 10px; }
 }
 
 /* ---------------------------------------------------------- the loading screen: the operation order */
