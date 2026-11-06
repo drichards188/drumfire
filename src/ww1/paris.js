@@ -252,7 +252,7 @@ export class ParisCtl {
     this.wearUpdate();
     st.charge.set = st.charge.need;
     this.tableUpdate();
-    if (u.def.ready || sim.attract || sim.scripted) this.finishAll();
+    if (u.def.ready || sim.attract || (sim.scripted && !sim.lessonBuild)) this.finishAll();
     // the gun is put together at its loading elevation and raised only once it stands
     for (const p of u.pieces) { p.fixed = !st.ready; if (p.fixed) p.el = GUNS[p.kind].loadEl ?? 0; }
     this.aim();

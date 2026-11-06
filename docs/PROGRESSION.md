@@ -1,4 +1,4 @@
-# Research, upgrades and the campaign
+# Research, upgrades and the special missions
 
 Germany has one career and one research tree: the guns of 1914 to 1918 and of the Second World War together, as a War Thunder nation. Britain (the 1917 game) is hidden from the menu for now; its tree is kept for when it comes back.
 
@@ -18,7 +18,7 @@ Seven lines, one type each, and each runs from the guns of 1914 to 1918 to those
 | Railway guns | 38 cm Langer Max (III, 2,400) → 28 cm Kurze Bruno (III, 2,800) → 28 cm K5 (III, 3,400) → Paris Gun (IV, 4,000) → 21 cm K 12 (IV, 4,600) → Gustav (IV, 5,000) |
 | Mortars | 21 cm Mörser 99 (II, 600) → 21 cm Mörser 16 (II, 900) → 21 cm Mörser 18 (II, 1,300) → 35.5 cm H M1 (III, 2,600) |
 | Siege guns | 30.5 cm Beta-Gerät (III, 2,000) → 42 cm Gamma (III, 2,400) → 42 cm Bertha (III, 2,800) → Karl-Gerät (IV, 4,000) |
-| Trench mortars and rockets | 25 cm schwerer Minenwerfer (I, 300) → Nebelwerfer 41 (I, 450) → schweres Wurfgerät 40 (II, 800) → Nebelwerfer 42 (II, 1,200) |
+| Rockets | Nebelwerfer 41 (I, 450) → schweres Wurfgerät 40 (II, 800) → Nebelwerfer 42 (II, 1,200) |
 | Off-map support | Gotha strike (III, 2,000) → V-1 (IV, 3,000) → V-2 (IV, 4,500) |
 
 What the new batteries bring (2026-11-01):
@@ -26,7 +26,8 @@ What the new batteries bring (2026-11-01):
 - **FK 16.** The quickest gun in the tree: shrapnel over infantry, the Sperrfeuer and the Feuerwalze. Its light shell does nothing to tanks or concrete.
 - **The ramp guns: Ringkanone C/92, sFH 93, Mörser 99.** No recoil system: at every shot the wheels run up two ramps and the gun rolls back down by its own weight, never quite on its old line, so the crew levers it round with handspikes and lays it afresh. Every round carries a new laying error, so each falls like a ranging round. Better sights shrink it.
 - **Your first battery: the Ringkanone C/92** (since 2026-11-01; the K 17 before). An old fortress gun, slow and a little wild, but its 40 kg shell hits harder than the K 17's 18 kg. The K 17 is the first thing to research down its line. A career saved before the change keeps its K 17 and gets the C/92 as well.
-- **Schwerer Minenwerfer and schweres Wurfgerät.** Short reach (a kilometre, and two), dug in behind our front trench. With one in the lineup the British forward posts (Lewis guns and a Stokes mortar) appear opposite as targets.
+- **Schweres Wurfgerät.** Short reach (two kilometres), dug in behind our front trench. With it in the lineup the British forward posts (Lewis guns and a Stokes mortar) appear opposite as targets.
+- **Taken out (2026-11-02): the 25 cm schwerer Minenwerfer.** A kilometre's reach from behind our front trench left it two targets on the whole ridge. A career that researched it gets its 300 RP back.
 - **Beta-Gerät.** The Gamma's flow on a smaller bed: T relays the bed past its arc.
 - **K 16, K 38.** Long guns: counter-battery and the depots behind the British line.
 - **H M1.** A 35.5 cm siege howitzer on its platform, high angle only.
@@ -36,7 +37,7 @@ What the new batteries bring (2026-11-01):
 - **Gotha strike.** Three bombers cross the map from the east at 1,800 m and each drops a stick of four 100 kg bombs across the point you gave.
 
 - **Off-map support.** The Gotha strike, the V-1, the V-2 and the Paris Gun (whose targets are 120 km away) fight in the open battle from off the map: you pick one, give it a target, and it fires in its own time, then takes long to be ready again. Their own launch missions stay, open to all.
-- **The other battles.** The special weapons' operations and the campaign missions are open to all, as before. The WW2 open battle is out of the menu for now: the higher threat levels are to bring the career onto its map.
+- **The other battles.** The special missions are open to all, as before. The WW2 open battle is out of the menu for now: the higher threat levels are to bring the career onto its map.
 - **Old saves.** A career keeps every battery it has researched. The Langer Max, the Paris Gun and the Gustav moved to the railway line and the Gamma, Bertha and the Karl to the siege line, so a career part way down the old long-range or mortar line now has the batteries before them still to research (owning a later battery never blocks you).
 - **Growing the tree further.** Ideas per line: the 24 cm K 3; the leFH 16 and a leFH 18/40 folder; the 21 cm Mörser 10; the Wurfrahmen 40; Stuka strikes off the map (as the Gotha's WW2 counterpart).
 
@@ -49,6 +50,7 @@ As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** 
 The career's open battle is played at a **threat level** from 1 to 10 (as Helldivers 2's difficulties), picked in the battle chooser beside To battle. Level 1 is a quiet morning a lone Ringkanone C/92 can carry; level 10 asks everything of a full lineup at its best. A level sets the battle, never your own guns: how long the day runs, the attacks and their size, the counter-battery fire, the aircraft, the kinds of target, the deadlines, and its pay (×1 up to ×4).
 
 - **All open:** every level can be played from the start, in any order.
+- **Strongpoints (levels 6 to 10):** concrete strongpoints in the lanes of our X-Zeit assault, two at levels 6 and 7, three at 8 and 9, four at 10. Only shells of 28 cm and more break them: the Langer Max, the Kurze Bruno, the K5, the H M1, the Beta-Gerät, the Gamma, Bertha and the Karl (Bertha reaches only the two in the southern lane from its pit). Lighter shells do nothing to them. Each one still standing at X-Zeit fires on our men in its lane, whatever the Feuerwalze does. Their missions open after the registration, by day and by night, with no clock: one at a time for each battery that can take them. So from level 6 one of the five slots wants a super-heavy, which costs a field battery's Sperrfeuer; the share of men the assault needs is a little lower there to make up for it.
 - **Modifiers:** from level 5 one, from level 8 two, rolled for each battle and shown before it: ground mist, enemy air superiority, a shell shortage, enemy sound ranging, poor intelligence, rain.
 - **The card** for each level says what its day holds and the lineup it fits.
 - The other battles (the WW2 sandbox, the special weapons' operations, the campaign) keep Easy, Normal and Hard.
@@ -97,12 +99,19 @@ The open battle's timetable was written for the whole Group. With your lineup in
 - **Reach.** A mission no battery of yours can serve (out of range, out of arc, or the wrong gun for it) goes to another site of the same kind one can, or is left out. Counter-battery calls, convoys and trains only come for what you can reach.
 - **Cadence.** Missions wait while your hands are full: about one at a time per battery, three at least. A free hand gets the waiting mission that best suits one of your batteries.
 - **Work.** A battery idle for 80 seconds is given a site that suits it: concrete and hostile batteries for the heavies, lighter targets for the field guns, the balloon for the 60-pounders. A big lineup gets more to do.
+- **No waiting.** When everything is done and nothing is coming, the day runs on as a time lapse after 15 seconds: the clock moves quickly to the next order, attack or the end of the day.
 
 Battles without a lineup (the tests, the WW1 sandbox) run the fixed day.
 
-## The campaign: one-off challenges
+## What there is to play
 
-The 12 campaign missions stay, open in any order. Each loans its battery for a set task. **The first win pays an RP bonus** (half that battery's research cost, at least 500); it no longer grants the battery. Batteries come only from research.
+The menu has three choices (since 2026-11-02, to keep choosing simple):
+
+- **Open battle:** the career's battle at a threat level. Every battle pays.
+- **Special missions:** the Paris Gun, Gustav, Karl-Gerät, V-1 and V-2, each its weapon's real use. **The first win pays an RP bonus** (half the weapon's research cost, at least 500). Each offers a guided first run, its lesson.
+- **Training:** the basic training.
+
+The 12 campaign missions are out of the menu: the open battle and the special missions do their work. Their code and their old URLs stay. Batteries come only from research.
 
 ## What each upgrade looks like
 
@@ -131,11 +140,11 @@ The **Dev mode** switch in the top right corner of the menu bar is off by defaul
 
 **Unlimited points** also adds a "Research now" button to a battery that can be researched.
 
-**Reset**, beside the switches, starts a new career (two clicks: the second within 4 seconds): no research, upgrades, points or battles, and the campaign missions unwon, so their RP bonus can be won again. The switches stay as they are.
+**Reset**, beside the switches, starts a new career (two clicks: the second within 4 seconds): no research, upgrades, points or battles, and the special missions unwon, so their RP bonus can be won again. The switches stay as they are.
 
 ## Saves and tests
 
-- **Save:** `drumfire.campaign.v4` in browser storage: the research target and the RP put into each battery, the batteries researched, each battery's points and levels, the missions won, the battles fought, the switches. Saves from before the German tree are not carried over: a new career.
+- **Save:** `drumfire.campaign.v4` in browser storage: the research target and the RP put into each battery, the batteries researched, each battery's points and levels, the special missions won (`specials`), the battles fought, the switches. Saves from before the German tree are not carried over: a new career.
 - **Code:** the trees, parts, costs and pay are in `src/research.js`, the career in `src/progression.js`, the screens in `src/ui/menu.js` (the hangar's panels, `researchView`) with the 3D hangar in `src/ui/hangar.js`, the heavy and long guns' missions in `src/sim/specialists.js`. DESIGN.md has the contract.
 - **Tests:** `node tools/progressiontest.mjs` checks research, upgrades, pay, saves and the campaign missions. `node tools/researchtest.mjs [seeds] --era de --lineup start|early|mid|full|max|all` plays headless open battles with a career's lineups and reports wins, RP and battery points.
 
@@ -156,7 +165,7 @@ The **Dev mode** switch in the top right corner of the menu bar is off by defaul
 **The tree and the lineup**
 - **The light guns' drill.** The leFH 18's crew looks fast: 8.6 s a round, about 6 s with its best breech. The proposal is about 12 s for the leFH 18 and 16 s for the sFH 18, and a look at the other light guns. It is a balance change, so re-run the tests.
 - **Choosing the lineup.** The slot bar's swap and "Leave out of battle" for now: no drag between slots, no saved lineups.
-- **The fifteen new batteries (2026-11-01).** Not yet: serving the Wespe, the Hummel and the Wurfgerät in person; menu background stills for them; the threat levels' reference lineups (`capability.js` `REFERENCE`) still use the older batteries; their research costs and pay are unplaytested. Further ideas are under "The tree" above.
+- **The fifteen new batteries (2026-11-01).** Not yet: serving the Wespe, the Hummel and the Wurfgerät in person; menu background stills for them; their research costs and pay are unplaytested. Further ideas are under "The tree" above.
 - **Britain's return**, with its own tree (`TREES['1917']` is kept).
 
 **From before**

@@ -27,7 +27,7 @@ const RIDE_DELAY = 1.4, RIDE_TOP = 14000, RIDE_MAX = 26;
 // cradle the barrel hangs from the portal crane (m)
 const PARIS_RUN_IN = 34, PARIS_LOWER = 7;
 // the big guns' firing positions: the builder's name in guns.EXTRAS
-const SITE_OF = { max38: 'buildMax38Site', gamma: 'buildGammaSite', paris: 'buildParisSite', beta: 'buildBetaSite', smw: 'buildSMWSite' };
+const SITE_OF = { max38: 'buildMax38Site', gamma: 'buildGammaSite', paris: 'buildParisSite', beta: 'buildBetaSite' };
 // the regular units' gun positions (gun_sites_ww1.js)
 const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha', 'fk16', 'k16']); // (the Mörser 99's plank platform is its own emplacement, in its model)
 

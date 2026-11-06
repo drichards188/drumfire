@@ -211,11 +211,6 @@ export const RIDGE_MORE = [
     role: 'The 30.5 cm siege mortar on its steel bed: 410 kg shells on concrete, heavies and dumps; T relays the bed past its arc.',
   },
   {
-    id: 18, kind: 'smw', name: '25 cm schwerer Minenwerfer', callsign: 'Moritz', battery: 'Minenwerfer-Kompanie 204', pos: P(4650, 3400), zero: 272 * DEG, era: 'ww1',
-    pieces: [{ kind: 'smw', dx: 0, dz: -20 }, { kind: 'smw', dx: 2, dz: 20 }],
-    role: 'Heavy trench mortars behind our front trench: a 97 kg bomb a kilometre at most. Their wire, their front trenches, the pillboxes opposite, the Sperrfeuer.',
-  },
-  {
     id: 19, kind: 'k38', name: '21 cm K 38', callsign: 'Kurt', battery: 'schwere Artillerie-Abteilung 767 (mot.)', pos: P(11800, -3800), zero: 272 * DEG,
     pieces: [{ kind: 'k38', dx: 0, dz: -32 }, { kind: 'k38', dx: 3, dz: 32 }],
     role: 'The long 21 cm gun: 120 kg shells to 34 km, counter-battery on the British heavies and the depots far behind.',
@@ -294,13 +289,25 @@ export const RIDGE_ROLE_SITES = [
   { id: 'V3', kind: 'mebu', name: 'Concrete shelter, Ypres', pos: P(-2600, 1200), bearing: 95 * DEG, r: 30, role: 'hard' },
 ];
 
-// the British forward posts in their front line (Lewis guns and a Stokes mortar), within a kilometre or two of our trench
-// mortars and the Wurfgerät: in the career's battle only when the lineup brings one of those (ww1Theatre), so their
-// short reach has work beyond the Sperrfeuer and the Feuerwalze
-export const FORWARD_KINDS = new Set(['smw', 'swg40']);
+// the British concrete strongpoints in the X-Zeit lanes (threat levels 6 to 10, `forts`: the first one in each lane,
+// then the second): machine guns behind concrete between their front and support trenches that only shells of 28 cm
+// and more break (`minHard`, the shell's hard.D: sim/targets.js), a task for the super-heavies (sim/specialists.js
+// role 'fort'). One still standing at X-Zeit fires on our assault in its lane whatever the Feuerwalze does
+// (ww1/infantry.js). The lanes are ww1/director.js laneOf: B at z -1200, C at z 2400; our groups walk 110 m either side.
+export const FORT_HARD = 70;
+const FORT_HP = 50; // each of its three shelters (the WW2 bunker's are 100)
+export const RIDGE_FORTS = [
+  { id: 'K1', kind: 'bunker', name: 'Strongpoint, Westhoek', pos: P(4060, -1530), bearing: 90 * DEG, r: 35, role: 'fort', minHard: FORT_HARD, partHp: FORT_HP, lane: 'B' },
+  { id: 'K2', kind: 'bunker', name: 'Strongpoint, Glencorse Wood', pos: P(4045, 2730), bearing: 90 * DEG, r: 35, role: 'fort', minHard: FORT_HARD, partHp: FORT_HP, lane: 'C' },
+  { id: 'K3', kind: 'bunker', name: 'Strongpoint, Hanebeek', pos: P(3720, -900), bearing: 90 * DEG, r: 35, role: 'fort', minHard: FORT_HARD, partHp: FORT_HP, lane: 'B' },
+  { id: 'K4', kind: 'bunker', name: 'Strongpoint, Nonne Bosschen', pos: P(3705, 2100), bearing: 90 * DEG, r: 35, role: 'fort', minHard: FORT_HARD, partHp: FORT_HP, lane: 'C' },
+];
+
+// the British forward posts in their front line (Lewis guns and a Stokes mortar), within a kilometre or two of the
+// Wurfgerät: in the career's battle only when the lineup brings it (ww1Theatre), so its short reach has work beyond the
+// Sperrfeuer and the Feuerwalze
+export const FORWARD_KINDS = new Set(['swg40']);
 export const RIDGE_FORWARD = [
-  { id: 'P1', kind: 'bpost', name: 'Forward post, Zouave Wood front', pos: P(3960, 3250), bearing: 92 * DEG, r: 25 },
-  { id: 'P2', kind: 'bpost', name: 'Forward post, Hooge crater', pos: P(4060, 2650), bearing: 88 * DEG, r: 25 },
   { id: 'P3', kind: 'bpost', name: 'Forward post, Westhoek', pos: P(4000, -2150), bearing: 85 * DEG, r: 25 },
   { id: 'P4', kind: 'bpost', name: 'Forward post, Frezenberg spur', pos: P(3880, -2750), bearing: 88 * DEG, r: 25 },
 ];
@@ -310,7 +317,7 @@ export const RIDGE_FORWARD = [
 export function ridgeWW2Pads(units) {
   const pads = [];
   const size = { gustav: [55, 190], karl: [40, 50], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6],
-    fk16: [8, 10], k16: [9, 12], m99: [10, 12], rk92: [9, 12], sfh93: [8, 10], beta: [26, 26], smw: [7, 7], k38: [10, 12], hm1: [22, 22], bruno: [24, 60], k5: [26, 26],
+    fk16: [8, 10], k16: [9, 12], m99: [10, 12], rk92: [9, 12], sfh93: [8, 10], beta: [26, 26], k38: [10, 12], hm1: [22, 22], bruno: [24, 60], k5: [26, 26],
     k12: [22, 80], wespe: [7, 9], hummel: [8, 10], nbw42: [6, 6], swg40: [6, 6] };
   for (const u of units) {
     const big = size[u.kind] ?? [8, 8];

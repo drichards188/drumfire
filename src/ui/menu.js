@@ -1,8 +1,8 @@
 import { Progression } from '../progression.js';
 import { exportSave, importSave } from '../saves.js';
-import { CAMPAIGN, BATTERIES } from '../campaign-data.js';
+import { BATTERIES } from '../campaign-data.js';
 import { TREES, LINES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
-import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf } from '../menuItems.js';
+import { menuItems, hrefOf, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
 import { createHangar } from './hangar.js';
@@ -19,11 +19,9 @@ import './menu.css';
 // with To battle beside it. Choosing a mission, a battery or a screen never reloads the
 // page; To battle opens the mission's game page, which loads the world behind its own loading screen (ui/loading.js).
 // Only the hangar's 3D view loads three.js (ui/hangar.js), the first time it shows a gun.
-const STORE = 'drumfire.menu'; // { view, era (the nation), sel: { era: key }, tab, difficulty, rs: { era: kind } }: the viewer's last choices
+const STORE = 'drumfire.menu'; // { view, era (the nation), sel: { era: key }, tab, difficulty, rs: { era: kind }, level, guided: { key: bool } }: the viewer's last choices
 const VIEWS = [['hangar', 'Hangar'], ['research', 'Research']];
-const TABS = [['battles', 'Battles'], ['campaign', 'Campaign'], ['tutorials', 'Tutorials']];
 const SHOWN = NATIONS.filter((n) => !n.hidden);
-const KEYS = '<li><kbd>1</kbd>-<kbd>9</kbd> select battery</li><li><kbd>Drag</kbd> orbit</li><li><kbd>Wheel</kbd> zoom</li><li><kbd>F</kbd> follow the shell to its burst</li><li><kbd>C</kbd> free camera</li><li><kbd>M</kbd> mute</li><li><kbd>[</kbd> <kbd>]</kbd> time compression</li><li><kbd>H</kbd> hide overlay</li><li><kbd>F3</kbd> stats</li>';
 // the testing switches in the top bar's right corner: dev mode and unlimited points, and beside them the career reset
 // (two clicks: the first arms it for 4 s)
 const SWITCHES = '<div class="mn-switches"><div class="mn-sw-stack">'
@@ -448,7 +446,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   let items = [];
   // the nation: a game's way back (?mode=ww1|ww2) or the last one shown (only Germany for now)
   let era = SHOWN.find((n) => n.id === NATION_OF[query.get('mode') ?? ''])?.id ?? SHOWN.find((n) => n.id === memo.era)?.id ?? SHOWN[0].id;
-  let tab = query.get('lessons') ? 'tutorials' : TABS.some(([t]) => t === memo.tab) ? memo.tab : 'battles';
+  let tab = query.get('lessons') ? 'training' : TABS.some(([t]) => t === memo.tab) ? memo.tab : 'battle';
   // ?view=research (the end card's Research button) opens that screen; otherwise the last one
   let view = VIEWS.some(([v]) => v === query.get('view')) ? query.get('view') : VIEWS.some(([v]) => v === memo.view) ? memo.view : 'hangar';
   let difficulty = DIFFICULTIES.includes(memo.difficulty) ? memo.difficulty : 'Normal';
@@ -457,7 +455,10 @@ export function mountMenu(root = document.getElementById('menu')) {
   memo.modSeed ??= (Math.random() * 1e9) | 0;
   const levelNow = () => (career.levelUnlocked(era, level) ? level : Math.max(1, ...THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n)));
   const modsNow = () => rollModifiers(levelNow(), memo.modSeed);
-  let sel = null, open = query.has('lessons') || query.has('campaign');
+  let sel = null, open = query.has('lessons');
+  // a special mission played as its guided first run (its lesson, menuItems.js GUIDE) or straight: the player's last
+  // choice for it, else guided until its lesson is done
+  memo.guided ??= {};
 
   root.innerHTML = `<header class="mn-top">
     <div class="mn-top-in">
@@ -465,29 +466,20 @@ export function mountMenu(root = document.getElementById('menu')) {
       <nav class="mn-eras" aria-label="Nation">${SHOWN.map((n) => `<button type="button" data-era="${n.id}">${n.name} <small>${n.sub}</small></button>`).join('')}</nav>
       <nav class="mn-views" aria-label="Screens">${VIEWS.map(([v, name]) => `<button type="button" data-view="${v}">${name}<span class="mn-view-n"></span></button>`).join('')}</nav>
       <div class="mn-go">
-        <nav class="mn-modes" aria-label="What to play">${TABS.map(([t, name]) => `<button type="button" data-mode="${t}">${name}<i class="mn-dot" hidden></i></button>`).join('')}</nav>
-        <button type="button" class="mn-mode" aria-haspopup="dialog" aria-expanded="false" title="Choose the battle, campaign mission or lesson"><small class="mn-mode-k"></small><b class="mn-mode-t"></b><span class="mn-mode-d"></span></button>
+        <button type="button" class="mn-mode" aria-haspopup="dialog" aria-expanded="false" title="Choose what to play: the open battle and its threat level, a special mission, or the training"><small class="mn-mode-k"></small><b class="mn-mode-t"></b><span class="mn-mode-d"></span><i class="mn-dot" hidden></i></button>
         <button type="button" id="mn-play">To battle</button>
       </div>
       ${SWITCHES}
     </div>
   </header>
-  <section class="mn-drop" role="dialog" aria-label="Choose a mission" hidden>
+  <section class="mn-drop" role="dialog" aria-label="Choose what to play" hidden>
     <button type="button" class="mn-drop-close" aria-label="Close">\u2715</button>
-    <div class="mn-drop-list">
-      <nav class="mn-tabs" aria-label="Lists">${TABS.map(([t, name]) => `<button type="button" data-tab="${t}">${name} <span class="mn-count"></span></button>`).join('')}</nav>
-      <p class="mn-help"></p>
-      <div class="mn-list" role="listbox" aria-label="Missions"></div>
-    </div>
-    <div class="mn-drop-detail">
-      <div class="mn-detail" aria-live="polite"><small class="mn-kicker"></small><h2 class="mn-title"></h2><p class="mn-sub"></p><p class="mn-blurb"></p><ul class="mn-lines"></ul></div>
+    <nav class="mn-tabs" aria-label="What to play">${TABS.map(([t, name]) => `<button type="button" data-tab="${t}">${name} <span class="mn-count"></span></button>`).join('')}</nav>
+    <div class="mn-body" aria-live="polite"></div>
+    <div class="mn-drop-foot">
+      <div class="mn-run" role="radiogroup" aria-label="How to play it" hidden><button type="button" role="radio" data-run="guided"><b>Guided first run</b><small></small></button><button type="button" role="radio" data-run="mission"><b>The mission</b><small>On your own</small></button></div>
       <div class="mn-difficulty" role="radiogroup" aria-label="Difficulty">${DIFFICULTIES.map((d) => `<button type="button" role="radio" data-d="${d}">${d}</button>`).join('')}</div>
-      <div class="mn-level" hidden>
-        <div class="mn-lv-row" role="radiogroup" aria-label="Threat level">${THREAT.map((t) => `<button type="button" role="radio" data-lv="${t.n}">${t.n}</button>`).join('')}</div>
-        <div class="mn-lv-card"></div>
-      </div>
       <button type="button" class="mn-play2">To battle</button>
-      <ul class="keys mn-keys">${KEYS}</ul>
     </div>
   </section>
   <main class="mn-hangar" data-for="hangar">
@@ -507,7 +499,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   <input type="file" class="mn-file-in" accept=".json,application/json" hidden>`;
   const $ = (s) => root.querySelector(s);
   const $$ = (s) => root.querySelectorAll(s);
-  const list = $('.mn-list'), drop = $('.mn-drop'), modeBtn = $('.mn-mode');
+  const body = $('.mn-body'), drop = $('.mn-drop'), modeBtn = $('.mn-mode');
   const still = backdrop(root);
   // the loading screen: up until the hangar's first parade stands drawn (or a minute has passed, whatever happens)
   const loading = el('div', 'mn-loading');
@@ -520,7 +512,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     loaded = true;
     loading.classList.add('done');
     setTimeout(() => loading.remove(), 700);
-    // a new player's first menu: the invitation to the basic training (ui/invite.js), once the hangar stands; not over a
+    // until the lesson is finished or Stop reminding me: the invitation to the basic training (ui/invite.js), once the hangar stands; not over a
     // battle's summary
     setTimeout(() => { if (shouldInvite() && !document.querySelector('.sm-page')) showInvite(); }, 500);
   };
@@ -538,11 +530,6 @@ export function mountMenu(root = document.getElementById('menu')) {
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify({ view, era, sel: memo.sel, tab, difficulty, rs: memo.rs, level, modSeed: memo.modSeed })); } catch { /* private mode */ } };
   const playable = (i) => i && NATION_OF[i.era] === era && !i.locked;
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
-  const HELP = {
-    battles: { de: 'The open battle of 1918 with your career\'s batteries (it pays research points, won or lost), the WW2 open battle as a sandbox, the special weapons\' own missions and the test range.', '1917': 'The open battle with the batteries you have researched. It pays research points, won or lost.', ww1: 'The open battle with the whole Gruppe from the start, nothing to earn; the Paris Gun\'s own mission; or crew the Big Bertha demo.', ww2: 'The open battle with the batteries you have researched (it pays research points, won or lost), or a special weapon\'s own operation (open to all).' },
-    campaign: { ww1: 'No campaign in this era: the open battle is a sandbox and every battery is yours from the start.', other: 'One-off challenges, in any order: each loans you a battery for a set task, and the first win pays research points.' },
-    tutorials: { de: 'Start with the basic training: the console and serving a gun in person, on the career\'s own ridge. The WW2 lessons teach each special weapon.', other: 'Short lessons on a quiet range, in daylight.' },
-  };
   const RESEARCH_HELP = {
     ww1: 'Nothing to research in this era: every battery of the Gruppe is yours from the start.',
     other: 'Pick the battery to research: every battle\'s research points go to it. Each line is researched in order. A battery takes the field with one gun; its own points buy its other guns and better parts.',
@@ -563,19 +550,30 @@ export function mountMenu(root = document.getElementById('menu')) {
     memo.sel[`${era}:${item.tab}`] = item.key; // (each list's last choice, for coming back to it)
     save();
     render();
-    if (focus) list.querySelector(`[data-key="${CSS.escape(item.key)}"]`)?.focus();
+    if (focus) body.querySelector(`[data-key="${CSS.escape(item.key)}"]`)?.focus();
   }
-  // another list (the top bar's tabs or the chooser's): its first entry is chosen unless the choice is already in it (the
-  // lessons: the first not yet done), so To battle always plays what the open list shows
+  // another list: its last choice (else its first entry) is chosen unless the choice is already in it, so To battle
+  // always plays what the open list shows
   const toTab = (t) => {
     tab = t;
     if (sel?.tab !== t) {
       const rows = items.filter((i) => i.tab === t && playable(i));
-      const pick = (t === 'tutorials' && rows.find((i) => !i.done)) || rows.find((i) => i.key === memo.sel[`${era}:${t}`]) || rows[0];
+      const pick = rows.find((i) => i.key === memo.sel[`${era}:${t}`]) || rows[0];
       if (pick) { sel = pick; memo.sel[era] = pick.key; }
     }
     save();
   };
+  // the open battle's list is its threat levels: a row picks the level (and the battle)
+  const setLevel = (n, focus = false) => {
+    level = n;
+    const b = items.find((i) => i.tab === 'battle' && playable(i));
+    if (b) select(b); else { save(); render(); }
+    if (focus) body.querySelector(`[data-lv="${n}"]`)?.focus();
+  };
+  // a special mission's way to play: its guided first run (while its lesson is not done, unless the player chose) or
+  // the mission itself
+  const lessonOf = (i) => (i?.guide ? items.find((q) => q.key === `tutorial:${i.guide}`) : null);
+  const guided = (i = sel) => !!lessonOf(i) && (memo.guided[i.key] ?? !lessonOf(i).done);
   const setOpen = (on) => {
     open = on;
     drop.hidden = !on;
@@ -592,19 +590,17 @@ export function mountMenu(root = document.getElementById('menu')) {
     }
     for (const w of $$('[data-for]')) w.hidden = w.dataset.for !== view;
     for (const b of $$('[data-era]')) { b.classList.toggle('on', b.dataset.era === era); b.setAttribute('aria-pressed', String(b.dataset.era === era)); }
-    // the lists in the bar: the chosen entry's lit; Tutorials marked until the basic training is done
-    const fresh = !items.find((i) => i.key === 'tutorial:training')?.done;
-    for (const b of $$('[data-mode]')) {
-      const on = b.dataset.mode === sel.tab;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-pressed', String(on));
-      const dot = b.querySelector('.mn-dot');
-      dot.hidden = !(b.dataset.mode === 'tutorials' && fresh);
-      b.title = b.dataset.mode === 'tutorials' && fresh ? 'New here? Start with the basic training' : `Choose from the ${b.textContent.toLowerCase()}`;
-    }
-    $('.mn-mode-k').textContent = sel.kicker;
-    $('.mn-mode-t').textContent = sel.title;
-    $('.mn-mode-d').textContent = sel.level ? `Level ${levelNow()}` : sel.difficulty ? difficulty : '';
+    // the chooser's button: what To battle plays (marked until the basic training is done)
+    const fresh = !items.find((i) => i.key === 'tutorial:training')?.done, dot = modeBtn.querySelector('.mn-dot');
+    dot.hidden = !fresh;
+    dot.title = 'New here? Start with the basic training (Training)';
+    const lv = threatOf(levelNow());
+    $('.mn-mode-k').textContent = sel.tab === 'battle' ? 'Open battle' : sel.tab === 'special' ? 'Special mission' : 'Training';
+    $('.mn-mode-t').textContent = sel.level ? `Level ${lv.n} · ${lv.name}` : sel.title;
+    $('.mn-mode-d').textContent = sel.level ? '' : guided() ? 'Guided first run' : sel.difficulty ? difficulty : '';
+    // the go button says what it starts (the bar's and the chooser's)
+    const goText = guided() ? 'Start the guided run' : sel.tab === 'training' ? 'Start the training' : 'To battle';
+    for (const b of [$('#mn-play'), $('.mn-play2')]) b.textContent = goText;
     for (const sw of $$('[data-switch]')) {
       const on = sw.dataset.switch === 'free' ? career.free : career.dev;
       sw.setAttribute('aria-pressed', String(on));
@@ -614,98 +610,118 @@ export function mountMenu(root = document.getElementById('menu')) {
     document.title = era === 'de' ? 'Drumfire: German artillery' : 'Drumfire: heavy artillery, Ypres 1917';
   }
 
-  // the mission chooser: the lists (battles, campaign missions, lessons) and the chosen one's orders
-  function renderDrop() {
-    $('.mn-kicker').textContent = sel.kicker;
-    $('.mn-title').textContent = sel.title;
-    if (sel.wip) $('.mn-title').append(wipBadge());
-    $('.mn-sub').textContent = sel.sub;
-    $('.mn-blurb').textContent = sel.blurb;
-    $('.mn-lines').replaceChildren(...sel.lines.map((t) => el('li', null, t)));
-    $('.mn-difficulty').hidden = !sel.difficulty;
-    for (const b of $$('[data-d]')) { b.classList.toggle('on', b.dataset.d === difficulty); b.setAttribute('aria-checked', String(b.dataset.d === difficulty)); }
-    renderLevel();
-    const ofEra = items.filter((i) => NATION_OF[i.era] === era), missions = CAMPAIGN.filter((m) => NATION_OF[m.era] === era);
-    const counts = {
-      campaign: missions.length ? `${missions.filter((m) => career.completed.has(m.id)).length}/${missions.length}` : '',
-      tutorials: `${ofEra.filter((i) => i.tab === 'tutorials' && i.done).length}/${ofEra.filter((i) => i.tab === 'tutorials').length}${items.find((i) => i.key === 'tutorial:training')?.done ? '' : ' · start here'}`,
-    };
-    for (const b of $$('[data-tab]')) {
-      b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
-      b.querySelector('.mn-count').textContent = counts[b.dataset.tab] ?? '';
-    }
-    $('.mn-help').textContent = HELP[tab][era] ?? HELP[tab].other;
-    list.replaceChildren(...ofEra.filter((i) => i.tab === tab).map((i, n) => {
-      const row = el('button', 'mn-row');
-      row.type = 'button';
-      row.dataset.key = i.key;
-      row.setAttribute('role', 'option');
-      row.setAttribute('aria-selected', String(i === sel));
-      row.classList.toggle('on', i === sel);
-      row.classList.toggle('done', !!i.done);
-      row.disabled = !!i.locked;
-      if (i.locked) row.title = `Locked: ${i.locked}.`;
-      const label = el('span', 'mn-label');
-      const name = el('b', null, i.title);
-      if (i.wip) name.append(wipBadge());
-      label.append(name, el('small', null, i.locked ? `Locked: ${i.locked}` : i.side));
-      row.append(el('span', 'mn-n', i.n ?? String(n + 1).padStart(2, '0')), label);
-      row.addEventListener('click', () => select(i));
-      row.addEventListener('dblclick', () => { select(i); go(); });
-      return row;
-    }));
-    if (!list.children.length) list.append(el('p', 'mn-empty', tab === 'campaign' ? 'No campaign missions in this era.' : 'Nothing here yet.'));
-  }
-
-  // the lineup's capabilities and recommended level (capability.js), worked out again only when the lineup changes
-  const CAP_NAME = { soft: 'Soft targets', armour: 'Tank laagers', heavy: 'Their heavy batteries', deep: 'Deep targets', hard: 'Concrete' };
-  const CAP_SAY = { ready: 'ready', slow: 'slow: only just, or not every time', no: 'out of its reach or beyond its shells' };
+  // The chooser (menu design kept to what a player takes in at a glance: a few chunks per view, short labels, the rest
+  // on hover). Three tabs; the open battle's threat level picked from a row of ten steps (Helldivers 2's difficulty
+  // bar) with the chosen level's name, four facts and its threats; the special missions as picture cards; the training
+  // as one card. The foot: how to play a special mission, its difficulty, and the go button.
+  const CAP_NAME = { soft: 'Soft targets', armour: 'Tank laagers', heavy: 'Their heavy batteries', deep: 'Deep targets', hard: 'Concrete', fort: 'Strongpoints (28 cm and up)' };
+  const CAP_SAY = { ready: 'ready', slow: 'slow', no: 'out of reach' };
+  const DAY = { morning: 'Morning', day: 'Until evening', night: 'Day and night', full: 'Full day' };
+  // a special mission's or the training's line under its card (ten words or so)
+  const TAGLINE = {
+    'ww1:paris': 'Build the giant gun, then shell targets 120 km away.',
+    'op:sevastopol': 'Lay the 80 cm railway gun, then breach the fortress.',
+    'op:karl': 'Drive the siege mortar into place and break the citadel.',
+    'op:v1': 'Ready the catapult and launch the flying bombs.',
+    'op:v2': 'Erect, fuel and launch the A4 rocket.',
+    'tutorial:training': 'The console, then a gun served in person. Start here.',
+  };
   let capKey = '', capMemo = null;
   const lineupCaps = () => {
     const lv = career.lineupLevels(era), key = JSON.stringify(lv);
     if (key !== capKey) { capKey = key; capMemo = { caps: capabilities(lv), rec: recommendedLevel(lv) }; }
     return capMemo;
   };
+  const chip = (text, cls = '', title = '') => { const c = el('span', `mn-chip${cls ? ` ${cls}` : ''}`, text); if (title) c.title = title; return c; };
 
-  // the threat level of a battle played at one: the ten levels (a locked one says what opens it) and the chosen one's
-  // card: what its day holds, the lineup it fits, its pay and the modifiers rolled for it
+  function renderDrop() {
+    const lesson = guided() ? lessonOf(sel) : null, les = lessonOf(sel);
+    const ofEra = items.filter((i) => NATION_OF[i.era] === era && playable(i));
+    const specials = ofEra.filter((i) => i.tab === 'special'), training = ofEra.find((i) => i.key === 'tutorial:training');
+    const counts = { battle: `level ${levelNow()}`, special: `${specials.filter((i) => i.done).length} of ${specials.length} won`, training: training?.done ? 'done' : 'start here' };
+    for (const b of $$('[data-tab]')) {
+      b.setAttribute('aria-pressed', String(b.dataset.tab === tab));
+      b.querySelector('.mn-count').textContent = counts[b.dataset.tab] ?? '';
+    }
+    // the foot
+    const run = $('.mn-run');
+    run.hidden = !les;
+    if (les) {
+      run.querySelector('[data-run="guided"] small').textContent = `${les.side} · nothing scored${les.done ? ' · done' : ''}`;
+      for (const b of run.querySelectorAll('[data-run]')) { const on = (b.dataset.run === 'guided') === guided(); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
+    }
+    $('.mn-difficulty').hidden = !sel.difficulty || !!lesson;
+    for (const b of $$('[data-d]')) { b.classList.toggle('on', b.dataset.d === difficulty); b.setAttribute('aria-checked', String(b.dataset.d === difficulty)); }
+    if (tab === 'battle') return renderLevel();
+    // the special missions and the training: picture cards, the chosen one's line under them
+    const cards = el('div', `mn-cards${tab === 'training' ? ' one' : ''}`);
+    for (const i of ofEra.filter((q) => q.tab === tab)) {
+      const c = el('button', 'mn-card');
+      c.type = 'button';
+      c.dataset.key = i.key;
+      c.setAttribute('aria-pressed', String(i === sel));
+      c.classList.toggle('on', i === sel);
+      const pic = el('span', 'mn-card-pic');
+      const st = i.still ?? stillOf(i.kind);
+      if (st) pic.style.backgroundImage = `url("${stillUrl(st)}")`;
+      const name = el('b', null, i.title);
+      if (i.wip) name.append(wipBadge());
+      const note = i.tab === 'training' ? (i.done ? '✓ Done' : i.side) : i.done ? '✓ Won' : `+${num(specialRP(i))} RP on first win`;
+      c.append(pic, name, el('small', i.done ? 'won' : null, note));
+      c.addEventListener('click', () => select(i));
+      c.addEventListener('dblclick', () => { select(i); go(); });
+      cards.append(c);
+    }
+    const head = el('div', 'mn-pick');
+    if (tab !== 'training') head.append(el('h3', null, sel.title)); // (the training's one card already names it)
+    head.append(el('p', null, TAGLINE[sel.key] ?? sel.sub));
+    head.title = sel.blurb;
+    body.replaceChildren(cards, head);
+  }
+  // a special mission's first-win RP (from its line in menuItems.js, which says it in words)
+  const specialRP = (i) => +(/\+([\d,]+)/.exec(i.lines.find((l) => l.startsWith('First win')) ?? '')?.[1]?.replace(/,/g, '') ?? 0);
+
+  // the threat level: ten steps, the chosen one and those under it lit, the lineup's own marked; the chosen level's
+  // name and line, four facts, the threats it brings, the lineup's fit and the modifiers rolled
   function renderLevel() {
-    $('.mn-level').hidden = !sel.level;
-    if (!sel.level) return;
-    const n = levelNow(), t = threatOf(n);
-    for (const b of $$('[data-lv]')) {
-      const k = +b.dataset.lv, open = career.levelUnlocked(era, k);
-      b.disabled = !open;
-      b.title = open ? `Level ${k}: ${threatOf(k).name} (${threatOf(k).en})` : `Locked: play level ${k - 1} to its end to open it`;
-      b.classList.toggle('on', k === n);
-      b.setAttribute('aria-checked', String(k === n));
+    const n = levelNow(), t = threatOf(n), { caps, rec } = lineupCaps();
+    const meter = el('div', 'lv-meter');
+    meter.setAttribute('role', 'radiogroup');
+    meter.setAttribute('aria-label', 'Threat level');
+    for (const q of THREAT) {
+      const open1 = career.levelUnlocked(era, q.n);
+      const b = el('button', `lv-seg${q.n <= n ? ' lit' : ''}${q.n === n ? ' on' : ''}${q.n === rec ? ' rec' : ''}`);
+      b.type = 'button';
+      b.dataset.lv = q.n;
+      b.style.setProperty('--k', String((q.n - 1) / 9));
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(q.n === n));
+      b.disabled = !open1;
+      b.title = open1 ? `Level ${q.n}: ${q.name} (${q.en})` : `Locked: play level ${q.n - 1} to its end`;
+      b.append(el('b', null, String(q.n)));
+      if (q.n === rec) b.append(el('small', null, 'your lineup'));
+      b.addEventListener('click', () => setLevel(q.n));
+      b.addEventListener('dblclick', () => { setLevel(q.n); go(); });
+      meter.append(b);
     }
-    const card = $('.mn-lv-card');
-    const head = el('div', 'mn-lv-head');
-    head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name));
-    const pay = el('span', 'mn-lv-pay', t.pay > 1 ? `Pay +${Math.round((t.pay - 1) * 100)}%` : 'Pay ×1');
-    head.append(pay);
-    const list = el('ul', 'mn-lv-lines');
-    for (const line of t.lines) list.append(el('li', null, line));
-    const fits = el('p', 'mn-lv-fits');
-    fits.append(el('b', null, 'Fits: '), t.fits, '.');
-    // what the lineup can do against the kinds of target this level brings (capability.js), and the level it suits
-    const { caps, rec } = lineupCaps();
-    const can = el('ul', 'mn-lv-caps');
-    for (const tier of t.sites) {
-      const v = caps[tier] ?? 'no', li = el('li', `v-${v}`);
-      li.append(el('b', null, CAP_NAME[tier] ?? tier), ` ${CAP_SAY[v]}`);
-      can.append(li);
-    }
-    const recP = el('p', 'mn-lv-rec', rec >= n ? `Your lineup suits up to level ${rec}.` : `Your lineup suits level ${rec}: this one asks more than it has. What it cannot do goes to the neighbouring Gruppe, unpaid.`);
-    recP.classList.toggle('over', rec < n);
-    card.replaceChildren(head, el('p', 'mn-lv-sub', t.sub), list, fits, el('small', 'mn-lv-k', 'Your lineup'), can, recP);
-    const mods = modsNow().map(modifierOf);
-    if (mods.length) {
-      const ml = el('ul', 'mn-lv-mods');
-      for (const m of mods) { const li = el('li'); li.append(el('b', null, m.name), ` ${m.line}`); ml.append(li); }
-      card.append(el('small', 'mn-lv-k', mods.length === 1 ? 'Modifier' : 'Modifiers'), ml);
-    }
+    const head = el('div', 'lv-head');
+    head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name), el('p', null, t.sub));
+    head.title = t.lines.join('\n');
+    const fact = (k, v) => { const f = el('div', 'lv-fact'); f.append(el('small', null, k), el('b', null, v)); return f; };
+    const facts = el('div', 'lv-facts');
+    facts.append(fact('Length', DAY[t.day] ?? t.day), fact('Goal', t.need ? `${t.need} fire mission${t.need > 1 ? 's' : ''}` : 'Win at X-Zeit'),
+      fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
+    const threats = el('div', 'lv-chips');
+    if (t.cb >= 0.5) threats.append(chip(t.cb >= 0.7 ? 'Counter-battery' : 'Some counter-battery'));
+    if (t.spotters || t.raids) threats.append(chip(t.raids ? 'Air raids' : 'Spotter aircraft'));
+    if (t.heavies) threats.append(chip('Heavy guns'));
+    if (t.tanks) threats.append(chip('Tanks'));
+    if (t.forts) threats.append(chip(`${t.forts} strongpoints`, '', 'Concrete in the lanes of our assault: only 28 cm shells and heavier break it'));
+    for (const m of modsNow().map(modifierOf)) threats.append(chip(m.name, 'mod', m.line));
+    if (!threats.children.length) threats.append(chip('Little to fear', 'calm'));
+    const fit = el('p', `lv-fit${rec < n ? ' over' : ''}`, rec >= n ? '✓ Your lineup is ready for this level' : `Above your lineup: it suits level ${rec}`);
+    fit.title = `Your lineup against this level's targets: ${t.sites.map((k) => `${CAP_NAME[k] ?? k} ${CAP_SAY[caps[k] ?? 'no']}`).join('; ')}. Fits: ${t.fits}.${rec < n ? ' What it cannot do goes to the neighbouring Gruppe, unpaid.' : ''}`;
+    body.replaceChildren(meter, head, facts, threats, fit);
   }
 
   // keep the focus on the control that was pressed when a screen is built again
@@ -781,7 +797,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   function render() {
     items = menuItems(career, read(LESSONS_KEY, {}));
     // the entries are built again (a lock may have opened): the selection is held by its key
-    sel = items.find((i) => i.key === sel?.key && playable(i)) ?? items.find((i) => i.key === memo.sel[era] && playable(i)) ?? firstOf('battles');
+    sel = items.find((i) => i.key === sel?.key && playable(i)) ?? items.find((i) => i.key === memo.sel[era] && playable(i) && TABS.some(([t]) => t === i.tab)) ?? firstOf('battle');
     renderTop();
     if (!loaded) loading.querySelector('.ml-era').textContent = `${NATIONS.find((n) => n.id === era).name} · the batteries drawn up for inspection`;
     if (open) renderDrop();
@@ -794,7 +810,8 @@ export function mountMenu(root = document.getElementById('menu')) {
   const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'rk92' : inHangar());
   const go = () => {
     if (!playable(sel)) return;
-    const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow() });
+    const lesson = guided() ? lessonOf(sel) : null;
+    const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : lesson ? hrefOf(lesson, difficulty, query) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow() });
     // the next battle at a level rolls its modifiers afresh
     if (sel.level) { memo.modSeed = (Math.random() * 1e9) | 0; save(); }
     location.href = href;
@@ -823,9 +840,8 @@ export function mountMenu(root = document.getElementById('menu')) {
     history.replaceState(null, '', url);
   });
   for (const b of $$('[data-tab]')) b.addEventListener('click', () => { toTab(b.dataset.tab); render(); });
-  for (const b of $$('[data-mode]')) b.addEventListener('click', () => { const t = b.dataset.mode; if (open && tab === t) { setOpen(false); return; } toTab(t); render(); setOpen(true); });
+  for (const b of $$('[data-run]')) b.addEventListener('click', () => { if (lessonOf(sel)) { memo.guided[sel.key] = b.dataset.run === 'guided'; save(); render(); } });
   for (const b of $$('[data-d]')) b.addEventListener('click', () => { difficulty = b.dataset.d; save(); render(); });
-  for (const b of $$('[data-lv]')) b.addEventListener('click', () => { level = +b.dataset.lv; save(); render(); });
   $('[data-switch="dev"]').addEventListener('click', () => { career.setDev(!career.dev); render(); });
   $('[data-switch="free"]').addEventListener('click', () => { career.setFree(!career.free); render(); });
   // the career reset: the first click arms it ("Confirm?") for 4 s, the second resets
@@ -866,7 +882,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   $('#mn-play').addEventListener('click', go);
   $('.mn-play2').addEventListener('click', go);
   // a click outside the chooser closes it
-  addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target) && !e.target.closest?.('.mn-modes')) setOpen(false); });
+  addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target)) setOpen(false); });
   // and one outside the bench and the slot bar closes the bench
   addEventListener('pointerdown', (e) => { if (swap && !e.target.closest?.('.hg-bench, .hg-slots')) setSwap(null); });
   // Escape closes the chooser; in it Up and Down walk the list; Enter goes to battle; in the hangar Left and Right
@@ -881,17 +897,26 @@ export function mountMenu(root = document.getElementById('menu')) {
       pick(ks[(k + (e.code === 'ArrowRight' ? 1 : ks.length - 1)) % ks.length]);
       return;
     }
-    if (!open || (e.code !== 'ArrowDown' && e.code !== 'ArrowUp')) return;
-    const rows = items.filter((i) => i.era === era && i.tab === tab && playable(i));
+    if (!open || !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.code)) return;
+    const fwd = e.code === 'ArrowDown' || e.code === 'ArrowRight';
+    if (tab === 'battle') {
+      const open1 = THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n), k = open1.indexOf(levelNow());
+      e.preventDefault();
+      setLevel(open1[Math.max(0, Math.min(open1.length - 1, k + (fwd ? 1 : -1)))], true);
+      return;
+    }
+    const rows = items.filter((i) => NATION_OF[i.era] === era && i.tab === tab && playable(i));
     if (!rows.length) return;
     e.preventDefault();
     const k = rows.indexOf(sel);
-    select(rows[k < 0 ? 0 : (k + (e.code === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length], true);
+    select(rows[k < 0 ? 0 : (k + (fwd ? 1 : rows.length - 1)) % rows.length], true);
   });
 
   // a way back from a game (?sel=) or an old address (?op=, ?campaign=) selects its entry
   items = menuItems(career, read(LESSONS_KEY, {}));
-  const asked = query.get('sel') ? items.find((i) => i.key === query.get('sel')) : query.get('op') || query.get('campaign') ? itemForQuery(query, items) : null;
+  let asked = query.get('sel') ? items.find((i) => i.key === query.get('sel')) : query.get('op') ? itemForQuery(query, items) : null;
+  // (back from a guided first run: its special mission)
+  if (asked?.guideFor) asked = items.find((i) => i.key === asked.guideFor) ?? asked;
   // (an entry in no list, the test range or the WW2 sandbox, selects nothing)
   if (asked && SHOWN.some((n) => n.id === NATION_OF[asked.era])) { era = NATION_OF[asked.era]; if (playable(asked) && TABS.some(([t]) => t === asked.tab)) { sel = asked; memo.sel[era] = asked.key; tab = asked.tab; } }
   render();

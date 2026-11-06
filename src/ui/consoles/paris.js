@@ -15,6 +15,7 @@
 // Shift ten times), Q/E the charge, T the table's corrections, . the last report, Y the barrel change, Tab/Shift+Tab
 // pick a target on ZIELE and L lay on it (or click it on ZIELE or the map).
 import { el, setText, setCls, card, Btn, Bar } from '../widgets.js';
+import { tut } from '../highlight.js';
 import { mmss, commas } from './common.js';
 import { DEG } from '../../sector.js';
 import { nextFall, correction } from '../../ww1/paris.js';
@@ -129,6 +130,8 @@ class ParisDrill {
     this.fault.append(this.fText, fb);
     this.drill = el('div', 'pd-drill');
     this.drill.append(this.key.el, this.now, this.steps, this.fault);
+    // (the lesson's names for the parts it points at: ww1/tutorial.js, the Paris Gun's guided first run)
+    tut(this.el, 'drill'); tut(this.tasks, 'tasks'); tut(this.hurry.el, 'hurry'); tut(this.key.el, 'next'); tut(this.steps, 'steps');
     this.crew = el('div', 'sp-note pd-crew');
     tip(this.crew, 'Crew: men left of the full detachment (fewer men work slower). Gun: its condition. Shells: numbered shells left at the gun. Site: whether the camouflage nets and flak posts are up (they keep the raiders off).');
     this.msg = el('div', 'sp-note pd-msg');
@@ -318,6 +321,7 @@ export class ParisCard {
     // ---- the firing data: in the fire order card's place (console.js `top`)
     const d = card('SCHUSSWERTE', 'firing data for the next round', 'special sp-paris pdata');
     this.top = d.el;
+    tut(this.top, 'data');
     tip(d.head, T_DATA);
     const db = d.body;
     this.tgt = el('div', 'sp-head pd-tgt');
@@ -330,6 +334,7 @@ export class ParisCard {
     tip(this.guide, 'How to aim the gun, and what to do about the newest fall report.');
     db.append(this.tgt, this.ordLine, this.guide, this.elLine);
     this.rCharge = row(db, 'LADUNG', T_CHARGE, 'powder charge');
+    tut(this.rCharge.r, 'charge');
     this.kDec = btn('−', '', () => this.powder(-1), 'Half a kilo less powder (Q; Shift: 5 kg)');
     this.kInc = btn('+', '', () => this.powder(1), 'Half a kilo more powder (E; Shift: 5 kg)');
     ctl(this.rCharge, this.kDec, this.kInc);
@@ -347,6 +352,7 @@ export class ParisCard {
     const dbt = el('div', 'sp-btns');
     this.bTable = btn('TABLE', 'T: lay the table', () => this.order('table'), 'Lay the firing table\'s corrections for today\'s wind and the Earth\'s turning, plus what the fall reports have taught about this barrel (T). Do it after each new Wettermeldung.');
     this.bReport = btn('REPORT', '.: by the last fall', () => this.order('report'), 'Correct the aim by the agents\' last report: moves it back by as much as that round fell over, short, left or right, counted from the data it was fired with (.)');
+    tut(this.bTable.el, 'table'); tut(this.bReport.el, 'reportbtn'); tut(this.guide, 'guide');
     this.bAim = btn('LAY', 'L: on the target', () => this.layCursor(), 'Lay the gun on the target picked on ZIELE (Tab), or on the same one again (L). Or click a target on ZIELE or the map.');
     dbt.append(this.bTable.el, this.bReport.el, this.bAim.el);
     db.append(dbt);
@@ -387,6 +393,7 @@ export class ParisCard {
     const z = card('ZIELE', 'the Armee\'s targets · click, or Tab and L', 'rtab ptgt');
     tip(z.head, T_ZIELE);
     this.aside = z.el;
+    tut(this.aside, 'targets');
     this.tRows = [];
     this.cur = -1; // the Tab cursor (-1: none yet)
   }

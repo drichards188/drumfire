@@ -30,7 +30,7 @@ export const SHELL_KINDS = ['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'fh15', 'm21'
   'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'bertha', 'q25', 'm55', 'rp3', 'bomb', 's76', 's122', 's152', 'v1', 'v2',
   'sfh13', 'm16', 'k17', 'max38', 'gamma', 'paris', 'b18', 'b45', 'fk16', 'cooper',
   // the rest of the German tree (research.js TREES.de)
-  'k16', 'm99', 'beta', 'smw', 'gotha', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40', 'rk92', 'sfh93'];
+  'k16', 'm99', 'beta', 'gotha', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40', 'rk92', 'sfh93'];
 
 // the missiles' builder (another file, may be absent): buildShell('v1' | 'v2') delegates to it
 const MISSILES = import.meta.glob('./v/de/missiles.js', { eager: true });
@@ -205,7 +205,7 @@ const CART = {
   // alone), the trench mortar's charge is a bag dropped down the muzzle, the rockets carry their own propellant
   fk16: { l: 0.23, r: 0.043, brass: true }, k16: { l: 0.6, r: 0.08, brass: true }, m99: { l: 0.24, r: 0.1, brass: false },
   rk92: { l: 0.45, r: 0.075, brass: false }, sfh93: { l: 0.22, r: 0.08, brass: false }, // the old guns' silk cartridge bags
-  beta: { l: 0.4, r: 0.14, brass: false, case: 0.6, cr: 0.155 }, smw: { l: 0.16, r: 0.09, brass: false }, gotha: { l: 0.1, r: 0.02, brass: false },
+  beta: { l: 0.4, r: 0.14, brass: false, case: 0.6, cr: 0.155 }, gotha: { l: 0.1, r: 0.02, brass: false },
   k38: { l: 0.55, r: 0.1, brass: false, case: 0.4, cr: 0.115 }, hm1: { l: 0.5, r: 0.17, brass: false, case: 0.8, cr: 0.19 },
   bruno: { l: 0.6, r: 0.13, brass: false, case: 0.8, cr: 0.15 }, k5: { l: 0.7, r: 0.13, brass: false, case: 1.0, cr: 0.15 },
   k12: { l: 0.8, r: 0.11, brass: false, case: 1.2, cr: 0.13 }, wespe: { l: 0.18, r: 0.062, brass: true }, hummel: { l: 0.27, r: 0.083, brass: true },
@@ -353,24 +353,6 @@ const CUSTOM = {
       { geometry: merge(body), material: M.paint(0x5a5a48) },
       { geometry: merge(tail), material: M.paint(0x5a5a48) },
       { geometry: merge(band), material: M.paint(0x8a1c14) },
-    ], L, R);
-  },
-  // the 25 cm schwerer Minenwerfer's Mine (97 kg, 1916): a stubby drum about 0.75 m, a round nose with its fuze, a flat
-  // base, the two rows of copper studs that ride the rifling
-  smw(seg) {
-    const L = 0.76, R = 0.123, n = Math.max(8, seg);
-    const body = [revolve([[0, 0.0001], [0, R * 0.92], [0.02, R], [0.5, R], [0.58, R * 0.92], [0.66, R * 0.7], [0.71, R * 0.42], [0.73, 0.03]], L, n)];
-    const studs = [];
-    if (seg >= 12) for (const z0 of [0.12, 0.4]) for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + z0;
-      studs.push(new THREE.CylinderGeometry(0.012, 0.012, 0.012, 6).translate(0, R + 0.004, 0).rotateZ(a).translate(0, 0, L / 2 - z0));
-    }
-    studs.push(revolve([[0.25, R + 0.001], [0.27, R + 0.001]], L, n));
-    const fz = [revolve([[0.73, 0.03], [0.75, 0.024], [L, 0.0]], L, 10)];
-    return done([
-      { geometry: merge(body), material: M.paint(0x4f534d) },
-      { geometry: merge(studs), material: M.copper() },
-      { geometry: merge(fz), material: M.brass() },
     ], L, R);
   },
   // the 21 cm Wurfgranate 42 and the 28 cm Wurfkörper Spreng: the rocket launchers' own builders (v/de/rockets.js)

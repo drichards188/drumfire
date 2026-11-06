@@ -39,7 +39,6 @@ export const POST_ROLE = {
   rk92: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
   sfh93: { cmd: 'officer', lay: 'layer', load: 'loader', fire: 'lanyard' },
   beta: { cmd: 'officer', lay: 'layer', load: 'loader2', fire: 'lanyard' },
-  smw: { cmd: 'officer', lay: 'layer', load: 'bomb1', fire: 'lanyard' },
   k38: { cmd: 'officer', lay: 'layer', load: 'loader1', fire: 'lanyard' },
   hm1: { cmd: 'sergeant', lay: 'layer', load: 'loader1', fire: 'lanyard' },
   bruno: { cmd: 'chief', lay: 'layer', load: 'rammer1', fire: 'lanyard' },

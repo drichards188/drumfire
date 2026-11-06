@@ -46,7 +46,7 @@ const POST_IDS = new Set(POSTS.map((p) => p.id));
 // The rest of the German tree (2026-11-01) too, but the Wespe and the Hummel (their move to another position would
 // carry the player off with the gun) and the Wurfgerät (its crates are carried by four men, no one loader's post)
 export const MANNABLE = new Set(['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha',
-  'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'smw', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42']);
+  'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42']);
 // the guns whose laying gear is powered: the Gustav shunted along its curve and elevated by motor, the Karl's
 // hydraulic elevation and traverse. Their rates are slow (minutes from the loading angle to the lay), so the layer
 // starts the drive and it stops itself on the mark. The Gamma and the Langer Max on their beds too: over a minute
@@ -63,8 +63,7 @@ export const STEP_EN = {
 // a launcher's own (the Nebelwerfer's: the loader connects the igniters, the firer fires from cover)
 const STEP_POST_KIND = { nbw41: { prime: 'load' }, nbw42: { prime: 'load' } };
 const STEP_EN_KIND = { nbw41: { open: 'clear the tubes', shell: 'load the six rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' },
-  nbw42: { open: 'clear the tubes', shell: 'load the five rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' },
-  smw: { cartridge: 'put the charge down the muzzle', shell: 'lift the bomb into the muzzle', ram: 'push the bomb home' } };
+  nbw42: { open: 'clear the tubes', shell: 'load the five rockets', prime: 'connect the igniters', cover: 'take the crew into cover at the firing box' } };
 export const stepPost = (kind, step) => STEP_POST_KIND[kind]?.[step] ?? STEP_POST[step] ?? 'load';
 export const stepEn = (kind, step) => STEP_EN_KIND[kind]?.[step] ?? STEP_EN[step] ?? step;
 export const GUNNER_CMDS = new Set(['man', 'post', 'unman', 'assist', 'drive']);

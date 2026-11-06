@@ -206,21 +206,6 @@ export const GUNS_WW1 = {
     crew: 3, hp: 60, recoil: 0, runout: 1, sheaf: 0, disp: { r: 0, l: 0 }, calib: { v: 0, line: 0 }, wearPerRound: 0,
     ammo: { he: 12, shrapnel: 0 }, sig: 0, cd: 0.3, fuzes: ['instant'], metric: true, side: 'german', era: 'ww1', rowStep: 100, launcher: true,
   },
-  smw: {
-    // 25 cm schwerer Minenwerfer n.A. (1916): a short rifled muzzle-loader on its wheeled firing platform in a pit
-    // behind the front trench, 97 kg bomb (47 kg of explosive), about 300 to 1,000 m. The charge goes down the muzzle
-    // first, then the bomb, its studs in the rifling. Fires +45 to +75 degrees (`high`), the bomb slow and visible.
-    // Wire, saps, the trenches opposite and the Sperrfeuer; nothing deeper. Real traverse 20 degrees on the platform (the game gives 50 either way: it covers the trenches opposite).
-    name: '25 cm schwerer Minenwerfer', short: '25 cm sMW', calibre: IN(250), mass: 97, shell: 'smw',
-    charges: [{ name: 'Ladung 1', v: 72 }, { name: 'Ladung 2', v: 88 }, { name: 'Ladung 3', v: 104 }],
-    elMin: D(45), elMax: D(75), restEl: D(50), loadEl: D(45), traverse: D(50), high: true, // (widened for play: the pit's wall)
-    azRate: D(3), elRate: D(3),
-    load: seq(['cartridge', 3], ['shell', 9], ['ram', 3], ['prime', 2], ['lay', 4]),
-    crew: 8, hp: 50, recoil: 0.25, runout: 1.2, sheaf: 30,
-    disp: { r: 0.012, l: 0.009 }, calib: { v: 0.004, line: 0.002 }, wearPerRound: 0.0006,
-    ammo: { he: 70, shrapnel: 0 }, sig: 0.03, cd: 0.382,
-    fuzes: ['instant', 'delay'], metric: true, side: 'german', era: 'ww1', rowStep: 25,
-  },
 };
 
 // Shell effects (the British SHELLS layout). The British shells fired at us: the 18-pounder and 4.5-inch here; the
@@ -238,7 +223,6 @@ export const SHELLS_WW1 = {
   rk92: { calibre: IN(149.1), crater: 3, soft: { R: 28, D: 26 }, hard: { R: 7, D: 12 }, lethal: 24, wire: 18, pieceR: 24 }, // the old 15 cm Granate, 40 kg
   sfh93: { calibre: IN(149.1), crater: 3, soft: { R: 29, D: 27 }, hard: { R: 8, D: 14 }, lethal: 24, wire: 19, pieceR: 24 },
   beta: { calibre: IN(305), crater: 7.5, soft: { R: 56, D: 68 }, hard: { R: 26, D: 100 }, deep: { R: 6, D: 90 }, lethal: 48, wire: 36, pieceR: 55 },
-  smw: { calibre: IN(250), crater: 4.2, soft: { R: 34, D: 40 }, hard: { R: 12, D: 46 }, lethal: 32, wire: 60, pieceR: 32 }, // the big bomb's blast: wire and trenches
   gotha: { calibre: 6, crater: 3.4, soft: { R: 30, D: 38 }, hard: { R: 8, D: 20 }, lethal: 28, wire: 14, pieceR: 30 }, // a Gotha's 100 kg P.u.W. bomb (sim/support.js)
   b18: { calibre: 3.3, crater: 1.5, soft: { R: 14, D: 16 }, lethal: 14, pieceR: 14, enemy: true }, // British 18-pounder
   cooper: { calibre: 2.5, crater: 1.2, soft: { R: 14, D: 22 }, lethal: 12, pieceR: 14, enemy: true }, // a Camel's 25 lb Cooper bomb
@@ -279,7 +263,6 @@ export const FFE_WW1 = {
   rk92: { ...ALL(4), bconvoy: 3, bballoon: 2, mebu: 5, sos: 4 },
   sfh93: { ...ALL(4), btanks: 5, bconvoy: 3, bballoon: 2, mebu: 5, sos: 4 },
   beta: { ...ALL(2), bconvoy: 1, bballoon: 1, mebu: 2 },
-  smw: { ...ALL(3), mebu: 4, sos: 4 },
   // the German career's WW2 batteries on the ridge (src/ww1/ops.js RIDGE_WW2), as their WW2 rows; merged into those
   // (tables.js), so without 'sos', 'hq' and 'railyard', which the WW2 rows give for both battles
   lefh18: { ...BRIT(8), btanks: 10, bdump: 6, bconvoy: 4, bballoon: 4 },

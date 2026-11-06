@@ -29,7 +29,7 @@ const kindArg = opt('--kind', 'all');
 // the ridge's kinds: the 1918 battle's, and the rest of the German tree's (src/ww1/ops.js RIDGE_MORE, fielded by name)
 const MORE = new Set(RIDGE_MORE.map((u) => u.kind));
 const WW1_KINDS = new Set(['k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha', ...MORE]);
-const asked = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl', 'nbw41', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'smw', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42'] : kindArg.split(',');
+const asked = kindArg === 'all' ? ['lefh18', 'sfh18', 'k18', 'mrs18', 'gustav', 'karl', 'nbw41', 'k17', 'sfh13', 'm16', 'max38', 'gamma', 'bertha', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'beta', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'nbw42'] : kindArg.split(',');
 // this process runs one era's guns (--era ww1: the 1918 ones, on the ridge); the 1918 ones asked for with the WW2
 // ones go to a second process, run after this one's
 const ERA1 = args.includes('--era') && opt('--era', 'ww2') === 'ww1';

@@ -404,6 +404,89 @@ for (const st of steps) {
   st.text = (T) => `${typeof base === 'function' ? base(T) : base}\n\nAT THE GUN: ${live(T)}`;
 }
 
+// The Paris Gun's guided first run (its special mission's lesson: menuItems.js GUIDE): the Stellungsbau on its site, then
+// one round through the Feuerablauf, the fall report and the correction it gives. On the scripted range of its own
+// mission (?mode=ww1&op=paris&tutorial=w-paris), with the gun in pieces (`build`: sim lessonBuild, paris.js). No orders,
+// no raids, no faults. Short cards: a line or two each (the menu's few-words rule).
+const ps = (T) => T.u?.special;
+const pStep = (T, id) => ps(T)?.steps?.find((q) => q.id === id)?.state === 'done';
+const pFlight = (T) => ps(T)?.flights?.[0] ?? null;
+const PARIS_LESSON = {
+  id: 'w-paris', op: 'paris', build: true, unit: 1, units: [1],
+  after: { label: 'Play the mission', op: 'paris', mode: 'ww1' }, // (its special mission's guided first run)
+  name: 'Paris Gun: the first round',
+  blurb: 'Build the Paris Gun on its site, then send one shell 120 km and correct by the agents\' report.',
+  outro: 'In the mission the Armee sends orders: rounds on a target before a deadline. The bore wears with every round: about 65, then the barrel must change.',
+  steps: [
+    { id: 'welcome', title: 'The Paris Gun', text: 'The gun arrives in pieces. Build it with three work gangs, then fire one round.', hi: ['drill'] },
+    {
+      id: 'gang', title: 'Put a gang to work', text: 'Each task has + and −. Everything stands on the concrete bed: start there.', goal: 'Put a gang on the bed (+)', hi: ['tasks'],
+      done: (T) => (ps(T)?.tasks.find((t) => t.id === 'bed')?.gangs ?? 0) > 0 || !!ps(T)?.ready,
+      demo: (T) => T.once('g', () => T.act('gang', { task: 'bed', d: 1 })),
+    },
+    {
+      id: 'build', title: 'Build it', text: (T) => `ALL HANDS (J) keeps every gang on the critical path. ] speeds up time. Built: ${ps(T)?.tasks.filter((t) => t.state === 'done').length ?? 0} of ${ps(T)?.tasks.filter((t) => !t.optional).length ?? 0} tasks.`,
+      goal: 'Finish the Stellungsbau', hi: ['hurry', 'timescale'],
+      done: (T) => !!ps(T)?.ready,
+      demo: (T) => { T.once('h', () => T.act('hurry')); T.once('s', () => T.host.setScale(8)); },
+      limit: 1500,
+    },
+    {
+      id: 'start', title: 'The first round', text: 'The big key always does the drill\'s next thing.', goal: 'Press Enter (FIRST ROUND)', hi: ['next'],
+      enter: (T) => { T.host.setScale(1); if (ps(T)?.steps[0].state !== 'done') T.act('powder', { add: -4 }); }, // (the charge off the gauge: one to set)
+      done: (T) => !!ps(T)?.doing || (ps(T)?.i ?? 0) > 0,
+      demo: (T) => { if (ps(T)?.hold === 'start') T.once('go', () => T.act('step')); },
+    },
+    {
+      id: 'gauge', title: 'Set the charge', text: (T) => `Every round wears the bore, so it needs more powder. Set LADUNG to the gauge: ${ps(T)?.charge.need.toFixed(1)} kg.`,
+      goal: 'Match the charge (Q and E)', hi: ['charge'],
+      done: (T) => pStep(T, 'gauge'),
+      demo: (T) => { if (ps(T)?.hold === 'dial') T.once('q', () => T.act('powder', { kg: ps(T).charge.need })); },
+      limit: 300,
+    },
+    {
+      id: 'data', title: 'The firing data', text: 'The Earth turns under a 3-minute flight, and the wind aloft pushes the shell. TABLE (T) lays both.',
+      goal: 'Lay the table (T)', hi: ['table', 'data'],
+      done: (T) => pStep(T, 'data'),
+      demo: (T) => { if (ps(T)?.hold === 'dial') T.once('t', () => T.act('table')); },
+      limit: 300,
+    },
+    {
+      id: 'load', title: 'Load', text: 'Barrel down, the shell up on the crane and rammed, the charges, the breech, barrel up. About two minutes.',
+      goal: 'Wait for the firing key (] speeds up)', hi: ['steps', 'timescale'],
+      done: (T) => ps(T)?.hold === 'fire' || !!pFlight(T),
+      demo: (T) => T.once('s', () => T.host.setScale(8)),
+      limit: 600,
+    },
+    {
+      id: 'fire', title: 'Fire', text: 'Everyone clear of the breech.', goal: 'Press Enter or Space', hi: ['next', 'fire'],
+      enter: (T) => T.host.setScale(1),
+      done: (T) => !!pFlight(T),
+      demo: (T) => { if (ps(T)?.hold === 'fire') T.once('f', () => T.act('step')); },
+    },
+    {
+      id: 'follow', title: 'Ride it', text: 'F follows the shell up and out of the map. F again comes back.', goal: 'Press F', hi: [],
+      done: (T) => T.host.following() || T.sim.time - T.mem.t0 > 20,
+      demo: (T) => T.once('f', () => T.host.follow()),
+    },
+    {
+      id: 'result', title: 'The agents\' report', text: (T) => (pFlight(T)?.state === 'flying' ? 'Agents near the target report where it fell, about two minutes after the shot.' : `${pFlight(T)?.text ?? ''}`),
+      goal: 'Wait for the report (] speeds up)', hi: ['guide', 'timescale'],
+      done: (T) => !!pFlight(T) && pFlight(T).state !== 'flying',
+      demo: (T) => T.once('s', () => T.host.setScale(8)),
+      limit: 900,
+    },
+    {
+      id: 'correct', title: 'Correct', text: (T) => `${pFlight(T)?.result === 'area' ? 'In the area, but it can fall closer.' : 'Off the target.'} REPORT (.) lays the correction for the next round.`,
+      goal: 'Press . (REPORT)', hi: ['reportbtn', 'guide'],
+      enter: (T) => T.host.setScale(1),
+      // (a round within 30 m of the aiming point leaves nothing to correct)
+      done: (T) => { const f = pFlight(T), st = ps(T); return !!f && ((f.miss ?? 0) < 30 || (!!f.corr && (st.corr.line !== f.corr.line || st.corr.range !== f.corr.range))); },
+      demo: (T) => T.once('r', () => T.act('report')),
+    },
+  ],
+};
+
 export const WW1_TUTORIALS = [
   {
     id: 'training', name: 'Basic training', unit: UNIT, units: [UNIT], kinds: [KIND], levels: { [KIND]: LEVELS },
@@ -426,4 +509,5 @@ export const WW1_TUTORIALS = [
     },
     steps,
   },
+  PARIS_LESSON,
 ];

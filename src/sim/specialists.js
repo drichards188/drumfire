@@ -6,13 +6,18 @@
 // the field can serve it, so a lineup without such a battery never sees them; a battery that can and has stood idle
 // brings the next one forward. Their window is long: a heavy gun takes a minute or more a round, and the S.O.S. calls
 // come first. They draw on their own random stream, so the rest of the day runs as it would without them.
+// A third role, 'fort' (the WW1 career's threat levels 6 to 10, ww1/ops.js RIDGE_FORTS): strongpoints in the X-Zeit
+// lanes whose concrete only the super-heavies break (the site's own `minHard`), by day and by night, as many open at
+// once as there are batteries able to serve them, one after another: each left standing costs our assault men.
 import { mulberry32 } from '../noise.js';
 
 export const MIN_HARD = 40; // SHELLS[kind].hard.D that breaks concrete in a few rounds
 const ROLES = {
   deep: { title: (t) => `Deep target: ${t.name}`, hint: 'Beyond the field guns: a task for the long guns. Range on the aeroplane\'s calls, then fire for effect.' },
   hard: { title: (t) => `Heavy target: ${t.name}`, hint: 'Concrete: only heavy shells break it. Delay fuze, and walk the rounds onto it.' },
+  fort: { title: (t) => `Strongpoint: ${t.name}`, hint: 'Concrete in the X-Zeit lane: only 28 cm shells and heavier break it. Left standing, its machine guns fire on our assault.', night: true, many: true, gap: [60, 60], clock: false },
 };
+const minHardOf = (t, role) => t.site?.minHard ?? (role === 'hard' ? MIN_HARD : 0);
 const POINTS = 90, DEADLINE = 1500, IDLE = 90;
 
 export class Specialists {
@@ -21,41 +26,51 @@ export class Specialists {
     this.rng = mulberry32((sim.seed ^ 0x5eed5) >>> 0);
     this.sites = sim.targets.filter((t) => ROLES[t.site?.role]);
     // the first after the registration, then a gap after each one ends (sooner when an able battery is idle)
-    this.next = Object.fromEntries(Object.keys(ROLES).map((r) => [r, 360 + this.rng() * 120]));
+    // (a strongpoint opens at once, without a draw: the stream stays the British and WW2 battles' own)
+    this.next = Object.fromEntries(Object.keys(ROLES).map((r) => [r, ROLES[r].many ? 0 : 360 + this.rng() * 120]));
     this.ended = Object.fromEntries(Object.keys(ROLES).map((r) => [r, -999]));
     this.idle = new Map(); // unit id -> since when it has had no mission
     this.allow = null; // the roles a threat level offers (ww1/director.js), null: every one
   }
 
   probe(t, role) {
-    return { kind: 'destroy', targetId: t.id, x: t.pos.x, z: t.pos.z, alt: 0, minHard: role === 'hard' ? MIN_HARD : 0 };
+    return { kind: 'destroy', targetId: t.id, x: t.pos.x, z: t.pos.z, alt: 0, minHard: minHardOf(t, role) };
   }
 
   update() {
     const sim = this.sim, now = sim.time;
-    if (!this.sites.length || sim.attract || sim.scripted || sim.state !== 'playing' || sim.phase < 2 || sim.night) return;
+    if (!this.sites.length || sim.attract || sim.scripted || sim.state !== 'playing' || sim.phase < 2) return;
+    // (by night only a strongpoint is opened, and nothing is counted without one: the other battles as they were)
+    if (sim.night && !this.sites.some((t) => t.alive && ROLES[t.site.role].night)) return;
     for (const u of sim.units) {
       if (u.alive && u.missionId == null && !u.firing) { if (!this.idle.has(u.id)) this.idle.set(u.id, now); } else this.idle.delete(u.id);
     }
     for (const role of Object.keys(ROLES)) {
-      if (this.allow && !this.allow.has(role)) continue;
-      const open = sim.missions.find((m) => m.role === role && m.state !== 'done' && m.state !== 'failed');
-      if (open) continue;
+      const R = ROLES[role];
+      if ((this.allow && !this.allow.has(role)) || (sim.night && !R.night)) continue;
+      const open = sim.missions.filter((m) => m.role === role && m.state !== 'done' && m.state !== 'failed');
+      if (open.length && !R.many) continue;
       const last = sim.missions.filter((m) => m.role === role).reduce((a, m) => Math.max(a, m.tEnd ?? 0), this.ended[role]);
       if (last > this.ended[role]) {
         this.ended[role] = last;
-        this.next[role] = last + 240 + this.rng() * 180;
+        const [g0, g1] = R.gap ?? [240, 180];
+        this.next[role] = last + g0 + this.rng() * g1;
       }
       // the sites a battery in the field can serve, and whether one that can has stood idle
       const able = new Set();
       let idle = false;
-      const choices = this.sites.filter((t) => t.alive && t.site.role === role && sim.units.some((u) => {
-        if (!u.alive || !sim.crews.canServe(u, this.probe(t, role))) return false;
+      // (a battery that could take it once it has relaid its bed counts: the WW1 crews' canTake)
+      const can = (u, m) => (sim.crews.canTake ? sim.crews.canTake(u, m) : sim.crews.canServe(u, m));
+      const choices = this.sites.filter((t) => t.alive && t.site.role === role && !open.some((m) => m.targetId === t.id) && sim.units.some((u) => {
+        if (!u.alive || !can(u, this.probe(t, role))) return false;
         able.add(u.id);
         if (now - (this.idle.get(u.id) ?? now) > IDLE) idle = true;
         return true;
       }));
-      if (!choices.length || (now < this.next[role] && !(idle && now - this.ended[role] > 120))) continue;
+      if (!choices.length) continue;
+      // (a strongpoint: one open for each battery able to serve them, the first soon after the registration)
+      if (R.many) { if (open.length >= able.size || (open.length && now < this.next[role])) continue; }
+      else if (now < this.next[role] && !(idle && now - this.ended[role] > 120)) continue;
       this.open(choices[Math.floor(this.rng() * choices.length)], role);
     }
   }
@@ -64,7 +79,9 @@ export class Specialists {
     const sim = this.sim, d = sim.director, R = ROLES[role];
     t.known = true;
     // (no aeroplane of ours under a threat level's enemy air superiority: the balloon observes)
-    return d.addMission({ kind: 'destroy', title: R.title(t), targetId: t.id, x: t.pos.x, z: t.pos.z, observer: sim.modifiers?.has('air') ? 'balloon' : 'air',
-      deadline: DEADLINE, priority: 6, hint: R.hint, role, points: POINTS, minHard: role === 'hard' ? MIN_HARD : 0 });
+    // (by night, a map shoot: the strongpoints' concrete is on the air photographs)
+    const observer = sim.night ? 'map' : sim.modifiers?.has('air') ? 'balloon' : 'air';
+    return d.addMission({ kind: 'destroy', title: R.title(t), targetId: t.id, x: t.pos.x, z: t.pos.z, observer,
+      deadline: R.clock === false ? null : DEADLINE, priority: 6, hint: R.hint, role, points: POINTS, minHard: minHardOf(t, role) });
   }
 }

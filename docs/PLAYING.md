@@ -2,7 +2,7 @@
 
 Back to the [README](../README.md).
 
-This page covers the menu, research and the campaigns, every era's units and operations, the special weapons' drills, the Big Bertha demo, every key and the tutorials.
+This page covers the menu, research, every era's units and operations, the special weapons' drills, the Big Bertha demo, every key and the tutorials.
 
 ## The menu
 
@@ -13,18 +13,22 @@ This page covers the menu, research and the campaigns, every era's units and ope
 - **In battle** the guns wear the same camouflage paint, and the radio says when a relief takes a fallen man's place.
 - **Research.** The German tree in its five lines: click a battery to see it, make it the battery to research, or upgrade it. "Preview the full battery" opens it in the hangar at full strength, every gun with its crew, with a way back to Research.
 - **Test range.** "Try on the range" (in the hangar under a battery's figures, and on Research) opens the test range with one gun of that battery; the Battles list no longer has a Test range entry. See [The test range](#the-test-range).
-- **To battle.** Battles, Campaign and Tutorials, the three lists of what to play, sit in the top bar beside To battle; each opens the dropdown on its list and picks its first entry (Tutorials: the first lesson not yet done, marked with a light until the basic training is done). The dropdown holds the lists, the chosen one's orders, and the difficulty (Easy, Normal or Hard). To battle, Enter, or a double-click on an entry plays it; in the dropdown Up and Down walk the list and Esc closes it. The battlefield loads only then, behind a loading screen with the mission's orders. The "Main menu" button in the game goes back, and the end card's Research button goes straight to the Research screen.
+- **Choosing what to play.** One button in the top bar shows what To battle will start; click it to choose. Three tabs, a few words each (details on hover):
+  - **Open battle:** your career's battle. Pick a threat level from the row of ten steps (the one your lineup suits is marked). Under it: the level's name, its length, goal, attacks and pay, and the threats it brings.
+  - **Special missions:** the Paris Gun, Gustav, Karl-Gerät, V-1 and V-2, as picture cards. The first win of each pays research points. Each offers a **guided first run** (its lesson, nothing scored) until you have done it; its end card plays the mission.
+  - **Training:** the basic training (marked with a light until it is done).
+- **Keys.** Enter, To battle or a double-click starts the choice; arrows walk the levels or the cards; Esc closes the chooser. The battlefield loads only then, behind a loading screen with the orders. The game's "Main menu" button comes back, and the end card's Research button goes straight to Research.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
 - **AI crews.** Units you are not operating fight on their own with an AI crew, in whatever mode you left them.
 
-## Research, upgrades and the campaign
+## Research and upgrades
 
 - **Start small.** Germany is one career: you start with the **15 cm Ringkanone C/92**, an old fortress gun, with **one gun** and no upgrades. The open battle of 1918 (the ridge) fields the batteries you have researched, 1918 and WW2 guns together, with the guns and parts they have earned.
 - **Every battle pays**, won or lost: research points (RP) to the battery you are researching, and battery points to each battery for its own fire. Leaving early pays what was earned so far.
-- **Research.** The Research screen (top bar) shows the tree in seven lines (field artillery, long-range guns, railway guns, mortars, siege guns, trench mortars and rockets, off-map support), each running from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order; the first of every line is open from the start. Click a battery, then "Research this battery": every battle's RP go to it until it is done, and the rest goes on to the next one in its line. See docs/PROGRESSION.md for the lines and costs.
+- **Research.** The Research screen (top bar) shows the tree in seven lines (field artillery, long-range guns, railway guns, mortars, siege guns, rockets, off-map support), each running from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order; the first of every line is open from the start. Click a battery, then "Research this battery": every battle's RP go to it until it is done, and the rest goes on to the next one in its line. See docs/PROGRESSION.md for the lines and costs.
 - **Your lineup.** At most 5 batteries on the map and 1 off-map support take the field: swap them in the hangar's slot bar, or "Leave out of battle" beside the battery. Dev mode opens every battery to the lineup but keeps the 5 slots.
-- **Threat levels.** The career's open battle is played at a level from 1 to 10, picked in the battle chooser; all ten are open from the start. See docs/PROGRESSION.md.
+- **Threat levels.** The career's open battle is played at a level from 1 to 10, picked in the battle chooser; all ten are open from the start. From level 6, concrete strongpoints stand in the lanes of our X-Zeit assault that only a super-heavy (28 cm and up) can break: bring one. See docs/PROGRESSION.md.
 - **Off-map support.** The Gotha strike, the V-1, the V-2 and the Paris Gun fight in the open battle from off the map. Their tiles sit under the battery tabs, marked OFF-MAP SUPPORT. Click a ready tile, then click the board where it is to fall (a point, or a target's symbol). It prepares (PREP), flies (AIR) and strikes in its own time, then reloads for a long time (RLD; about 9 to 13 minutes, less with its breech and relief crews upgraded).
   - **Changing or stopping it.** Click a preparing tile, then the board, to give it a new point; its × stands it down with no reload.
   - **On the board.** Each weapon's aim shows as a ring two spreads across with its countdown, and the last strike stays marked for a minute and a half.
@@ -33,30 +37,15 @@ This page covers the menu, research and the campaigns, every era's units and ope
 - **Upgrades.** In the hangar's modifications panel (or on the Research screen), a researched battery spends its own points on more guns (up to its full battery) and on seven parts with three levels each: shells (damage), barrel (accuracy), breech and loading gear (reload), sights and survey (first round and laying), camouflage (less for the enemy to locate), ammunition supply, and relief crews (more men at each gun to take turns at the heavy work: reserves against casualties, and a little faster loading). Any order.
 - **The enemy follows your strength.** A small lineup meets less counter-battery fire and smaller attacks.
 - **Heavy and long guns' missions.** "Deep target" missions stand beyond every gun's reach but the long guns' (the 18-inch railway gun; the K 18 and the Gustav). "Heavy target" missions are concrete shelters only heavy shells break (the 9.2-inch and up; the Mörser 18, the Karl and the Gustav). They come by day, one of each at a time, only when you field a battery that can take them.
-- **Campaign missions** are one-off challenges in any order: each loans its battery, with every earlier battery of its era beside it on auto, each with its own target under counter-battery fire. Finish every assignment with the right fuze and enough rounds before the time runs out (a V-1 or V-2 launch counts within 1 degree and 1 % of range, with no oxygen shortfall). The first win pays an RP bonus; it does not grant the battery.
-- **Always open.** The WW2 Gustav, Karl-Gerät, V-1 and V-2 operations and every lesson are open from the start, with their whole roster.
+- **Special missions** pay research points once, on their first win (half the weapon's research cost, 500 at least). The old campaign missions are out of the menu since 2026-11-02.
+- **Always open.** The special missions and the training are open from the start, with their whole roster.
 - **Saving.** Progress is saved in the browser, with a backup copy the game puts back if the browser's storage was wiped (on itch.io every game shares one storage space). **Export save** at the foot of the Hangar and Research screens downloads your career as a small file; **Import save** loads one back. Keep a file to carry the career to another browser or computer, or to recover it after clearing your browser data.
 - **WW1 German** has no career: every battery is yours from the start.
 - **Dev mode.** A switch in the top right corner of the menu bar puts every battery in the open battles, researched and fully upgraded, for testing. It is off by default; your own career still earns underneath and the hangar and the Research screen show it.
 - **Unlimited points.** The switch under it makes research and modifications cost nothing (the tree order still holds), for testing. Off by default; the points you earn keep adding up underneath.
-- **Reset.** The red button beside the switches starts a new career: research, upgrades, points, battles and campaign wins back to nothing. Click it, then click "Confirm?" within 4 seconds. The switches stay as they are.
+- **Reset.** The red button beside the switches starts a new career: research, upgrades, points, battles and special-mission wins back to nothing. Click it, then click "Confirm?" within 4 seconds. The switches stay as they are.
 
 Details, costs and numbers: [PROGRESSION.md](PROGRESSION.md).
-
-| Era | Mission | Battery on loan |
-|---|---|---|
-| 1917 | 01 Beyond the howitzers | 60-pounders |
-| 1917 | 02 Crack the pillboxes | 9.2-inch howitzers |
-| 1917 | 03 The buried command post | 15-inch howitzer |
-| 1917 | 04 The distant command centre | 18-inch railway gun |
-| WW2 | 01 Break the supply position | 15 cm sFH 18 |
-| WW2 | 02 A storm over the assembly area | Nebelwerfer 41 |
-| WW2 | 03 Reach their heavy guns | 17 cm K 18 |
-| WW2 | 04 Over the parapet | 21 cm Mörser 18 |
-| WW2 | 05 Into firing position | Karl-Gerät |
-| WW2 | 06 Under the rock (WIP) | Schwerer Gustav (it starts assembled in every campaign mission) |
-| WW2 | 07 Prepare the launch corridor | V-1 catapult |
-| WW2 | 08 The mobile launch operation | V-2 firing table |
 
 ## The test range
 
@@ -204,9 +193,9 @@ The battle's roster, smallest calibre first (keys 1 to 6):
 6. the 42 cm Gamma-Mörser (fixed on its bed, set up and ready)
 
 - **The beds.** Bertha, the Gamma and the Beta-Gerät turn only 11.5, 23 and 30 degrees either way on their beds. For a target beyond, press T (or BETTUNG UMLEGEN on the guns card) to relay the bed onto its line.
-- **The rest of the tree.** A career's lineup can also bring the Ringkanone C/92 (the career's first battery), the FK 16, the sFH 93, the K 16, the Mörser 99, the Beta-Gerät and the schwerer Minenwerfer of 1914 to 1918, and the WW2 K 38, 35.5 cm H M1, Kurze Bruno, K5, K 12, Wespe, Hummel, Nebelwerfer 42 and schweres Wurfgerät 40. Each stands in its own place on the ridge:
+- **The rest of the tree.** A career's lineup can also bring the Ringkanone C/92 (the career's first battery), the FK 16, the sFH 93, the K 16, the Mörser 99 and the Beta-Gerät of 1914 to 1918, and the WW2 K 38, 35.5 cm H M1, Kurze Bruno, K5, K 12, Wespe, Hummel, Nebelwerfer 42 and schweres Wurfgerät 40. Each stands in its own place on the ridge:
   - **Ringkanone C/92, sFH 93 and Mörser 99.** No recoil system: at every shot the gun runs up two ramps behind its wheels and rolls back down by its own weight, a little off its line. The crew levers it back with handspikes and lays it again, so every round lands like a ranging round.
-  - **Minenwerfer and Wurfgerät.** Dug in just behind our front trench, a kilometre and two of reach. With either in the lineup, British forward posts (Lewis guns and a Stokes mortar) appear opposite as targets.
+  - **Wurfgerät.** Dug in just behind our front trench, two kilometres of reach. With it in the lineup, British forward posts (Lewis guns and a Stokes mortar) appear opposite as targets.
   - **Railway guns.** The Kurze Bruno and the K 12 lay for line by shunting along their curved spurs; the K5 turns on its turntable to any bearing. All of them turn slowly: a target across the map costs minutes.
   - **Wespe and Hummel.** Self-propelled: press T (or STELLUNGSWECHSEL on the guns card) to drive to the other position. The enemy loses the battery on the way, but it cannot fire for a couple of minutes and has to range again. On auto the crew moves by itself once it is found.
 - **The day** runs like the WW2 Flanders battle: Einschießen at dawn, the Artilleriekampf, the British attack (Sperrfeuer, S), night and Störungsfeuer.
@@ -348,12 +337,12 @@ No longer in the menu (its drill is the main game's gunner now); the page `/bert
 
 ## Tutorials
 
-- **Where.** The menu's Tutorials tab holds short guided lessons on a quiet scripted range, always in daylight: the sun is held at 10:00 and the weather is Clear or Overcast; your own settings come back when you leave.
+- **Where.** The menu's Training tab holds the basic training; each special mission's guided first run is its own lesson. Both run on a quiet scripted range, always in daylight: the sun is held at 10:00 and the weather is Clear or Overcast; your own settings come back when you leave.
 - **How.** Each lesson shows an instruction card over the 3D view, pulses the console controls it is about, and completes a step when you have done what it asks. Skip step and Esc are always there (the basic training has no Skip step: Exit tutorial and Esc leave it).
-- **First launch.** A new player's first menu offers the basic training once (Start basic training, or Not now); it stays in the Tutorials list either way.
+- **First launch.** The menu offers the basic training each time it loads until you finish the lesson or click Stop reminding me (Not now only closes it for now); it stays in the Training tab either way.
 - **Always open.** Lessons are open whatever you have researched, and completed ones are ticked (stored in the browser).
 
-**1917 British**, six lessons (`/?tutorial=basics|ranging|clockcode|heavy|counter|sos`):
+**1917 British** (hidden with the British game), six lessons (`/?tutorial=basics|ranging|clockcode|heavy|counter|sos`):
 
 - **The basics:** the screen, five units, camera, console, time compression; watch the 15-inch load, fire and ride its shell with F.
 - **Ranging with the F.O.O.:** the 6-inch battery: take a mission, ranging round, telephone report, corrections, bracketing, fire for effect.
@@ -362,15 +351,14 @@ No longer in the menu (its drill is the main game's gunner now); the page `/bert
 - **Counter-battery:** German fire walks onto you; HOLD; the 60-pounders on the sound rangers' reference.
 - **S.O.S.:** red rockets, every gun on the line, shrapnel, break the attack.
 
-**WW2 German**, five lessons on the special weapons (`/?mode=ww2&tutorial=w-werfer|w-gustav|w-karl|w-v1|w-v2`; a lesson on another operation reloads the page there; the basic training below teaches the drill they share):
+**WW2 German**, the special missions' guided first runs (`/?mode=ww2&tutorial=w-gustav|w-karl|w-v1|w-v2`; the basic training below teaches the drill they share). The Nebelwerfer lesson (`w-werfer`) is out of the menu: in the open battle it is worked like any other battery.
 
-- **Der Nebelwerfer**
 - **Gustav: railway preparation**
 - **Karl-Gerät**
 - **V-1: the launch drill**
 - **V-2: the A4 drill**
 
-**WW1 German**, the career's ridge (`/?mode=ww1&tutorial=training`), listed first:
+**WW1 German:** the Paris Gun's guided first run (`/?mode=ww1&op=paris&tutorial=w-paris`): build the gun with the work gangs (the bed first, ALL HANDS), then one round through the drill (set the charge to the gauge, lay the table, load, fire), ride it, read the agents' report and lay its correction (REPORT). And the basic training on the career's ridge (`/?mode=ww1&tutorial=training`), the Training tab:
 
 - **Basic training:** with a borrowed battery of two 21 cm Mörser 18, every upgrade fitted. The console, one section at a time, then a call: watch No. 1 gun lay and load, fire a ranging round, ride the shell, read the VB's report, correct, bracket, fire for effect, then a gun in person: man it (P), lay and fire, read back a corrected command at post 1, then work every post for the next round (barrel down, load, prime, lay, fire), crew help (C), leave (P). The screen is dark but for what each step is about, and every step waits until you have done it. When it ends, To battle opens the career's battle with your own guns.
 

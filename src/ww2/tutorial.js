@@ -71,7 +71,8 @@ export const WW2_TUTORIALS = [
     ],
   },
   {
-    id: 'w-gustav', op: 'sevastopol', name: 'Gustav: railway preparation', unit: 1, units: [1, 2],
+    id: 'w-gustav', op: 'sevastopol', after: { label: 'Play the mission', op: 'sevastopol' }, // (its special mission's guided first run: menuItems.js GUIDE)
+    name: 'Gustav: railway preparation', unit: 1, units: [1, 2],
     blurb: 'Build the 80 cm Gustav on its firing curve with the work gangs and the gantry cranes, then fire a 4.8 t shell at Fort Stalin.',
     outro: 'The Gustav has only a handful of shells. Spend each one on the hardest target in reach, with the delay fuze.',
     steps: [
@@ -106,7 +107,8 @@ export const WW2_TUTORIALS = [
     ],
   },
   {
-    id: 'w-karl', op: 'karl', name: 'Karl-Gerät', unit: 1, units: [1, 2],
+    id: 'w-karl', op: 'karl', after: { label: 'Play the mission', op: 'karl' }, // (its special mission's guided first run: menuItems.js GUIDE)
+    name: 'Karl-Gerät', unit: 1, units: [1, 2],
     blurb: 'Drive the 124 t mortar into a firing position, turn the whole vehicle onto the target, lower the hull and fire a 2.2 t shell at the Terespol gate.',
     outro: 'The Karl must be emplaced, turned and lowered for every new line, and its carrier brings four shells a trip. Displace when the fortress guns find you.',
     steps: [
@@ -145,7 +147,8 @@ export const WW2_TUTORIALS = [
     ],
   },
   {
-    id: 'w-v1', op: 'v1', name: 'V-1: the launch drill', unit: 1, units: [1],
+    id: 'w-v1', op: 'v1', after: { label: 'Play the mission', op: 'v1' }, // (its special mission's guided first run: menuItems.js GUIDE)
+    name: 'V-1: the launch drill', unit: 1, units: [1],
     blurb: 'Prepare a flying bomb at its Walter ramp: compass, air log, fuel, the steam generator, and the catapult.',
     outro: 'The crew works the drill; you set it, decide its faults, take cover from the bombers and fire. The game scores the drill and whether the missile reached the target area.',
     steps: [
@@ -164,7 +167,8 @@ export const WW2_TUTORIALS = [
     ],
   },
   {
-    id: 'w-v2', op: 'v2', name: 'V-2: the A4 drill', unit: 1, units: [1],
+    id: 'w-v2', op: 'v2', after: { label: 'Play the mission', op: 'v2' }, // (its special mission's guided first run: menuItems.js GUIDE)
+    name: 'V-2: the A4 drill', unit: 1, units: [1],
     blurb: 'Erect the A4 on its firing table, align it, set the cut-off, fuel it (the liquid oxygen boils away) and launch.',
     outro: 'Nothing can stop the A4 in flight; all the crew can do is make it hit. Mind the oxygen: below 92% the rocket falls short.',
     steps: [

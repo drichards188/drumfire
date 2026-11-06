@@ -16,14 +16,15 @@ import { autoCharge } from './sim/shells.js';
 import { partLayout } from './models/t/layout.js';
 import { modsOf, levelOf, maxGuns, maxedLevels, isOffmap } from './research.js';
 import { OPS } from './ww1/ops.js';
-import { RIDGE_WW2, RIDGE_MORE, RIDGE_ROLE_SITES } from './ww1/ops.js';
+import { RIDGE_WW2, RIDGE_MORE, RIDGE_ROLE_SITES, RIDGE_FORTS } from './ww1/ops.js';
+import { MIN_HARD } from './sim/specialists.js';
 import { THREAT } from './threat.js';
 
 // the kinds of site (threat.js `sites`) by target kind; a role site (sim/specialists.js) is its role's
 export const TIER = { bpost: 'soft', bfield: 'soft', bdump: 'soft', bconvoy: 'soft', railyard: 'soft', hq: 'soft', bballoon: 'soft', btanks: 'armour',
   bgun15: 'heavy', bgun92: 'heavy', bgun6: 'heavy', bgun60: 'heavy', bgunrail: 'heavy', mebu: 'hard' };
 export const tierOf = (t) => t?.site?.role ?? t?.role ?? TIER[t?.kind] ?? 'soft';
-export const TIERS = ['soft', 'armour', 'heavy', 'deep', 'hard'];
+export const TIERS = ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'];
 // a mission's time (ww1/director.js siteMission's deadlines) and what finishes it
 const DEADLINE = { btanks: 650, bdump: 800, hq: 800, bconvoy: 150, railyard: 260, mebu: 1500 };
 const deadlineOf = (kind, role) => (role ? 1500 : DEADLINE[kind] ?? 700);
@@ -66,13 +67,16 @@ function perRound(kind, mods, tKind, D, aimPart = null) {
 export function batteryVerdict(b, site, { deadlineK = 1 } = {}) {
   const g = GUNS[b.kind];
   if (!g || isOffmap(b.kind)) return { verdict: 'no', rounds: Infinity, time: Infinity };
+  // concrete a lighter shell does not touch (a strongpoint's own floor, a heavy target's MIN_HARD: the crews' rule)
+  const floor = site.minHard ?? (site.role === 'hard' ? MIN_HARD : 0);
+  if (floor && (SHELLS[g.shell ?? b.kind]?.hard?.D ?? 0) < floor) return { verdict: 'no', rounds: Infinity, time: Infinity };
   const D = Math.hypot(site.pos.x - b.pos.x, site.pos.z - b.pos.z);
   if (autoCharge(b.kind, D) < 0) return { verdict: 'no', rounds: Infinity, time: Infinity, reach: false };
   const T = TARGETS[site.kind], n = partLayout(site.kind).length;
   const e = perRound(b.kind, b.mods, site.kind, D, site.kind === 'btanks');
   if (!(e > 0)) return { verdict: 'no', rounds: Infinity, time: Infinity };
   // (the parts knocked out stop taking damage, the rounds that overkill a part are lost: half again)
-  const rounds = ((needOf(site.kind, n) * T.partHp) / e) * 1.5;
+  const rounds = ((needOf(site.kind, n) * (site.partHp ?? T.partHp)) / e) * 1.5;
   const cycle = g.load.reduce((a, s) => a + s.dur, 0) * (b.mods.load ?? 1) + 2;
   const time = RANGING + (rounds * cycle) / Math.max(1, b.guns);
   const dl = deadlineOf(site.kind, site.role) * deadlineK, ammo = g.ammo.he * b.guns * (b.mods.ammo ?? 1);
@@ -92,8 +96,8 @@ export function siteVerdict(batteries, site, opts) {
 const PITS = Object.fromEntries([...OPS.ridge.units, ...RIDGE_WW2, ...RIDGE_MORE].map((u) => [u.kind, u.pos]));
 export const batteriesOf = (levelsByKind) => Object.entries(levelsByKind).filter(([k]) => PITS[k] && !isOffmap(k))
   .map(([kind, l]) => ({ kind, guns: Math.min(maxGuns(kind), levelOf(l, 'guns')), mods: modsOf(l), pos: PITS[kind] }));
-// the ridge's sites by kind of site (the 1918 battle's, and the career's role sites)
-const SITES = [...OPS.ridge.sites, ...RIDGE_ROLE_SITES].map((s) => ({ id: s.id, kind: s.kind, pos: s.pos, role: s.role ?? null }));
+// the ridge's sites by kind of site (the 1918 battle's, and the career's role sites and strongpoints)
+const SITES = [...OPS.ridge.sites, ...RIDGE_ROLE_SITES, ...RIDGE_FORTS].map((s) => ({ id: s.id, kind: s.kind, pos: s.pos, role: s.role ?? null, minHard: s.minHard, partHp: s.partHp }));
 export const sitesOf = (tier) => SITES.filter((s) => tierOf(s) === tier);
 
 // every kind of site's verdict for a lineup: { soft, armour, heavy, deep, hard } ('ready', 'slow' or 'no'), from the
@@ -110,7 +114,7 @@ export function capabilities(levelsByKind, opts) {
 
 // the lineup's weight in the Sperrfeuer and the Feuerwalze: the soft damage its field guns can put down a minute
 // (the super-heavies, the mortars' few shells and the off-map weapons apart, as the levels' crews fire them)
-const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'smw', 'wespe', 'hummel', 'nbw42', 'swg40']);
+const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'wespe', 'hummel', 'nbw42', 'swg40']);
 export function firepower(levelsByKind) {
   let f = 0;
   for (const b of batteriesOf(levelsByKind)) {
@@ -130,19 +134,23 @@ const MAX = (kind) => [kind, maxedLevels(kind)];
 export const REFERENCE = {
   1: Object.fromEntries([B('rk92', 1)]), // (the career's first battery since 2026-11-01; the K 17 before)
   2: Object.fromEntries([B('rk92', 2)]),
-  3: Object.fromEntries([B('k17', 2), B('sfh13', 2)]),
+  3: Object.fromEntries([B('rk92', 2), B('fk16', 4)]),
   4: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4), B('m16', 1)]),
   5: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4, 1), B('lefh18', 4), B('m16', 2)]),
   6: Object.fromEntries([B('k18', 2, 1), B('sfh13', 4, 1), B('lefh18', 4, 1), B('m16', 2, 1), B('max38', 1)]),
   7: Object.fromEntries([B('k18', 2, 1), B('sfh18', 4, 2), B('sfh13', 4, 2), B('lefh18', 4, 1), B('gamma', 1, 1)]),
-  8: Object.fromEntries([B('k18', 2, 2), B('sfh18', 4, 2), B('sfh13', 4, 2), B('lefh18', 4, 2), B('mrs18', 2, 2), B('v1', 1)]),
-  9: Object.fromEntries([B('k18', 2, 3), B('sfh18', 4, 3), B('sfh13', 4, 2), B('lefh18', 4, 3), B('mrs18', 2, 2), B('v2', 1, 1)]),
-  10: Object.fromEntries([MAX('k18'), MAX('sfh18'), MAX('sfh13'), MAX('lefh18'), MAX('mrs18'), MAX('v2')]),
+  // (from level 6 a super-heavy for the strongpoints, ops.js RIDGE_FORTS, in one of the five slots)
+  8: Object.fromEntries([B('k18', 2, 2), B('sfh18', 4, 2), B('lefh18', 4, 2), B('mrs18', 2, 2), B('beta', 1, 2), B('v1', 1)]),
+  9: Object.fromEntries([B('k18', 2, 3), B('sfh18', 4, 3), B('lefh18', 4, 3), B('mrs18', 2, 2), B('gamma', 1, 2), B('v2', 1, 1)]),
+  10: Object.fromEntries([MAX('k38'), MAX('sfh18'), MAX('hummel'), MAX('lefh18'), MAX('gamma'), MAX('v2')]),
 };
 
 // the highest level the lineup can carry: every kind of site the level asks for at least 'slow', and the field guns'
 // weight at least the level's reference lineup's (1 at the least)
-const FP = Object.fromEntries(Object.entries(REFERENCE).map(([n, l]) => [n, firepower(l)]));
+// (each level's bar the lowest of its own and every level's above it: from level 6 a super-heavy takes a field battery's
+// slot, so a reference can carry a little less weight than the one below it)
+const FP0 = Object.fromEntries(Object.entries(REFERENCE).map(([n, l]) => [n, firepower(l)]));
+const FP = Object.fromEntries(Object.keys(FP0).map((n) => [n, Math.min(...Object.entries(FP0).filter(([m]) => +m >= +n).map(([, f]) => f))]));
 export function recommendedLevel(levelsByKind) {
   const cap = capabilities(levelsByKind), f = firepower(levelsByKind);
   let best = 1;

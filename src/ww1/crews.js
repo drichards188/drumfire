@@ -9,7 +9,7 @@
 // beside the sFH 13, the K 18 beside the K 17, the Mörser 18 beside the 21 cm Mörser, the Nebelwerfer on the
 // batteries, the tanks and the traffic, the Gustav and the Karl with the super-heavies (the Karl turns its hull onto
 // a target, as in the WW2 mode).
-import { TARGETS } from '../sim/tables.js';
+import { TARGETS, SHELLS } from '../sim/tables.js';
 import { Crews } from '../sim/crews.js';
 import { autoCharge } from '../sim/shells.js';
 import { bearingOf } from '../sector.js';
@@ -17,7 +17,7 @@ import { FEUERWALZE, walzeMargin } from './director.js';
 
 export const SUPER = new Set(['bertha', 'gamma', 'max38', 'gustav', 'karl', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
 const HEAVY = new Set(['m16', 'bertha', 'gamma', 'max38', 'mrs18', 'gustav', 'karl', 'm99', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
-const BIG = new Set(['bgun15', 'bgun92', 'bgunrail', 'bgun6', 'hq', 'railyard', 'bdump', 'btanks', 'mebu']);
+const BIG = new Set(['bgun15', 'bgun92', 'bgunrail', 'bgun6', 'hq', 'railyard', 'bdump', 'btanks', 'mebu', 'bunker']); // (bunker: a level's strongpoint, ops.js RIDGE_FORTS)
 const LONG = new Set(['k17', 'k18', 'k16', 'k38', 'rk92']); // the long guns: counter-battery, the rear, the traffic
 const RAIL = new Set(['max38', 'gustav', 'bruno', 'k5', 'k12']); // the railway guns: the railhead and the HQ first
 const ROCKETS = new Set(['nbw41', 'nbw42', 'swg40']); // ripples that drench an area: batteries, tanks, traffic
@@ -46,6 +46,15 @@ export class CrewsWW1 extends Crews {
     if (u.kind !== 'karl') return super.canServe(u, m);
     if (!this.suits(u, m)) return false;
     return autoCharge(u.kind, Math.hypot(m.x - u.pos.x, m.z - u.pos.z)) >= 0 || u.special?.stage === 'travel';
+  }
+
+  // a mission the battery could take after relaying its bed (Bertha's and the Gamma's, special.js BedCtl): in reach,
+  // its shell heavy enough, whatever the bed's present line (sim/specialists.js asks this before it opens one)
+  canTake(u, m) {
+    if (this.canServe(u, m)) return true;
+    if (!u.special?.bed || !this.suits(u, m) || !u.pieces.some((q) => q.state !== 'dead')) return false;
+    if (m.minHard && (SHELLS[u.kind]?.hard?.D ?? 0) < m.minHard) return false;
+    return autoCharge(u.kind, Math.hypot(m.x - u.pos.x, m.z - u.pos.z)) >= 0;
   }
 
   // the Karl driving, turning or lowering: the crew waits for it rather than giving the task up
@@ -119,15 +128,22 @@ export class CrewsWW1 extends Crews {
     if (k === 'bconvoy') s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' || u.kind === 'wespe' ? 8 : -4;
     if (k === 'bballoon') s += 20;
     if (k === 'bfield') s += FIELD.has(u.kind) || ROCKETS.has(u.kind) ? 8 : SUPER.has(u.kind) ? -20 : 0;
-    if (k === 'mebu' || k === 'bpost') s += u.kind === 'smw' || u.kind === 'swg40' ? 14 : 0; // (the posts and pillboxes opposite: the trench mortars' work)
+    if (k === 'mebu' || k === 'bpost') s += u.kind === 'swg40' ? 14 : 0; // (the posts and pillboxes opposite: the Wurfgerät's work)
     if (m.kind === 'barrage') s += FIELD.has(u.kind) ? 8 : 4;
     if (m.role) s += 10; // a deep or heavy target (sim/specialists.js): only the guns made for it can serve it
+    if (m.role === 'fort') s += 30; // (a strongpoint in the X-Zeit lanes: our assault pays for each left standing, so before their heavies)
     return s;
   }
 
   pick(u, ai) {
-    super.pick(u, ai);
     const sim = this.sim, bed = u.special?.bed;
+    // a strongpoint beyond the bed's arc comes before anything inside it: relay the bed onto it first
+    if (bed && !ai.m && !u.gate && u.mode === 'auto' && bed.state !== 'moving') {
+      const p = u.pieces.find((q) => q.state !== 'dead');
+      const fort = p && sim.missions.find((m) => m.role === 'fort' && m.state !== 'done' && m.state !== 'failed' && !m.units.length && !this.canServe(u, m) && this.canTake(u, m));
+      if (fort && sim.special?.of(u)?.rebed(bearingOf(fort.x - u.pos.x, fort.z - u.pos.z), true)) return;
+    }
+    super.pick(u, ai);
     if (!bed || ai.m || u.gate || u.mode !== 'auto' || sim.time < (ai.bedAt ?? 0)) return;
     ai.bedAt = sim.time + 30;
     const p = u.pieces.find((q) => q.state !== 'dead');
@@ -135,7 +151,8 @@ export class CrewsWW1 extends Crews {
     let best = null, bs = -1e9;
     for (const m of sim.missions) {
       if (m.state !== 'open' || m.kind === 'sos' || m.kind === 'barrage' || m.units.length) continue;
-      if (!this.suits(u, m) || m.deadline - sim.time < bed.dur + 180) continue;
+      if (!this.suits(u, m) || (m.deadline != null && m.deadline - sim.time < bed.dur + 180)) continue; // (a strongpoint has no clock)
+      if (m.minHard && (SHELLS[u.kind]?.hard?.D ?? 0) < m.minHard) continue;
       const b = bearingOf(m.x - u.pos.x, m.z - u.pos.z);
       if (Math.abs(Math.atan2(Math.sin(p.bearing - b), Math.cos(p.bearing - b))) <= u.arc) continue;
       if (autoCharge(u.kind, Math.hypot(m.x - u.pos.x, m.z - u.pos.z)) < 0) continue;

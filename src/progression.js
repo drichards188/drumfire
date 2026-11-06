@@ -1,5 +1,5 @@
 import { BATTERIES, CAMPAIGN, missionById } from './campaign-data.js';
-import { TREES, TREE_OF, nodeOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, PARTS, isOffmap } from './research.js';
+import { TREES, TREE_OF, nodeOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
 import { SLOTS, MAX_LEVEL } from './threat.js';
 export { BATTERIES };
 // v4: one German tree and a research target (research.js); the saves before it are not carried over (a new career)
@@ -10,6 +10,9 @@ const LEVEL_KEYS = ['guns', ...PARTS.map((p) => p.id)];
 const treeOf = (era) => TREE_OF[era] ?? era;
 // the starting batteries of the saves written before `start` was saved (they owned these without researching them)
 const OLD_START = ['k17'];
+// batteries taken out of the game, with what their research cost (a save's RP in them are given back): the 25 cm
+// schwerer Minenwerfer (2026-11-02: its kilometre's reach left it almost nothing to do on the ridge)
+const REMOVED = { smw: { tree: 'de', cost: 300 } };
 const START = 2; // the saves' mark: careers begun with the C/92 (an older save has none)
 
 // The career, per tree: the research points put into each battery (`progress`), the battery the battles' RP go to
@@ -21,6 +24,7 @@ export class Progression {
   constructor(storage) {
     this.storage = storage;
     this.completed = new Set();
+    this.specials = new Set(); // the special missions won (menuItems.js keys: op:v2, ww1:paris); the first win pays
     this.rp = Object.fromEntries(Object.keys(TREES).map((e) => [e, 0]));
     this.target = Object.fromEntries(Object.keys(TREES).map((e) => [e, null]));
     this.progress = {};
@@ -37,10 +41,16 @@ export class Progression {
     try {
       const data = JSON.parse(storage?.getItem(SAVE_KEY) || 'null');
       for (const m of CAMPAIGN) if (Array.isArray(data?.completed) && data.completed.includes(m.id)) this.completed.add(m.id);
+      for (const k of data?.specials ?? []) if (typeof k === 'string') this.specials.add(k);
       for (const k of data?.researched ?? []) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
       // a career begun before the Ringkanone C/92 headed the guns' line (2026-11-01) started with the K 17: it keeps it
       if (data && !data.start) for (const k of OLD_START) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
       for (const e of Object.keys(this.rp)) this.rp[e] = Math.max(0, Math.round(+data?.rp?.[e] || 0));
+      // a battery taken out of the game (REMOVED): the RP put into it come back (its battery points go with it)
+      for (const [k, { tree, cost }] of Object.entries(REMOVED)) {
+        const put = data?.researched?.includes(k) ? cost : Math.min(cost, +data?.progress?.[k] || 0);
+        if (put > 0 && tree in this.rp) this.rp[tree] += Math.round(put);
+      }
       for (const [k, v] of Object.entries(data?.progress ?? {})) if (nodeOf(k)) this.progress[k] = Math.max(0, Math.round(+v || 0));
       for (const e of Object.keys(this.target)) if (nodeOf(data?.target?.[e]) && eraOfKind(data.target[e]) === e) this.target[e] = data.target[e];
       for (const [k, v] of Object.entries(data?.bp ?? {})) if (nodeOf(k)) this.bp[k] = Math.max(0, Math.round(+v || 0));
@@ -283,11 +293,20 @@ export class Progression {
     this.addRP(m.era, bonus);
     return bonus;
   }
+  // a special mission won (its menu key and its weapon): the first win pays half the weapon's research cost to the
+  // German tree's research target; 0 when it was won before
+  completeSpecial(key, kind) {
+    if (!key || this.specials.has(key)) return 0;
+    this.specials.add(key);
+    const bonus = specialBonus(kind);
+    this.addRP('de', bonus);
+    return bonus;
+  }
 
   save() {
     try {
       if (!this.storage) throw new Error('Storage unavailable');
-      this.storage.setItem(SAVE_KEY, JSON.stringify({ completed: [...this.completed], rp: this.rp, target: this.target, progress: this.progress,
+      this.storage.setItem(SAVE_KEY, JSON.stringify({ completed: [...this.completed], specials: [...this.specials], rp: this.rp, target: this.target, progress: this.progress,
         researched: [...this.researched], bp: this.bp, levels: this.levels, battles: this.battles, lineup: this.lineup, threat: this.threat,
         dev: this.dev, devSet: this.devSet, free: this.free, start: START }));
       this.saved = true;
@@ -301,6 +320,7 @@ export class Progression {
   // won again); the dev and unlimited points switches stay as they are
   reset() {
     this.completed.clear();
+    this.specials.clear();
     this.researched.clear();
     for (const e of Object.keys(this.rp)) { this.rp[e] = 0; this.battles[e] = 0; this.target[e] = null; this.lineup[e] = null; this.threat[e] = 1; }
     this.progress = {};

@@ -94,6 +94,10 @@ const MISPLACED = !query.get('tutorial') && !SANDBOX && !RANGE && !!requestedMis
 // a WW2 special weapon's own operation (the Gustav siege, the Karl, the V-1, the V-2): its whole roster is the player's,
 // earned or not, as a campaign mission's is; only the open battle's batteries are earned
 const OPERATION = WW2 && !CAMPAIGN_MISSION && TH.opId !== 'flanders';
+// a special mission (the menu's list: these four and the Paris Gun's): its menu key and its weapon, for the first win's
+// research points (progression.js completeSpecial); null in a lesson, on the range and in every battle
+const SPECIAL = SANDBOX || RANGE || query.get('tutorial') ? null : OPERATION ? { key: `op:${TH.opId}`, kind: TH.op?.units?.[0]?.kind }
+  : WW1 && TH?.op?.kind === 'paris' ? { key: `ww1:${TH.opId ?? 'paris'}`, kind: 'paris' } : null;
 // the career's open battle (src/research.js, the German tree): the 1918 ridge, where the career's researched lineup
 // takes the field with its guns and upgrades, and the battle pays RP and battery points (null: everything else, which
 // pays nothing; the WW2 open battle and the British game are sandboxes for now, Britain hidden from the menu)
@@ -139,7 +143,6 @@ const KIND = {
   rk92: { eye: 2.4, dist: 62, calibre: 5.87 },
   sfh93: { eye: 2.2, dist: 90, calibre: 5.87 },
   beta: { eye: 3.4, dist: 48, calibre: 12 },
-  smw: { eye: 1.4, dist: 45, calibre: 9.8 },
   k38: { eye: 3.2, dist: 80, calibre: 8.3 },
   hm1: { eye: 4.2, dist: 55, calibre: 14 },
   bruno: { eye: 4.5, dist: 75, calibre: 11 },
@@ -153,7 +156,7 @@ const KIND = {
 // how far the selected unit's camouflage nets are drawn back around each of its pieces (metres)
 const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sfh18: 10, k18: 14, mrs18: 14, nbw41: 6, gustav: 40, bertha: 14, karl: 16, v1: 30, v2: 20,
   sfh13: 10, m16: 13, k17: 10, max38: 34, gamma: 16, paris: 45,
-  fk16: 8, k16: 12, m99: 12, rk92: 11, sfh93: 10, beta: 16, smw: 7, k38: 15, hm1: 18, bruno: 30, k5: 36, k12: 45, wespe: 8, hummel: 9, nbw42: 6, swg40: 6 };
+  fk16: 8, k16: 12, m99: 12, rk92: 11, sfh93: 10, beta: 16, k38: 15, hm1: 18, bruno: 30, k5: 36, k12: 45, wespe: 8, hummel: 9, nbw42: 6, swg40: 6 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
 
@@ -851,8 +854,8 @@ async function init() {
         host: {
           // a WW2 lesson on another operation: load the page there (the theatre is fixed per page)
           redirect(def) {
-            if (!WW2 || !def.op || def.op === TH.opId) return false;
-            location.href = `index.html?mode=ww2&op=${def.op}&tutorial=${def.id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+            if ((!WW2 && !WW1) || !def.op || def.op === (WW1 ? TH?.opId ?? 'ridge' : TH.opId)) return false;
+            location.href = `index.html?mode=${WW1 ? 'ww1' : 'ww2'}&op=${def.op}&tutorial=${def.id}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
             return true;
           },
           enter(def) {
@@ -866,7 +869,7 @@ async function init() {
             saved ??= { weather: params.weather };
             setWeather('Clear', true); // sun and shadow for the lesson; the gear menu may still pick Overcast
             // (the basic training lends its battery, upgrades and all, and lets the player serve a gun)
-            newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0, loadout: def.loadout ?? null, manning: !!def.gunnerFrom });
+            newBattle({ scripted: true, difficulty: 'Normal', attract: false, seed: (Math.random() * 1e9) | 0, loadout: def.loadout ?? null, manning: !!def.gunnerFrom, build: !!def.build });
             setTimeScale(1);
             hud.setScore(0);
             try {
@@ -888,7 +891,14 @@ async function init() {
           },
           // the finished card's main button (def.after): the basic training's To battle is the career's open battle at the
           // threat level the menu last had (a level not yet open: level 1)
-          after() {
+          // a special mission's guided first run (def.after.op): the mission itself, at the menu's difficulty
+          after(def) {
+            if (def?.after?.op) {
+              let d = 'Normal';
+              try { d = JSON.parse(localStorage.getItem('drumfire.menu'))?.difficulty ?? 'Normal'; } catch { /* Normal */ }
+              location.href = `index.html?mode=${def.after.mode ?? 'ww2'}&op=${def.after.op}&play=1&difficulty=${d}${query.get('quality') ? `&quality=${query.get('quality')}` : ''}`;
+              return;
+            }
             let lv = 1;
             try { lv = Math.max(1, JSON.parse(localStorage.getItem('drumfire.menu'))?.level | 0 || 1); } catch { /* level 1 */ }
             if (!career.levelUnlocked('de', lv)) lv = 1;
@@ -1283,6 +1293,8 @@ async function init() {
     let bonus = 0;
     const had = new Set(career.researched);
     if (CAMPAIGN_MISSION && win && !sim.attract && !sim.scripted) bonus = career.complete(CAMPAIGN_MISSION.id);
+    const wonBefore = SPECIAL ? career.specials.has(SPECIAL.key) : false;
+    if (SPECIAL && win && !sim.attract && !sim.scripted) bonus = career.completeSpecial(SPECIAL.key, SPECIAL.kind);
     // a threat level played to its end, won or lost, opens the next (progression.js; leaving early does not)
     const opened = LEVEL && !sim.attract && !sim.scripted ? career.playedLevel(RESEARCH_ERA, LEVEL.n) : 0;
     const pay = payOut(win);
@@ -1293,7 +1305,7 @@ async function init() {
     if (research) research.hidden = !(pay || bonus);
     const names = Object.fromEntries(sim.units.map((u) => [u.kind, u.name]));
     // where the RP went: the research target now (the one paid for may be researched, the next taking the rest)
-    const tgt = career.targetOf(RESEARCH_ERA ?? CAMPAIGN_MISSION?.era), nameOf = (k) => BATTERIES.find((b) => b.kind === k)?.name ?? k;
+    const tgt = career.targetOf(RESEARCH_ERA ?? CAMPAIGN_MISSION?.era ?? (SPECIAL ? 'de' : undefined)), nameOf = (k) => BATTERIES.find((b) => b.kind === k)?.name ?? k;
     const fresh = [...career.researched].filter((k) => !had.has(k)).map(nameOf);
     const rpLine = (n, why) => ['Research points', `+${n.toLocaleString('en-US')}`, `${why}${fresh.length ? `; researched: ${fresh.join(', ')}` : ''}; ${tgt ? `now researching the ${nameOf(tgt)} (${Math.round(career.researchShare(tgt) * 100)}%)` : 'every battery researched'}`];
     hud.showEnd(
@@ -1304,6 +1316,7 @@ async function init() {
         stats: [
           ...(LEVEL ? [['Threat level', `${LEVEL.n} · ${LEVEL.name}`, opened ? `level ${opened}, ${threatOf(opened).name}, is open` : 'played']] : []),
           ...(CAMPAIGN_MISSION ? [win && bonus ? rpLine(bonus, 'first win of this mission') : ['Research points', win ? 'none' : 'not yet', win ? 'the bonus is paid on the first win only' : 'win the mission for its one-off bonus']] : []),
+          ...(SPECIAL ? [win && bonus ? rpLine(bonus, 'first win of this special mission') : ['Research points', win || wonBefore ? 'none' : 'not yet', win || wonBefore ? 'the bonus is paid on the first win only' : 'win the mission for its one-off bonus']] : []),
           ...(pay ? [rpLine(pay.rp, `${pay.fought.toLocaleString('en-US')} from the batteries, ${pay.time} for the time in action${pay.win ? `, ${pay.win} for the day won` : ''}`),
             ['Battery points', Object.values(pay.batteries).reduce((a, b) => a + b, 0).toLocaleString('en-US'), Object.entries(pay.batteries).map(([k, v]) => `${names[k]} +${v}`).join(', ')]] : []),
           ['Score', (typeof sc === 'number' ? sc : sc?.points ?? 0).toLocaleString('en-US')],
@@ -1651,7 +1664,7 @@ async function init() {
     else toMenu();
   } else if (RIDGE_CAREER && query.get('play') && shouldInvite()) {
     // the career's battle opened from a link by a new player: the invitation to the basic training first (ui/invite.js),
-    // over the demonstration bombardment; Not now starts the battle
+    // over the demonstration bombardment; Not now or Stop reminding me starts the battle
     selectUnit(selected);
     showInvite({ onDecline: () => start() });
   } else {

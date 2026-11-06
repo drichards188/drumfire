@@ -13,10 +13,14 @@
 //   attacks  how many British attacks with their Sperrfeuer, and `assault` their size (1: today's Normal)
 //   cb, raids, spotters, heavies  the counter-battery fire's rate, the air raids' rate (0: none), the spotter
 //            aircraft, the British heavies answering in their pits
-//   tanks    tanks with the attacks; `sites` the site missions' kinds: 'soft', 'armour', 'heavy', 'deep', 'hard'
+//   tanks    tanks with the attacks; `sites` the site missions' kinds: 'soft', 'armour', 'heavy', 'deep', 'hard',
+//            'fort'; `forts` the concrete strongpoints in the X-Zeit lanes (levels 6 to 10, ww1/ops.js RIDGE_FORTS):
+//            only shells of 28 cm and more break them, and each left standing fires on our assault (ww1/infantry.js)
 //   deadline the missions' time, `dmg` the enemy's damage to the guns, `sig` how fast the guns are located; `zero`
 //            the share of our men that must reach the British line at X-Zeit, `cover` the Feuerwalze's bursts on each
-//            lane in 20 s that keep the garrison's heads down (ww1/infantry.js; 6 without a level)
+//            lane in 20 s that keep the garrison's heads down (ww1/infantry.js; 6 without a level). From level 6 a
+//            super-heavy takes one of the five slots a field battery had, so `zero` is lower there (tuned on 72 seeds
+//            with capability.js REFERENCE, 2026-11-02)
 export const THREAT = [
   { n: 1, name: 'Ruhige Front', en: 'Quiet front', fits: 'Ringkanone C/92, one gun', pay: 1, modifiers: 0,
     sub: 'Morning only: soft targets in reach, no attacks, little to fear.',
@@ -26,7 +30,7 @@ export const THREAT = [
     sub: 'Into the afternoon: one small attack and its Sperrfeuer.',
     lines: ['The morning and the afternoon: finish two fire missions and hold the line.', 'One small British attack: answer the red rockets.', 'Light counter-battery fire.'],
     day: 'day', need: 2, attacks: 1, assault: 0.45, cb: 0.4, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.3, dmg: 0.6, sig: 0.7, zero: 0.5, cover: 6 },
-  { n: 3, name: 'Störungsfeuer', en: 'Harassing fire', fits: 'K 17 and sFH 13, two guns each', pay: 1.25, modifiers: 0,
+  { n: 3, name: 'Störungsfeuer', en: 'Harassing fire', fits: 'Ringkanone C/92 and a battery of FK 16', pay: 1.25, modifiers: 0,
     sub: 'Through the night: two attacks, their field batteries answer.',
     lines: ['The day and the night, with harassing fire on their roads: finish ten fire missions and hold the line.', 'Two attacks.', 'The British field batteries shoot back.'],
     day: 'night', need: 10, attacks: 2, assault: 0.55, cb: 0.55, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.2, dmg: 0.7, sig: 0.8, zero: 0.5, cover: 6 },
@@ -38,26 +42,26 @@ export const THREAT = [
     sub: 'The whole day, to X-Zeit and the Feuerwalze; their tanks swell the attacks.',
     lines: ['The whole day, ending with our own attack at X-Zeit behind the Feuerwalze: get our men into the British line.', 'Three attacks, bigger where their tank laagers still stand; Camels raid the loudest battery.', 'One modifier.'],
     day: 'full', attacks: 3, assault: 0.75, cb: 0.85, raids: 0.7, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy'], deadline: 1, dmg: 0.9, sig: 1, zero: 0.72, cover: 7 },
-  { n: 6, name: 'Materialschlacht', en: 'Battle of materiel', fits: 'Five batteries with a K 18 and the Langer Max', pay: 2, modifiers: 1,
-    sub: 'Deep targets and concrete join the day.',
-    lines: ['The whole day, to X-Zeit.', 'Deep targets beyond the field guns, concrete shelters only heavy shells break.', 'Three attacks; one modifier.'],
-    day: 'full', attacks: 3, assault: 0.85, cb: 1, raids: 1, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard'], deadline: 1, dmg: 1, sig: 1, zero: 0.71, cover: 8 },
+  { n: 6, name: 'Materialschlacht', en: 'Battle of materiel', fits: 'K 18, sFH 13, leFH 18, Mörser 16 and the Langer Max', pay: 2, modifiers: 1,
+    sub: 'Strongpoints in the X-Zeit lanes: bring a super-heavy.',
+    lines: ['The whole day, to X-Zeit.', 'Two concrete strongpoints in the lanes of our assault: only 28 cm shells and heavier break them, and each left standing fires on our men.', 'Deep targets and concrete shelters; three attacks; one modifier.'],
+    day: 'full', attacks: 3, assault: 0.85, cb: 1, raids: 1, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, deadline: 1, dmg: 1, sig: 1, zero: 0.675, cover: 8 },
   { n: 7, name: 'Abwehrschlacht', en: 'Defensive battle', fits: 'Five upgraded: K 18, sFH 18, sFH 13, leFH 18 and the Gamma', pay: 2.5, modifiers: 1,
     sub: 'Four attacks, and the counter-battery fire comes quicker.',
-    lines: ['The whole day, to X-Zeit.', 'Four attacks; the counter-battery fire comes quicker.', 'More raids by day; one modifier.'],
-    day: 'full', attacks: 4, assault: 0.95, cb: 1.2, raids: 1.2, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard'], deadline: 0.95, dmg: 1.1, sig: 1.1, zero: 0.73, cover: 9 },
-  { n: 8, name: 'Trommelfeuer', en: 'Drumfire', fits: 'Five upgraded with a Mörser 18, and the V-1', pay: 3, modifiers: 2,
+    lines: ['The whole day, to X-Zeit.', 'Four attacks; the counter-battery fire comes quicker; two strongpoints for the super-heavies.', 'More raids by day; one modifier.'],
+    day: 'full', attacks: 4, assault: 0.95, cb: 1.2, raids: 1.2, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, deadline: 0.95, dmg: 1.1, sig: 1.1, zero: 0.72, cover: 9 },
+  { n: 8, name: 'Trommelfeuer', en: 'Drumfire', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and the Beta-Gerät, upgraded, and the V-1', pay: 3, modifiers: 2,
     sub: 'Two modifiers, concrete in numbers, the sky theirs.',
-    lines: ['The whole day, to X-Zeit.', 'Four bigger attacks; concrete and deep targets.', 'Two modifiers.'],
-    day: 'full', attacks: 4, assault: 1.05, cb: 1.45, raids: 1.4, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard'], deadline: 0.9, dmg: 1.2, sig: 1.2, zero: 0.7, cover: 10 },
-  { n: 9, name: 'Feuersturm', en: 'Firestorm', fits: 'Five well upgraded, and the V-2', pay: 3.5, modifiers: 2,
+    lines: ['The whole day, to X-Zeit.', 'Four bigger attacks; three strongpoints for the super-heavies, concrete and deep targets.', 'Two modifiers.'],
+    day: 'full', attacks: 4, assault: 1.05, cb: 1.45, raids: 1.4, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, deadline: 0.9, dmg: 1.2, sig: 1.2, zero: 0.63, cover: 10 },
+  { n: 9, name: 'Feuersturm', en: 'Firestorm', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and the Gamma, well upgraded, and the V-2', pay: 3.5, modifiers: 2,
     sub: 'Bigger attacks, harder counter-battery fire, tighter deadlines.',
-    lines: ['The whole day, to X-Zeit.', 'Four big attacks; tight deadlines.', 'The heaviest counter-battery fire yet; two modifiers.'],
-    day: 'full', attacks: 4, assault: 1.2, cb: 1.7, raids: 1.6, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard'], deadline: 0.8, dmg: 1.35, sig: 1.35, zero: 0.72, cover: 11 },
-  { n: 10, name: 'Stahlgewitter', en: 'Storm of steel', fits: 'Five at their best, and the V-2', pay: 4, modifiers: 2,
+    lines: ['The whole day, to X-Zeit.', 'Four big attacks; tight deadlines; three strongpoints for the super-heavies.', 'The heaviest counter-battery fire yet; two modifiers.'],
+    day: 'full', attacks: 4, assault: 1.2, cb: 1.7, raids: 1.6, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, deadline: 0.8, dmg: 1.35, sig: 1.35, zero: 0.645, cover: 11 },
+  { n: 10, name: 'Stahlgewitter', en: 'Storm of steel', fits: 'K 38, sFH 18, Hummel, leFH 18 and the Gamma at their best, and the V-2', pay: 4, modifiers: 2,
     sub: 'Everything at full strength, with nothing to spare.',
-    lines: ['The whole day, to X-Zeit.', 'Five attacks, the heaviest counter-battery fire, raids all day.', 'Two modifiers.'],
-    day: 'full', attacks: 5, assault: 1.35, cb: 2, raids: 1.8, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard'], deadline: 0.75, dmg: 1.5, sig: 1.5, zero: 0.67, cover: 12 },
+    lines: ['The whole day, to X-Zeit.', 'Five attacks, the heaviest counter-battery fire, raids all day; four strongpoints, every one in our lanes.', 'Two modifiers.'],
+    day: 'full', attacks: 5, assault: 1.35, cb: 2, raids: 1.8, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 4, deadline: 0.75, dmg: 1.5, sig: 1.5, zero: 0.6, cover: 12 },
 ];
 export const MAX_LEVEL = THREAT.length;
 export const threatOf = (n) => THREAT[Math.max(1, Math.min(MAX_LEVEL, n | 0)) - 1];

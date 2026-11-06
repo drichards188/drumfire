@@ -5,10 +5,13 @@
 // One addition for 1918: the British front line's garrison and its Lewis guns fire on our assault unless the
 // Feuerwalze keeps their heads down. Each lane counts the shells that burst on its barrage line; a lane with
 // fewer than COVER of them in the last 20 s costs the groups in it men (a thin or late Feuerwalze is paid for).
+// On threat levels 6 to 10 the concrete strongpoints in the lanes (ops.js RIDGE_FORTS) still standing fire on the
+// groups in their lane on top of that, Feuerwalze or not (FORT_MG each): only the super-heavies break them.
 import { InfantryWW2 } from '../ww2/infantry.js';
 
 export const COVER = 6; // bursts on the line in 20 s for full cover
 const MG = 0.013; // men a second a group loses with no cover at all
+export const FORT_MG = 0.008; // men a second a group loses to each strongpoint standing in its lane
 
 export class InfantryWW1 extends InfantryWW2 {
   onBurst(shell, pos, air) {
@@ -33,6 +36,15 @@ export class InfantryWW1 extends InfantryWW2 {
       g.mgAcc -= 1;
       const alive = g.men.filter((m) => m.alive);
       if (alive.length) { this.kill(g, alive[Math.floor(sim.rng() * alive.length)]); sim.stats.britishLost++; sim.stats.lossBy.mebu++; }
+    }
+    let forts = 0;
+    for (const t of sim.targets) if (t.alive && t.site?.role === 'fort' && t.site.lane === l.sector) forts++;
+    if (!forts) return;
+    g.fortAcc = (g.fortAcc ?? 0) + FORT_MG * forts * dt;
+    while (g.fortAcc >= 1) {
+      g.fortAcc -= 1;
+      const alive = g.men.filter((m) => m.alive);
+      if (alive.length) { this.kill(g, alive[Math.floor(sim.rng() * alive.length)]); sim.stats.britishLost++; sim.stats.lossBy.fort = (sim.stats.lossBy.fort ?? 0) + 1; }
     }
   }
 }

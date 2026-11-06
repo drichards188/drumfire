@@ -6,7 +6,7 @@
 }
 .iv-page.in { opacity: 1; }
 .iv-card {
-  width: min(520px, 100%); display: grid; gap: 12px; padding: 24px 28px 22px;
+  width: min(560px, 100%); display: grid; gap: 12px; padding: 24px 28px 22px;
   border: 1px solid #9b906366; border-top: 4px solid #cfa94b; background: linear-gradient(145deg, #262b23f4, #151b17fa);
   box-shadow: 0 24px 80px #000b; color: #ddd8c5; font: 14px/1.5 var(--serif);
   transform: translateY(10px); transition: transform 0.3s ease;
@@ -25,6 +25,8 @@
   border: 1px solid #9b906388; background: transparent; color: #ddd8c5;
 }
 .iv-actions button:hover { background: #ddd8c512; }
+.iv-actions .iv-stop { margin-right: auto; padding-left: 0; padding-right: 0; letter-spacing: 0.1em; border-color: transparent; color: #aaa690; }
+.iv-actions .iv-stop:hover { color: #ddd8c5; }
 .iv-actions .iv-yes { border-color: #cfa94b; background: #cfa94b; color: #1d1912; }
 .iv-actions .iv-yes:hover { background: #e2bd5c; }
 .iv-actions button:focus-visible { outline: 2px solid #ffd45a; outline-offset: 2px; }

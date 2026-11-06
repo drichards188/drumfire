@@ -16,7 +16,7 @@ import { CrewHD } from './crewhd.js';
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 const KICK = { bl15: 0.9, bl92: 0.6, bl6: 0.3, bl60: 0.3, rail: 0.4, lefh18: 0.25, sfh18: 0.3, k18: 0.5, mrs18: 0.5, nbw41: 0.05, gustav: 0.6, bertha: 0.8, karl: 0.9, v1: 0, v2: 0,
   sfh13: 0.3, m16: 0.5, k17: 0.3, max38: 0.6, gamma: 0.9, paris: 0.7,
-  fk16: 0.2, k16: 0.4, m99: 0.6, rk92: 0.35, sfh93: 0.3, beta: 0.7, smw: 0.4, k38: 0.6, hm1: 0.8, bruno: 0.5, k5: 0.6, k12: 0.5, wespe: 0.3, hummel: 0.35, nbw42: 0.05, swg40: 0.05 };
+  fk16: 0.2, k16: 0.4, m99: 0.6, rk92: 0.35, sfh93: 0.3, beta: 0.7, k38: 0.6, hm1: 0.8, bruno: 0.5, k5: 0.6, k12: 0.5, wespe: 0.3, hummel: 0.35, nbw42: 0.05, swg40: 0.05 };
 
 // How far back along the rails the railway car stands `tf` s after the shot (0..1 of rig.carRoll): a fast run
 // back against the brakes (decelerating over 1.9 s), a pause, then the slow winch-in that ends as the round

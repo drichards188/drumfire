@@ -50,23 +50,13 @@ body.menu #view, body.menu #panel { display: none; }
 .mn-view-n { margin-left: 10px; font-size: 10px; letter-spacing: .08em; color: #c9a95e; }
 .mn-view-n:empty { display: none; }
 .mn-go { margin-left: auto; display: flex; height: 42px; min-width: 0; }
-/* the lists (Battles, Campaign, Tutorials) in the bar, joined to the chooser they open: what there is to play, in sight */
-.mn-modes { display: flex; margin-right: 8px; border: 1px solid #c2a46499; }
-.mn-modes button {
-  position: relative; padding: 0 13px; cursor: pointer; white-space: nowrap; border: 0; border-left: 1px solid #c2a46455;
-  font: 700 10px var(--mono); letter-spacing: .16em; text-transform: uppercase; background: #c2bc930f; color: #d3c79f;
-}
-.mn-modes button:first-child { border-left: 0; }
-.mn-modes button:hover { background: #c2bc9330; color: #fff0c8; }
-.mn-modes button.on { background: #bca16a; color: #171b16; }
-/* Tutorials until the basic training is done: a pulsing brass light */
-.mn-dot { position: absolute; top: 5px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ffd45a; box-shadow: 0 0 0 0 #ffd45aaa; animation: mn-dot 1.6s ease-out infinite; }
+/* until the basic training is done: a pulsing brass light on the chooser's button */
+.mn-dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: #ffd45a; box-shadow: 0 0 0 0 #ffd45aaa; animation: mn-dot 1.6s ease-out infinite; }
 .mn-dot[hidden] { display: none; }
-.mn-modes button.on .mn-dot { background: #6a1f12; }
 @keyframes mn-dot { 0% { box-shadow: 0 0 0 0 #ffd45aaa; } 100% { box-shadow: 0 0 0 7px #ffd45a00; } }
 .mn-mode {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; column-gap: 10px; text-align: left;
-  width: 250px; min-width: 0; padding: 3px 34px 3px 12px; cursor: pointer; border: 1px solid #a49b6988; border-right: 0;
+  width: 330px; min-width: 0; padding: 3px 34px 3px 12px; cursor: pointer; border: 1px solid #a49b6988; border-right: 0;
   background: #c2bc9314; color: #ece2c6;
 }
 .mn-mode::after { content: '\25be'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--brass); font-size: 13px; }
@@ -95,8 +85,8 @@ body.menu #view, body.menu #panel { display: none; }
 /* the mission chooser: dropped from the top bar, the lists beside the chosen mission's orders */
 .mn-drop {
   position: fixed; z-index: 9; top: calc(var(--mn-bar) + 1px); right: max(24px, calc((100vw - 1320px) / 2));
-  width: min(900px, calc(100vw - 32px)); max-height: calc(100vh - var(--mn-bar) - 24px); overflow: auto;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; padding: 20px 22px 22px;
+  width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - var(--mn-bar) - 24px); overflow: auto;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 20px 22px 22px;
   border: 1px solid #9b906366; border-top: 2px solid #c2a464; background: linear-gradient(160deg, #242922f8, #151b17fb); box-shadow: 0 30px 80px #000b;
 }
 .mn-drop-close { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: #a3a690; font-size: 16px; cursor: pointer; padding: 4px 6px; }
@@ -120,6 +110,8 @@ body.menu #view, body.menu #panel { display: none; }
 .mn-row:hover:not(:disabled) { background: #c2bc9324; border-color: #a99d6755; }
 .mn-row.on { border-color: #b9a36a; background: #b7a3632a; box-shadow: inset 3px 0 0 #d2b77d; }
 .mn-row:disabled { opacity: .45; cursor: default; }
+.mn-row.over:not(.on) .mn-label { opacity: .6; }
+.mn-tag { margin-left: 8px; padding: 1px 5px; vertical-align: 1px; font: 700 8px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: #171b16; background: #9fbf86; }
 .mn-n { font: 11px var(--mono); color: #bda975; min-width: 2ch; }
 .mn-row.done .mn-n { color: #9fbf86; }
 .mn-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; }
@@ -138,38 +130,64 @@ body.menu #view, body.menu #panel { display: none; }
 }
 .mn-difficulty button:hover { border-color: rgba(233, 223, 196, 0.6); color: var(--ui); }
 .mn-difficulty button.on { border-color: var(--brass); color: #fff4d6; background: var(--brass-soft); }
-/* the threat level (menu.js renderLevel): the ten levels in a row, the chosen one's card under them */
-.mn-level { display: grid; gap: 10px; }
-.mn-level[hidden] { display: none; }
-.mn-lv-row { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
-.mn-lv-row button {
-  font: 700 12px var(--mono); padding: 8px 0; cursor: pointer;
+/* a special mission's way to play: its guided first run or the mission itself */
+.mn-run { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mn-run[hidden] { display: none; }
+.mn-run button {
+  display: grid; gap: 4px; text-align: left; padding: 9px 12px; cursor: pointer;
   border: 1px solid rgba(233, 223, 196, 0.3); background: rgba(20, 16, 9, 0.45); color: var(--ui-dim);
 }
-.mn-lv-row button:hover:not(:disabled) { border-color: rgba(233, 223, 196, 0.6); color: var(--ui); }
-.mn-lv-row button.on { border-color: var(--brass); color: #fff4d6; background: var(--brass-soft); }
-.mn-lv-row button:disabled { cursor: default; opacity: .35; }
-.mn-lv-card { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid #a49b6944; background: #c2bc930a; }
-.mn-lv-head { display: grid; grid-template-columns: 1fr auto; align-items: end; column-gap: 12px; }
-.mn-lv-head small { grid-column: 1; font: 9px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: #aaa88b; }
-.mn-lv-head h3 { grid-column: 1; font: normal 19px var(--serif); color: #ece2c6; }
-.mn-lv-pay { grid-column: 2; grid-row: 1 / 3; font: 10px var(--mono); letter-spacing: .1em; color: #f0c36a; }
-.mn-lv-sub { font: italic 13px/1.5 var(--serif); color: #bdb9a9; }
-.mn-lv-lines, .mn-lv-mods { list-style: none; display: grid; gap: 2px; font-size: 12px; line-height: 1.45; color: #cfc6a8; }
-.mn-lv-lines li::before { content: '\00b7'; color: var(--brass); margin-right: 8px; }
-.mn-lv-fits { font: 11px/1.5 var(--mono); color: #9fbf86; }
-.mn-lv-fits b { font-weight: normal; color: #aaa88b; }
-.mn-lv-caps { list-style: none; display: grid; gap: 2px; font: 11px/1.45 var(--mono); color: #bdb9a9; }
-.mn-lv-caps b { font-weight: normal; color: #ddd8c5; }
-.mn-lv-caps .v-ready b::before, .mn-lv-caps .v-slow b::before, .mn-lv-caps .v-no b::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; vertical-align: 1px; }
-.mn-lv-caps .v-ready b::before { background: #9fbf86; }
-.mn-lv-caps .v-slow b::before { background: #f0c36a; }
-.mn-lv-caps .v-no b::before { background: #c8705a; }
-.mn-lv-rec { font: italic 12px/1.5 var(--serif); color: #9fbf86; }
-.mn-lv-rec.over { color: #e6a35a; }
-.mn-lv-k { font: 9px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: #e6a35a; margin-top: 4px; }
-.mn-lv-mods b { font-weight: normal; color: #f0c36a; }
+.mn-run button b { font: 700 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+.mn-run button small { font: italic 12px/1.35 var(--serif); opacity: .85; }
+.mn-run button:hover { border-color: rgba(233, 223, 196, 0.6); color: var(--ui); }
+.mn-run button.on { border-color: var(--brass); color: #fff4d6; background: var(--brass-soft); }
+/* the threat level (menu.js renderLevel): the chosen level's card; the levels are the chooser's list */
+.mn-level { display: grid; gap: 10px; }
+.mn-level[hidden] { display: none; }
 .mn-play2 { padding: 14px 20px; }
+.mn-tabs { margin-right: 26px; }
+.mn-body { display: grid; gap: 14px; min-height: 0; }
+.mn-drop-foot { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid #a49b6933; }
+.mn-drop-foot .mn-difficulty button { flex: 1; }
+/* the threat level: ten steps rising and warming from olive to red, the chosen one and those below lit (Helldivers 2's bar) */
+.lv-meter { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; align-items: end; padding-bottom: 16px; }
+.lv-seg {
+  position: relative; display: grid; place-items: center; height: calc(30px + var(--k) * 26px); cursor: pointer; padding: 0;
+  border: 1px solid rgba(233, 223, 196, 0.25); background: rgba(20, 16, 9, 0.5); color: var(--ui-dim);
+  --c: color-mix(in srgb, #8f9a52 calc(100% - var(--k) * 100%), #c8452e);
+}
+.lv-seg b { font: 700 13px var(--mono); }
+.lv-seg:hover:not(:disabled) { border-color: var(--c); color: var(--ui); }
+.lv-seg.lit { background: color-mix(in srgb, var(--c) 45%, transparent); border-color: var(--c); color: #f3ead2; }
+.lv-seg.on { background: var(--c); color: #12140f; box-shadow: 0 0 0 2px #f0d999; }
+.lv-seg:disabled { opacity: .3; cursor: default; }
+.lv-seg small { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); white-space: nowrap; font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #9fbf86; }
+.lv-seg small::before { content: '\25b2 '; }
+.lv-head small { font: 9px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #aaa88b; }
+.lv-head h3 { font: normal 28px/1.1 var(--serif); color: #ece2c6; margin: 4px 0; }
+.lv-head p { font: italic 14px/1.4 var(--serif); color: #bdb9a9; }
+.lv-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.lv-fact { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid #a49b6933; background: #c2bc930a; }
+.lv-fact small { font: 8px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #aaa88b; }
+.lv-fact b { font: normal 15px var(--serif); color: #ece2c6; }
+.lv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mn-chip { padding: 3px 8px; font: 10px var(--mono); letter-spacing: .06em; color: #f0c9a0; border: 1px solid #c8705a88; background: #c8705a1a; }
+.mn-chip.mod { color: #f0d999; border-color: #c2a46499; background: #c2a46418; }
+.mn-chip.calm { color: #b9cfa6; border-color: #9fbf8677; background: #9fbf8614; }
+.lv-fit { font: 12px var(--mono); color: #9fbf86; }
+.lv-fit.over { color: #e6a35a; }
+/* the special missions and the training: picture cards, the chosen one's line under them */
+.mn-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mn-cards.one { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.mn-card { display: grid; gap: 4px; padding: 0 0 8px; text-align: left; cursor: pointer; border: 1px solid #9b906355; background: #c2bc930a; color: #ddd5bb; }
+.mn-card:hover { border-color: #c2a464; }
+.mn-card.on { border-color: #d2b77d; box-shadow: 0 0 0 1px #d2b77d; background: #b7a3632a; }
+.mn-card-pic { display: block; aspect-ratio: 16 / 9; background: #10140f center / cover no-repeat; }
+.mn-card b { padding: 0 9px; font: normal 14px var(--serif); }
+.mn-card small { padding: 0 9px; font: 9px var(--mono); letter-spacing: .06em; color: #c9a95e; }
+.mn-card small.won { color: #9fbf86; }
+.mn-pick h3 { font: normal 24px/1.15 var(--serif); color: #ece2c6; }
+.mn-pick p { margin-top: 4px; font: italic 14px/1.4 var(--serif); color: #bdb9a9; }
 .mn-keys { margin-top: 4px; font-size: 10px; opacity: .65; }
 
 /* the hangar: the gun in 3D behind (hangar.js), its details left, its modifications right, the batteries along the bottom */
@@ -390,7 +408,7 @@ body.menu #view, body.menu #panel { display: none; }
 /* a narrower desktop: the bar drops its wordmark so the mission chooser keeps its room */
 @media (max-width: 1699px) and (min-width: 1100px) {
   .mn-mark { display: none; }
-  .mn-mode { width: 230px; }
+  .mn-mode { width: 280px; }
 }
 /* a bar narrower than its 1320 px: two rows, the nation, screens and switches above, what to play and To battle below */
 @media (max-width: 1399px) and (min-width: 1100px) {
@@ -407,7 +425,6 @@ body.menu #view, body.menu #panel { display: none; }
   .mn-top-in { height: auto; flex-wrap: wrap; gap: 10px 20px; padding: 10px 0; }
   .mn-views { height: 38px; }
   .mn-go { margin-left: 0; width: 100%; order: 5; }
-  .mn-modes button { padding: 0 9px; }
   .mn-switches { order: 1; margin-left: auto; }
   .mn-mode { flex: 1; width: auto; }
   .mn-drop { position: fixed; top: 8px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 16px); }
@@ -421,10 +438,7 @@ body.menu #view, body.menu #panel { display: none; }
 @media (max-width: 700px) {
   #menu { --mn-w: calc(100% - 32px); }
   .mn-mark { display: none; }
-  .mn-drop { grid-template-columns: minmax(0, 1fr); }
   .mn-go { flex-wrap: wrap; height: auto; gap: 6px 0; }
-  .mn-modes { width: 100%; height: 36px; margin-right: 0; }
-  .mn-modes button { flex: 1; }
   .mn-mode { height: 42px; }
   #mn-play { height: 42px; }
   .mn-hangar { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'stage' 'info' 'bar' 'mods'; }

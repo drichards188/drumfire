@@ -39,6 +39,23 @@ export const SHOTS = [
   { id: 'k17', url: BWW1, hour: 10.5, kind: 'k17', ff: 30, cam: [0.8, 0.34, 16] },
   { id: 'paris', url: '/?mode=ww1&op=paris&play=1', hour: 9, kind: 'paris', ff: 300, wait: 900, cam: [0.9, 0.22, 75], after: 10 },
   { id: 'bertha-demo', bertha: true, hour: 9 },
+  // the German tree's batteries added on 2026-11-01, each on the ridge in the career's lineup (ops.js RIDGE_MORE)
+  { id: 'fk16', url: BWW1, hour: 9.5, kind: 'fk16', ff: 30, cam: [0.8, 0.36, 13] },
+  { id: 'sfh93', url: BWW1, hour: 10, kind: 'sfh93', ff: 30, cam: [0.8, 0.36, 14] },
+  { id: 'rk92', url: BWW1, hour: 9, kind: 'rk92', ff: 30, cam: [0.8, 0.34, 15] },
+  { id: 'k16', url: BWW1, hour: 10.5, kind: 'k16', ff: 30, cam: [0.8, 0.34, 18] },
+  { id: 'm99', url: BWW1, hour: 9.5, kind: 'm99', ff: 30, cam: [0.8, 0.34, 16] },
+  { id: 'bruno', url: BWW1, hour: 10, kind: 'bruno', ff: 30, cam: [0.85, 0.28, 40], after: 8 },
+  { id: 'beta', url: BWW1, hour: 10, kind: 'beta', ff: 30, cam: [-0.8, 0.3, 24], after: 8 },
+  { id: 'swg40', url: BWW1, hour: 10.5, kind: 'swg40', ff: 30, cam: [1.1, 0.3, 10], after: 4 },
+  { id: 'gotha', url: BWW1, hour: 10, kind: 'gotha', lineup: ['sfh13', 'gotha'], gotha: true, ff: 200, cam: [2.6, 0.12, 34], after: 3 },
+  { id: 'wespe', url: BWW1, hour: 11, weather: 'Clear', kind: 'wespe', ff: 30, cam: [0.8, 0.34, 13] },
+  { id: 'hummel', url: BWW1, hour: 10.5, weather: 'Clear', kind: 'hummel', ff: 30, cam: [0.8, 0.34, 15] },
+  { id: 'k38', url: BWW1, hour: 9.5, weather: 'Clear', kind: 'k38', ff: 30, cam: [0.85, 0.3, 24] },
+  { id: 'k5', url: BWW1, hour: 11, weather: 'Clear', kind: 'k5', ff: 30, cam: [0.9, 0.26, 50], after: 10 },
+  { id: 'k12', url: BWW1, hour: 10, weather: 'Clear', kind: 'k12', ff: 30, cam: [0.5, 0.42, 46], after: 10 },
+  { id: 'hm1', url: BWW1, hour: 11, weather: 'Clear', kind: 'hm1', ff: 30, cam: [0.85, 0.3, 30], after: 8 },
+  { id: 'nbw42', url: BWW1, hour: 11, weather: 'Clear', kind: 'nbw42', ff: 30, cam: [1.2, 0.26, 11], after: 4 },
   // WW2 German
   { id: 'lefh18', url: BWW2, hour: 9.5, weather: 'Clear', kind: 'lefh18', ff: 30, cam: [0.8, 0.36, 14] },
   { id: 'sfh18', url: BWW2, hour: 10.5, weather: 'Clear', kind: 'sfh18', ff: 30, cam: [0.8, 0.34, 17] },
@@ -50,6 +67,36 @@ export const SHOTS = [
   { id: 'v1', url: '/?mode=ww2&op=v1&play=1', hour: 9, kind: 'v1', ff: 30, wait: 900, cam: [1.3, 0.14, 45], after: 2 },
   { id: 'v2', url: '/?mode=ww2&op=v2&play=1', hour: 11, kind: 'v2', ff: 30, wait: 900, cam: [-1.4, 0.06, 75], after: 60 },
 ];
+
+// in the page: the Gotha strike (off the map, so no gun): ordered onto a British battery, the battle run on until the
+// flight comes over, then the camera on the lead bomber as its stick goes down
+async function gothaShot(page, s) {
+  return page.evaluate(({ ff, cam, after = 3 }) => {
+    const D = window.__drumfire, sim = D.sim;
+    D.post.shockwave = () => {};
+    D.post.heat = () => {};
+    const t = sim.targets.find((q) => q.alive && q.kind === 'bbattery') ?? sim.targets.find((q) => q.alive);
+    if (!t) return { error: 'no target' };
+    if (!sim.command(null, 'support', { kind: 'gotha', x: t.pos.x, z: t.pos.z })) return { error: 'not ordered' };
+    D.fastForward(ff, { unit: 0, scale: 8, settle: 1 });
+    let n = 0;
+    const lead = () => sim.support?.planes?.[0];
+    while (!(lead()?.dropped >= 2) && n++ < 30 * 400) { D.params.timeScale = lead() ? 1 : 6; D.frame(1 / 30, false); }
+    const pl = lead();
+    if (!pl) return { error: 'no flight' };
+    const hdg = Math.atan2(-pl.vel.x, -pl.vel.z);
+    const tgt = { rotation: { y: hdg }, getWorldPosition: (v) => v.set(pl.pos.x, pl.pos.y, pl.pos.z) };
+    D.chase.setTarget(tgt, { behind: false });
+    D.params.timeScale = 1;
+    for (let k = 0; k < after + 30; k++) {
+      D.chase.yaw = D.chase.goalYaw = hdg + cam[0];
+      D.chase.pitch = D.chase.goalPitch = cam[1];
+      D.chase.dist = D.chase.goalDist = cam[2];
+      D.frame(1 / 30, k >= after + 28);
+    }
+    return { dropped: pl.dropped, time: Math.round(sim.time) };
+  }, s);
+}
 
 // in the page: the gun on auto, the battle run on, frames until it fires, then the blast developing. The camera orbits
 // the piece about to fire (a battery's centre would leave each gun small)
@@ -105,14 +152,14 @@ const HIDE = '#panel, #hud, #loading, #tut-card, #gear, #return-menu, #campaign-
 for (const s of SHOTS.filter((x) => !want.length || want.includes(x.id))) {
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
   // (dev mode, and the career battle's lineup: the gun of the shot, so it takes the field on the ridge)
-  await page.addInitScript((kind) => {
-    try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true, lineup: { de: [kind] } })); } catch {}
+  await page.addInitScript((kinds) => {
+    try { localStorage.setItem('drumfire.campaign.v4', JSON.stringify({ completed: [], dev: true, devSet: true, lineup: { de: kinds } })); } catch {}
     const Orig = window.WebSocket;
     window.WebSocket = function (url, proto) {
       if (proto === 'vite-hmr') return { send() {}, close() {}, addEventListener() {}, removeEventListener() {}, readyState: 1 };
       return new Orig(url, proto);
     };
-  }, s.kind);
+  }, s.lineup ?? [s.kind]); // (an off-map battery alone is no battle: s.lineup gives it a gun on the map)
   page.on('pageerror', (e) => console.log(`  [pageerror] ${e.message}`));
   const t = Date.now();
   let r;
@@ -137,7 +184,7 @@ for (const s of SHOTS.filter((x) => !want.length || want.includes(x.id))) {
       await page.waitForFunction(() => window.__drumfire?.state === 'playing', null, { timeout: 120000, polling: 250 });
       await page.addStyleTag({ content: HIDE });
       await page.waitForTimeout(300);
-      r = await gunShot(page, s);
+      r = s.gotha ? await gothaShot(page, s) : await gunShot(page, s);
     }
     await page.evaluate(() => document.querySelector('canvas')?.getContext('webgl2')?.finish?.()).catch(() => {});
     const file = `${OUT}/${s.id}.jpg`;

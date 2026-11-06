@@ -172,11 +172,18 @@ export class Panel {
       const call = el('b', 'tcall');
       const hp = new Bar({ cls: 'mini' }), am = new Bar({ cls: 'mini ammo' });
       const mode = el('span', 'tmode', 'A');
-      const line = el('div', 'tline');
+      // one thing to a line: the callsign with the mode, the gun's type in full, the guns' state and the shells left
+      // (the type used to share a line with the bars and ran under them once the German types grew long)
+      const top = el('div', 'ttop');
+      top.append(call, mode);
       const kind = el('i', TH.metric ? 'ttype metric' : 'ttype', KIND_SHORT[u.kind] || u.kind);
-      line.append(kind, hp.el, am.el, mode);
-      main.append(call, line);
-      t.title = `${u.name}: HP, ammunition, mode (A: auto or manual; HOLD on the console)`;
+      kind.title = GUNS[u.kind]?.name ?? kind.textContent;
+      const line = el('div', 'tline');
+      hp.el.title = 'The guns\' state';
+      am.el.title = 'Shells left';
+      line.append(hp.el, am.el);
+      main.append(top, kind, line);
+      t.title = `${u.name}: the guns' state, shells left, mode (A: auto or manual; HOLD on the console)`;
       const lamp = el('i', 'tlamp');
       // loading state: one pip per piece, filling toward READY, and a short summary
       const lrow = el('div', 'tload');

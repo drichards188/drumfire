@@ -47,9 +47,11 @@ export const FUZE = {
 };
 export const KIND_SHORT = {
   bl15: '15-in', bl92: '9.2-in', bl6: '6-in', bl60: '60-pr', rail: '18-in Rly',
-  lefh18: '10.5 cm', sfh18: '15 cm sFH', k18: '17 cm', mrs18: '21 cm', nbw41: '15 cm NbW',
-  gustav: '80 cm', bertha: '42 cm', karl: '60 cm', v1: 'V-1', v2: 'V-2',
-  k38: '21 cm K', hm1: '35.5 cm', bruno: '28 cm Bruno', k5: '28 cm K5', k12: '21 cm K 12', wespe: 'Wespe', hummel: 'Hummel', nbw42: '21 cm NbW', swg40: 'sWG 40',
+  // the German types: calibre and designation, one of a kind (two batteries in a lineup must never read alike; the
+  // battery tab gives the type a line of its own)
+  lefh18: '10.5 cm leFH 18', sfh18: '15 cm sFH 18', k18: '17 cm K 18', mrs18: '21 cm Mörser 18', nbw41: '15 cm NbW 41',
+  gustav: '80 cm Gustav', bertha: '42 cm Bertha', karl: '60 cm Karl', v1: 'V-1', v2: 'V-2',
+  k38: '21 cm K 38', hm1: '35.5 cm H M1', bruno: '28 cm Kurze Bruno', k5: '28 cm K5 (E)', k12: '21 cm K 12 (E)', wespe: '10.5 cm Wespe', hummel: '15 cm Hummel', nbw42: '21 cm NbW 42', swg40: 'sWG 40',
 };
 
 // Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns

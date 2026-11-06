@@ -23,6 +23,8 @@ export const clockOf = (keys, t) => {
   return keys[keys.length - 1][1] + (t - keys[keys.length - 1][0]) / 600;
 };
 
+const LULL = 15, LAPSE = 10; // a lull's length before the day runs on (s), and the most it then takes to the next thing (s)
+
 export class DirectorWW2 extends Director {
   get op() {
     return this.sim.theatre.op;
@@ -38,6 +40,10 @@ export class DirectorWW2 extends Director {
     // a career's lineup: the open battle's day fitted to it (sim/lineup.js)
     this.day = sim.loadout && !sim.attract && !sim.scripted && this.op.kind === 'battle' ? new LineupDay(sim) : null;
     if (this.day) this.script = this.day.wrap(this.script);
+    // the pace of a career's day (pace below): how far the day's clock has run ahead of the battle's time
+    this.ahead = 0;
+    this.lullAt = null;
+    this.lapsing = false;
     this.si = 0;
     this.nobs = 0;
     this.attractT = 6;
@@ -287,15 +293,52 @@ export class DirectorWW2 extends Director {
     else this.setState('defeat', `The counter-attack failed: only ${inn} of ${n0} men reached the objective.`);
   }
 
+  // The day's time: the battle's time plus what the day has run ahead of it in the lulls (pace)
+  get dayTime() {
+    return this.sim.time + this.ahead;
+  }
+  // The pace of a career's day (with a lineup only: the tests' battles are as before). The day is a script on the clock,
+  // so a lineup that finishes its work early used to wait, with nothing to do, for the next order, the next attack or
+  // the end of a level's day. Now, after LULL s with nothing in hand (no mission open, no attack under way, no
+  // Feuerwalze, nothing waiting in the lineup's queue), the day runs on as a time lapse, the clock, the phases and the
+  // script together, until the next thing comes; only the day's clock jumps, never the battle's own time, so deadlines,
+  // reloads and the British fire run as ever.
+  pace(dt) {
+    const sim = this.sim;
+    if (!this.day || sim.state !== 'playing') return;
+    const busy = sim.missions.some((m) => m.state === 'open' || m.state === 'ranging' || m.state === 'ffe')
+      || sim.assaults.some((a) => a.state !== 'resolved') || sim.barrage?.active || this.day.queue.length > 0;
+    if (busy) {
+      this.lullAt = null;
+      this.lapsing = false;
+      return;
+    }
+    if (this.lullAt == null) this.lullAt = sim.time;
+    if (sim.time - this.lullAt < LULL) return;
+    const next = Math.min(this.script[this.si]?.t ?? Infinity, this.endAt || Infinity);
+    if (!Number.isFinite(next)) return;
+    const left = next - this.dayTime;
+    if (left <= 0) return;
+    if (!this.lapsing) {
+      this.lapsing = true;
+      sim.radio('All quiet on our front: the hours pass until the next orders.', 'info');
+    }
+    // fast enough to be there within LAPSE s, and never past it
+    this.ahead += Math.min(left, dt * Math.max(8, left / LAPSE));
+  }
+
   // ------------------------------------------------------------------ per step
   update(dt) {
     const sim = this.sim, now = sim.time, op = this.op;
     if (sim.scripted) return this.scriptedUpdate();
-    sim.clock = (sim.attract ? op.clockStart + 0.6 + 0.8 * Math.sin(now / 160) : clockOf(op.clock, now)) % 24;
+    this.pace(dt);
+    const day = this.dayTime;
+    sim.clock = (sim.attract ? op.clockStart + 0.6 + 0.8 * Math.sin(now / 160) : clockOf(op.clock, day)) % 24;
     sim.night = sim.clock >= 19 || sim.clock < 5;
+    sim.lapse = this.lapsing;
     if (sim.attract) return this.attractUpdate(dt);
     let ph = 1;
-    for (const p of op.phases) if (now >= p.t0) ph = p.n;
+    for (const p of op.phases) if (day >= p.t0) ph = p.n;
     if (ph !== sim.phase || !this.phaseSent) {
       sim.phase = ph;
       this.phaseSent = ph;
@@ -303,7 +346,7 @@ export class DirectorWW2 extends Director {
       sim.events.phase?.(ph, p.title, p.sub);
       sim.radio(`${p.title}. ${p.sub}`, 'info');
     }
-    while (this.si < this.script.length && this.script[this.si].t <= now) this.script[this.si++].fn();
+    while (this.si < this.script.length && this.script[this.si].t <= day) this.script[this.si++].fn();
     for (const a of sim.assaults) if (a.state === 'forming' && !a.missionId && now >= a.rocketsAt) {
       a.state = 'called';
       this.rockets(a);

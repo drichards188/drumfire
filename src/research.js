@@ -25,7 +25,7 @@ export const LINES = {
     { id: 'railway', name: 'Railway guns', de: 'Eisenbahngeschütze' },
     { id: 'mortars', name: 'Mortars', de: 'Mörser' },
     { id: 'siege', name: 'Siege guns', de: 'Belagerungsgeschütze' },
-    { id: 'rockets', name: 'Trench mortars and rockets', de: 'Minenwerfer und Werfer' },
+    { id: 'rockets', name: 'Rockets', de: 'Werfer' },
     { id: 'support', name: 'Off-map support', de: 'Fernwaffen' },
   ],
   '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
@@ -67,8 +67,7 @@ export const TREES = {
     { kind: 'gamma', line: 'siege', tier: 3, after: 'beta', cost: 2400 },
     { kind: 'bertha', line: 'siege', tier: 3, after: 'gamma', cost: 2800 },
     { kind: 'karl', line: 'siege', tier: 4, after: 'bertha', cost: 4000 },
-    { kind: 'smw', line: 'rockets', tier: 1, after: null, cost: 300 },
-    { kind: 'nbw41', line: 'rockets', tier: 1, after: 'smw', cost: 450 },
+    { kind: 'nbw41', line: 'rockets', tier: 1, after: null, cost: 450 },
     { kind: 'swg40', line: 'rockets', tier: 2, after: 'nbw41', cost: 800 },
     { kind: 'nbw42', line: 'rockets', tier: 2, after: 'swg40', cost: 1200 },
     { kind: 'gotha', line: 'support', tier: 3, after: null, cost: 2000, offmap: true },
@@ -156,7 +155,7 @@ export const DETACHMENT = {
   lefh18: { men: 6 }, sfh18: { men: 7 }, k18: { men: 10 }, mrs18: { men: 10 }, nbw41: { men: 5 }, karl: { men: 21 }, gustav: { men: 250 },
   k17: { men: 8, est: true }, sfh13: { men: 8, est: true }, m16: { men: 10, est: true }, max38: { men: 40, est: true },
   bertha: { men: 120, est: true }, gamma: { men: 250, est: true }, paris: { men: 80 },
-  fk16: { men: 6 }, k16: { men: 9, est: true }, m99: { men: 10, est: true }, rk92: { men: 8, est: true }, sfh93: { men: 8, est: true }, beta: { men: 40, est: true }, smw: { men: 8, est: true },
+  fk16: { men: 6 }, k16: { men: 9, est: true }, m99: { men: 10, est: true }, rk92: { men: 8, est: true }, sfh93: { men: 8, est: true }, beta: { men: 40, est: true },
   k38: { men: 12, est: true }, hm1: { men: 30, est: true }, bruno: { men: 40, est: true }, k5: { men: 70, est: true }, k12: { men: 80, est: true },
   wespe: { men: 5 }, hummel: { men: 6 }, nbw42: { men: 6 }, swg40: { men: 6, est: true }, gotha: { men: 3 },
 };
@@ -211,3 +210,5 @@ export function battleReward(sim, { won = false } = {}) {
 
 // a campaign mission's first win: half the research cost of the battery it features (the V-weapons' missions a flat sum)
 export const missionBonus = (m) => Math.max(500, Math.round((nodeOf(m.reward)?.cost ?? 2000) / 2));
+// a special mission's first win (menuItems.js SPECIAL): half its weapon's research cost, 500 at least
+export const specialBonus = (kind) => Math.max(500, Math.round((nodeOf(kind)?.cost ?? 2000) / 2));

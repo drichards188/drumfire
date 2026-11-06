@@ -58,8 +58,17 @@ export class DirectorWW1 extends DirectorWW2 {
     this.dayEnded = false;
     this.handedOff = new Set();
     this.endAt = L && this.op.kind === 'battle' ? DAY_END[L.day] ?? null : null;
+    // the strongpoints in the X-Zeit lanes (ops.js RIDGE_FORTS): the level's `forts` of them, in their order (one in
+    // each lane first); none without a level
+    const forts = sim.targets.filter((t) => t.site?.role === 'fort');
+    if (forts.length) {
+      const gone = new Set(forts.slice(L && this.op.kind === 'battle' ? L.forts ?? 0 : 0).map((t) => t.id));
+      sim.targets = sim.targets.filter((t) => !gone.has(t.id));
+      for (const id of gone) sim.targetAI.byId.delete(id);
+      this.specialists.sites = this.specialists.sites.filter((t) => !gone.has(t.id));
+    }
     if (!L || this.op.kind !== 'battle') return;
-    this.specialists.allow = new Set(L.sites.filter((t) => t === 'deep' || t === 'hard'));
+    this.specialists.allow = new Set(L.sites.filter((t) => t === 'deep' || t === 'hard' || t === 'fort'));
     // the lineup's batteries in the field, for the capability check (capability.js)
     this.bats = sim.units.filter((u) => !isOffmap(u.kind)).map((u) => ({ kind: u.kind, guns: u.pieces.length, mods: u.mods ?? IDENTITY, pos: u.pos }));
   }
@@ -242,7 +251,7 @@ export class DirectorWW1 extends DirectorWW2 {
   update(dt) {
     const sim = this.sim;
     // a threat level's shorter day: it ends at its hour
-    if (this.endAt != null && !this.dayEnded && sim.time >= this.endAt && sim.state === 'playing') return this.dayEnd();
+    if (this.endAt != null && !this.dayEnded && this.dayTime >= this.endAt && sim.state === 'playing') return this.dayEnd();
     super.update(dt);
     if (!sim.scripted) this.fieldFire();
   }

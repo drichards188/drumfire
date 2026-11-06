@@ -4,7 +4,7 @@ import { TUTORIALS } from './tutorial.js';
 import { WW2_TUTORIALS } from './ww2/tutorial.js';
 import { WW1_TUTORIALS } from './ww1/tutorial.js';
 import { OPS as OPS_WW1 } from './ww1/ops.js';
-import { maxGuns, missionBonus, TREES, isOffmap } from './research.js';
+import { maxGuns, missionBonus, specialBonus, TREES, isOffmap } from './research.js';
 
 // The menu's entries and the game pages they open (plain data, Node-safe). The menu (ui/menu.js) builds none of
 // the battlefield: a game page is a URL with play, tutorial, sandbox or range (src/boot.js), and its loading screen
@@ -12,6 +12,14 @@ import { maxGuns, missionBonus, TREES, isOffmap } from './research.js';
 // campaign:<id>, tutorial:<id>. Eras: '1917' (British), 'ww1' (German, 1918: a sandbox era, every battery from the
 // start, no campaign), 'ww2' (German).
 export const ERAS = ['1917', 'ww1', 'ww2'];
+// What there is to play (the menu's three lists, `tab`): the career's open battle at a threat level, the special
+// weapons' own missions, and the basic training. Anything else is in no list (tab 'hidden': the test range, the WW2
+// sandbox, the campaign's old one-off challenges and the lessons a special mission runs as its guided first run),
+// kept for the URLs that still open it.
+export const TABS = [['battle', 'Open battle'], ['special', 'Special missions'], ['training', 'Training']];
+// a special mission's guided first run: the lesson that walks through its weapon's drill
+export const GUIDE = { 'ww1:paris': 'w-paris', 'op:sevastopol': 'w-gustav', 'op:karl': 'w-karl', 'op:v1': 'w-v1', 'op:v2': 'w-v2' };
+const GUIDED = Object.fromEntries(Object.entries(GUIDE).map(([k, id]) => [id, k]));
 // The menu's nations (its top tabs): Germany holds the 1918 and the WW2 entries and the one German tree; Britain (the
 // 1917 game) is hidden for now, its entries and tree kept for when it comes back
 export const NATIONS = [{ id: 'de', name: 'Germany', sub: 'WW1 · WW2', eras: ['ww1', 'ww2'] }, { id: '1917', name: 'Britain', sub: '1917', eras: ['1917'], hidden: true }];
@@ -30,7 +38,8 @@ const wip = (item, on = true) => (on ? { ...item, wip: true, lines: [WIP_LINE, .
 // firing). An entry shows its own (`still`: its operation's gun, the battery its campaign mission earns, its lesson's
 // weapon); one without shows its era's in turn (ERA_STILLS).
 export const STILLS = new Set(['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'max38', 'gamma', 'm16', 'sfh13', 'k17', 'paris', 'bertha-demo',
-  'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'v1', 'v2']);
+  'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'v1', 'v2',
+  'rk92', 'fk16', 'sfh93', 'k16', 'm99', 'bruno', 'beta', 'swg40', 'gotha', 'wespe', 'hummel', 'k38', 'k5', 'k12', 'hm1', 'nbw42']);
 export const ERA_STILLS = { '1917': ['bl15', 'rail', 'bl92', 'bl60', 'bl6'], ww1: ['max38', 'paris', 'gamma', 'm16'], ww2: ['gustav', 'nbw41', 'v2', 'karl', 'k18'], de: ['max38', 'gustav', 'nbw41', 'paris', 'v2', 'k18'] };
 // a battery's still (Bertha's is the demo's)
 export const stillOf = (kind) => (kind === 'bertha' ? 'bertha-demo' : STILLS.has(kind) ? kind : null);
@@ -56,6 +65,8 @@ const earned = (career, era, ok = () => true) => {
   return `${TREES[era] ? 'Your lineup' : 'Your batteries'}: ${on.map((b) => b.name + guns(b)).join(', ')}${off.length ? `; off-map support: ${off.map((b) => b.name).join(', ')}` : ''}${TREES[era] ? ' (set in the hangar).' : list.length < all.length ? '. Research earns the rest.' : '.'}`;
 };
 const PAYS = 'Every kill pays as it happens: research points to the battery you are researching, and each battery its own points for its upgrades. Leaving early keeps them.';
+// a special mission's pay: the first win's research points, once
+const specialLine = (career, key, kind) => (career?.specials?.has(key) ? 'Won: its research bonus is paid.' : `First win: +${specialBonus(kind).toLocaleString('en-US')} research points.`);
 // the career's open battle, whatever the lineup and the level (its batteries and the level's day are in its lines)
 const CAREER_BLURB = 'The Gruppe on the ridge east of Ypres, firing west at the British: your lineup, up to five batteries and one weapon off the map, with the guns and parts they have earned. Lay the guns from the board, range on the observers\' calls, fire for effect and answer the red rockets. The threat level decides how long the day runs and what comes at you.';
 const forceLine = (k) => {
@@ -68,7 +79,7 @@ const forceLine = (k) => {
 export function menuItems(career = null, lessons = {}) {
   const items = [];
   items.push({
-    key: 'battle:ypres', era: '1917', tab: 'battles', title: 'Ypres salient', side: 'Heavy Artillery Group',
+    key: 'battle:ypres', era: '1917', tab: 'battle', title: 'Ypres salient', side: 'Heavy Artillery Group',
     kicker: 'Battle · 1917 British', sub: 'Heavy artillery, Ypres salient, 1917',
     blurb: 'A Heavy Artillery Group in the mud before Passchendaele: a 15-inch howitzer, 9.2s, 6-inch howitzers, 60-pounders and an 18-inch railway gun. Lay the guns from the board, read the observers, walk the shells onto pillboxes, batteries and dumps, and hold the line when the counter-attack comes.',
     lines: [earned(career, '1917'), PAYS], query: { play: 1 }, difficulty: true, still: 'bl15',
@@ -78,10 +89,11 @@ export function menuItems(career = null, lessons = {}) {
   // gunner now), its page bertha.html stays
   for (const op of Object.values(OPS_WW1)) {
     const battle = op.kind === 'battle';
+    const key = `ww1:${op.id}`, kind = op.units[0].kind;
     items.push(wip({
-      key: `ww1:${op.id}`, era: 'ww1', tab: 'battles', title: op.short, side: battle ? 'Your lineup' : op.units[0].name,
-      kicker: battle ? 'Battle · your career' : 'Battle · WW1 German', sub: op.tag, blurb: battle ? CAREER_BLURB : op.blurb,
-      lines: battle ? [earned(career, 'de'), PAYS] : [],
+      key, era: 'ww1', tab: battle ? 'battle' : 'special', title: op.short, side: battle ? 'Your lineup' : op.units[0].name, guide: GUIDE[key] ?? null,
+      kicker: battle ? 'Open battle · your career' : 'Special mission · 1918', sub: op.tag, blurb: battle ? CAREER_BLURB : op.blurb,
+      lines: battle ? [earned(career, 'de'), PAYS] : [specialLine(career, key, kind)], done: !battle && !!career?.specials?.has(key), kind,
       // (the career's battle is played at a threat level, threat.js, instead of a difficulty)
       query: { mode: 'ww1', op: op.id, play: 1 }, difficulty: !battle, level: battle, still: battle ? 'max38' : stillFor(op.units[0].kind),
     }, !battle && WIP_KINDS.has(op.units[0].kind)));
@@ -89,12 +101,14 @@ export function menuItems(career = null, lessons = {}) {
   for (const id of OP_IDS) {
     // the special weapons' operations are open from the start, with their whole roster (only the open battle's
     // batteries are earned)
-    const op = OPS[id], b = battery(op.units[0].kind);
+    const op = OPS[id], b = battery(op.units[0].kind), key = `op:${id}`, sandbox = id === 'flanders';
     items.push(wip({
-      // (the WW2 open battle: every WW2 battery, nothing earned, until the difficulty levels bring the career here)
-      key: `op:${id}`, era: 'ww2', tab: id === 'flanders' ? 'hidden' : 'battles', title: id === 'flanders' ? `${op.short}, WW2` : op.short, side: id === 'flanders' ? 'Sandbox: every WW2 battery' : b.name,
-      kicker: 'Battle · WW2 German', sub: `German artillery, ${op.title}`, blurb: op.blurb,
-      lines: id === 'flanders' ? ['A sandbox for now: every WW2 battery, nothing earned or paid. The career fights the open battle of 1918.'] : [], query: { mode: 'ww2', op: id, play: 1 }, difficulty: true,
+      // (the WW2 open battle: every WW2 battery, nothing earned, a sandbox in no list)
+      key, era: 'ww2', tab: sandbox ? 'hidden' : 'special', title: sandbox ? `${op.short}, WW2` : op.short, side: sandbox ? 'Sandbox: every WW2 battery' : b.name,
+      kicker: sandbox ? 'Battle · WW2 German' : 'Special mission · WW2', sub: `German artillery, ${op.title}`, blurb: op.blurb,
+      lines: sandbox ? ['A sandbox for now: every WW2 battery, nothing earned or paid. The career fights the open battle of 1918.'] : [specialLine(career, key, b.kind)],
+      done: !sandbox && !!career?.specials?.has(key), kind: b.kind, guide: GUIDE[key] ?? null,
+      query: { mode: 'ww2', op: id, play: 1 }, difficulty: true,
       still: id === 'flanders' ? 'nbw41' : stillFor(op.units[0].kind),
     }, id !== 'flanders' && WIP_KINDS.has(op.units[0].kind)));
   }
@@ -112,7 +126,9 @@ export function menuItems(career = null, lessons = {}) {
   for (const m of CAMPAIGN) {
     const n = numberOf(m), b = battery(m.reward), done = !!career?.completed.has(m.id);
     items.push(wip({
-      key: `campaign:${m.id}`, era: m.era, tab: 'campaign', n: done ? '✓' : pad(n), done, title: m.title, side: b.name,
+      // (the campaign's one-off challenges are in no list since 2026-11-02: the open battle and the special missions
+      // do their work; kept for the URLs that open them)
+      key: `campaign:${m.id}`, era: m.era, tab: 'hidden', n: done ? '✓' : pad(n), done, title: m.title, side: b.name,
       kicker: `Campaign · mission ${pad(n)}`, sub: `A challenge for the ${b.name}`, blurb: m.briefing,
       lines: [`Loaned battery: ${b.name}. ${done ? 'Won: its research bonus is paid.' : `First win: +${missionBonus(m).toLocaleString('en-US')} research points.`}`, ...m.roster.map(forceLine)],
       query: { ...(m.era === 'ww2' ? { mode: 'ww2' } : {}), campaign: m.id, play: 1 }, difficulty: true, still: stillFor(m.reward),
@@ -122,12 +138,15 @@ export function menuItems(career = null, lessons = {}) {
   const nth = {};
   for (const [era, defs] of [['1917', TUTORIALS], ['ww1', WW1_TUTORIALS], ['ww2', WW2_TUTORIALS]]) defs.forEach((d) => {
     const done = !!lessons[d.id], n = (nth[NATION_OF[era]] = (nth[NATION_OF[era]] ?? 0) + 1);
+    // (the basic training is the one lesson listed: every battery of the open battle is worked as it teaches. A WW2
+    // lesson is its special mission's guided first run, `guideFor`; the Nebelwerfer's taught nothing the training does not)
+    const guideFor = GUIDED[d.id] ?? null;
     items.push(wip({
-      key: `tutorial:${d.id}`, era, tab: 'tutorials', n: done ? '✓' : pad(n), done, title: d.name, side: `${d.steps.length} steps`,
-      kicker: `Tutorial · ${d.steps.length} steps`, sub: era === 'ww1' ? 'The career\'s ridge in daylight, with a borrowed battery. Nothing is scored and nothing is lost.' : 'A quiet range in daylight. Nothing is scored and nothing is lost.', blurb: d.blurb,
-      lines: era === 'ww1' ? ['Start here: it teaches the console and serving a gun in person.'] : [],
-      query: era === 'ww2' ? { mode: 'ww2', op: d.op, tutorial: d.id } : era === 'ww1' ? { mode: 'ww1', tutorial: d.id } : { tutorial: d.id },
-      still: era === '1917' ? null : era === 'ww1' ? stillFor(d.kinds[0]) : d.id === 'w-werfer' ? 'nbw41' : d.op === 'flanders' ? 'lefh18' : stillFor(OPS[d.op]?.units[0].kind),
+      key: `tutorial:${d.id}`, era, tab: era === 'ww2' || guideFor ? 'hidden' : 'training', n: done ? '✓' : pad(n), done, title: d.name, side: `${d.steps.length} steps`, guideFor,
+      kicker: guideFor ? `Guided first run · ${d.steps.length} steps` : `Training · ${d.steps.length} steps`, sub: d.id === 'training' ? 'The career\'s ridge in daylight, with a borrowed battery. Nothing is scored and nothing is lost.' : 'A quiet range in daylight. Nothing is scored and nothing is lost.', blurb: d.blurb,
+      lines: d.id === 'training' ? ['Start here: it teaches the console and serving a gun in person.'] : [],
+      query: era === 'ww2' ? { mode: 'ww2', op: d.op, tutorial: d.id } : era === 'ww1' ? { mode: 'ww1', ...(d.op ? { op: d.op } : {}), tutorial: d.id } : { tutorial: d.id },
+      still: era === '1917' ? null : era === 'ww1' ? stillFor(d.kinds?.[0] ?? d.op) : d.id === 'w-werfer' ? 'nbw41' : d.op === 'flanders' ? 'lefh18' : stillFor(OPS[d.op]?.units[0].kind),
     }, era === 'ww2' && d.op !== 'flanders' && WIP_KINDS.has(OPS[d.op]?.units[0].kind)));
   });
   return items;

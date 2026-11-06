@@ -4,10 +4,10 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { buildGun, loadGuns, EXTRAS, GUN_ERA } from '../../guns.js';
 import { GUNS } from '../../../sim/tables.js';
 
-// The new 1914 to 1918 batteries of the German tree (m99, smw, beta) and their firing positions (guns.EXTRAS
-// buildSMWSite, buildBetaSite) for ww1_tree_preview.html.
+// The new 1914 to 1918 batteries of the German tree (m99, beta) and their firing positions (guns.EXTRAS
+// buildBetaSite) for ww1_tree_preview.html.
 const q = new URLSearchParams(location.search);
-const kind = q.get('kind') ?? 'smw';
+const kind = q.get('kind') ?? 'beta';
 GUN_ERA.ww1 = true;
 await loadGuns([kind]);
 
@@ -38,7 +38,7 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-const SITE = { smw: 'buildSMWSite', beta: 'buildBetaSite' };
+const SITE = { beta: 'buildBetaSite' };
 let site = null;
 if (q.get('site') !== '0' && EXTRAS[SITE[kind]]) {
   site = EXTRAS[SITE[kind]](Number(q.get('seed') ?? 1));

@@ -29,17 +29,19 @@ export class Targets {
       id: s.id, kind: s.kind, name: s.name, pos: { x: s.pos.x, y, z: s.pos.z }, bearing: s.bearing, r: s.r,
       alive: true, known: s.kind === 'mebu' || s.kind === 'hq', active: false, present: true, hp: 0, maxHp: 0,
       parts: [], damage: 0, suppressed: 0, firedAt: -999, hits: 0, respawnAt: 0, site: s,
+      minHard: s.minHard ?? 0, // (concrete that a lighter shell's hard.D does not touch: a WW1 strongpoint, ww1/ops.js)
     };
     // parts stand where the models put them: layout offsets in the site's frame (local -Z faces the bearing)
     const b = s.bearing, rx = Math.cos(b), rz = Math.sin(b), fx = Math.sin(b), fz = -Math.cos(b);
     const lay = partLayout(s.kind, { alt: s.alt });
     lay.forEach((o, i) => {
       const x = s.pos.x + rx * o.x - fx * o.z, z = s.pos.z + rz * o.x - fz * o.z;
-      const part = { x, z, hp: def.partHp, alive: true };
+      const hp = s.partHp ?? def.partHp; // (a site's own: a WW1 strongpoint, lighter than the kind's)
+      const part = { x, z, hp, alive: true };
       if (s.kind === 'balloon' || o.y) part.y = o.y;
       if (s.kind === 'crossroads') part.type = CROSS_KINDS[i % 4];
       t.parts.push(part);
-      t.maxHp += def.partHp;
+      t.maxHp += hp;
     });
     t.hp = t.maxHp;
     if (s.kind === 'crossroads' || s.kind === 'railyard') {
@@ -134,6 +136,7 @@ export class Targets {
       if (!t.alive || !t.present) continue;
       const far = Math.hypot(p.x - t.pos.x, p.z - t.pos.z);
       if (far > t.r + 80) continue;
+      if (t.minHard && (sc.hard?.D ?? 0) < t.minHard) continue;
       const hard = this.hardOf(t);
       let total = 0, worst = 0;
       t.parts.forEach((part, i) => {
@@ -279,12 +282,13 @@ export class Targets {
   revive(t) {
     const def = TARGETS[t.kind];
     t.alive = true;
-    t.hp = t.maxHp = def.partHp * t.parts.length;
+    const hp = t.site?.partHp ?? def.partHp;
+    t.hp = t.maxHp = hp * t.parts.length;
     t.damage = 0;
     t.respawnAt = 0;
     for (const p of t.parts) {
       p.alive = true;
-      p.hp = def.partHp;
+      p.hp = hp;
     }
     if (t.kind === 'crossroads' || t.kind === 'railyard') t.present = false;
     if (t.kind === 'battery') {

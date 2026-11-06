@@ -21,7 +21,7 @@ export const GUN_KINDS_WW2 = ['lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gusta
   'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40'];
 // The WW1 German mode's pieces (src/models/v/de/, DESIGN.md "WW1 German mode"); the 42 cm M-Gerät is the shared
 // `bertha`, built in its 1917 colours on a WW1 page (GUN_ERA.ww1, set by main before the rigs are built).
-export const GUN_KINDS_WW1 = ['sfh13', 'm16', 'k17', 'bertha', 'max38', 'gamma', 'paris', 'fk16', 'k16', 'm99', 'beta', 'smw', 'gotha', 'rk92', 'sfh93'];
+export const GUN_KINDS_WW1 = ['sfh13', 'm16', 'k17', 'bertha', 'max38', 'gamma', 'paris', 'fk16', 'k16', 'm99', 'beta', 'gotha', 'rk92', 'sfh93'];
 export const GUN_ERA = { ww1: false };
 
 const EXT = {
@@ -48,7 +48,6 @@ const EXT = {
   k16: { glob: import.meta.glob('./v/de/k16.js') },
   m99: { glob: import.meta.glob('./v/de/m99.js') },
   beta: { glob: import.meta.glob('./v/de/beta.js') },
-  smw: { glob: import.meta.glob('./v/de/smw.js') },
   gotha: { glob: import.meta.glob('./v/de/gotha.js') },
   // the old guns without a recoil system that fired off ramps (2026-11-01)
   rk92: { glob: import.meta.glob('./v/de/rk92.js') },
@@ -67,7 +66,7 @@ const NAMES = {
   bl6: 'buildBL6', bl60: 'buildBL60', lefh18: 'buildLeFH18', sfh18: 'buildSFH18', k18: 'buildK18', mrs18: 'buildMrs18',
   nbw41: 'buildNbW41', gustav: 'buildGustav', bertha: 'buildBerthaGun', karl: 'buildKarl', v1: 'buildV1Site', v2: 'buildV2Site',
   sfh13: 'buildSFH13', m16: 'buildM16', k17: 'buildK17', max38: 'buildMax38', gamma: 'buildGamma', paris: 'buildParis',
-  fk16: 'buildFK16', k16: 'buildK16', m99: 'buildM99', beta: 'buildBeta', smw: 'buildSMW', gotha: 'buildGotha', rk92: 'buildRK92', sfh93: 'buildSFH93',
+  fk16: 'buildFK16', k16: 'buildK16', m99: 'buildM99', beta: 'buildBeta', gotha: 'buildGotha', rk92: 'buildRK92', sfh93: 'buildSFH93',
   k38: 'buildK38', hm1: 'buildHM1', bruno: 'buildBruno', k5: 'buildK5', k12: 'buildK12', wespe: 'buildWespe', hummel: 'buildHummel',
   nbw42: 'buildNbW42', swg40: 'buildSWG40',
 };
@@ -78,7 +77,7 @@ const EXTRA_NAMES = {
   // the WW1 German mode: the 42 cm in its 1917 colours, and the firing positions of the railway and fixed guns
   bertha: ['buildBerthaGun1917'], max38: ['buildMax38Site'], gamma: ['buildGammaSite'], paris: ['buildParisSite'],
   // the new tree's emplacements: the beds and the railway guns' spurs and turntable
-  beta: ['buildBetaSite'], hm1: ['buildHM1Site'], bruno: ['buildBrunoSite'], k5: ['buildK5Site'], k12: ['buildK12Site'], smw: ['buildSMWSite'],
+  beta: ['buildBetaSite'], hm1: ['buildHM1Site'], bruno: ['buildBrunoSite'], k5: ['buildK5Site'], k12: ['buildK12Site'],
 };
 const loaded = {};
 const pending = {};
@@ -110,7 +109,7 @@ const STANDIN = {
   sfh13: { len: 2.6, r: 0.1, y: 1.1 }, m16: { len: 3.2, r: 0.14, y: 1.6 }, k17: { len: 4.7, r: 0.07, y: 1.2 },
   max38: { len: 17, r: 0.32, y: 3.4 }, gamma: { len: 6.7, r: 0.4, y: 2.6 }, paris: { len: 34, r: 0.3, y: 4 },
   fk16: { len: 2.7, r: 0.05, y: 1.1 }, k16: { len: 6.4, r: 0.1, y: 1.5 }, m99: { len: 2.6, r: 0.15, y: 1.5 }, beta: { len: 5, r: 0.28, y: 2.4 },
-  smw: { len: 1.4, r: 0.17, y: 0.9 }, gotha: { len: 2, r: 0.3, y: 1.5 }, k38: { len: 11.5, r: 0.15, y: 2.4 }, hm1: { len: 10, r: 0.27, y: 3.2 },
+  gotha: { len: 2, r: 0.3, y: 1.5 }, k38: { len: 11.5, r: 0.15, y: 2.4 }, hm1: { len: 10, r: 0.27, y: 3.2 },
   bruno: { len: 12, r: 0.22, y: 3.4 }, k5: { len: 21.5, r: 0.22, y: 3.6 }, k12: { len: 33, r: 0.17, y: 4.2 },
   wespe: { len: 2.9, r: 0.08, y: 2 }, hummel: { len: 4.4, r: 0.11, y: 2.4 }, nbw42: { len: 1.3, r: 0.3, y: 0.9 }, swg40: { len: 1.6, r: 0.3, y: 0.8 },
   rk92: { len: 4.5, r: 0.1, y: 1.6 }, sfh93: { len: 2.1, r: 0.1, y: 1.2 },

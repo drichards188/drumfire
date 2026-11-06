@@ -28,7 +28,6 @@ export const BATTERIES = [
   { kind: 'k16', era: 'de', name: '15 cm K 16', role: 'Long heavy gun: 51 kg shells to 22 km', range: 22000 },
   { kind: 'm99', era: 'de', name: '21 cm Mörser 99', role: 'Old mortar without a recoil system: every round laid afresh', range: 8300 },
   { kind: 'beta', era: 'de', name: '30.5 cm Beta-Gerät', role: 'Siege mortar on its steel bed: 410 kg shells on concrete', range: 12000 },
-  { kind: 'smw', era: 'de', name: '25 cm schwerer Minenwerfer', role: 'Heavy trench mortar: 97 kg bombs at a kilometre', range: 1000 },
   { kind: 'rk92', era: 'de', name: '15 cm Ringkanone C/92', role: 'Old fortress gun without a recoil system: off its ramps, re-laid every round', range: 12000 },
   { kind: 'sfh93', era: 'de', name: '15 cm sFH 93', role: 'Old heavy field howitzer without a recoil system: off its ramps, re-laid every round', range: 6000 },
   { kind: 'gotha', era: 'de', name: 'Gotha bomber strike', role: 'Off-map support: three Gothas bomb a point on the map', range: 0 },

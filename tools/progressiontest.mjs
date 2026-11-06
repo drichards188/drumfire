@@ -19,7 +19,7 @@ assert.equal(new Progression(storage).dev, true, 'Switching dev mode on must sur
 career.setDev(false);
 assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must survive a reload');
 assert.deepEqual(DE.filter(k=>career.unlocked(k)), ['rk92'], 'A new career owns the 15 cm Ringkanone C/92 alone');
-assert.equal(career.targetOf('de'), 'fk16', 'A new career researches the cheapest open battery (the FK 16 and the Minenwerfer tie: the first in the tree)');
+assert.equal(career.targetOf('de'), 'fk16', 'A new career researches the cheapest open battery (the FK 16)');
 assert.equal(career.targetOf('ww1'), 'fk16', 'The 1918 and the WW2 eras share the German tree');
 // every mission, operation and lesson is open from the start, in any order
 assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
