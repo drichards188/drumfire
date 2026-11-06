@@ -399,6 +399,13 @@ body.range #score-box { display: none; }
 .pdrill .pd-tasks .sp-name b { font: 700 9px/1.15 var(--serif); }
 .pdrill .pd-tasks .sp-name i { font-size: 7.5px; }
 .pdrill .pd-tasks .btn.mini { min-width: 18px; padding: 0; }
+/* the tasks take what room the card has and scroll when they need more (a wider fallback font, Georgia on Windows,
+   wraps more names onto two lines): never cut off */
+.pdrill .cbody { display: flex; flex-direction: column; min-height: 0; }
+.pdrill .cbody > * { flex: none; }
+.pdrill .pd-tasks.tight .sp-name i { display: none; }
+.pdrill .pd-tasks.tight .sp-row.opt .sp-name b::after { content: ' (optional)'; font-weight: normal; font-style: italic; }
+.pdrill .cbody > .pd-tasks { flex: 0 1 auto; min-height: 48px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #a08c5c transparent; }
 .pdrill .pd-drill { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
 .pdrill .btn.pd-key { width: 100%; height: 42px; flex: none; }
 .pdrill .btn.pd-key .lbl b { font: 800 14px/1 var(--serif); letter-spacing: .12em; }

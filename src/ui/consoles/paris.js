@@ -154,9 +154,10 @@ class ParisDrill {
   taskRows(st) {
     if (this.rows.length) return;
     for (const t of st.tasks) {
-      const r = el('div', 'sp-row');
+      const r = el('div', t.optional ? 'sp-row opt' : 'sp-row');
       const name = el('div', 'sp-name');
       name.append(el('b', null, t.name), el('i', null, t.de + (t.optional ? '  (optional)' : '')));
+      name.title = `${t.name} · ${t.de}${t.optional ? ' (optional)' : ''}`;
       const bar = new Bar({ cls: 'sp-bar' });
       const g = el('span', 'sp-gangs', '0');
       tip(g, 'Work gangs on this task');
@@ -212,9 +213,19 @@ class ParisDrill {
     this.taskRows(st);
     const busy = st.tasks.reduce((s, t) => s + t.gangs, 0);
     const lead = st.cover ? 'FLIEGERALARM: the gangs are in cover. ' : '';
-    setText(this.head, `${lead}${st.gangs - busy} of ${st.gangs} work gangs free. Send them to the tasks (+/−); a task waits for the ones it needs. ${u.mode === 'auto' ? 'AUTO: the gangs organise themselves.' : st.allHands ? 'ALL HANDS: the gangs keep to the critical path.' : 'J: all hands on the critical path.'}`);
+    // (kept to two lines: the tasks below need the room; the whole rule is in the hover text, T_SETUP)
+    setText(this.head, `${lead}${st.gangs - busy} of ${st.gangs} gangs free: + and − send them. ${u.mode === 'auto' ? 'AUTO: they organise themselves.' : st.allHands ? 'ALL HANDS: on the critical path.' : 'J: all hands.'}`);
     tip(this.head, T_SETUP);
     this.head.style.color = st.cover ? '#8a1c10' : '';
+    // when the tasks do not all fit (a wider fallback font wraps more names), the German names go (they stay in the
+    // hover text); measured a few times a second, not every frame
+    const now = performance.now();
+    if (!(now < this.fitAt)) {
+      this.fitAt = now + 400;
+      const L = this.tasks;
+      if (L.classList.contains('tight')) { L.classList.remove('tight'); if (L.scrollHeight > L.clientHeight + 1) L.classList.add('tight'); }
+      else if (L.scrollHeight > L.clientHeight + 1) L.classList.add('tight');
+    }
     for (const row of this.rows) {
       const t = st.tasks.find((q) => q.id === row.id);
       row.bar.set(t.done / t.work);
