@@ -14,6 +14,13 @@ const TYPE = "'Courier 10 Pitch','Liberation Mono',monospace";
 const KIND = {
   phone: 'TELEPHONE', wireless: 'WIRELESS', sound: 'SOUND RANGING', order: 'GROUP ORDERS', alert: 'WARNING', kill: 'REPORT',
 };
+// a message's own title: what comes before its first ': ' or '! ' when that is short ("Zerstörungsfeuer: ...",
+// "Fliegeralarm! ..."), else the kind of slip ("Group orders") over the whole text
+function splitTitle(text, kind) {
+  const m = /^(.{3,34}?)(: |! )(.{8,})$/s.exec(text);
+  if (m) return [m[2] === '! ' ? `${m[1]}!` : m[1], m[3][0].toUpperCase() + m[3].slice(1)];
+  return [kind ? kind[0] + kind.slice(1).toLowerCase() : '', text];
+}
 const DIR = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
 export class MessagePad {
@@ -48,31 +55,34 @@ export class MessagePad {
     this.latest = null;
   }
 
+  // A slip in the Smart Brevity order: the title on top (the round and its battery, or the order's name) with the time,
+  // the one line that matters below it at the card's full width (the correction to make, ON TARGET, the order), the
+  // observer's own words small under it, and where it came from in one line at the foot (the whole of it on hover).
   build(s) {
-    const e = el('div', `slip ${s.kind}`);
+    // (the kind as `s-<kind>`: a bare `kill` or `alert` class would take other rules, style.css's kill feed among them)
+    const e = el('div', `slip s-${s.kind}`);
     e.style.setProperty('--rot', `${((s.id * 37) % 21 - 10) / 8}deg`);
-    const head = el('div', 'sh');
-    head.append(el('b', null, KIND[s.kind] || 'MESSAGE'), el('i', null, `${s.from}`), el('span', 'stime', clockStr(s.clock)));
-    const body = el('div', 'sb');
-    // round, battery, gun, and task for this report
-    if (s.round || s.battery || s.task != null) {
-      const who = el('div', 'sfor');
-      if (s.round) who.append(el('span', 'sround', `Round ${s.round}`));
-      if (s.battery) who.append(el('span', 'sbattery', s.battery));
-      const bits = [s.gun ? `No. ${s.gun} gun` : '', s.task != null ? `${taskNo(s.task)} ${s.title || ''}`.trim() : ''].filter(Boolean);
-      if (bits.length) who.append(el('span', 'swho', bits.join(' · ')));
-      body.append(who);
-    }
+    const kind = KIND[s.kind] || 'MESSAGE';
+    const report = !!(s.round || s.battery);
+    let title, main = s.text;
+    if (report) title = [s.round ? `Round ${s.round}` : '', s.battery, s.gun ? `No. ${s.gun} gun` : ''].filter(Boolean).join(' · ');
+    else if (s.head) {
+      // an order: the task's name on top ("Zerstörungsfeuer: Brigade HQ" gives the kind of fire and the target)
+      const [t, rest] = splitTitle(s.head, '');
+      title = t || s.head;
+      main = t ? `${rest} ${s.body.replace(/^At /, 'at ')}` : s.body;
+    } else [title, main] = splitTitle(s.text, kind);
+    const top = el('div', 'st');
+    const tt = el('b', 'stitle', title);
+    top.append(tt, el('span', 'stime', clockStr(s.clock)));
+    e.append(top);
+    // the gist: the pencilled note (a correction is a key that applies it), else the message itself
     const dup = s.code && s.text.replace(/\s/g, '').toUpperCase().includes(s.rawCode.replace(/\s/g, '').toUpperCase());
-    if (s.code) body.append(el('span', 'scode', s.rawCode));
-    if (!dup) body.append(el('span', 'stext', s.text));
-    e.append(head, body);
-    if (s.round) tut(e, 'report'); // (an observer's report on a round; the newest is the list's first)
     if (s.note) {
       const n = el('button', 'snote');
       n.type = 'button';
       n.tabIndex = -1;
-      const lab = el('i', null, s.corr ? 'Corr.' : 'Note'), txt = el('b', null, s.note);
+      const lab = el('i', null, s.corr ? 'Corr.' : ''), txt = el('b', null, s.note);
       n.append(lab, txt);
       e._note = { lab, txt, key: '' };
       if (s.corr) {
@@ -81,7 +91,27 @@ export class MessagePad {
         n.addEventListener('pointerdown', (ev) => { ev.preventDefault(); snd('click'); this.apply(s); });
       }
       e.append(n);
+      // the observer's words under it, without the English the note already gives
+      const said = (s.code ? '' : s.text).replace(/\s*\([^()]*\)\.?\s*$/, '');
+      if (s.code || said) {
+        const d = el('div', 'sdet');
+        if (s.code) d.append(el('span', 'scode', s.rawCode));
+        if (said) d.append(said);
+        else if (!dup) d.append(s.text);
+        e.append(d);
+      }
+    } else {
+      const m = el('div', 'smain');
+      if (s.code) m.append(el('span', 'scode', s.rawCode));
+      if (!s.code || !dup) m.append(main);
+      e.append(m);
     }
+    // where it came from, and the task it belongs to
+    const from = [kind[0] + kind.slice(1).toLowerCase(), s.from, s.task != null && report ? `${taskNo(s.task)} ${s.title || ''}`.trim() : ''].filter(Boolean).join(' · ');
+    const f = el('div', 'sfrom', from);
+    e.title = `${title}\n${s.text}\n${from}`;
+    e.append(f);
+    if (s.round) tut(e, 'report'); // (an observer's report on a round; the newest is the list's first)
     return e;
   }
 

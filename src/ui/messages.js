@@ -69,7 +69,10 @@ export class Mail {
           const r = m.gridRef || ref(m.x, m.z);
           const dl = m.deadline != null ? ` Engage within ${Math.max(1, Math.round((m.deadline - (sim.time || 0)) / 60))} minutes.` : '';
           const what = m.kind === 'sos' ? `${TH.sos} called on ${sectorAt(m.z).name} front. All guns to the ${TH.sos} line.` : `${m.title || MISSION_NAME[m.kind]} at ${r}.${dl}`;
-          fresh.push({ kind: 'order', from: TH.hq, text: what, mission: m.id, tag: `TASK ${m.id}`, clock: sim.clock - ((sim.time || 0) - (m.t0 || 0)) / 3600 });
+          // (head and body: the slip's title, the task's name, and the line under it; messagePad.js)
+          const head = m.kind === 'sos' ? `${TH.sos} · ${sectorAt(m.z).name}` : m.title || MISSION_NAME[m.kind];
+          const body = m.kind === 'sos' ? `All guns to the ${TH.sos} line.` : `At ${r}.${dl}`;
+          fresh.push({ kind: 'order', from: TH.hq, text: what, head, body, mission: m.id, tag: `TASK ${m.id}`, clock: sim.clock - ((sim.time || 0) - (m.t0 || 0)) / 3600 });
         }
       }
       for (const rp of m.reports || []) {
