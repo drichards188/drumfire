@@ -462,6 +462,9 @@ body.spotlit #tut-card, body.spotlit #hint { z-index: 42; }
 body.ui-hidden #spotlight { display: none; }
 /* at a gun the gun card has the view's lower left: the lesson's card goes to the upper right */
 body.tutorial.gunner #tut-card { left: auto; right: 16px; bottom: auto; top: 86px; width: min(390px, calc(100% - 32px)); }
+/* the max-quality lesson: in a step that lights the 3D view the card stands over a free corner of the console
+   (src/tutorial.js dockCard sets the corner), so the battery is seen whole; fixed, so it leaves #view's clip */
+body.tutorial.tc-docked #tut-card { position: fixed; left: var(--tc-x, 50%); top: var(--tc-y, 56px); right: auto; bottom: auto; width: var(--tc-w, min(360px, calc(55vw - 20px))); }
 /* an `instant` lesson's tick for the step just done (src/tutorial.js flashDone) */
 #tut-card .tc-done { height: 0; overflow: hidden; font: 700 11px var(--mono); letter-spacing: 0.08em; color: var(--olive); opacity: 0; }
 #tut-card .tc-done.show { animation: tc-done 2.2s ease forwards; }

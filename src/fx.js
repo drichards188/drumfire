@@ -4,10 +4,12 @@ import { mulberry32 } from './noise.js';
 import { SMOKE, FLAME, FLASH, SPARK, rand, rr, rdir, seedFx } from './fx/kinds.js';
 import { Clods } from './fx/clods.js';
 import { makeAtlasData } from './fx/atlas.js';
+import { makeHeroAtlasData, HERO_SMOKE_TILES } from './fx/heroatlas.js';
 import { Emitters } from './fx/emitters.js';
 import * as art from './fx/artillery.js';
 import * as rk from './fx/rockets.js';
 import * as w1 from './fx/ww1.js';
+import { HERO_OFF } from './fx/hero.js';
 
 export { SMOKE, seedFx };
 const tmpV = new THREE.Vector3();
@@ -107,6 +109,10 @@ const MAX_LIDS = 16;
 const _lq = new THREE.Quaternion();
 
 const smooth01 = (x) => { x = x < 0 ? 0 : x > 1 ? 1 : x; return x * x * (3 - 2 * x); };
+// the hero battery's muzzle flash by day: the share of the dazzle (flashScale) it keeps. As small as its light's day
+// share (fx/hero.js DAY_LIGHT): in sunlight the eye does not stop down for seconds after a flash. At 0.15 the lesson's
+// close-up came out darker on the flash frame than before the shot (the exposure cut 21 %, still 7 % at 2 s).
+const HERO_DAZZLE_DAY = 0.06;
 
 export class FX {
   constructor(scene, { maxSmoke = 9000, maxGlow = 4000, maxDebris = 300, maxShards = 640, maxBrass = 1600, maxClods = 1600, lights = 4 } = {}) {
@@ -121,6 +127,7 @@ export class FX {
     // lit, sorted smoke / spray
     const s = quadGeo(['iA', 'iB', 'iC', 'iE'], maxSmoke);
     this.smokeAttrs = s.attrs;
+    this._smokeAttrList = Object.values(s.attrs); // (no array made per frame)
     this.smokeMat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.merge([
         THREE.UniformsLib.fog,
@@ -139,10 +146,12 @@ export class FX {
         attribute vec4 iE; // ground height under the puff, fade height, stretch x, stretch y
         varying vec2 vGnd;
         varying vec2 vUv;
+        varying vec2 vUvH;
         varying vec4 vCol;
         varying float vGlow;
         varying float vRot;
         varying float vNear;
+        varying float vHero;
         #include <fog_pars_vertex>
         void main() {
           vec4 mvPosition = viewMatrix * vec4(iA.xyz, 1.0);
@@ -151,12 +160,20 @@ export class FX {
           vGnd = iE.xy;
           float tile = iC.z;
           vUv = (uv + vec2(mod(tile, 2.0), floor(tile / 2.0))) * 0.5;
+          // the max-quality battery's puffs (tile 4 and up) use their own atlas (fx/heroatlas.js, 4 x 2 tiles): the
+          // tile in the integer part, the puff's age (0 to 1) in the fraction
+          float ht = max(floor(tile) - 4.0, 0.0);
+          vHero = tile > 3.5 ? 1.0 + fract(tile) : 0.0;
+          vUvH = (uv + vec2(mod(ht, 4.0), floor(ht / 4.0))) * vec2(0.25, 0.5);
           vCol = iB;
           vGlow = iC.y;
           vRot = iC.x;
           vNear = smoothstep(1.0, 4.0 + iA.w * 0.6, -mvPosition.z);
           // old diffuse smoke (iC.w: 0 fresh, 1 aged cordite or hang) thins out within a few tens of metres of the camera
           vNear *= mix(1.0, smoothstep(4.0 + iA.w * 0.6, 12.0 + iA.w * 1.8, -mvPosition.z), iC.w);
+          // a small hero puff (a wisp from the bore, fumes from the breech, the hot case's smoke) stays in view up to
+          // half a metre from the eye: the gunner at the breech sees it
+          if (tile > 3.5 && iA.w < 3.0) vNear = smoothstep(0.4, 1.0 + iA.w * 0.4, -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
           if (vNear < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // fully faded: skip the fill
           #include <fog_vertex>
@@ -164,19 +181,26 @@ export class FX {
       `,
       fragmentShader: /* glsl */ `
         uniform sampler2D uTex;
+        uniform sampler2D uTexH;
         uniform vec3 uLightView;
         uniform vec3 uSun;
         uniform vec3 uAmbient;
         uniform vec3 uGlowColor;
         varying vec2 vGnd;
         varying vec2 vUv;
+        varying vec2 vUvH;
         varying vec4 vCol;
         varying float vGlow;
         varying float vRot;
         varying float vNear;
+        varying float vHero;
         #include <fog_pars_fragment>
         void main() {
           vec4 t = texture2D(uTex, vUv);
+          // (the hero atlas's gradients are taken here, in uniform control flow, for its sample below)
+          vec2 hdx = dFdx(vUvH), hdy = dFdy(vUvH);
+          bool hero = vHero > 0.5;
+          if (hero) t = textureGrad(uTexH, vUvH, hdx, hdy);
           float a = t.a * vCol.a * vNear;
           #ifdef USE_FOG
           // soft contact with the ground: fade out over the last bit above the ground it was born on
@@ -189,7 +213,19 @@ export class FX {
           vec3 n = vec3(nxy, sqrt(max(1.0 - dot(nxy, nxy), 0.0)));
           float ndl = dot(n, uLightView);
           float thin = 1.0 - t.a;
-          vec3 light = uAmbient * (0.75 + 0.25 * n.y) + uSun * (0.3 + 0.7 * max(ndl, 0.0) + thin * 0.4 * max(-uLightView.z, 0.0));
+          vec3 light;
+          if (hero) {
+            // lit billows: a wrapped sun term over the thickness field's normals, the thick middle turned away from
+            // the sun in its own shadow, the thin rim letting the light through when the sun is behind the cloud,
+            // the ambient shut out of the thick parts
+            float th = t.b;
+            float wrap = clamp((ndl + 0.45) / 1.45, 0.0, 1.0);
+            float self = 1.0 - 0.5 * th * (1.0 - clamp(ndl, 0.0, 1.0));
+            float back = max(-uLightView.z, 0.0);
+            light = uAmbient * (0.72 + 0.28 * n.y) * (1.0 - 0.22 * th) + uSun * ((0.12 + 0.88 * wrap) * self + (thin * 0.85 + 0.12) * back);
+          } else {
+            light = uAmbient * (0.75 + 0.25 * n.y) + uSun * (0.3 + 0.7 * max(ndl, 0.0) + thin * 0.4 * max(-uLightView.z, 0.0));
+          }
           #ifdef USE_FOG
           // parachute flares light the smoke too (the flare uniforms come with the fog chunk)
           for (int fi = 0; fi < ${MAX_FLARE_LIGHTS}; fi++) {
@@ -210,6 +246,8 @@ export class FX {
       fog: true,
     });
     this.smokeMat.uniforms.uTex.value = atlas;
+    // the hero atlas until enableHero builds it: the old one (no texture is added on pages without the hero battery)
+    this.smokeMat.uniforms.uTexH = { value: atlas };
     Object.assign(this.smokeMat.uniforms, globalUniforms);
     this.smokeMesh = new THREE.Mesh(s.geo, this.smokeMat);
     this.smokeMesh.frustumCulled = false;
@@ -219,29 +257,45 @@ export class FX {
     // additive HDR flames, flashes and sparks
     const gq = quadGeo(['iA', 'iB', 'iD'], maxGlow);
     this.glowAttrs = gq.attrs;
+    this._glowAttrList = Object.values(gq.attrs);
     this.glowMat = new THREE.ShaderMaterial({
       uniforms: {
         uTex: { value: atlas },
+        uTexH: { value: atlas }, // the hero atlas once enableHero has built it
+        uStar: { value: 1 }, // the hero flash's lens star: faint by day (set in update)
         uFogDensity: { value: 0.00006 },
         uGlowScale: { value: 1 }, // turned down by night, when the eye is open wide
       },
       vertexShader: /* glsl */ `
         attribute vec4 iA; // position, size
         attribute vec4 iB; // hdr color, alpha
-        attribute vec4 iD; // streak vector (world, length baked in), kind
+        attribute vec4 iD; // streak vector (world, length baked in), kind (+ 4 x (1 + tile) for a hero flame or flash: then iD.x is its angle)
         uniform float uFogDensity;
         uniform float uGlowScale;
         varying vec2 vUv;
+        varying vec2 vUvH;
         varying vec4 vCol;
         varying float vKind;
+        varying float vHero;
         varying vec2 vQ;
         void main() {
           vec4 p0 = viewMatrix * vec4(iA.xyz, 1.0);
-          vKind = iD.w;
+          float hk = floor(iD.w / 4.0);
+          vKind = iD.w - 4.0 * hk;
+          vHero = hk;
           vec2 q = position.xy;
           vQ = q * 2.0;
           vUv = uv * 0.5;
-          if (dot(iD.xyz, iD.xyz) > 1e-6) {
+          vUvH = vec2(0.0);
+          if (hk > 0.5 && vKind < 1.5) {
+            // the max-quality battery's flames and flashes: a billboard turned by its own angle, a flame shaped by one
+            // of the hero atlas's smoke tiles
+            float c = cos(iD.x), s = sin(iD.x);
+            p0.xy += mat2(c, s, -s, c) * q * iA.w;
+            gl_Position = projectionMatrix * p0;
+            float ht = hk - 1.0;
+            vUvH = (uv + vec2(mod(ht, 4.0), floor(ht / 4.0))) * vec2(0.25, 0.5);
+          } else if (dot(iD.xyz, iD.xyz) > 1e-6) {
             // streak: stretch between the head and the tail in view space
             vec4 p1 = viewMatrix * vec4(iA.xyz - iD.xyz, 1.0);
             vec2 axis = p0.xy / -p0.z - p1.xy / -p1.z;
@@ -264,31 +318,52 @@ export class FX {
       `,
       fragmentShader: /* glsl */ `
         uniform sampler2D uTex;
+        uniform sampler2D uTexH;
+        uniform float uStar;
         varying vec2 vUv;
+        varying vec2 vUvH;
         varying vec4 vCol;
         varying float vKind;
+        varying float vHero;
         varying vec2 vQ;
         void main() {
+          vec2 hdx = dFdx(vUvH), hdy = dFdy(vUvH);
           float a;
+          // how much of what is behind it a flame hides: a hero flame is drawn over what is behind it (thick fire does
+          // not grow brighter with depth: a fireball seen down the bore is no brighter than seen from the side, and it
+          // reads orange by day instead of washing out); everything else adds
+          float occ = 0.0;
           if (vKind < 0.5) {
             a = texture2D(uTex, vUv).a;
             a = smoothstep(0.05, 0.8, a);
+            if (vHero > 0.5) {
+              vec4 t = textureGrad(uTexH, vUvH, hdx, hdy);
+              a = smoothstep(0.04, 0.85, t.a) * (0.55 + 0.7 * t.b);
+              occ = 1.0;
+            }
           } else if (vKind < 1.5) {
             float r = length(vQ);
             float ang = atan(vQ.y, vQ.x);
             float star = pow(abs(cos(ang * 3.0)), 12.0) * (1.0 - r) * 0.8;
+            if (vHero > 0.5) star *= uStar;
             a = exp(-r * r * 9.0) + star + exp(-r * 3.5) * 0.25;
             a *= smoothstep(1.0, 0.8, r);
           } else {
             float r = abs(vQ.y);
             a = exp(-r * r * 6.0) * smoothstep(1.0, 0.6, abs(vQ.x));
           }
-          gl_FragColor = vec4(vCol.rgb * a * vCol.a, 1.0);
+          // additive (alpha 0), or over for a hero flame (premultiplied: its colour times its cover, what is behind
+          // kept by 1 - cover)
+          gl_FragColor = vec4(vCol.rgb * a * vCol.a, occ * min(1.0, a * vCol.a));
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      // src + dst * (1 - alpha): plain additive for everything with alpha 0 (all but the hero flames)
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneMinusSrcAlphaFactor,
     });
     this.glowMesh = new THREE.Mesh(gq.geo, this.glowMat);
     this.glowMesh.frustumCulled = false;
@@ -379,10 +454,72 @@ export class FX {
     this._fc = Array.from({ length: 64 }, () => new THREE.Color());
     this._fi = 0;
     this._fo = { radius: 12, reach: 3500 }; // 5th arg of onFlash (pooled): softening radius and reach in metres
+    this.night = 0; // 0 day .. 1 night, from the last update (the hero flash light and dazzle follow it)
+    // The max-quality battery (shots/maxq/PLAN.md 3.7): enableHero() builds its puff atlas; heroShock and heroHeat are
+    // set by render/herofx.js to post's shockwave and heat with the hero flag (the near-field rules), so a hero
+    // effect does not need main's wiring
+    this.heroOn = false;
+    this.heroOff = HERO_OFF; // (review A/B switches of the hero shot: fx/hero.js)
+    this.heroReady = false; // the hero atlas is in (until then hero puffs are drawn as every other)
+    this.heroAtlasReady = null;
+    this.heroShock = null; // (pos, radius, speed, strength)
+    this.heroHeat = null; // (pos, radius, life, strength)
+  }
+
+  /**
+   * Builds the max-quality battery's puff atlas (fx/heroatlas.js: 256 px tiles, 128 when lean, in a worker so no frame
+   * waits; the main thread only if there is no worker) and hands it to the smoke and glow shaders; returns a promise
+   * that resolves when it is in (also fx.heroAtlasReady: await it behind the loading screen). Puffs and glows spawned
+   * with { hero: true } use it from then on (before, they are drawn as every other puff). Pages without the hero
+   * battery never call it, so they keep exactly their textures and look.
+   */
+  enableHero({ size = 256, renderer = null, lean = false } = {}) {
+    if (this.heroOn) return this.heroAtlasReady;
+    this.heroOn = true;
+    const sz = lean ? Math.min(size, 128) : size;
+    const done = ({ data, W, H }) => {
+      if (this.heroReady) return;
+      const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+      tex.generateMipmaps = true;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.anisotropy = Math.min(8, renderer?.capabilities?.getMaxAnisotropy?.() ?? 1);
+      tex.needsUpdate = true;
+      this.heroAtlas = tex;
+      this.smokeMat.uniforms.uTexH.value = tex;
+      this.glowMat.uniforms.uTexH.value = tex;
+      renderer?.initTexture?.(tex);
+      this.heroReady = true;
+    };
+    let p;
+    try {
+      const w = new Worker(new URL('./fx/heroatlasWorker.js', import.meta.url), { type: 'module' });
+      p = new Promise((res, rej) => {
+        w.onmessage = (e) => { w.terminate(); done(e.data); res(); };
+        w.onerror = (e) => { w.terminate(); rej(e); };
+      }).catch(() => done(makeHeroAtlasData(sz)));
+      w.postMessage({ size: sz });
+    } catch {
+      done(makeHeroAtlasData(sz));
+      p = Promise.resolve();
+    }
+    this.heroAtlasReady = p;
+    return p;
+  }
+
+  /**
+   * By how much main scales the dazzle (the white-out and the eye's stop-down) of a blast: 1 for every effect but the
+   * hero battery's, whose muzzle flash by day is a warm flicker in sunlight, not a white-out (full by night).
+   */
+  flashScale(hero = false) {
+    return hero ? HERO_DAZZLE_DAY + (1 - HERO_DAZZLE_DAY) * this.night : 1;
   }
 
   // ---------------------------------------------------------------- spawning
-  addSmoke(kind, x, y, z, vx, vy, vz, life, s0, s1, r, g, b, a, { glow = 0, drag = 0.4, buoy = 0, len = 0, hug = 0, gy = null, grav = 0, stretch = null } = {}) {
+  // hero: one of the max-quality battery's puffs (its own atlas, lit billows; earth spray gets the dirt tiles and is
+  // stretched along its motion), drawn from its smoke tiles tile0 to tile0 + tiles - 1 (fx/heroatlas.js: 0, 1 dense, 2, 3
+  // broken, 4, 5 torn); spin: its own turning speed (rad/s) instead of the usual slow drift
+  addSmoke(kind, x, y, z, vx, vy, vz, life, s0, s1, r, g, b, a, { glow = 0, drag = 0.4, buoy = 0, len = 0, hug = 0, gy = null, grav = 0, stretch = null, hero = false, spin = null, tile0 = 0, tiles = HERO_SMOKE_TILES } = {}) {
     const P = this.smoke;
     const i = P.spawn();
     if (i < 0) return;
@@ -392,7 +529,8 @@ export class FX {
     P.s0[i] = s0; P.s1[i] = s1;
     P.rot[i] = rand() * 6.283; P.rotV[i] = rr(-0.3, 0.3);
     P.r[i] = r; P.g[i] = g; P.b[i] = b; P.a[i] = a;
-    P.glow[i] = glow; P.tile[i] = Math.floor(rand() * 4);
+    P.glow[i] = glow; P.tile[i] = hero && this.heroReady ? 4 + (kind === SMOKE.SPRAY ? HERO_SMOKE_TILES + Math.floor(rand() * 2) : tile0 + Math.floor(rand() * tiles)) : Math.floor(rand() * 4);
+    if (spin !== null) P.rotV[i] = spin;
     P.drag[i] = drag; P.buoy[i] = buoy; P.kind[i] = kind;
     P.len[i] = len; P.hug[i] = hug; P.grav[i] = grav;
     P.sx[i] = stretch ? stretch[0] : 1; P.sy[i] = stretch ? stretch[1] : 1;
@@ -401,7 +539,9 @@ export class FX {
     return i;
   }
 
-  addGlow(kind, x, y, z, vx, vy, vz, life, s0, s1, r, g, b, a, { len = 0, drag = 0.5, buoy = 0 } = {}) {
+  // hero: one of the max-quality battery's flames or flashes (turned at random, a flame shaped by the hero atlas and
+  // darkening what is behind it a little, a flash with a faint lens star by day)
+  addGlow(kind, x, y, z, vx, vy, vz, life, s0, s1, r, g, b, a, { len = 0, drag = 0.5, buoy = 0, hero = false } = {}) {
     const P = this.glow;
     const i = P.spawn();
     if (i < 0) return;
@@ -412,7 +552,7 @@ export class FX {
     P.rot[i] = rand() * 6.283; P.rotV[i] = 0;
     P.r[i] = r; P.g[i] = g; P.b[i] = b; P.a[i] = a;
     P.kind[i] = kind; P.len[i] = len; P.drag[i] = drag; P.buoy[i] = buoy;
-    P.tile[i] = Math.floor(rand() * 4);
+    P.tile[i] = hero && this.heroReady ? 4 + Math.floor(rand() * HERO_SMOKE_TILES) : Math.floor(rand() * 4);
     return i;
   }
 
@@ -559,16 +699,20 @@ export class FX {
     this.onFlash(this._fp[i].copy(p), this._fc[i].set(color), intensity, life, this._fo);
   }
 
-  shockAt(p, radius, speed, strength) {
-    if (this.onShock) this.onShock(p, radius, speed, strength);
+  shockAt(p, radius, speed, strength, hero = false) {
+    if (hero && this.heroShock) this.heroShock(p, radius, speed, strength);
+    else if (this.onShock) this.onShock(p, radius, speed, strength);
   }
 
   gustAt(p, hx, hz, radius, strength) {
     if (this.onGust) this.onGust(p, hx, hz, radius, strength);
   }
 
-  heatAt(p, radius, life) {
-    if (this.onHeat) this.onHeat(p, radius, life);
+  // strength and hero: the max-quality battery's shimmer (weighted by the view ray's closest approach, so it shows
+  // against the sky too: post.js); every other caller keeps the three-argument call
+  heatAt(p, radius, life, strength = 1, hero = false) {
+    if (hero && this.heroHeat) this.heroHeat(p, radius, life, strength);
+    else if (this.onHeat) this.onHeat(p, radius, life);
   }
 
   /** A leaf or a wisp of grass flicked up (a flat plate, tumbling and fluttering down). */
@@ -949,6 +1093,8 @@ export class FX {
     const cam = this._cam.copy(camera.position);
     // by night the exposure is wide open: flashes and fires would bloom across half the sky
     this.glowMat.uniforms.uGlowScale.value = 1 - 0.65 * night;
+    this.night = night;
+    this.glowMat.uniforms.uStar.value = 0.15 + 0.85 * night; // (hero flashes only: the lens star is a night thing)
     const wind = this.wind;
     const wx = wind.x, wz = wind.z;
 
@@ -1023,16 +1169,28 @@ export class FX {
       B[o + 3] = P.a[i] * fade;
       C[o] = P.rot[i];
       C[o + 1] = P.glow[i] * Math.max(0, P.len[i] > 0 ? 1 - P.age[i] / P.len[i] : 1 - t * 3); // len: how long the orange glow lasts, in seconds
-      C[o + 2] = P.tile[i];
-      const kd = P.kind[i];
+      const kd = P.kind[i], tl = P.tile[i];
+      // a hero puff carries its age in the tile's fraction (fx/heroatlas.js tiles from 4)
+      C[o + 2] = tl < 4 ? tl : tl + 0.99 * t;
       C[o + 3] = kd === SMOKE.HANG ? smooth01((t - 0.03) / 0.17) : kd === SMOKE.CORDITE ? smooth01((t - 0.1) / 0.3) : 0;
       const gyv = P.gy[i], hasG = gyv > -1e8 && P.kind[i] !== SMOKE.SPRAY;
       E4[o] = hasG ? gyv : -1e9;
       E4[o + 1] = 0.16 * sz * P.sy[i];
       E4[o + 2] = P.sx[i];
       E4[o + 3] = P.sy[i];
+      if (tl >= 4 && kd === SMOKE.SPRAY) {
+        // hero earth spray drawn stretched along its motion on screen (it holds the last angle once it slows)
+        const vx = P.vx[i], vy = P.vy[i], vz = P.vz[i];
+        const qx = fx[0] * vx + fx[4] * vy + fx[8] * vz, qy = fx[1] * vx + fx[5] * vy + fx[9] * vz;
+        const sp = Math.sqrt(qx * qx + qy * qy);
+        if (sp > 3) P.rot[i] = Math.atan2(qy, qx);
+        const st = 1 + Math.min(1.6, 0.045 * Math.max(0, sp - 3));
+        C[o] = P.rot[i];
+        E4[o + 2] = st;
+        E4[o + 3] = 1 / Math.sqrt(st);
+      }
     }
-    for (const a of Object.values(this.smokeAttrs)) {
+    for (const a of this._smokeAttrList) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, n * 4);
       a.needsUpdate = true;
@@ -1105,8 +1263,14 @@ export class FX {
         GD[o] = GD[o + 1] = GD[o + 2] = 0;
       }
       GD[o + 3] = kind;
+      const tg = Q.tile[i];
+      if (tg >= 4) {
+        // a hero flame or flash: its tile in the kind code, its angle where a streak would be
+        GD[o + 3] = kind + 4 * (tg - 3);
+        if (kind !== SPARK) { GD[o] = Q.rot[i]; GD[o + 1] = GD[o + 2] = 0; }
+      }
     }
-    for (const a of Object.values(this.glowAttrs)) {
+    for (const a of this._glowAttrList) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, Q.n * 4);
       a.needsUpdate = true;

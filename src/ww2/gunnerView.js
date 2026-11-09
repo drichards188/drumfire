@@ -58,6 +58,10 @@ const VIEW = {
 // the big guns' commanders stand further back and higher: the Karl's on the ground below a hull taller than him, the
 // Gustav's on the gallery under the barrel
 const VIEW_KIND = {
+  // the max-quality Mörser 18 (shots/maxq/PLAN.md, track M): the layer looks from his own eyes at a point 70 % of the way
+  // from his elevating wheel to the muzzle (`mix`: rig.gear, the HD rig only), so his hand on the turning wheel
+  // and the barrel's rise are both in the frame
+  mrs18: { lay: { poi: 'muzzle', mix: 'wheelL', f: 0.7, back: 0.1, up: 0.03, pitch: -0.1 } },
   karl: { cmd: { poi: 'gun', back: 3.4, up: 1.6, pitch: -0.12 } },
   gustav: { cmd: { poi: 'gun', back: 3.0, up: 1.2, pitch: -0.08 } },
   // the bed-mounted giants' commanders off the side of the bed, over the men at the breech and the crane
@@ -335,6 +339,8 @@ export class GunnerView {
       rig.anchors.breech.getWorldPosition(_d);
       _poi.add(_d).multiplyScalar(0.5);
     } else (rig.anchors[vw.poi] ?? rig.root).getWorldPosition(_poi);
+    // (the wheel's hub, not its turning knob, so the view does not wobble with the crank)
+    if (vw.mix && rig.gear?.[vw.mix]) { rig.gear[vw.mix].getWorldPosition(_d); _poi.lerp(_d, 1 - vw.f); }
     _d.subVectors(_poi, this.pos);
     const yaw = Math.atan2(-_d.x, -_d.z), pitch = Math.max(-1.1, Math.min(0.9, Math.atan2(_d.y, Math.hypot(_d.x, _d.z)) * 0.7 + vw.pitch));
     _e.set(Math.max(-1.45, Math.min(1.45, pitch + this.look.pitch)), wrapA(yaw + this.look.yaw), 0);

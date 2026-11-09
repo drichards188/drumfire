@@ -20,9 +20,11 @@ import { supportTrails } from './support.js';
 //   render.newestShell(unitId)                   // sim shell for the F key
 //   render.select(unitId)                        // the unit with the full-detail crews
 //   render.detail                                // DetailCull over the gun rigs and targets (src/render/detail.js)
-export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onlyRigs = false }) {
+//   hero                                         main's HERO (the max-quality battery, DESIGN.md): render/guns.js
+//                                                builds and poses its views for it; absent on every other page
+export function createRender({ scene, sim, terrain, fx, rigs, camera = null, onlyRigs = false, hero = null }) {
   const detail = new DetailCull();
-  const guns = new GunViews(scene, sim, terrain, rigs ?? new Map(), fx, onlyRigs, detail);
+  const guns = new GunViews(scene, sim, terrain, rigs ?? new Map(), fx, onlyRigs, detail, hero ? { hero } : undefined);
   const shells = new ShellViews(scene);
   const targets = new TargetViews(scene, sim, terrain, fx, detail);
   let inf = null;

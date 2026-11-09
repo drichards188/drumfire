@@ -90,7 +90,8 @@ const steps = [
   {
     id: 'welcome', title: 'Basic training',
     text: 'For this lesson you have a borrowed battery: "Julius", two 21 cm Mörser 18 with every upgrade, each shell 113 kg.\n\nEvery step waits until you have done it; Exit tutorial leaves at any time.',
-    spot: [],
+    // (on the max-quality page, `dock`, the battery is lit from the first card and the card stands over the console)
+    spot: (T) => (T.dock ? ['#view'] : []),
   },
   {
     id: 'look', title: 'The guns',
@@ -491,6 +492,9 @@ export const WW1_TUTORIALS = [
   {
     id: 'training', name: 'Basic training', unit: UNIT, units: [UNIT], kinds: [KIND], levels: { [KIND]: LEVELS },
     loadout: loadoutOf({ [KIND]: LEVELS }), gunnerFrom: 'man', spotlight: true, noSkip: true, instant: true,
+    // the lent battery at the game's best (main.js HERO, DESIGN.md "Max-quality battery"): the close-detail guns, the
+    // close crew tiers, its own blasts, sounds and motion, the page's resolution and shadows raised (?maxq=0 to compare)
+    maxq: true,
     // after this long without a step's goal met, the card says what holds it (the step's stuck, else this)
     stall: 20, stuck: (T) => (G(T) ? live(T) : problem(T) || null),
     after: { label: 'To battle' },

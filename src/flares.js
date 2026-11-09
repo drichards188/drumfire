@@ -4,6 +4,7 @@ import { globalUniforms, MAX_FLARE_LIGHTS } from './shaderlib.js';
 const rr = (a, b) => a + (b - a) * Math.random();
 const _v = new THREE.Vector3();
 const G = 9.8;
+const byScore = (a, b) => b.score - a.score; // (one comparator, not one a frame)
 
 // The night lights of the Western Front, as game values. `I` is the light's strength in shader units
 // (irradiance times distance squared: a surface 1.2 km from I = 1.5e6 gets about 1, the level a
@@ -33,6 +34,7 @@ export class Flares {
     this.items = [];
     this.flashes = [];
     this.cand = [];
+    this._freeFlashes = [];
     this.onIgnite = null; // (pos, kind) when a star shell opens or a rocket bursts
     this.wind = new THREE.Vector3();
 
@@ -48,6 +50,19 @@ export class Flares {
     g.setAttribute('iB', this.aB);
     g.setAttribute('iC', this.aC);
     g.instanceCount = 0;
+    this._attrs = [this.aA, this.aB, this.aC];
+    // writes the next sprite of this frame (update counts them in _k)
+    const A = this.aA.array, B = this.aB.array, C = this.aC.array;
+    this._k = 0;
+    this._put = (x, y, z, size, r, g, b, kind, len, seed) => {
+      const k = this._k;
+      if (k >= MAX_SPRITES) return;
+      const o = k * 4;
+      A[o] = x; A[o + 1] = y; A[o + 2] = z; A[o + 3] = size;
+      B[o] = r; B[o + 1] = g; B[o + 2] = b; B[o + 3] = 1;
+      C[o] = kind; C[o + 1] = len; C[o + 2] = seed; C[o + 3] = 0;
+      this._k = k + 1;
+    };
     this.mat = new THREE.ShaderMaterial({
       uniforms: { uPixel: { value: 0.0016 }, uFogDensity: { value: 0.00022 } },
       vertexShader: /* glsl */ `
@@ -170,10 +185,11 @@ export class Flares {
     intensity *= 0.02;
     const soft = opts.radius ?? 12 + 0.012 * rt;
     const reach = opts.reach ?? 600 + 0.9 * rt;
-    const c = color instanceof THREE.Color ? color : new THREE.Color(color);
-    const fl = this.flashes.length >= MAX_FLASHES ? this.flashes.shift() : { pos: new THREE.Vector3(), c: new THREE.Color(), score: 0, s: 0 };
+    // (the records are reused: a spent one goes back to _freeFlashes; nothing is made per flash once warm)
+    const fl = this.flashes.length >= MAX_FLASHES ? this.flashes.shift() : this._freeFlashes.pop() ?? { pos: new THREE.Vector3(), c: new THREE.Color(), score: 0, s: 0 };
     fl.pos.set(pos.x, pos.y, pos.z);
-    fl.c.copy(c);
+    if (color instanceof THREE.Color) fl.c.copy(color);
+    else fl.c.set(color);
     fl.I = intensity;
     fl.soft = soft;
     fl.reach = reach;
@@ -269,7 +285,13 @@ export class Flares {
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       const fl = this.flashes[i];
       fl.t += dt;
-      if (fl.t >= fl.life) this.flashes.splice(i, 1);
+      if (fl.t >= fl.life) {
+        // out of the list in order, the record kept for the next flash
+        const L = this.flashes;
+        for (let j = i; j < L.length - 1; j++) L[j] = L[j + 1];
+        L.length--;
+        this._freeFlashes.push(fl);
+      }
     }
 
     // the brightest lights (strength over distance to the camera) become the scene's analytic lights
@@ -288,7 +310,7 @@ export class Flares {
       fl.score = (fl.I * fl.s) / (fl.pos.distanceToSquared(cp) + fl.soft * fl.soft);
       cand.push(fl);
     }
-    cand.sort((a, b) => b.score - a.score);
+    cand.sort(byScore);
     const n = Math.min(cand.length, MAX_FLARE_LIGHTS);
     const U = globalUniforms;
     for (let i = 0; i < n; i++) {
@@ -305,17 +327,9 @@ export class Flares {
     }
     U.uFlareCount.value = n;
 
-    // sprites
-    const A = this.aA.array, B = this.aB.array, C = this.aC.array;
-    let k = 0;
-    const put = (x, y, z, size, r, g, b, kind, len, seed) => {
-      if (k >= MAX_SPRITES) return;
-      const o = k * 4;
-      A[o] = x; A[o + 1] = y; A[o + 2] = z; A[o + 3] = size;
-      B[o] = r; B[o + 1] = g; B[o + 2] = b; B[o + 3] = 1;
-      C[o] = kind; C[o + 1] = len; C[o + 2] = seed; C[o + 3] = 0;
-      k++;
-    };
+    // sprites (put() writes the next one; no closure is made per frame)
+    this._k = 0;
+    const put = this._put;
     for (const f of this.items) {
       const c = f.K.color, p = f.pos;
       const s = f.phase === 'burn' ? this.strength(f) : 0.4;
@@ -329,7 +343,8 @@ export class Flares {
       if (f.kind === 'star' && f.phase === 'burn' && f.top - p.y > 2) put(p.x, p.y + 1, p.z, 5, 0.5 * s, 0.5 * s, 0.5 * s, 1, Math.min(f.top - p.y, 140), f.seed);
       else if (f.kind !== 'star' && f.kind !== 'sos' && len > 2) put(p.x, p.y + 1, p.z, 2.5, 0.35 * s, 0.33 * s, 0.3 * s, 1, Math.min(len, 60), f.seed);
     }
-    for (const a of [this.aA, this.aB, this.aC]) {
+    const k = this._k;
+    for (const a of this._attrs) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, k * 4);
       a.needsUpdate = true;

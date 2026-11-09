@@ -14,9 +14,11 @@ import { GunViews } from './guns.js';
 const q = new URLSearchParams(location.search);
 const KINDS = (q.get('gun') || 'bl15,bl92,bl6,bl60,rail').split(',');
 const FAST = q.has('fast');
+// &hd=1: the HD tier (buildGun(kind, { hd: true }), shown at &detail=, default 2): its visible steel against the same poses
+const HD = q.get('hd') === '1', DETAIL = Number(q.get('detail') ?? 2);
 const TOL = 0.01; // reported as a violation above this depth (m)
 const SAMPLE = 0.09; // surface sample spacing (m)
-const CELL = 0.25;
+const CELL = HD ? 0.08 : 0.25; // (the HD tier's fine meshes: a finer grid, so a ray meets a few hundred triangles a cell, not thousands)
 const out = document.getElementById('out');
 const log = (s) => { out.textContent += '\n' + s; };
 
@@ -37,9 +39,20 @@ const PAIRS = [
 ];
 
 // ------------------------------------------------------------------ geometry helpers
+// An HD tier mesh (under a group with userData.tier) is made of small triangles (the surface-nets forgings: 9 mm cells,
+// about 4e-5 m2 each), so the standard tier's area floors below would drop nearly all of it: its solids would be full
+// of holes and its surface unsampled. For those meshes every triangle but the degenerate ones counts, and the movers'
+// samples come by area (localSamples). The standard tier's meshes are filtered as before, so its numbers do not move.
+const tierCache = new WeakMap();
+function isTier(mesh) {
+  let t = tierCache.get(mesh);
+  if (t === undefined) { t = false; for (let o = mesh; o; o = o.parent) if (o.userData?.tier) { t = true; break; } tierCache.set(mesh, t); }
+  return t;
+}
 const lcache = new WeakMap();
 function localTris(mesh, minArea) {
-  const key = minArea;
+  const tier = isTier(mesh), key = tier ? 1e-12 : minArea;
+  if (tier) minArea = key;
   let c = lcache.get(mesh);
   if (c && c.key === key) return c.t;
   const g = mesh.geometry, p = g.attributes.position, idx = g.index;
@@ -80,12 +93,21 @@ const scache = new WeakMap();
 function localSamples(mesh) {
   let s = scache.get(mesh);
   if (s) return s;
-  const t = localTris(mesh, 4e-4), pts = [];
+  const t = localTris(mesh, 4e-4), pts = [], tier = isTier(mesh);
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  // (an HD mesh's triangles under the spacing: one point each time their running area passes a quarter spacing square,
+  // at the triangle's middle, so a fine mesh is sampled about twice as densely as the standard tier, not once a triangle)
+  const A0 = SAMPLE * SAMPLE * 0.25;
+  let acc = 0;
   for (let i = 0; i < t.length; i += 9) {
     a.set(t[i], t[i + 1], t[i + 2]); b.set(t[i + 3], t[i + 4], t[i + 5]); c.set(t[i + 6], t[i + 7], t[i + 8]);
     e1.subVectors(b, a); e2.subVectors(c, a);
     const L = Math.max(e1.length(), e2.length(), c.clone().sub(b).length());
+    if (tier && L < SAMPLE) {
+      acc += e1.clone().cross(e2).length() * 0.5;
+      if (acc >= A0) { acc -= A0; pts.push((a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3, (a.z + b.z + c.z) / 3); }
+      continue;
+    }
     const n = Math.max(1, Math.ceil(L / SAMPLE));
     for (let u = 0; u <= n; u++) for (let v = 0; v <= n - u; v++) {
       // the barycentric grid, nudged inside so corners are not all duplicates across triangles
@@ -218,7 +240,8 @@ function depthIn(G, x, y, z) {
 
 // ------------------------------------------------------------------ rigs and poses
 function makeCtx(kind) {
-  const rig = buildGun(kind);
+  const rig = HD ? buildGun(kind, { hd: true }) : buildGun(kind);
+  if (HD) rig.setDetail?.(DETAIL);
   const g = GUNS[kind];
   const piece = { i: 0, kind, az: 0, el: g.restEl, cmd: { az: 0, el: g.restEl, tof: 0, ok: false }, state: 'idle', job: null, ji: 0, recoil: 0, breech: 0, rounds: 0, loaded: false, firedAt: -999, fireAt: 0, crew: 10, crewMax: 10 };
   const sim = { time: 100, alpha: 0, units: [{ id: 1, pieces: [piece] }], unitById: () => sim.units[0] };

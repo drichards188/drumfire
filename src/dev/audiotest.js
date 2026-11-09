@@ -1,8 +1,11 @@
 // Live smoke test of the audio engine: every API call, world sounds at several distances, shells in
 // flight (passing, receding, ridden), the close-blast deafening and the ambience. Reports exceptions and the voice
 // counts in window.__audioReport; buttons on the page let a human listen (click one first to unlock audio).
+// `?hero=mrs18`: the max-quality battery's banks too (src/audioHero.js), its buttons and its smoke test.
 import * as THREE from 'three';
 import { AudioEngine } from '../audio.js';
+import { HERO, FOLEY_CUES } from '../audioHero.js';
+import { GUNS } from '../sim/tables.js';
 
 const out = document.getElementById('out');
 const report = (window.__audioReport = { errors: [], steps: [] });
@@ -16,7 +19,8 @@ const step = (name, fn) => {
 };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const audio = new AudioEngine();
+const HERO_KIND = new URLSearchParams(location.search).get('hero');
+const audio = new AudioEngine(HERO[HERO_KIND] ? { hero: { kinds: [HERO_KIND] } } : undefined);
 audio.keepSynth = true; // the A/B button: the synthesized guns kept beside the recorded ones
 window.__audio = audio;
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1e5);
@@ -137,6 +141,50 @@ for (const n of ['feldfernsprecher', 'funk']) btn(`ui ${n}`, () => audio.ui(n));
 btn('drumfire 0.2', () => audio.setAmbience({ drumfire: 0.2 }));
 btn('drumfire 1 + rain', () => audio.setAmbience({ drumfire: 1, rain: 0.7, wind: 0.6 }));
 btn('ambience off', () => audio.setAmbience({ drumfire: 0, rain: 0, wind: 0 }));
+
+// the max-quality battery (?hero=mrs18): the listener stands at (0, 3, 0) facing -Z; the gun laid at 45 degrees away from him
+if (HERO[HERO_KIND]) {
+  const K = HERO_KIND, H = HERO[K], cal = H.cal, up = Math.SQRT1_2;
+  const bar2 = document.createElement('div');
+  bar2.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin:6px 0;border-top:1px solid #363';
+  bar?.after(bar2);
+  const hbtn = (label, fn) => {
+    const b = btn(label, fn);
+    bar2.append(b);
+  };
+  // the muzzle `d` m ahead, the bore away from the listener (or toward him: front)
+  const shot = (d, opts = {}) => audio.gun(P(0, 3, -d), cal, { hero: true, kind: K, charge: H.charges.length - 1, dir: P(0, up, opts.front ? up : -up), ...opts });
+  for (const d of [5, 28, 80, 300]) hbtn(`${K} at ${d} m`, () => shot(d));
+  hbtn(`${K} Ladung 1 at 5 m`, () => shot(5, { charge: 0 }));
+  hbtn(`${K} from the front, 28 m`, () => shot(28, { front: true }));
+  hbtn(`${K} ears covered, 5 m`, () => {
+    audio.setEars(1);
+    shot(5);
+    setTimeout(() => audio.setEars(0), 2500);
+  });
+  hbtn('the class gun at 5 m (before)', () => audio.gun(P(0, 3, -5), cal));
+  // the drill: every cue of the table on the step lengths of GUNS[kind].load, 2.5 m from the breech
+  hbtn(`${K} drill`, () => {
+    const L = GUNS[K].load, at = {};
+    let t = 0;
+    for (const st of L) (at[st.step] = [t, st.dur]), (t += st.dur);
+    const pos = P(1.5, 2.2, -2);
+    for (const c of FOLEY_CUES[K]) {
+      const [step, k, dt = 0] = c.fb, ts = at[step][0] + k * at[step][1] + dt;
+      const fit = c.fit ? at[c.fit[1][0]][0] + c.fit[1][1] * at[c.fit[1][0]][1] - ts : null;
+      setTimeout(() => audio.foley(c.s, pos, { gain: c.g, rate: c.rate ?? 1, until: fit }), ts * 1000);
+    }
+  });
+  hbtn('run-out (with the shot, 5 m)', () => shot(5));
+  for (const n of ['caseDrop', 'blockSlide', 'blockStop', 'blockLock', 'bandSeat', 'shellSlide', 'shellSet', 'crank', 'cock', 'wheelMark']) hbtn(n, () => audio.foley(n, P(1.5, 1.5, -2)));
+  hbtn('steps on the deck', () => [0, 0.55, 1.1, 1.65, 2.2, 2.75].forEach((t, i) => setTimeout(() => audio.foley('step_grate', P(-1 + i * 0.4, 1.1, -2), { gain: 0.8 }), t * 1000)));
+  hbtn('steps on earth', () => [0, 0.55, 1.1, 1.65, 2.2, 2.75].forEach((t, i) => setTimeout(() => audio.foley('step_earth', P(-1 + i * 0.4, 0, -2), { gain: 0.8 }), t * 1000)));
+  hbtn('steps in mud', () => [0, 0.6, 1.2, 1.8].forEach((t, i) => setTimeout(() => audio.foley('step_mud', P(-1 + i * 0.4, 0, -2), { gain: 0.8 }), t * 1000)));
+  hbtn('elevating gear 3 s', () => live(3000, (t) => audio.foleyLoop('elev', 'mlaf_elev', P(-0.8, 1.8, -1), 0.6, 0.6 + 0.5 * Math.min(1, t))).then(() => audio.foleyLoop('elev', 'mlaf_elev', P(-0.8, 1.8, -1), 0, 1)));
+  hbtn('traverse 4 s', () => live(4000, () => audio.foleyLoop('trav', 'mlaf_trav', P(0, 0.5, -2), 0.6, 1)).then(() => audio.foleyLoop('trav', 'mlaf_trav', P(0, 0.5, -2), 0, 1)));
+  hbtn('21 cm burst at 100 m', () => audio.burst(P(0, 0, -100), cal, { fuze: 'instant', ground: 'mud', kind: K, hero: true }));
+  hbtn('21 cm burst at 100 m (before)', () => audio.burst(P(0, 0, -100), cal, { fuze: 'instant', ground: 'mud', kind: K }));
+}
 
 (async () => {
   step('start', () => audio.start());
@@ -274,6 +322,37 @@ btn('ambience off', () => audio.setAmbience({ drumfire: 0, rain: 0, wind: 0 }));
   report.ww2.moversAfter = audio.movers.length;
   report.ww2.shellsAfter = audio.shells.size;
 
+  // the max-quality battery: its banks, the report and the burst with their options, the drill, the loops, the ears
+  if (HERO[HERO_KIND]) {
+    const K = HERO_KIND, H = HERO[K];
+    report.hero = { kind: K, on: audio.heroOn(K), banks: Object.keys(audio.bank[H.group] ?? {}).length, foley: Object.keys(audio.bank[H.foley] ?? {}).length, loops: ['mlaf_elev', 'mlaf_trav'].filter((k) => audio.bank.loop?.[k]).length,
+      cuesMissing: FOLEY_CUES[K].filter((c) => !audio.bank[c.group ?? H.foley]?.[c.s]).map((c) => c.s) };
+    let shocks = 0;
+    audio.onShock = () => shocks++;
+    for (const d of [5, 28, 80, 600, 3000]) step(`hero gun ${d}`, () => audio.gun(P(0, 3, -d), H.cal, { hero: true, kind: K, charge: 3, dir: P(0, 0.7, -0.7) }));
+    step('hero gun charge 0', () => audio.gun(P(4, 3, -4), H.cal, { hero: true, kind: K, charge: 0, dir: P(0, 0.7, -0.7), ground: 0 }));
+    step('hero gun no dir', () => audio.gun(P(4, 3, -4), H.cal, { hero: true, kind: K, v: 490 }));
+    step('hero gun not hero', () => audio.gun(P(4, 3, -4), H.cal, { kind: K }));
+    step('hero burst', () => audio.burst(P(0, 0, -100), H.cal, { fuze: 'instant', ground: 'mud', kind: K, hero: true }));
+    step('hero burst air', () => audio.burst(P(0, 30, -100), H.cal, { fuze: 'air', kind: K, hero: true }));
+    for (const c of FOLEY_CUES[K]) step('foley ' + c.s, () => audio.foley(c.s, P(1, 1.5, -2), { gain: c.g, until: 0.3 }));
+    step('foley bogus', () => audio.foley('bogus', P(1, 1.5, -2)));
+    let hrtfPeak = 0;
+    await live(1500, (t) => {
+      audio.foleyLoop('elev', 'mlaf_elev', P(-0.8, 1.8, -1), t < 1 ? 0.6 : 0, 1);
+      audio.foleyLoop('trav', 'mlaf_trav', P(0, 0.5, -2), 0.5, 1);
+      hrtfPeak = Math.max(hrtfPeak, audio.hrtfN);
+    });
+    step('ears', () => (audio.setEars(1), audio.setEars(0.4), audio.setEars(0)));
+    report.hero.shocks = shocks;
+    report.hero.hrtfPeak = hrtfPeak;
+    report.hero.loopsBuilt = audio.loops.size;
+    report.hero.deaf = +audio.deaf.toFixed(2);
+    report.hero.ringK = +audio.ringK.toFixed(2);
+    audio.onShock = null;
+    await live(2500);
+  }
+
   // ambience
   step('ambience', () => audio.setAmbience({ drumfire: 0.8, rain: 0.6, wind: 0.5 }));
   await live(5000);
@@ -295,7 +374,9 @@ btn('ambience off', () => audio.setAmbience({ drumfire: 0, rain: 0, wind: 0 }));
     report.britishBanksOnly && report.v2Ignored && report.ww2.moverPeak > 0 && report.ww2.buzzOn > 0.05 && report.ww2.buzzAfterCut < 0.01 && report.ww2.voicesWithMoan > 0 && report.ww2.moversAfter === 0 && report.ww2.shellsAfter === 0 &&
     report.ownShellHeardAfter > 0.45 && report.ownShellHeardAfter < 0.8 &&
     // with the guns' recordings decoded, every gun is built from them (the WW2 colossal one too)
-    (!report.recordings?.includes('gun76') || ['light', 'field', 'med', 'heavy', 'huge', 'colossal'].every((c) => report.recordedGuns.includes('gun_' + c)));
+    (!report.recordings?.includes('gun76') || ['light', 'field', 'med', 'heavy', 'huge', 'colossal'].every((c) => report.recordedGuns.includes('gun_' + c))) &&
+    // with a hero kind, its banks are all there and its calls sound (shocks), within the HRTF budget
+    (!report.hero || (report.hero.on && report.hero.banks >= 10 && !report.hero.cuesMissing.length && report.hero.loops === 2 && report.hero.shocks >= 2 && report.hero.hrtfPeak <= 12 && report.hero.loopsBuilt === 2));
   report.done = true;
   out.textContent = JSON.stringify(report, null, 1);
 })();

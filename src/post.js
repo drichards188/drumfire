@@ -30,6 +30,9 @@ const linearDepthGLSL = /* glsl */ `
 // no wave is alive. The ring is a shell of radius (now - t0) * speed around the blast in world space,
 // rebuilt from depth, so it sweeps over hills, stops at the sky and fades with the distance.
 export const MAX_SHOCKS = 4;
+// the shader's slots: MAX_SHOCKS for every page's waves and shimmers, as many again for the max-quality battery's
+// (shots/maxq/PLAN.md 3.7), so its barrel's shimmer and its blasts never push another effect's out
+const SLOTS = MAX_SHOCKS * 2;
 const resolveFrag = /* glsl */ `
   uniform sampler2D tDiffuse;
   uniform sampler2D tDepth;
@@ -39,10 +42,10 @@ const resolveFrag = /* glsl */ `
   uniform float uNow;
   uniform int uShockN;
   uniform int uHeatN;
-  uniform vec4 uShock[${MAX_SHOCKS}];  // centre, start time
-  uniform vec4 uShockP[${MAX_SHOCKS}]; // max radius, speed, strength, attenuation distance
-  uniform vec4 uHeat[${MAX_SHOCKS}];   // centre, radius
-  uniform vec4 uHeatP[${MAX_SHOCKS}];  // strength (envelope), 0, 0, 0
+  uniform vec4 uShock[${SLOTS}];  // centre, start time
+  uniform vec4 uShockP[${SLOTS}]; // max radius, speed, strength, attenuation distance (negative: a hero wave)
+  uniform vec4 uHeat[${SLOTS}];   // centre, radius
+  uniform vec4 uHeatP[${SLOTS}];  // strength (envelope), 1 for a hero shimmer, 0, 0
   varying vec2 vUv;
   float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vn(vec2 p) {
@@ -58,35 +61,59 @@ const resolveFrag = /* glsl */ `
     bool sky = depth > 0.99995;
     vec2 off = vec2(0.0);
     float lift = 0.0;
-    for (int i = 0; i < ${MAX_SHOCKS}; i++) {
+    for (int i = 0; i < ${SLOTS}; i++) {
       if (i < uShockN && !sky) {
         float R = (uNow - uShock[i].w) * uShockP[i].y;
         if (R > 0.0 && R < uShockP[i].x) {
+          bool hs = uShockP[i].w < 0.0;
           float w = 5.0 + 0.12 * R;
           float x = (distance(world, uShock[i].xyz) - R) / w;
           float ring = exp(-x * x);
           float fade = 1.0 - R / uShockP[i].x;
-          float amp = uShockP[i].z * fade * fade / (1.0 + distance(uShock[i].xyz, uCam) / uShockP[i].w);
+          float amp = uShockP[i].z * fade * fade / (1.0 + distance(uShock[i].xyz, uCam) / abs(uShockP[i].w));
+          // a hero wave leaves the camera's own surroundings alone (metres of displacement there are tens of pixels:
+          // a doubled picture at the gun) and is clamped harder
+          if (hs) amp *= smoothstep(3.0, 25.0, distance(world, uCam));
           vec3 n = normalize(world - uShock[i].xyz);
           vec3 src = world - n * (w * 0.75 * amp * ring);
           vec4 pc = uViewProj * vec4(src, 1.0);
           vec2 d = pc.xy / pc.w * 0.5 + 0.5 - vUv;
-          off += clamp(d, vec2(-0.05), vec2(0.05));
+          vec2 lim = vec2(hs ? 0.012 : 0.05);
+          off += clamp(d, -lim, lim);
           lift += ring * amp * 0.12; // the condensation front
         }
       }
-      if (i < uHeatN && !sky) {
+      if (i < uHeatN) {
         float r = uHeat[i].w;
-        vec3 dc = world - uHeat[i].xyz;
-        float m = exp(-dot(dc, dc) / (r * r)) * uHeatP[i].x;
-        vec2 q = world.xz * 0.35 + vec2(0.0, world.y * 0.9 - uNow * 4.0);
-        off += (vec2(vn(q), vn(q + 7.3)) - 0.5) * 0.012 * m;
+        if (uHeatP[i].y > 0.5) {
+          // a hero shimmer: weighted by how near the view ray passes the hot air, wherever it ends (the sky behind a
+          // barrel shimmers too), and only in front of the surface seen there; small cells rising
+          vec3 rd = normalize(world - uCam);
+          float tc = dot(uHeat[i].xyz - uCam, rd);
+          vec3 cp = uCam + rd * tc;
+          vec3 dc = cp - uHeat[i].xyz;
+          float m = exp(-dot(dc, dc) / (r * r)) * uHeatP[i].x * step(0.0, tc) * step(tc - r, distance(world, uCam));
+          vec2 q = cp.xz * 5.0 + vec2(0.0, cp.y * 5.0 - uNow * 7.0);
+          off += (vec2(vn(q), vn(q + 7.3)) - 0.5) * 0.0035 * m;
+        } else if (!sky) {
+          vec3 dc = world - uHeat[i].xyz;
+          float m = exp(-dot(dc, dc) / (r * r)) * uHeatP[i].x;
+          vec2 q = world.xz * 0.35 + vec2(0.0, world.y * 0.9 - uNow * 4.0);
+          off += (vec2(vn(q), vn(q + 7.3)) - 0.5) * 0.012 * m;
+        }
       }
     }
     vec3 col = texture2D(tDiffuse, clamp(vUv + off, vec2(0.001), vec2(0.999))).rgb;
     gl_FragColor = vec4(col * (1.0 + lift), 1.0);
   }
 `;
+
+// takes L[i] out of the list (keeping the order) and keeps the record for reuse, without making an array
+function drop(L, i, free) {
+  free.push(L[i]);
+  for (let j = i; j < L.length - 1; j++) L[j] = L[j + 1];
+  L.length--;
+}
 
 class ScenePass extends Pass {
   constructor(scene, camera) {
@@ -97,7 +124,7 @@ class ScenePass extends Pass {
     depthTexture.type = THREE.UnsignedIntType;
     this.rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture });
     this.depthTexture = depthTexture;
-    const vec4s = () => Array.from({ length: MAX_SHOCKS }, () => new THREE.Vector4());
+    const vec4s = () => Array.from({ length: SLOTS }, () => new THREE.Vector4());
     this.resolve = new FullScreenQuad(
       new THREE.ShaderMaterial({
         uniforms: {
@@ -620,6 +647,11 @@ export class PostFX {
     this._now = 0; // the effects' own clock (seconds of real time)
     this._shocks = []; // { x, y, z, t0, radius, speed, strength }, newest last, at most MAX_SHOCKS
     this._heat = []; // { x, y, z, radius, t0, life, strength }
+    // the max-quality battery's waves and shimmers, in slots of their own (at most MAX_SHOCKS each), and the records
+    // they and the others are kept in (reused, so a blast makes no garbage)
+    this._shocksH = [];
+    this._heatH = [];
+    this._free = [];
     this._dzFast = 0; // the white-out and bloom flare of a blast: gone in a second
     this._dzSlow = 0; // the eye's recovery: stopped down for several seconds
   }
@@ -629,15 +661,23 @@ export class PostFX {
    * from depth so it runs over the ground and ignores the sky. strength 1 is a big shell near the
    * camera; the effect fades with the distance of the blast from the camera and as the ring grows.
    */
-  shockwave(worldPos, { radius = 300, speed = 343, strength = 1 } = {}) {
-    if (this._shocks.length >= MAX_SHOCKS) this._shocks.shift();
-    this._shocks.push({ x: worldPos.x, y: worldPos.y, z: worldPos.z, t0: this._now, radius, speed, strength });
+  shockwave(worldPos, { radius = 300, speed = 343, strength = 1, hero = false } = {}) {
+    // hero: the max-quality battery's wave, faded within about 25 m of the camera and clamped harder
+    const L = hero ? this._shocksH : this._shocks;
+    if (L.length >= MAX_SHOCKS) this._free.push(L.shift());
+    const s = this._free.pop() ?? {};
+    s.x = worldPos.x; s.y = worldPos.y; s.z = worldPos.z; s.t0 = this._now; s.radius = radius; s.speed = speed; s.strength = strength;
+    L.push(s);
   }
 
   /** A heat shimmer: the air over worldPos wobbling for `life` seconds (muzzle blasts, fires). */
-  heat(worldPos, { radius = 6, life = 1.2, strength = 1 } = {}) {
-    if (this._heat.length >= MAX_SHOCKS) this._heat.shift();
-    this._heat.push({ x: worldPos.x, y: worldPos.y, z: worldPos.z, radius, t0: this._now, life, strength });
+  heat(worldPos, { radius = 6, life = 1.2, strength = 1, hero = false } = {}) {
+    // hero: the max-quality battery's shimmer, weighted by the view ray's closest approach (shows against the sky)
+    const L = hero ? this._heatH : this._heat;
+    if (L.length >= MAX_SHOCKS) this._free.push(L.shift());
+    const h = this._free.pop() ?? {};
+    h.x = worldPos.x; h.y = worldPos.y; h.z = worldPos.z; h.radius = radius; h.t0 = this._now; h.life = life; h.strength = strength;
+    L.push(h);
   }
 
   /** A blast beside the camera: k 0..1 whites the picture out, flares the bloom and stops the eye down for seconds. */
@@ -699,20 +739,41 @@ export class PostFX {
     let n = 0;
     for (let i = this._shocks.length - 1; i >= 0; i--) {
       const s = this._shocks[i];
-      if ((this._now - s.t0) * s.speed > s.radius) this._shocks.splice(i, 1);
+      if ((this._now - s.t0) * s.speed > s.radius) drop(this._shocks, i, this._free);
     }
-    for (const s of this._shocks) {
+    for (let i = this._shocksH.length - 1; i >= 0; i--) {
+      const s = this._shocksH[i];
+      if ((this._now - s.t0) * s.speed > s.radius) drop(this._shocksH, i, this._free);
+    }
+    for (let i = 0; i < this._shocks.length; i++) {
+      const s = this._shocks[i];
       ru.uShock.value[n].set(s.x, s.y, s.z, s.t0);
       ru.uShockP.value[n].set(s.radius, s.speed, s.strength, 700);
       n++;
     }
+    for (let i = 0; i < this._shocksH.length; i++) {
+      const s = this._shocksH[i];
+      ru.uShock.value[n].set(s.x, s.y, s.z, s.t0);
+      ru.uShockP.value[n].set(s.radius, s.speed, s.strength, -700);
+      n++;
+    }
     ru.uShockN.value = n;
     n = 0;
-    for (let i = this._heat.length - 1; i >= 0; i--) if (this._now - this._heat[i].t0 > this._heat[i].life) this._heat.splice(i, 1);
-    for (const h of this._heat) {
+    for (let i = this._heat.length - 1; i >= 0; i--) if (this._now - this._heat[i].t0 > this._heat[i].life) drop(this._heat, i, this._free);
+    for (let i = this._heatH.length - 1; i >= 0; i--) if (this._now - this._heatH[i].t0 > this._heatH[i].life) drop(this._heatH, i, this._free);
+    for (let i = 0; i < this._heat.length; i++) {
+      const h = this._heat[i];
       const k = 1 - (this._now - h.t0) / h.life;
       ru.uHeat.value[n].set(h.x, h.y, h.z, h.radius);
       ru.uHeatP.value[n].set(h.strength * k * k, 0, 0, 0);
+      n++;
+    }
+    for (let i = 0; i < this._heatH.length; i++) {
+      const h = this._heatH[i];
+      // a hero shimmer swells in over its first fifth and dies away (the barrel's steady shimmer is laid end to end)
+      const a = (this._now - h.t0) / h.life, k = Math.min(1, a * 5) * (1 - a);
+      ru.uHeat.value[n].set(h.x, h.y, h.z, h.radius);
+      ru.uHeatP.value[n].set(h.strength * k, 1, 0, 0);
       n++;
     }
     ru.uHeatN.value = n;

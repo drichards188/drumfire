@@ -1,7 +1,8 @@
 // Headless screenshot and console capture, private to whoever runs it (no shared browser).
-//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--dev] [--lineup k5,wespe,...]
+//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--until-timeout ms] [--dev] [--lineup k5,wespe,...]
 // <path> is relative to the dev server (http://localhost:5201), e.g. "/" or "/models.html?kind=bl15in".
-// --until polls the expression (up to 60 s) before --wait starts; --eval runs after the wait and its result is printed.
+// --until polls the expression (up to --until-timeout, default 60 s) before --wait starts; --eval runs after the wait and
+// its result is printed (an expression that gives a promise is awaited, so it can wait for the page itself).
 // Console errors and page errors are printed so a broken module shows up immediately.
 // --dev turns the career's dev mode on in the capture's (throwaway) browser, so every battery and operation plays.
 import { chromium } from 'playwright-core';
@@ -19,6 +20,7 @@ const size = opt('--size', '1600x900').split('x').map(Number);
 const wait = Number(opt('--wait', '3000'));
 const evalExpr = opt('--eval', null);
 const until = opt('--until', null);
+const untilMs = Number(opt('--until-timeout', '60000'));
 const lineup = opt('--lineup', null); // --lineup k5,wespe,...: dev mode with that career lineup (the German tree)
 const dev = args.includes('--dev') || !!lineup;
 if (args.includes('--dev')) args.splice(args.indexOf('--dev'), 1);
@@ -32,7 +34,7 @@ const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247
 
 const browser = await chromium.launch({
   executablePath: exe,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
+  args: [...(process.env.GPU === '1' ? ['--use-angle=gl', '--use-gl=angle', '--enable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']), '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
 });
 const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
 // No hot reload: another agent's save would otherwise reload the page in the middle of a capture.
@@ -50,7 +52,7 @@ page.on('console', (m) => {
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}\n${e.stack ?? ''}`));
 
 await page.goto(`http://localhost:5201${path}`, { waitUntil: 'load', timeout: 60000 });
-if (until) await page.waitForFunction(until, null, { timeout: 60000, polling: 250 }).catch((e) => console.log(`[until timeout] ${e.message}`));
+if (until) await page.waitForFunction(until, null, { timeout: untilMs, polling: 250 }).catch((e) => console.log(`[until timeout] ${e.message}`));
 await page.waitForTimeout(wait);
 if (evalExpr) {
   try {

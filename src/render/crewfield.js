@@ -69,7 +69,9 @@ function buildRig(rig, kind, floors, g, bounds) {
   rig.root.updateMatrixWorld(true);
   rig.root.traverse((o) => {
     if (!o.isMesh || o.isSkinnedMesh) return;
-    for (let p = o; p; p = p.parent) if (p.name && p.name.startsWith('shell-')) return;
+    // the rounds are the men's, and an HD rig's tiers (userData.tier, models/v/de/k18_hd.js) are left out: the field is
+    // the standard steel's, so an HD gun's men stand and walk exactly where the standard gun's do
+    for (let p = o; p; p = p.parent) if ((p.name && p.name.startsWith('shell-')) || p.userData.tier) return;
     let layer = 'fix';
     for (let p = o.parent; p; p = p.parent) if (p.name === 'traverse') layer = 'rot';
     items.push({ mesh: o, group: groupOf(o), layer });
@@ -141,11 +143,28 @@ function buildRig(rig, kind, floors, g, bounds) {
   return occ;
 }
 
+// Box3.setFromObject's (non-precise) bounds over everything but the HD tiers, so an HD rig's grid is the standard one's
+const _bb = new THREE.Box3();
+function stdBounds(o, box) {
+  if (o.userData.hdGun) return box; // the gun's HD tier groups (not the men, whatever tier their figures are on)
+  o.updateWorldMatrix(false, false);
+  const g = o.geometry;
+  if (g !== undefined) {
+    if (o.boundingBox !== undefined) { if (o.boundingBox === null) o.computeBoundingBox(); _bb.copy(o.boundingBox); } else { if (g.boundingBox === null) g.computeBoundingBox(); _bb.copy(g.boundingBox); }
+    _bb.applyMatrix4(o.matrixWorld);
+    box.union(_bb);
+  }
+  for (const c of o.children) stdBounds(c, box);
+  return box;
+}
+// for tests that compare two rigs of one kind (the field is cached per kind and floors)
+export const clearFieldCache = () => cache.clear();
+
 export class CrewField {
   constructor(rig, kind, g, floors, place, workY = 0) {
     this.floors = floors;
     // bounds: the rig's plan, the crew spots, the pit
-    const box = new THREE.Box3().setFromObject(rig.root);
+    const box = rig.hd ? stdBounds(rig.root, new THREE.Box3()) : new THREE.Box3().setFromObject(rig.root);
     let x0 = box.min.x, x1 = box.max.x, z0 = box.min.z, z1 = box.max.z;
     for (const s of rig.anchors.crew) { x0 = Math.min(x0, s.x - 2); x1 = Math.max(x1, s.x + 2); z0 = Math.min(z0, s.z - 2); z1 = Math.max(z1, s.z + 2); }
     const pit = pitSolids(kind, place.x, place.z);

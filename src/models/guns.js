@@ -147,13 +147,15 @@ function buildStandIn(kind) {
 
 const BUILDERS = { bl15: buildBL15, bl92: buildBL92, rail: buildRail };
 
-export function buildGun(kind) {
+// opts (e.g. { hd: true }, the max-quality hero tier of the K 18 / Mörser 18, shots/maxq/PLAN.md 3.1) go to the builder
+// only when given, so builders that take positional arguments never see an object
+export function buildGun(kind, opts) {
   if (BUILDERS[kind]) return BUILDERS[kind]();
   if (GUN_ERA.ww1 && kind === 'bertha' && EXTRAS.buildBerthaGun1917) {
     try { return EXTRAS.buildBerthaGun1917(); } catch (e) { console.warn('guns: bertha (1917) builder threw:', e.message); }
   }
   if (loaded[kind]) {
-    try { return loaded[kind](); } catch (e) { console.warn(`guns: ${kind} builder threw:`, e.message); }
+    try { return opts === undefined ? loaded[kind]() : loaded[kind](opts); } catch (e) { console.warn(`guns: ${kind} builder threw:`, e.message); }
   }
   if (STANDIN[kind]) return buildStandIn(kind);
   throw new Error(`unknown gun kind: ${kind}`);

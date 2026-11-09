@@ -3,6 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
 import { panoramicSight, slidingBlock } from './common.js';
+import { recordParts, buildHD } from './k18_hd.js';
 
 /**
  * The Mörserlafette (Krupp, 1939) in firing order, carrying either barrel (refs/k18_mrs18/README.md):
@@ -61,8 +62,11 @@ const CARRIAGE_RECOIL = 0.6;
 export const buildK18 = (o = {}) => build(K18, o);
 export const buildMrs18 = (o = {}) => build(MRS18, o);
 
-function build(G, { scheme = 'dgelb' } = {}) {
+function build(G, opts = {}) {
+  const { scheme = 'dgelb', hd = false } = opts;
   const rig = makeRig(scheme);
+  // the HD tier (k18_hd.js) records the standard parts as they are added; P.tag?.() names them (a no-op otherwise)
+  const rec = hd ? recordParts(rig) : null;
   const { root } = rig;
   const MZ = -(G.L - BR), ring0 = BR - G.ring.len;
   const rAt = (s) => { // the barrel's outside radius at s metres from the muzzle
@@ -74,6 +78,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
   // ---- the firing platform (Bettung): a round ribbed steel plate on the levelled ground, the racer ring the three
   // roller pieces run on, the centre pivot, and the pickets that hold it
   const F = rig.part();
+  F.tag?.('platform');
   F.add('dark', yTube(0, 0.07, PR, PR, 48));
   F.add('dark', ring(PR - 0.07, PR, 0, 0.15, 48).rotateZ(Math.PI / 2));
   F.add('steel', ring(0.95, 1.05, 0.07, 0.2, 48).rotateZ(Math.PI / 2));
@@ -96,6 +101,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
   // slide rails on top, transoms clear of the breech's path at high elevation, the pivot housing and roller pieces
   const trav = pivotAt(rig, root, 'traverse', 0, 0, 0);
   const T = rig.part();
+  T.tag?.('girders');
   const gir = [[-2.05, 0.6], [-2.05, 1.02], [4.95, 1.02], [5.62, 0.86], [5.62, 0.46], [4.4, 0.4], [-0.9, 0.4], [-1.55, 0.5]];
   for (const s of [-1, 1]) {
     T.add('camo', sideProfile(gir, 0.24).translate(s * 0.5, 0, 0));
@@ -107,16 +113,19 @@ function build(G, { scheme = 'dgelb' } = {}) {
     T.add('camo', rivetRow(V(xo, 0.46, -0.85), V(xo, 0.46, 4.4), 0.16, V(s, 0, 0), 0.017));
     for (const z of [-1.95, -0.6, 0.6, 1.8, 3.0, 4.2]) T.add('camo', box(0.02, 0.56, 0.07, s * 0.63, 0.71, z)); // stiffeners
   }
+  T.tag?.('transoms');
   T.add('camo', box(0.76, 0.42, 0.12, 0, 0.8, -1.99)); // front transom
   T.add('camo', box(0.76, 0.08, 0.3, 0, 0.4, -1.0)); // lower transom carrying the front roller
   for (const z of [2.55, 3.75]) T.add('camo', box(0.76, 0.5, 0.1, 0, 0.72, z));
   T.add('camo', box(1.0, 0.42, 0.06, 0, 0.66, 5.62)); // trail end plate
   T.add('camo', box(0.76, 0.04, 2.9, 0, 0.42, 4.05)); // trail floor
+  T.tag?.('deck');
   T.add('camo', box(1.24, 0.04, 1.75, 0, DECK - 0.02, 4.125)); // the deck over the trail behind the top carriage's run
   for (let z = 3.4; z < 5.0; z += 0.3) T.add('camo', box(1.1, 0.012, 0.025, 0, DECK + 0.006, z)); // cleats
   T.add('camo', rivetRow(V(-0.58, DECK + 0.001, 3.3), V(-0.58, DECK + 0.001, 4.95), 0.15, V(0, 1, 0), 0.014));
   T.add('camo', rivetRow(V(0.58, DECK + 0.001, 3.3), V(0.58, DECK + 0.001, 4.95), 0.15, V(0, 1, 0), 0.014));
   // pivot housing on the platform's pin, joined to both girders; the three roller pieces on the racer ring
+  T.tag?.('pivot');
   T.add('camo', yTube(0.26, 0.46, 0.2, 0.22, 20));
   T.add('camo', box(0.76, 0.12, 0.22, 0, 0.36, 0));
   for (const a of [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3]) {
@@ -127,6 +136,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
     if (Math.abs(x) > 0.1) T.add('camo', rod(V(x * 0.97, 0.36, z), V(Math.sign(x) * 0.6, 0.42, z * 0.6 - 0.1), 0.05, 8));
   }
   // front axle (cranked up), jack screws at the front corners, the towing crossbar and lunette
+  T.tag?.('axle');
   T.add('camo', box(1.96, 0.2, 0.24, 0, AX.y, AX.z));
   for (const s of [-1, 1]) {
     T.add('steel', xTube(s * 0.95, s * 1.02, 0.09, 0.09, 14, AX.y, AX.z));
@@ -140,28 +150,35 @@ function build(G, { scheme = 'dgelb' } = {}) {
   }
   T.add('camo', box(0.46, 0.32, 0.36, 0, AX.y + 0.04, AX.z)); // the lifting gear's housing on the axle
   T.add('steel', xTube(-0.6, 0.6, 0.035, 0.035, 8, AX.y + 0.16, AX.z - 0.24)); // its cross shaft
+  T.tag?.('brakes');
   for (const s of [-1, 1]) {
     T.add('dark', xTube(s * 0.9, s * 1.0, 0.27, 0.27, 24, AX.y, AX.z)); // brake drum
     T.add('steel', rod(V(s * 0.95, AX.y + 0.2, AX.z - 0.1), V(s * 0.55, AX.y + 0.16, AX.z - 0.24), 0.018, 5)); // brake rod
   }
+  T.tag?.('towing');
   T.add('camo', xTube(-0.88, 0.88, 0.045, 0.045, 10, 0.72, -2.35));
   T.add('dark', new THREE.TorusGeometry(0.09, 0.025, 6, 16).rotateX(Math.PI / 2).translate(0, 0.72, -2.47));
   for (const s of [-1, 1]) {
+    T.tag?.('wheels');
     wheel(T, s * AX.x, AX.y, AX.z, s);
+    T.tag?.('fenders');
     fender(T, s * AX.x, AX.y, AX.z, s);
   }
   // footplates for the layer (left) and the traverser (right), the grated walkways let down along both sides with
   // their legs, the ladders at the rear corners
   for (const s of [-1, 1]) {
+    T.tag?.('footplates');
     grating(T, s * 0.64, s * 1.45, 0.1, 0.95, FOOT);
     T.add('camo', rod(V(s * 0.63, 0.5, 0.5), V(s * 1.4, FOOT - 0.06, 0.5), 0.025, 6));
     T.add('camo', yTube(FOOT, DECK, 0.02, 0.02, 6, s * 1.45, 0.95));
+    T.tag?.('walkways');
     grating(T, s * 0.64, s * 1.6, 0.95, 4.72, DECK);
     for (const z of [1.1, 2.9, 4.6]) {
       T.add('camo', yTube(0, DECK - 0.08, 0.035, 0.035, 8, s * 1.55, z));
       T.add('dark', box(0.14, 0.03, 0.14, s * 1.55, 0.015, z));
       T.add('camo', box(0.06, 0.1, 0.12, s * 0.66, DECK - 0.1, z)); // hinge
     }
+    T.tag?.(s < 0 ? 'ladderL' : 'ladderR');
     const lx0 = s * 1.3, lx1 = s * 1.58;
     for (const x of [lx0, lx1]) T.add('camo', rod(V(x, DECK - 0.03, 4.7), V(x, 0, 5.4), 0.022, 6));
     for (let k = 1; k <= 3; k++) {
@@ -170,10 +187,12 @@ function build(G, { scheme = 'dgelb' } = {}) {
     }
   }
   // the float the trail end rests on, the castor jack behind it, the lunette and the trail spike sockets
+  T.tag?.('float');
   T.add('camo', box(1.5, 0.05, 0.8, 0, 0.025, 5.25));
   for (const [z, a] of [[4.84, -0.6], [5.66, 0.6]]) T.add('camo', box(1.5, 0.05, 0.16, 0, 0.07, z, a, 0, 0));
   for (const x of [-0.55, 0, 0.55]) T.add('camo', box(0.05, 0.1, 0.78, x, 0.1, 5.25));
   for (const s of [-1, 1]) T.add('camo', rod(V(s * 0.42, 0.42, 5.45), V(s * 0.42, 0.12, 5.25), 0.04, 8));
+  T.tag?.('castor');
   T.add('camo', box(0.3, 0.2, 0.2, 0, 0.78, 5.72));
   T.add('camo', yTube(0.38, 0.98, 0.075, 0.075, 14, 0, 5.84));
   T.add('steel', yTube(0.28, 0.4, 0.045, 0.045, 10, 0, 5.84));
@@ -182,9 +201,12 @@ function build(G, { scheme = 'dgelb' } = {}) {
   T.add('dark', ring(0.1, 0.18, -0.045, 0.045, 18).translate(0, 0.18, 5.84));
   T.add('steel', xTube(-0.07, 0.07, 0.025, 0.025, 8, 0.18, 5.84));
   T.add('steel', xTube(-0.18, 0.18, 0.015, 0.015, 6, 1.0, 5.84));
+  T.tag?.('lunette');
   T.add('dark', new THREE.TorusGeometry(0.1, 0.03, 6, 16).rotateX(Math.PI / 2).translate(0, 0.62, 5.75));
+  T.tag?.('spike');
   for (const s of [-1, 1]) T.add('steel', zTube(5.55, 5.78, 0.045, 0.045, 10, s * 0.32, 0.86));
   T.add('steel', rod(V(0.69, 0.84, 2.3), V(0.69, 0.84, 4.25), 0.025, 6)); // the trail spike, stowed
+  T.tag?.('springs');
   // balance springs of the trail-end gear, outside the girders under the walkways' ends
   for (const s of [-1, 1]) {
     T.add('steel', helix(0.085, 1.1, 13, 0.016).translate(s * 0.74, 0.76, 4.4));
@@ -200,6 +222,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
   const cheek = [[-1.45, RAIL + 0.06], [2.55, RAIL + 0.06], [2.55, 1.52], [1.55, 1.52], [1.05, 1.95], [0.55, TRY + 0.08],
     [0.35, TRY + 0.24], [-0.25, TRY + 0.24], [-0.5, TRY + 0.08], [-0.95, 1.95], [-1.45, 1.55]];
   for (const s of [-1, 1]) {
+    C.tag?.('cheeks');
     C.add('camo', sideProfile(cheek, 0.05).translate(s * 0.555, 0, 0));
     C.add('camo', rivetPoly(cheek, (z, y) => V(s * 0.58, y, z), 0.05, 0.15, V(s, 0, 0), 0.016));
     // the flange round the cheek's top edge and the stiffeners on its outer face
@@ -211,35 +234,46 @@ function build(G, { scheme = 'dgelb' } = {}) {
       const top = topAt(cheek, z) - 0.03;
       C.add('camo', box(0.035, top - RAIL - 0.08, 0.05, s * 0.595, (top + RAIL + 0.08) / 2, z));
     }
+    C.tag?.('shoes');
     C.add('dark', box(0.2, 0.05, 3.96, s * 0.5, RAIL + 0.025, 0.55)); // slide shoes
+    C.tag?.('bearings');
     C.add('camo', xTube(s * 0.53, s * 0.66, 0.21, 0.21, 24, TRY, TRZ)); // trunnion bearing housing
     C.add('camo', box(0.13, 0.08, 0.5, s * 0.595, TRY + 0.21, TRZ)); // its cap
     for (const z of [-0.2, 0.3]) C.add('steel', yTube(TRY + 0.25, TRY + 0.29, 0.025, 0.025, 6, s * 0.595, TRZ + z));
     C.add('camo', rivets(Array.from({ length: 8 }, (_, i) => V(s * 0.661, TRY + Math.sin(i * TAU / 8) * 0.16, TRZ + Math.cos(i * TAU / 8) * 0.16)), V(s, 0, 0), 0.02));
+    C.tag?.('eqBracket');
     // equilibrator lower bracket
     C.add('camo', box(0.24, 0.16, 0.2, s * 0.68, EQ.lo[0], EQ.lo[1]));
     C.add('steel', xTube(s * 0.6, s * 0.86, 0.035, 0.035, 8, EQ.lo[0], EQ.lo[1]));
   }
+  C.tag?.('transom');
   C.add('camo', box(1.06, 0.48, 0.12, 0, RAIL + 0.3, -1.38)); // front transom
+  C.tag?.('rearBox');
   C.add('camo', box(1.06, 0.38, 0.95, 0, RAIL + 0.25, 2.07)); // rear box over the slide
   C.add('camo', rivetRow(V(-0.5, 1.47, 1.65), V(0.5, 1.47, 1.65), 0.14, V(0, 0, -1), 0.016));
   C.add('dark', box(0.9, 0.08, 0.2, 0, 1.36, 2.6)); // buffer stop
   // elevating gear: the pinion on the left cheek meshing with the cradle's arc, the handwheel and its gearbox; the
   // traversing handwheel on the right
+  C.tag?.('pinion');
   C.add('steel', xTube(-0.53, -0.4, 0.06, 0.06, 12, TRY - 0.787, TRZ - 0.069));
   for (const s of [-1, 1]) {
+    C.tag?.('gearbox');
     C.add('camo', box(0.14, 0.24, 0.26, s * 0.65, FOOT + 1.12, 0.55));
     C.add('steel', xTube(s * 0.72, s * 0.78, 0.025, 0.025, 8, FOOT + 1.12, 0.55));
+    C.tag?.('handwheels');
     C.add('dark', handwheel(0.17, 6, 0.016, 0.035, 1).rotateY(s < 0 ? Math.PI : 0).translate(s * 0.78, FOOT + 1.12, 0.55));
   }
   // the elevation scale drum on the left cheek below the trunnion (the round dial in the Fort Sill photographs)
+  C.tag?.('dial');
   C.add('camo', xTube(-0.58, -0.66, 0.13, 0.13, 20, TRY - 0.42, TRZ + 0.18));
   C.add('dark', xTube(-0.66, -0.67, 0.1, 0.1, 20, TRY - 0.42, TRZ + 0.18));
   // the panoramic sight on its bracket by the left trunnion, at the layer's eye
   const sy = FOOT + 1.46; // the eyepiece at the layer's eye (his feet + 1.66)
+  C.tag?.('sightMount');
   C.add('camo', box(0.3, 0.06, 0.1, -0.78, sy - 0.03, 0.39));
   C.add('camo', box(0.06, 0.3, 0.1, -0.66, sy - 0.15, 0.32));
   C.add('dark', box(0.1, 0.1, 0.1, -0.91, sy - 0.01, 0.39));
+  C.tag?.('sight');
   panoramicSight(C, -0.92, sy, 0.39, -1);
   C.build(car, { dirt: 0.35 });
 
@@ -247,23 +281,29 @@ function build(G, { scheme = 'dgelb' } = {}) {
   // recuperator head, the trunnions and the equilibrator arms, the elevating arc on the left
   const el = pivotAt(rig, car, 'elevation', 0, TRY, TRZ);
   const E = rig.part();
+  E.tag?.('cradle');
   const cl = CR.z1 - CR.z0, cz = (CR.z0 + CR.z1) / 2;
   E.add('camo', box(CR.hw * 2, 0.06, cl, 0, CR.y0 + 0.03, cz));
   E.add('camo', box(CR.hw * 2, 0.06, cl, 0, CR.y1 - 0.03, cz));
   for (const s of [-1, 1]) {
+    E.tag?.('cradle');
     E.add('camo', box(0.06, CR.y1 - CR.y0, cl, s * (CR.hw - 0.03), (CR.y0 + CR.y1) / 2, cz));
     for (const y of [CR.y0 + 0.025, CR.y1 - 0.025]) E.add('camo', box(0.05, 0.05, cl, s * (CR.hw + 0.02), y, cz));
     E.add('camo', rivetRow(V(s * (CR.hw + 0.001), 0.12, CR.z0 + 0.1), V(s * (CR.hw + 0.001), 0.12, CR.z1 - 0.1), 0.15, V(s, 0, 0), 0.015));
     E.add('camo', rivetRow(V(s * (CR.hw + 0.001), -0.18, CR.z0 + 0.1), V(s * (CR.hw + 0.001), -0.18, CR.z1 - 0.1), 0.15, V(s, 0, 0), 0.015));
+    E.tag?.('trunnions');
     E.add('steel', xTube(s * CR.hw, s * 0.69, 0.11, 0.11, 18)); // trunnion
+    E.tag?.('eqArms');
     // equilibrator arm clamped on the trunnion's end
     E.add('camo', xTube(s * 0.67, s * 0.8, 0.12, 0.12, 16));
     E.add('camo', rod(V(s * 0.735, 0, 0), V(s * 0.735, EQ.up[0], EQ.up[1]), 0.055, 8));
     E.add('steel', xTube(s * 0.66, s * 0.84, 0.035, 0.035, 8, EQ.up[0], EQ.up[1]));
   }
+  E.tag?.('guideRings');
   const jr = rAt(-MZ + CR.z0) + 0.006; // the barrel's radius at the cradle's mouth
   E.add('camo', zRing(jr, 0.31, CR.z0 - 0.14, CR.z0 + 0.02, 28));
   E.add('camo', zRing(rAt(-MZ + CR.z1) + 0.006, 0.3, CR.z1 - 0.04, CR.z1 + 0.04, 28));
+  E.tag?.('cylinder');
   // the recoil cylinder on top: saddles and straps, the recuperator head forward with its bolted flange, the gland
   for (const z of [-0.95, -0.1, 0.75]) {
     E.add('camo', box(0.26, CYL.y - CYL.r - CR.y1 + 0.04, 0.16, 0, (CR.y1 + CYL.y - CYL.r) / 2, z));
@@ -277,6 +317,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
   E.add('dark', zTube(CYL.z0 - 0.4, CYL.z0 - 0.36, 0.05, 0.05, 6, 0, CYL.y));
   E.add('camo', zTube(CYL.z1, CYL.z1 + 0.08, 0.085, 0.075, 12, 0, CYL.y));
   E.add('steel', yTube(CYL.y + CYL.r - 0.02, CYL.y + CYL.r + 0.05, 0.025, 0.025, 6, 0, -0.6)); // filler plug
+  E.tag?.('arc');
   // elevating arc (left) on its web plate: the pinion on the cheek meets it 95 degrees round from the bore
   E.add('camo', gearArc(0.58, 0.7, 25 * DEG, 95 * DEG, 0.05, 20, 0.03).translate(-0.43, 0, 0));
   E.add('camo', gearArc(0.3, 0.58, 25 * DEG, 95 * DEG, 0.025).translate(-0.4, 0, 0));
@@ -286,17 +327,22 @@ function build(G, { scheme = 'dgelb' } = {}) {
   // the block and the lug the recoil cylinder's piston rod is made fast to
   const rc = pivotAt(rig, el, 'recoil', 0, 0, 0);
   const B = rig.part();
+  B.tag?.('barrel');
   const ch = G.bore * 1.12, pts = [[MZ, G.bore]]; // the chamber is a little wider than the bore
   for (const [s, r] of G.prof) pts.push([MZ + s, r]);
   pts.push([ring0 + 0.01, G.prof[G.prof.length - 1][1]], [ring0 + 0.01, ch]);
   B.add('camo', zLathe(pts, 40));
+  B.tag?.('bore');
   B.add('dark', zLathe([[MZ + 0.6, G.bore], [MZ, G.bore]], 20)); // the bore seen from the muzzle (listed backwards: faces in)
   B.add('char', new THREE.CircleGeometry(G.bore, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.6));
+  B.tag?.('chamber');
   B.add('dark', zLathe([[ring0 + 0.01, ch], [ring0 - 0.9, ch]], 20)); // the chamber, open behind the block
   B.add('char', new THREE.CircleGeometry(ch, 20).translate(0, 0, ring0 - 0.9));
   const rj = G.prof[G.prof.length - 1][1];
+  B.tag?.('band');
   B.add('camo', zRing(rj - 0.01, rj + 0.022, ring0 - 0.18, ring0 - 0.02, 32)); // the band the barrel's guides are fixed to
   const { len: rl, w: rw, h: rh } = G.ring, rz = ring0 + rl / 2, fw = 0.14;
+  B.tag?.('ring');
   B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, rh * 0.39, rz));
   B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, -rh * 0.39, rz));
   B.add('camo', box(rw * 0.22, rh * 0.56, rl, -rw * 0.39, 0, rz));
@@ -309,17 +355,23 @@ function build(G, { scheme = 'dgelb' } = {}) {
     B.add('camo', new THREE.ExtrudeGeometry(f, { depth: fw, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, ring0));
     B.add('dark', zLathe([[ring0 + fw, ch], [ring0, ch]], 20));
   }
+  B.tag?.('lug');
   B.add('camo', box(0.16, CYL.y + 0.07 - rh * 0.5, 0.22, 0, (CYL.y + 0.07 + rh * 0.5) / 2, ring0 + 0.11));
+  B.tag?.('rod');
   B.add('steel', zTube(CYL.z1 - G.recoil - 0.15, ring0, 0.045, 0.045, 10, 0, CYL.y));
   B.add('dark', zTube(ring0 - 0.05, ring0, 0.07, 0.07, 6, 0, CYL.y));
+  B.tag?.('firingLever');
   B.add('dark', box(0.05, 0.05, 0.16, rw * 0.5 + 0.02, rh * 0.4, BR - 0.12)); // firing lever bracket, above the block's slot
   B.add('steel', rod(V(rw * 0.5 + 0.03, rh * 0.4, BR - 0.05), V(rw * 0.5 + 0.08, rh * 0.5, BR + 0.08), 0.014, 5));
   B.build(rc, { dirt: 0.12, y0: TRY });
 
   const brk = pivotAt(rig, rc, 'breech', rw * 0.11, 0, ring0 + fw + (rl - fw) / 2);
   const K = rig.part();
+  K.tag?.('block');
   K.add('camo', box(rw * 0.78 - 0.004, rh * 0.56 - 0.004, rl - fw - 0.004, 0, 0, 0));
+  K.tag?.('lock');
   K.add('dark', zTube((rl - fw) / 2 - 0.01, (rl - fw) / 2 + 0.03, 0.05, 0.045, 12, -rw * 0.11, 0)); // firing lock
+  K.tag?.('crank');
   K.add('dark', box(0.08, 0.1, 0.06, rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.02));
   K.add('steel', rod(V(rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.05), V(rw * 0.42, rh * 0.06, (rl - fw) / 2 + 0.3), 0.018, 6)); // operating crank
   K.add('dark', xTube(rw * 0.4, rw * 0.46, 0.03, 0.03, 8, rh * 0.06, (rl - fw) / 2 + 0.3));
@@ -343,6 +395,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
   const sh = buildShell(G.kind), sr = sh.radius, yb = -rh * 0.28; // yb: the slot's floor (the ring's lower wall)
   const tp = pivotAt(rig, rc, 'loadTray', 0, yb, BR - 0.05);
   const R = rig.part(), tw = sr + 0.03, tl = sh.length * 0.8 + 0.1, fy = -sr - yb, z0 = 0.05, z1 = z0 + tl;
+  R.tag?.('tray');
   R.add('camo', box(tw * 2, 0.014, tl, 0, fy - 0.007, z0 + tl / 2)); // the floor, its top at the shell's underside
   R.add('dark', box(tw * 2 - 0.04, 0.012, z0 + 0.012, 0, 0.006, (z0 + 0.012) / 2)); // the lip on the slot's floor
   R.add('dark', box(tw * 2 - 0.04, fy, 0.014, 0, fy / 2, z0 + 0.007)); // the riser up the ring's face
@@ -427,7 +480,15 @@ function build(G, { scheme = 'dgelb' } = {}) {
 
   hb(rig, -1.45, 0, -2.5, 1.45, 3.0, 1.0);
   hb(rig, -1.65, 0, 1.0, 1.65, 2.7, 5.9);
-  return finishRig(rig, G.kind, G.kind);
+  finishRig(rig, G.kind, G.kind);
+  if (hd) {
+    // a failure in the HD tier leaves the standard rig (never the stand-in): the spec is built before anything is attached
+    try {
+      buildHD(rig, G, { opts, rec, struts, sy, MZ, ring0, rAt, rw, rh, rl, fw, rz, ch, sh, sr, yb, tw, tl, fy, z0, trav, car, el, rc, brk, tp,
+        K: { TRY, TRZ, BR, RAIL, DECK, FOOT, AX, PR, CR, CYL, EQ, CARRIAGE_RECOIL } });
+    } catch (e) { console.warn(`k18: the HD tier of ${G.kind} failed, the standard rig instead:`, e.message); }
+  }
+  return rig;
 }
 
 // The height of a [z, y] outline's top edge at z.

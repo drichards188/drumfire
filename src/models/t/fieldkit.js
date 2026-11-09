@@ -107,8 +107,8 @@ export function breechSetter(rig, hinge, maxAngle = 1.9) {
   rig.setBreech(0);
 }
 
-/** A shell (or bag) shown on the loading tray, lying along the bore (child of `tray`). */
-export function trayShells(rig, tray, kind) {
+/** A shell (or bag) shown on the loading tray, lying along the bore (child of `tray`); `seg` the shell's segments round. */
+export function trayShells(rig, tray, kind, seg = 24) {
   const mk = (b) => {
     const g = new THREE.Group();
     for (const p of b.parts) {
@@ -120,7 +120,7 @@ export function trayShells(rig, tray, kind) {
     tray.add(g);
     return g;
   };
-  const shell = buildShell(kind), bag = buildCartridge(kind);
+  const shell = buildShell(kind, seg), bag = buildCartridge(kind);
   const gs = mk(shell), gc = mk(bag);
   gs.position.z = shell.length / 2 + 0.02; // lies behind the breech, nose to the muzzle
   gc.position.z = bag.length / 2 + 0.02;

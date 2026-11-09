@@ -42,7 +42,7 @@ const MAX = Object.fromEntries(PARTS.map((p) => [p.id, 3]));
 const jobs = eras.flatMap((era) => ERAS[era].filter((k) => !only || only.includes(k)).map((kind) => ({ era, kind })));
 // (CHROME=chromium-1217 picks a build: one install can stop drawing 2D canvases while the other works)
 const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247', 'chromium-1217'].map((d) => `${os.homedir()}/.cache/ms-playwright/${d}/chrome-linux64/chrome`).find((p) => fs.existsSync(p));
-const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ executablePath: exe, args: [...(process.env.GPU === '1' ? ['--use-angle=gl', '--use-gl=angle', '--enable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']), '--ignore-gpu-blocklist'] });
 
 async function worker() {
   const page = await browser.newPage({ viewport: { width: VW, height: VH } });

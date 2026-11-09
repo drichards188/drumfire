@@ -145,7 +145,7 @@ const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1247
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`)
   .concat(process.env.PLAYWRIGHT_BROWSERS_PATH ? [`${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium`] : [])
   .find((p) => fs.existsSync(p));
-const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ executablePath: exe, args: [...(process.env.GPU === '1' ? ['--use-angle=gl', '--use-gl=angle', '--enable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']), '--ignore-gpu-blocklist'] });
 fs.mkdirSync(OUT, { recursive: true });
 const want = args.filter((a) => !a.startsWith('--'));
 const HIDE = '#panel, #hud, #loading, #tut-card, #gear, #return-menu, #campaign-objectives, #end, .lil-gui, #voice-sub, #voice-btn, #man-gun, #gunner, .rw-feed, .rw-total, .sm-page { display: none !important; } #view { flex: 1 1 100% !important; width: 100% !important; }';

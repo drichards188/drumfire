@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CREW_FRAME, registerCrewTier } from './crew.js';
+import { FACES, faceField, meshFace, headWeight, headPaint, lidRows, gridArrays, eyeRadius, meshEar, ER as EYE_R } from './crew_face.js';
+import { maxMaterial as maxMat0, patchCrewMax as patchMax0 } from './crew_maxmat.js';
 
 /**
  * The close tier of the German gun crews (1917: outfits 'german', 'german-cap', 'german-drill'; 1944: 'german44',
@@ -54,12 +56,22 @@ const SURF = {
 const C = (h) => new THREE.Color(h);
 const _c = new THREE.Color();
 
+// The quality profile a figure is built with (build() sets it for the call): segment counts scale by SEG and the torso
+// rings and the lathes' profiles are resampled to RING times their spacing. The 'hd' profile is 1 and 1, so its
+// figures are exactly what they were; 'max' (the lesson's battery, PLAN.md C2) is finer everywhere.
+let SEG = 1, RING = 1;
+const segs = (n) => (SEG === 1 ? n : Math.round(n * SEG));
+
 // ---------------------------------------------------------------- the body, part by part
 
 class HBody {
-  constructor() { this.list = []; }
-  // bone: a name or (x, y, z) => name; colour: hex or (x, y, z) => hex | THREE.Color; shade: per vertex multiplier
-  add(g, bone, colour, surf = 'wool', shadeOf = null) {
+  // max: the max tier's figure, whose every part also carries aMax (texture layer, skin weight, wear, under the brim)
+  // and aFace (the skin detail's masks: beard, brow, hair, lip; on the eyes the iris)
+  constructor(max = false) { this.list = []; this.max = max; }
+  // bone: a name, (x, y, z) => name, or 'head+neck' (the max head's skin, blended between them, crew_face.js
+  // headWeight); colour: hex or (x, y, z) => hex | THREE.Color; shade: per vertex multiplier; ext (max only):
+  // { surf(i) -> [4], max(i) -> [4], face(i) -> [4] } per vertex instead of the surface's defaults
+  add(g, bone, colour, surf = 'wool', shadeOf = null, ext = null) {
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
     if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
     if (!g.attributes.normal) g.computeVertexNormals();
@@ -68,20 +80,32 @@ class HBody {
     if (!g.index) g.setIndex([...Array(n).keys()]); // (mergeGeometries wants all indexed; shade(i) is per vertex)
     const col = new Float32Array(n * 3), si = new Uint16Array(n * 4), sw = new Float32Array(n * 4), sf = new Float32Array(n * 4);
     const S = SURF[surf] ?? SURF.wool;
+    const am = this.max ? new Float32Array(n * 4) : null, af = this.max ? new Float32Array(n * 4) : null, M = this.max ? maxDefaults(surf) : null;
     for (let i = 0; i < n; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const h = typeof colour === 'function' ? colour(x, y, z) : colour;
+      const h = typeof colour === 'function' ? colour(x, y, z, i) : colour;
       if (h && h.isColor) _c.copy(h); else _c.setHex(h);
       const k = shadeOf ? shadeOf(i) : 1;
       col[i * 3] = _c.r * k; col[i * 3 + 1] = _c.g * k; col[i * 3 + 2] = _c.b * k;
-      si[i * 4] = BI[typeof bone === 'function' ? bone(x, y, z) : bone];
-      sw[i * 4] = 1;
-      sf[i * 4] = S[0]; sf[i * 4 + 1] = S[1]; sf[i * 4 + 2] = S[2]; sf[i * 4 + 3] = S[3];
+      if (bone === 'head+neck') {
+        const w = headWeight(x - HC.x, y - HC.y, z - HC.z);
+        si[i * 4] = BI.head; si[i * 4 + 1] = BI.neck; sw[i * 4] = w; sw[i * 4 + 1] = 1 - w;
+      } else {
+        si[i * 4] = BI[typeof bone === 'function' ? bone(x, y, z) : bone];
+        sw[i * 4] = 1;
+      }
+      const sv = ext?.surf ? ext.surf(i) : S;
+      sf[i * 4] = sv[0]; sf[i * 4 + 1] = sv[1]; sf[i * 4 + 2] = sv[2]; sf[i * 4 + 3] = sv[3];
+      if (am) {
+        am.set(ext?.max ? ext.max(i) : M, i * 4);
+        if (ext?.face) af.set(ext.face(i), i * 4);
+      }
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
     g.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
     g.setAttribute('aSurf', new THREE.BufferAttribute(sf, 4));
+    if (am) { g.setAttribute('aMax', new THREE.BufferAttribute(am, 4)); g.setAttribute('aFace', new THREE.BufferAttribute(af, 4)); }
     this.list.push(g);
   }
   geometry() {
@@ -157,6 +181,7 @@ function orient(g, ref) {
 // Superelliptic loft about +Y: rings { y, rx, rz, cx, cz, ex }, angle a from the front (-Z) toward +X.
 // mod(a, y, x, z) returns a displacement along the ring's outward normal (folds); hollows come out darker.
 function loft(rings, n, mod = null, darken = 18) {
+  n = segs(n);
   const rows = [], uvs = [], shade = [];
   let v = 0;
   rings.forEach((R, k) => {
@@ -188,12 +213,25 @@ function loft(rings, n, mod = null, darken = 18) {
 
 // Surface of revolution about +Y through (x, y, z) from [dy, r] pairs bottom to top; mod as in loft.
 function lathe(prof, seg, x, y, z, sx = 1, sz = 1, mod = null, darken = 18) {
+  if (RING < 1) prof = finer(prof, 0.012 * RING);
   return loft(prof.map(([dy, r]) => ({ y: y + dy, rx: Math.max(r * sx, 1e-4), rz: Math.max(r * sz, 1e-4), cx: x, cz: z, ex: 2 })), seg, mod, darken);
+}
+
+// a [dy, r] profile with extra points so no step along it is longer than `step` (straight between the given points)
+function finer(prof, step) {
+  const out = [prof[0]];
+  for (let i = 1; i < prof.length; i++) {
+    const [a0, r0] = prof[i - 1], [a1, r1] = prof[i], k = Math.ceil(Math.abs(a1 - a0) / step);
+    for (let j = 1; j < k; j++) out.push([lerp(a0, a1, j / k), lerp(r0, r1, j / k)]);
+    out.push(prof[i]);
+  }
+  return out;
 }
 
 // A tube along points with radii (r or [r1, r2], r1 along the frame normal), rounded ends; `up` per point (optional)
 // orients the cross-section's first axis (a strap lies flat on the body).
 function tube(pts, rad, seg, { capA = true, capB = true, up = null } = {}) {
+  seg = segs(seg);
   const n = pts.length, T = [], N = [], B = [];
   for (let i = 0; i < n; i++) T.push(new V3().subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize());
   for (let i = 0; i < n; i++) {
@@ -225,6 +263,7 @@ function tube(pts, rad, seg, { capA = true, capB = true, up = null } = {}) {
 // Rounded box (radius r) centred at the origin, then placed: rotation (Euler XYZ) and translation.
 function rbox(w, h, d, r, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sg = 3) {
   r = Math.min(r, w / 2 - 1e-4, h / 2 - 1e-4, d / 2 - 1e-4);
+  sg = segs(sg);
   const g = new THREE.BoxGeometry(w, h, d, sg, sg, sg);
   const p = g.attributes.position, hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r, v = new V3(), q = new V3();
   for (let i = 0; i < p.count; i++) {
@@ -248,7 +287,7 @@ function place(g, x, y, z, rx = 0, ry = 0, rz = 0, order = 'XYZ') {
 }
 
 function ellip(rx, ry, rz, x, y, z, w = 16, h = 12) {
-  const g = new THREE.SphereGeometry(1, w, h);
+  const g = new THREE.SphereGeometry(1, segs(w), segs(h));
   const uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * TAU * (rx + rz) / 2) / TILE, (uv.getY(i) * Math.PI * ry) / TILE);
   return g.scale(rx, ry, rz).translate(x, y, z);
@@ -256,7 +295,7 @@ function ellip(rx, ry, rz, x, y, z, w = 16, h = 12) {
 
 // a disc button (dome on a rim) facing direction (nx, nz) in the horizontal plane, or up the given normal
 function button(x, y, z, r, nrm) {
-  const g = new THREE.LatheGeometry([[0, 0], [r, 0], [r, r * 0.25], [r * 0.85, r * 0.45], [r * 0.4, r * 0.55], [0.0001, r * 0.55]].map(([a, b]) => new THREE.Vector2(Math.max(a, 1e-4), b)), 8);
+  const g = new THREE.LatheGeometry([[0, 0], [r, 0], [r, r * 0.25], [r * 0.85, r * 0.45], [r * 0.4, r * 0.55], [0.0001, r * 0.55]].map(([a, b]) => new THREE.Vector2(Math.max(a, 1e-4), b)), segs(8));
   const q = new THREE.Quaternion().setFromUnitVectors(new V3(0, 1, 0), nrm.clone().normalize());
   g.applyQuaternion(q).translate(x, y, z);
   return g;
@@ -264,7 +303,7 @@ function button(x, y, z, r, nrm) {
 
 // a flat ring (D-ring, buckle frame) of radius r and wire thickness t about axis nrm
 function ring(x, y, z, r, t, nrm, arc = TAU) {
-  const g = new THREE.TorusGeometry(r, t, 5, 12, arc);
+  const g = new THREE.TorusGeometry(r, t, segs(5), segs(12), arc);
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 0, 1), nrm.clone().normalize())).translate(x, y, z);
   return g;
 }
@@ -287,6 +326,7 @@ function ringAt(y) {
 }
 // a resampled run of the profile between y0 and y1, a ring every `dy`
 function torsoRings(y0, y1, dy = 0.018) {
+  dy *= RING;
   const n = Math.max(2, Math.ceil((y1 - y0) / dy)), out = [];
   for (let i = 0; i <= n; i++) out.push({ ...ringAt(lerp(y0, y1, i / n)) });
   return out;
@@ -308,6 +348,7 @@ function onTorso(x, y, side = -1, out = { p: new V3(), n: new V3() }) {
 // lifted `lift` and `thick` more in the middle, the edge rounded over `edge` of the width; walls down to the body.
 // relief(u, v) adds to the thickness (pleats, seams). Returns a geometry.
 function slab(map, nu, nv, { side = -1, lift = 0.004, thick = 0.005, edge = 0.12, relief = null } = {}) {
+  nu = segs(nu); nv = segs(nv);
   const rows = [], uvs = [], S = { p: new V3(), n: new V3() };
   const top = (u, v) => {
     const [x, y] = map(u, v);
@@ -343,6 +384,7 @@ function slab(map, nu, nv, { side = -1, lift = 0.004, thick = 0.005, edge = 0.12
 
 // points along the torso surface between two (x, y) marks, lifted, with their normals (for straps as flat tubes)
 function surfPath(marks, n, side, lift, more = null) {
+  n = segs(n);
   const pts = [], up = [], S = { p: new V3(), n: new V3() };
   for (let k = 0; k < marks.length - 1; k++) for (let i = 0; i < n; i++) {
     const t = i / n, x = lerp(marks[k][0], marks[k + 1][0], t), y = lerp(marks[k][1], marks[k + 1][1], t);
@@ -435,9 +477,9 @@ function headCut(helmet) {
 // The mesher is a generator (it yields after each slab of the lattice) so the game can spread it over frames
 // (hdStep); the meshed face is cached per variant (skin parity) and cut per headgear afterwards.
 const meshes = new Map(), meshers = new Map();
-function* headMesher(vi) {
+function* headMesher(vi, H = 0.0046) {
   const vr = { jaw: [0, 0.003][vi], nose: [0, 0.003][vi] };
-  const H = 0.0046, x0 = -0.092, y0 = -0.128, z0 = -0.128, NX = Math.ceil(0.184 / H) + 1, NY = Math.ceil(0.19 / H) + 1, NZ = Math.ceil(0.25 / H) + 1;
+  const x0 = -0.092, y0 = -0.128, z0 = -0.128, NX = Math.ceil(0.184 / H) + 1, NY = Math.ceil(0.19 / H) + 1, NZ = Math.ceil(0.25 / H) + 1;
   const F = new Float32Array(NX * NY * NZ), at = (i, j, k) => (k * NY + j) * NX + i;
   // only near the surface is the field needed: well outside a bounding ellipsoid it is +1, well inside a core -1
   for (let k = 0; k < NZ; k++) {
@@ -486,23 +528,24 @@ function* headMesher(vi) {
     N.crossVectors(Bv.sub(A), Cv.sub(A));
     vote += N.x * nrm[quads[q] * 3] + N.y * nrm[quads[q] * 3 + 1] + N.z * nrm[quads[q] * 3 + 2];
   }
-  meshes.set(vi, { pos, nrm, quads, flip: vote < 0 });
+  meshes.set(`${vi}|${H}`, { pos, nrm, quads, flip: vote < 0 });
 }
-// advance the face variant's mesher for up to `ms` (Infinity: to the end); true when it is meshed
-function meshHead(vi, ms = Infinity) {
-  if (meshes.has(vi)) return true;
-  let it = meshers.get(vi);
-  if (!it) meshers.set(vi, it = headMesher(vi));
+// advance the face variant's mesher (lattice H) for up to `ms` (Infinity: to the end); true when it is meshed
+function meshHead(vi, ms = Infinity, H = 0.0046) {
+  const mk = `${vi}|${H}`;
+  if (meshes.has(mk)) return true;
+  let it = meshers.get(mk);
+  if (!it) meshers.set(mk, it = headMesher(vi, H));
   const t0 = performance.now();
   while (!it.next().done) if (performance.now() - t0 > ms) return false;
-  meshers.delete(vi);
+  meshers.delete(mk);
   return true;
 }
-function headGeometry(skinI, helmet = false) {
-  const vi = skinI % 2, key = vi + (helmet ? 'h' : 'c');
+function headGeometry(skinI, helmet = false, H = 0.0046) {
+  const vi = skinI % 2, key = vi + (helmet ? 'h' : 'c') + `|${H}`;
   if (!headCache.has(key)) {
-    meshHead(vi);
-    const { pos, nrm, quads, flip } = meshes.get(vi), keep = headCut(helmet), idx = [];
+    meshHead(vi, Infinity, H);
+    const { pos, nrm, quads, flip } = meshes.get(`${vi}|${H}`), keep = headCut(helmet), idx = [];
     const k = (q) => keep(pos[q * 3], pos[q * 3 + 1], pos[q * 3 + 2]);
     for (let q = 0; q < quads.length; q += 4) {
       const [a, b, c, d] = [quads[q], quads[q + 1], quads[q + 2], quads[q + 3]];
@@ -612,15 +655,26 @@ export function patchCrewHD(patchMaterial) {
   return m;
 }
 
+// The max tier's material (crew_maxmat.js: its own program, own key, own primer in render/crewhd.js); the cloth's
+// textures are the hd tier's for now.
+export function maxMaterial(fig = null) { hdMaterial(); return maxMat0({ map: mat.map, normalMap: mat.normalMap }, fig?.man ?? null); }
+export function patchCrewMax(patchMaterial) { hdMaterial(); return patchMax0(patchMaterial, { map: mat.map, normalMap: mat.normalMap }); }
+
 // ---------------------------------------------------------------- the figure
 
-const cache = new Map();
+// The tier's quality profiles: 'hd' serves the battles' first-person figures (as it always has); 'max' the lesson's
+// battery (PLAN.md 3.4): a 2.5 mm face lattice, 1.75 times the segments, rings 2.5 times closer along the body.
+export const PROFILE = {
+  hd: Object.freeze({ name: 'hd', H: 0.0046, seg: 1, ring: 1, max: false }),
+  max: Object.freeze({ name: 'max', H: 0.0025, seg: 1.3, ring: 0.6, max: true }),
+};
+const cache = new Map(), maxCache = new Map();
 const isGerman = (o) => o.vest === 'german44' || o.vest === 'german1917';
 export const hdHas = (o) => cache.has(o.key);
 export const hdFor = (o) => isGerman(o);
 export function hdBuild(o) {
   if (!isGerman(o)) return null;
-  if (!cache.has(o.key)) cache.set(o.key, build(o));
+  if (!cache.has(o.key)) cache.set(o.key, build(o, PROFILE.hd));
   return cache.get(o.key);
 }
 // Spread over frames: advance the build of outfit o by about `ms` (the face's mesher in slices, then the figure in
@@ -631,15 +685,64 @@ export function hdStep(o, ms = 6) {
   if (!meshHead(o.skin % 2, ms)) return null;
   return hdBuild(o);
 }
+// The same for the max tier; `fig` (optional) is the figure it is for (its man's face and kit, item 7).
+const maxKey = (o, fig) => `${o.key}|${maxVariant(o, fig)}`;
+function maxVariant(o, fig) { return `f${faceOf(o, fig)}${fig?.man?.gloves ? 'g' : ''}`; }
+export const maxHas = (o, fig) => maxCache.has(maxKey(o, fig));
 
-function build(o) {
-  const B = new HBody();
+// The worker's half (crewWorker.js): build a figure of tier 'hd' or 'max' for outfit o (crew.js options()) and man,
+// as plain arrays to transfer: { key, attrs: { name: [array, itemSize, normalized] }, index }. The main thread's half,
+// adoptArrays, puts them in the tier's cache as a BufferGeometry, so fig.setTier finds it built.
+export function buildArrays(tier, o, man = null, keep = true) {
+  const fig = man ? { man } : null, g = tier === 'max' ? maxBuild(o, fig) : hdBuild(o);
+  if (!g) return null;
+  const attrs = {}, key = tier === 'max' ? maxKey(o, fig) : o.key;
+  for (const [k, a] of Object.entries(g.attributes)) attrs[k] = [a.array, a.itemSize, a.normalized];
+  if (!keep) (tier === 'max' ? maxCache : cache).delete(key); // (a worker sends its arrays away: none stays behind)
+  return { key, attrs, index: g.index.array };
+}
+export function adoptArrays(tier, data) {
+  const c = tier === 'max' ? maxCache : cache;
+  if (!data || c.has(data.key)) return c.get(data?.key) ?? null;
+  const g = new THREE.BufferGeometry();
+  for (const [k, [arr, size, norm]] of Object.entries(data.attrs)) g.setAttribute(k, k === 'skinIndex' ? new THREE.Uint16BufferAttribute(arr, size, norm) : new THREE.BufferAttribute(arr, size, norm));
+  g.setIndex(new THREE.BufferAttribute(data.index, 1));
+  g.computeBoundingBox();
+  g.boundingSphere = new THREE.Sphere(new V3(0, 1.05, -0.1), 1.45);
+  c.set(data.key, g);
+  return g;
+}
+// the cache key a figure of this tier would have (render/crewhd.js asks before it sends work to a worker)
+export const tierKey = (tier, o, man = null) => (tier === 'max' ? maxKey(o, man ? { man } : null) : o.key);
+export function maxBuild(o, fig = null) {
+  if (!isGerman(o)) return null;
+  const k = maxKey(o, fig);
+  if (!maxCache.has(k)) maxCache.set(k, build(o, PROFILE.max, fig));
+  return maxCache.get(k);
+}
+export function maxStep(o, ms = 6, fig = null) {
+  if (!isGerman(o)) return null;
+  const k = maxKey(o, fig);
+  if (maxCache.has(k)) return maxCache.get(k);
+  if (!meshMax(o, fig, ms)) return null;
+  return maxBuild(o, fig);
+}
+
+function build(o, q = PROFILE.hd, fig = null) {
+  const seg0 = SEG, ring0 = RING;
+  SEG = q.seg; RING = q.ring;
+  try { return buildFigure(o, q, fig); } finally { SEG = seg0; RING = ring0; }
+}
+
+function buildFigure(o, q, fig) {
+  const B = new HBody(q.max);
   const ww2 = o.vest === 'german44';
   const cloth = C(o.jacket ?? COL[o.pattern]), legC = C(o.trousers ?? COL[o.pattern]);
   const drill = o.jacket != null, cmd = o.headgear === 'm43' || (o.headgear === 'feldmuetze' && !drill);
-  // skin: crew.js's tones a little less orange (toward their own grey); lips a deeper shade of it, brows like the hair
+  // skin: crew.js's tones a touch less orange (toward their own grey: at 4 m the face matches the standard tier's within
+  // 3 %, so a man changing tier does not change colour); lips a deeper shade of it, brows like the hair
   const skin = C(COL.skin[o.skin % 4]), sl = skin.r * 0.3 + skin.g * 0.59 + skin.b * 0.11;
-  skin.lerp(new THREE.Color(sl, sl, sl * 1.02), 0.2);
+  skin.lerp(new THREE.Color(sl, sl, sl * 1.02), 0.05);
   const hair = C(COL.hair[o.skin % 4]), lipC = skin.clone().lerp(C(0x8a4f46), 0.4), brow = C(o.skin === 2 ? COL.hair[3] : COL.hair[o.skin % 4]).multiplyScalar(0.9);
   const wool = drill ? 'drill' : 'wool';
   const sh = (g) => (g.userData.shade ? (i) => g.userData.shade[i] : null);
@@ -649,69 +752,72 @@ function build(o) {
   const straps = !cmd && o.skin % 2 === 0;
   const black = C(ww2 ? COL.ystrap : COL.gbelt), pouchC = C(ww2 ? COL.pouch44 : 0x2a2420);
 
-  // ---- head, eyes, ears, neck
-  B.add(headGeometry(o.skin % 4, o.headgear === 'm35' || o.headgear === 'stahlhelm'), 'head', (x, y, z) => headColour(x - HC.x, y - HC.y, z - HC.z, skin, hair, lipC, brow), 'skin');
-  // eyes: a muted sclera barely brighter than the skin, grey-brown irises mostly; the lids are smooth shells round the
-  // eyeball (upper and lower, a margin along each edge) so the opening is narrow and clean, not an iso-surface edge
-  const iris = C([0x4a3d32, 0x5a5953, 0x3d332b, 0x4c5056][o.skin % 4]), sclera = skin.clone().lerp(C(0xc4bdb2), 0.3);
-  const lidC = skin.clone().lerp(lipC, 0.08), ER = 0.0115;
-  for (const s of SIDE) {
-    const ex = s * 0.032, ey = HC.y + 0.0, ez = HC.z - 0.079; // set back so only the lids' opening shows the eyeball
-    B.add(ellip(ER, ER, ER, ex, ey, ez, 24, 18), 'head', (x, y, z) => {
-      const dz = ez - z, r = Math.hypot(x - ex, y - ey);
-      return dz > 0.0095 && r < 0.0052 ? (r < 0.0021 ? C(0x0e0c0b) : iris) : sclera;
-    }, 'eye');
-    // the lids: two shells on a sphere a little larger than the eyeball, their edges an almond (widest a little in from
-    // the middle, meeting at the corners), with a fine margin along each edge
-    const tilt = s * 0.06; // the outer corner a touch higher
-    const edge = (al, up) => (up ? 0.36 : -0.27) * Math.max(0, Math.cos(clamp(al * 1.18 - s * 0.08, -Math.PI / 2, Math.PI / 2))) ** 0.75;
-    // each lid rises out of the skin: its outer rows sit just under the face and take the face's normals, so there is no
-    // seam where it meets the face, and it swells to its edge over the eyeball
-    const vr = { jaw: [0, 0.003][o.skin % 2], nose: [0, 0.003][o.skin % 2] }, gn = new V3();
-    const lidGeo = (r, up) => {
-      const rows = [], uvs = [], NA = 20, NE = 7;
-      for (let k = 0; k <= NE; k++) {
-        const row = [], ur = [], rk = lerp(ER * 0.95, r, sstep(0, 1, k / NE) ** 0.7);
-        for (let i = 0; i <= NA; i++) {
-          const al = lerp(-1.45, 1.45, i / NA), e0 = edge(al, up), e1 = up ? 1.35 : -1.35, el = lerp(e1, e0, k / NE);
-          row.push(new V3(ex + Math.sin(al) * Math.cos(el) * rk, ey + Math.sin(el) * rk + Math.sin(al) * tilt * rk * 0.3, ez - Math.cos(al) * Math.cos(el) * rk));
-          ur.push([al * r, el * r]);
+  // ---- head, eyes, ears, neck (max: crew_face.js's head)
+  if (q.max) maxHead(B, o, q, fig, skin, hair, lipC, brow);
+  else {
+    B.add(headGeometry(o.skin % 4, o.headgear === 'm35' || o.headgear === 'stahlhelm', q.H), 'head', (x, y, z) => headColour(x - HC.x, y - HC.y, z - HC.z, skin, hair, lipC, brow), 'skin');
+    // eyes: a muted sclera barely brighter than the skin, grey-brown irises mostly; the lids are smooth shells round the
+    // eyeball (upper and lower, a margin along each edge) so the opening is narrow and clean, not an iso-surface edge
+    const iris = C([0x4a3d32, 0x5a5953, 0x3d332b, 0x4c5056][o.skin % 4]), sclera = skin.clone().lerp(C(0xc4bdb2), 0.3);
+    const lidC = skin.clone().lerp(lipC, 0.08), ER = 0.0115;
+    for (const s of SIDE) {
+      const ex = s * 0.032, ey = HC.y + 0.0, ez = HC.z - 0.079; // set back so only the lids' opening shows the eyeball
+      B.add(ellip(ER, ER, ER, ex, ey, ez, 24, 18), 'head', (x, y, z) => {
+        const dz = ez - z, r = Math.hypot(x - ex, y - ey);
+        return dz > 0.0095 && r < 0.0052 ? (r < 0.0021 ? C(0x0e0c0b) : iris) : sclera;
+      }, 'eye');
+      // the lids: two shells on a sphere a little larger than the eyeball, their edges an almond (widest a little in from
+      // the middle, meeting at the corners), with a fine margin along each edge
+      const tilt = s * 0.06; // the outer corner a touch higher
+      const edge = (al, up) => (up ? 0.36 : -0.27) * Math.max(0, Math.cos(clamp(al * 1.18 - s * 0.08, -Math.PI / 2, Math.PI / 2))) ** 0.75;
+      // each lid rises out of the skin: its outer rows sit just under the face and take the face's normals, so there is no
+      // seam where it meets the face, and it swells to its edge over the eyeball
+      const vr = { jaw: [0, 0.003][o.skin % 2], nose: [0, 0.003][o.skin % 2] }, gn = new V3();
+      const lidGeo = (r, up) => {
+        const rows = [], uvs = [], NA = segs(20), NE = segs(7);
+        for (let k = 0; k <= NE; k++) {
+          const row = [], ur = [], rk = lerp(ER * 0.95, r, sstep(0, 1, k / NE) ** 0.7);
+          for (let i = 0; i <= NA; i++) {
+            const al = lerp(-1.45, 1.45, i / NA), e0 = edge(al, up), e1 = up ? 1.35 : -1.35, el = lerp(e1, e0, k / NE);
+            row.push(new V3(ex + Math.sin(al) * Math.cos(el) * rk, ey + Math.sin(el) * rk + Math.sin(al) * tilt * rk * 0.3, ez - Math.cos(al) * Math.cos(el) * rk));
+            ur.push([al * r, el * r]);
+          }
+          rows.push(row); uvs.push(ur);
         }
-        rows.push(row); uvs.push(ur);
+        const g = orient(grid(rows, uvs), new V3(ex, ey, ez)), P = g.attributes.position, N = g.attributes.normal, sn = new V3();
+        for (let k = 0; k <= NE; k++) for (let i = 0; i <= NA; i++) {
+          const j = k * (NA + 1) + i, x = P.getX(j) - HC.x, y = P.getY(j) - HC.y, z = P.getZ(j) - HC.z, e = 0.0006;
+          gn.set(headSDF(x + e, y, z, vr) - headSDF(x - e, y, z, vr), headSDF(x, y + e, z, vr) - headSDF(x, y - e, z, vr), headSDF(x, y, z + e, vr) - headSDF(x, y, z - e, vr)).normalize();
+          sn.set(N.getX(j), N.getY(j), N.getZ(j));
+          gn.lerp(sn, sstep(0.3, 1, k / NE)).normalize();
+          N.setXYZ(j, gn.x, gn.y, gn.z);
+        }
+        return g;
+      };
+      B.add(lidGeo(ER * 1.05, true), 'head', lidC, 'skin');
+      B.add(lidGeo(ER * 1.035, false), 'head', lidC, 'skin');
+      for (const [up, r, k] of [[true, ER * 1.05, 0.0009], [false, ER * 1.035, 0.0006]]) {
+        const pts = [];
+        for (let i = 0, nm = segs(16); i <= nm; i++) {
+          const al = lerp(-1.4, 1.4, i / nm), el = edge(al, up);
+          pts.push(new V3(ex + Math.sin(al) * Math.cos(el) * r, ey + Math.sin(el) * r + Math.sin(al) * tilt * r * 0.3, ez - Math.cos(al) * Math.cos(el) * r));
+        }
+        B.add(tube(pts, pts.map(() => k), 5), 'head', lidC.clone().multiplyScalar(up ? 0.86 : 0.93), 'skin');
       }
-      const g = orient(grid(rows, uvs), new V3(ex, ey, ez)), P = g.attributes.position, N = g.attributes.normal, sn = new V3();
-      for (let k = 0; k <= NE; k++) for (let i = 0; i <= NA; i++) {
-        const j = k * (NA + 1) + i, x = P.getX(j) - HC.x, y = P.getY(j) - HC.y, z = P.getZ(j) - HC.z, e = 0.0006;
-        gn.set(headSDF(x + e, y, z, vr) - headSDF(x - e, y, z, vr), headSDF(x, y + e, z, vr) - headSDF(x, y - e, z, vr), headSDF(x, y, z + e, vr) - headSDF(x, y, z - e, vr)).normalize();
-        sn.set(N.getX(j), N.getY(j), N.getZ(j));
-        gn.lerp(sn, sstep(0.3, 1, k / NE)).normalize();
-        N.setXYZ(j, gn.x, gn.y, gn.z);
+      // ear: a flattened shell, its bowl pressed in, turned back a little
+      const eg = ellip(0.0105, 0.03, 0.02, 0, 0, 0, 12, 12), ep = eg.attributes.position;
+      for (let i = 0; i < ep.count; i++) {
+        const x = ep.getX(i), y = ep.getY(i), z = ep.getZ(i), r = Math.hypot(y / 0.03, z / 0.02);
+        if (x > 0) ep.setX(i, x - 0.009 * Math.max(0, 1 - r * r * 1.4));
       }
-      return g;
-    };
-    B.add(lidGeo(ER * 1.05, true), 'head', lidC, 'skin');
-    B.add(lidGeo(ER * 1.035, false), 'head', lidC, 'skin');
-    for (const [up, r, k] of [[true, ER * 1.05, 0.0009], [false, ER * 1.035, 0.0006]]) {
-      const pts = [];
-      for (let i = 0; i <= 16; i++) {
-        const al = lerp(-1.4, 1.4, i / 16), el = edge(al, up);
-        pts.push(new V3(ex + Math.sin(al) * Math.cos(el) * r, ey + Math.sin(el) * r + Math.sin(al) * tilt * r * 0.3, ez - Math.cos(al) * Math.cos(el) * r));
-      }
-      B.add(tube(pts, pts.map(() => k), 5), 'head', lidC.clone().multiplyScalar(up ? 0.86 : 0.93), 'skin');
+      eg.computeVertexNormals();
+      if (s < 0) eg.scale(-1, 1, 1);
+      place(eg, s * 0.079, HC.y - 0.006, HC.z + 0.012, 0.12, s * 0.28, 0);
+      if (s < 0) { const ix = eg.index; if (ix) for (let i = 0; i < ix.count; i += 3) { const t = ix.getX(i); ix.setX(i, ix.getX(i + 1)); ix.setX(i + 1, t); } eg.computeVertexNormals(); }
+      B.add(eg, 'head', skin.clone().lerp(lipC, 0.12), 'skin');
     }
-    // ear: a flattened shell, its bowl pressed in, turned back a little
-    const eg = ellip(0.0105, 0.03, 0.02, 0, 0, 0, 12, 12), ep = eg.attributes.position;
-    for (let i = 0; i < ep.count; i++) {
-      const x = ep.getX(i), y = ep.getY(i), z = ep.getZ(i), r = Math.hypot(y / 0.03, z / 0.02);
-      if (x > 0) ep.setX(i, x - 0.009 * Math.max(0, 1 - r * r * 1.4));
-    }
-    eg.computeVertexNormals();
-    if (s < 0) eg.scale(-1, 1, 1);
-    place(eg, s * 0.079, HC.y - 0.006, HC.z + 0.012, 0.12, s * 0.28, 0);
-    if (s < 0) { const ix = eg.index; if (ix) for (let i = 0; i < ix.count; i += 3) { const t = ix.getX(i); ix.setX(i, ix.getX(i + 1)); ix.setX(i + 1, t); } eg.computeVertexNormals(); }
-    B.add(eg, 'head', skin.clone().lerp(lipC, 0.12), 'skin');
+    addS(lathe([[-0.06, 0.056], [0.0, 0.055], [0.06, 0.05], [0.1, 0.049], [0.14, 0.046]], 20, 0, 1.49, 0.018, 1, 0.95), 'neck', skin, 'skin');
   }
-  addS(lathe([[-0.06, 0.056], [0.0, 0.055], [0.06, 0.05], [0.1, 0.049], [0.14, 0.046]], 20, 0, 1.49, 0.018, 1, 0.95), 'neck', skin, 'skin');
 
   // ---- torso: the blouse in three overlapping pieces, folds displaced
   const front = (a) => Math.max(0, Math.cos(a));
@@ -805,7 +911,7 @@ function build(o) {
     const S = onTorso(0, 1.023, -1);
     const bz = S.p.z - 0.011;
     B.add(rbox(0.062, 0.048, 0.008, 0.004, 0, 1.023, bz), 'spine', C(ww2 ? COL.gbuckle : COL.gbuckle), 'metal');
-    B.add(button(0, 1.023, bz - 0.004, 0.015, new V3(0, 0, -1)), 'spine', C(ww2 ? 0x8a8a80 : 0x8d8d84), 'metal'); // the roundel
+    B.add(button(0, 1.023, bz - 0.004, 0.015, new V3(0, 0, -1)), 'spine', C(ww2 ? 0x8a8a80 : 0x8d8d84), 'metal'); // the roundel, plain
     // belt hooks on the sides (the blouse's cloth tabs carry it)
     for (const s of SIDE) B.add(rbox(0.02, 0.03, 0.006, 0.002, s * 0.19, 1.023, 0.0, 0, s * Math.PI / 2, 0), 'spine', black, 'leather');
   }
@@ -825,7 +931,7 @@ function build(o) {
     // cuff: a turned band, its slit at the back
     addS(lathe([[-0.272, 0.001], [-0.27, 0.047], [-0.262, 0.05], [-0.225, 0.051], [-0.22, 0.049], [-0.215, 0.001]], 22, x, ey, SH_Z, 1, 1.06, (a) => -0.003 * (1 - sstep(0, 0.25, Math.abs(a - Math.PI)))), 'forearm' + Sx, drill ? cloth : cloth.clone().multiplyScalar(0.97), wool);
     // the wrist and the fist
-    hand(B, s, skin, lipC);
+    hand(B, s, skin, lipC, q.max ? { nails: true, glove: fig?.man?.gloves ? 0.0013 : 0 } : null);
   }
 
   // ---- legs: trousers with creases, boots
@@ -939,28 +1045,218 @@ function build(o) {
   }
 
   // ---- headgear
-  headgear(B, o, cloth, ww2);
+  headgear(B, o, cloth, ww2, q.max ? faceField(FACES[faceOf(o, fig)]) : null);
   return B.geometry();
+}
+
+// ---------------------------------------------------------------- the max tier's head (crew_face.js)
+
+// aMax by surface: [texture layer (crew_tex.js; -1 skin, -2 eye), skin weight (light wraps round skin), wear, under
+// the brim (the helmet's analytic shade falls on it)]
+const LAYER = { wool: 0, drill: 1, canvas: 2, felt: 3, leather: 4, boot: 5, sole: 5, paint: 6, metal: 7, wood: 8, skin: -1, lip: -1, hair: -1, eye: -2 };
+function maxDefaults(surf) { return [LAYER[surf] ?? 0, surf === 'skin' || surf === 'lip' ? 1 : 0, 1, 0]; }
+// the headgear whose brim shades the face (crew_maxmat.js crewBrim): 1 M1935, 2 M1916, 3 the M43 cap's peak
+const brimKind = (o) => ({ m35: 1, stahlhelm: 2, m43: 3 })[o.headgear] ?? 0;
+// crew_maxmat.js's brim test in JS: 1 when the ray from bind-space p along d leaves under the rim, 0 when it meets it
+function brimLit(kind, px, py, pz, dx, dy, dz) {
+  if (kind <= 0 || dy <= 0.02) return 1;
+  if (kind === 3) {
+    const t = (1.688 - py) / dy;
+    if (t < 0) return 1;
+    const qx = px + dx * t, qz = pz + dz * t, a = Math.atan2(qx, -(qz - 0.006)), r = Math.hypot(qx / 0.0945, (qz - 0.006) / 0.1095);
+    if (r < 1) return sstep(0.92, 1, r);
+    const w = Math.abs(a) < 1 ? Math.cos(a * 1.5708) ** 0.6 : 0;
+    return sstep(0.96, 1.04, Math.hypot(qx / (0.093 + 0.058 * w), (qz - 0.006) / (0.109 + 0.064 * w)));
+  }
+  let t0 = 0, t1 = (1.86 - py) / dy;
+  const rimAt = (t) => { const qx = px + dx * t, qz = pz + dz * t, a = Math.atan2(qx, -(qz - 0.012)), F = Math.max(0, Math.cos(a)), Bk = Math.max(0, -Math.cos(a)); return { qx, qz, a, F, Bk, y: rimY(kind === 1, F, Bk) }; };
+  for (let i = 0; i < 12; i++) { const t = (t0 + t1) / 2; if (py + dy * t > rimAt(t).y) t1 = t; else t0 = t; }
+  const q = rimAt(t1), rx = 0.111, rz = kind === 1 ? 0.128 : 0.129;
+  const R = 1 / Math.hypot(Math.sin(q.a) / rx, Math.cos(q.a) / rz) + 0.004 + (kind === 1 ? 0.012 + 0.004 * q.F + 0.022 * q.Bk ** 1.2 : 0.022 + 0.008 * q.F + 0.034 * q.Bk ** 1.2);
+  return sstep(-0.004, 0.006, Math.hypot(q.qx, q.qz - 0.012) - R);
+}
+// the sky a head vertex sees past the brim (ambient occlusion by the helmet): cosine-weighted directions about its normal
+const AO_DIRS = Array.from({ length: 24 }, (_, i) => { const u = (i + 0.5) / 24, ph = i * 2.39996; const r = Math.sqrt(u); return [r * Math.cos(ph), Math.sqrt(1 - u), r * Math.sin(ph)]; });
+function brimAO(kind, p, n) {
+  if (kind <= 0) return 1;
+  // a frame about the normal
+  const t = Math.abs(n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+  let bx = n[1] * t[2] - n[2] * t[1], by = n[2] * t[0] - n[0] * t[2], bz = n[0] * t[1] - n[1] * t[0];
+  const bl = Math.hypot(bx, by, bz); bx /= bl; by /= bl; bz /= bl;
+  const cx = n[1] * bz - n[2] * by, cy = n[2] * bx - n[0] * bz, cz = n[0] * by - n[1] * bx;
+  let s = 0, w = 0;
+  for (const [a, h, b] of AO_DIRS) {
+    const dx = bx * a + n[0] * h + cx * b, dy = by * a + n[1] * h + cy * b, dz = bz * a + n[2] * h + cz * b;
+    const sky = 0.35 + 0.65 * Math.max(0, dy); // (the sky above gives more than the ground's bounce)
+    s += sky * brimLit(kind, p[0], p[1], p[2], dx, dy, dz); w += sky;
+  }
+  return lerp(0.35, 1, s / w);
+}
+const headKind = (o) => (o.headgear === 'm35' ? 'helmet35' : o.headgear === 'stahlhelm' ? 'helmet16' : o.headgear === 'm43' || o.headgear === 'feldmuetze' ? 'cap' : 'none');
+// which of the five faces a figure has: its man's (fig.man.face, render/crewhd.js gives each man of the lesson's battery
+// his own), else by the outfit's skin
+export const faceOf = (o, fig) => (fig?.man?.face ?? o.skin) % FACES.length;
+
+// the meshed heads and ears by face, cut and lattice (the slow part: built a slice at a time by maxStep)
+const faceMeshes = new Map(), faceMeshers = new Map();
+function* headPrep(fi, kind, H) {
+  const k = `${fi}|${kind}|${H}`;
+  if (!faceMeshes.has(k)) faceMeshes.set(k, yield* meshFace(FACES[fi], kind, H));
+  if (kind === 'cap' || kind === 'none') for (const s of SIDE) {
+    const ke = `ear|${fi}|${s}`;
+    if (!faceMeshes.has(ke)) faceMeshes.set(ke, yield* meshEar(FACES[fi], s));
+  }
+}
+// advance the meshing a figure's head needs by up to `ms` (Infinity: to the end); true when it is all meshed
+function meshMax(o, fig, ms = Infinity) {
+  const fi = faceOf(o, fig), kind = headKind(o), k = `${fi}|${kind}|${PROFILE.max.H}`;
+  if (faceMeshes.has(k) && (kind === 'helmet35' || kind === 'helmet16' || faceMeshes.has(`ear|${fi}|1`))) return true;
+  let it = faceMeshers.get(k);
+  if (!it) faceMeshers.set(k, it = headPrep(fi, kind, PROFILE.max.H));
+  const t0 = performance.now();
+  while (!it.next().done) if (performance.now() - t0 > ms) return false;
+  faceMeshers.delete(k);
+  return true;
+}
+
+const lin = (c) => [c.r, c.g, c.b];
+function arraysGeo(pos, idx, nrm = null, off = HC) {
+  const g = new THREE.BufferGeometry(), P = new Float32Array(pos.length);
+  for (let i = 0; i < pos.length; i += 3) { P[i] = pos[i] + off.x; P[i + 1] = pos[i + 1] + off.y; P[i + 2] = pos[i + 2] + off.z; }
+  g.setAttribute('position', new THREE.BufferAttribute(P, 3));
+  if (nrm) g.setAttribute('normal', new THREE.BufferAttribute(Float32Array.from(nrm), 3));
+  g.setIndex(new THREE.BufferAttribute(Uint32Array.from(idx), 1));
+  if (!nrm) { g.computeVertexNormals(); weldNormals(g); }
+  return g;
+}
+
+function maxHead(B, o, q, fig, skin, hair, lipC, brow) {
+  const fi = faceOf(o, fig), F = FACES[fi], kind = headKind(o), BK = brimKind(o);
+  meshMax(o, fig);
+  const field = faceField(F);
+  // the man's colours (per-man tints come in through fig.man: render/crewhd.js)
+  const man = fig?.man ?? {};
+  // (the skin's albedo 5 % under the hd tier's: the max material's wrapped light gives it back on the lit side)
+  const P = {
+    skin: lin(skin).map((v) => v * 0.95), hair: lin(hair), brow: lin(brow), lip: lin(lipC),
+    stubble: lin(C(0x4e4c4a)), flush: lin(skin.clone().lerp(C(0xa0544a), 0.55)),
+    ruddy: man.ruddy ?? 1, beard: man.beard ?? 1,
+  };
+  const paint = { c: [0, 0, 0], r: 0.5, m: [0, 0, 0, 0] };
+  // the face and neck: one surface, skinned between the head and the neck
+  {
+    const m = faceMeshes.get(`${fi}|${kind}|${q.H}`), n = m.pos.length / 3;
+    const cols = new Float32Array(n * 3), rough = new Float32Array(n), masks = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      headPaint(m.pos[i * 3], m.pos[i * 3 + 1], m.pos[i * 3 + 2], F, P, paint);
+      cols.set(paint.c, i * 3); rough[i] = paint.r; masks.set(paint.m, i * 4);
+    }
+    const g = arraysGeo(m.pos, m.idx, m.nrm);
+    const cc = new THREE.Color();
+    const bk = brimKind(o), ao = new Float32Array(n), Pp = g.attributes.position.array, Nn = g.attributes.normal.array;
+    for (let i = 0; i < n; i++) ao[i] = brimAO(bk, Pp.subarray(i * 3, i * 3 + 3), Nn.subarray(i * 3, i * 3 + 3));
+    B.add(g, 'head+neck', (x, y, z, i) => cc.setRGB(cols[i * 3], cols[i * 3 + 1], cols[i * 3 + 2]), 'skin', null, {
+      surf: (i) => [rough[i], 0, 0.03, 0.1], max: (i) => [-1, 1, ao[i], bk], face: (i) => masks.subarray(i * 4, i * 4 + 4),
+    });
+  }
+  // the ears (a helmet covers them)
+  if (kind === 'cap' || kind === 'none') for (const s of SIDE) {
+    const m = faceMeshes.get(`ear|${fi}|${s}`), g = arraysGeo(m.pos, m.idx, m.nrm), red = skin.clone().lerp(C(0xa0544a), 0.2);
+    B.add(g, 'head', red, 'skin', null, { surf: () => [0.5, 0, 0.03, 0.1], max: () => [-1, 1, 1, brimKind(o)] });
+  }
+  // the eyes, the lids round them, the lash and tear lines, the caruncle
+  // irises: grey-blue, brown, green-grey, hazel, dark brown
+  const iris = C([0x8796a0, 0x7a5a40, 0x8a8f78, 0x9a7a52, 0x5a4232][(man.iris ?? o.skin) % 5]), sclera = C(0xc2bbb0).lerp(skin, 0.15);
+  const lidC = skin.clone().lerp(lipC, 0.12).multiplyScalar(0.97);
+  // sink: lid points behind the face's surface go just under it (the face covers the lid's outer rows)
+  const e = 0.0002, gr = new V3();
+  const sink = (p) => {
+    for (let it = 0; it < 3; it++) {
+      const f0 = field(p[0], p[1], p[2]);
+      if (f0 > 0.0006) return p;
+      gr.set(field(p[0] + e, p[1], p[2]) - field(p[0] - e, p[1], p[2]), field(p[0], p[1] + e, p[2]) - field(p[0], p[1] - e, p[2]), field(p[0], p[1], p[2] + e) - field(p[0], p[1], p[2] - e)).normalize();
+      const t = f0 + 0.0004;
+      if (t < 0) return p;
+      p[0] -= gr.x * t; p[1] -= gr.y * t; p[2] -= gr.z * t;
+    }
+    return p;
+  };
+  for (const s of SIDE) {
+    const cx = s * F.eyeX, cy = F.eyeY, cz = -0.080;
+    // the eyeball: the sclera's sphere with the cornea's bulge in front; uv: millimetres off its axis (the iris)
+    const eg = new THREE.SphereGeometry(1, segs(30), segs(22)), ep = eg.attributes.position, euv = eg.attributes.uv, v = new V3();
+    for (let i = 0; i < ep.count; i++) {
+      v.fromBufferAttribute(ep, i);
+      const t = Math.acos(clamp(-v.z, -1, 1)), r = eyeRadius(t);
+      ep.setXYZ(i, cx + v.x * r + HC.x, cy + v.y * r + HC.y, cz + v.z * r + HC.z);
+      euv.setXY(i, v.x * r * 1000, v.y * r * 1000);
+    }
+    eg.computeVertexNormals(); weldNormals(eg);
+    B.add(eg, 'head', (x, y, z) => {
+      const dx = x - cx - HC.x, dy = y - cy - HC.y, front = -(z - cz - HC.z), rr = Math.hypot(dx, dy);
+      if (front < 0.004) return sclera;
+      return rr < 0.0021 ? C(0x0b0a09) : rr < 0.0059 ? iris : rr < 0.0064 ? iris.clone().multiplyScalar(0.55).lerp(sclera, sstep(0.0061, 0.0066, rr)) : sclera;
+    }, 'eye', null, {
+      surf: (i) => { const z = ep.getZ(i) - HC.z - cz; return [-z > 0.0095 ? 0.04 : 0.16, 0, 0, 0]; },
+      max: () => [-2, 0, 0.7, BK], face: () => [iris.r, iris.g, iris.b, 1],
+    });
+    const L = lidRows(F, s, segs(20));
+    const rowsU = L.upper.map((r) => r.map(sink)), rowsL = L.lower.map((r) => r.map(sink));
+    const eyeC = new V3(cx + HC.x, cy + HC.y, cz + HC.z);
+    const lidGeo = (rows) => {
+      const a = gridArrays(rows), g = orient(arraysGeo(a.pos, a.idx), eyeC); // (faces away from the eyeball)
+      // the outer rows take the face's normals (no seam where the lid goes under the face)
+      const N = g.attributes.normal, Pp = g.attributes.position, m = rows[0].length, gn = new V3();
+      for (let k = 0; k < rows.length; k++) for (let i = 0; i < m; i++) {
+        const j = k * m + i, x = Pp.getX(j) - HC.x, y = Pp.getY(j) - HC.y, z = Pp.getZ(j) - HC.z;
+        const w = sstep(0.45, 1, k / (rows.length - 1));
+        if (w <= 0) continue;
+        gn.set(field(x + e, y, z) - field(x - e, y, z), field(x, y + e, z) - field(x, y - e, z), field(x, y, z + e) - field(x, y, z - e)).normalize();
+        v.set(N.getX(j), N.getY(j), N.getZ(j)).lerp(gn, w).normalize();
+        N.setXYZ(j, v.x, v.y, v.z);
+      }
+      return g;
+    };
+    const wet = (rows, kWet) => (i) => [Math.floor(i / rows[0].length) < kWet ? 0.18 : 0.48, 0, 0.03, 0.1];
+    B.add(lidGeo(rowsU), 'head', lidC, 'skin', null, { surf: wet(rowsU, 1), max: () => [-1, 1, 0.8, BK] });
+    B.add(lidGeo(rowsL), 'head', lidC, 'skin', null, { surf: wet(rowsL, 1), max: () => [-1, 1, 0.8, BK] });
+    const dark = C(0x15110e), lashC = brow.clone().multiplyScalar(0.55);
+    B.add(tube(L.lashLine.map((p) => new V3(p[0] + HC.x, p[1] + HC.y, p[2] + HC.z)), L.lashLine.map(() => 0.00042), 4, { capA: false, capB: false }), 'head', dark, 'hair', null, { surf: () => [0.6, 0, 0, 0], max: () => [-1, 0, 0.8, BK] });
+    for (const flip of [false, true]) {
+      const a = gridArrays(L.lashes, flip), g = arraysGeo(a.pos, a.idx);
+      B.add(g, 'head', lashC, 'hair', null, { surf: () => [0.65, 0, 0, 0], max: () => [-1, 0, 0.8, BK] });
+    }
+    B.add(tube(L.tearLine.map((p) => new V3(p[0] + HC.x, p[1] + HC.y, p[2] + HC.z)), L.tearLine.map(() => 0.0003), 4, { capA: false, capB: false }), 'head', skin.clone().lerp(C(0xc07a70), 0.5), 'skin', null, { surf: () => [0.05, 0, 0, 0], max: () => [-1, 0.5, 0.75, BK] });
+    const ci = L.inner;
+    B.add(ellip(0.0018, 0.0022, 0.0016, ci[0] + HC.x - s * 0.0006, ci[1] + HC.y, ci[2] + HC.z + 0.0008, 8, 6), 'head', skin.clone().lerp(C(0xb46a62), 0.6), 'skin', null, { surf: () => [0.12, 0, 0, 0], max: () => [-1, 1, 0.8, BK] });
+  }
 }
 
 function addPart(B, g, bone, col, surf) { B.add(g, bone, col, surf, g.userData.shade ? (i) => g.userData.shade[i] : null); }
 
 // The fist: palm, four fingers of three phalanges curled round the grip point (crew.js GRIP: 0.032 in, 0.092 down
 // from the wrist), the thumb across them. Rigid on the hand bone.
-function hand(B, s, skin, lipC) {
+// max (opt): { nails, glove } the max tier's fist: nails on the bare fingers, or the whole fist in a leather work glove
+// (glove: the leather's thickness) with a cuff over the wrist, for the men at the shells (the Norway photographs)
+function hand(B, s, skin0, lipC, opt = null) {
   const Sx = SFX[SIDE.indexOf(s)], W = new V3(s * SH_X, SH_Y - L_UA - L_FA, SH_Z);
   const IN = new V3(-s, 0, 0), DN = new V3(0, -1, 0), FW = new V3(0, 0, -1);
   const at = (i, d, f) => W.clone().addScaledVector(IN, i).addScaledVector(DN, d).addScaledVector(FW, f);
-  const knuckle = skin.clone().lerp(lipC, 0.1);
+  const gl = opt?.glove ?? 0, skin = gl ? C(0x4b3a2b) : skin0, surf = gl ? 'leather' : 'skin';
+  const knuckle = gl ? skin.clone().multiplyScalar(1.12) : skin.clone().lerp(lipC, opt ? 0.22 : 0.1);
+  const R = (r) => r + gl; // (the glove's leather over every part)
   // wrist and palm
-  B.add(tube([at(0, -0.035, 0), at(0, 0.0, 0), at(0.002, 0.02, 0)], [[0.023, 0.03], [0.022, 0.029], [0.019, 0.032]], 14, { capA: false, up: [IN, IN, IN] }), 'hand' + Sx, skin, 'skin');
+  B.add(tube([at(0, -0.035, 0), at(0, 0.0, 0), at(0.002, 0.02, 0)], [[R(0.023), R(0.03)], [R(0.022), R(0.029)], [R(0.019), R(0.032)]], 14, { capA: false, up: [IN, IN, IN] }), 'hand' + Sx, skin, surf);
+  if (gl) { // the glove's cuff, flared over the sleeve's end
+    B.add(tube([at(0, -0.06, 0), at(0, -0.035, 0), at(0, -0.012, 0)], [[0.034, 0.04], [0.031, 0.037], [R(0.024), R(0.031)]], 18, { up: [IN, IN, IN] }), 'hand' + Sx, skin.clone().multiplyScalar(0.92), surf);
+  }
   // the palm and the back of the hand: a loft down from the wrist, thin at the edges, domed over the back
   const PR = [[0.012, 0.021, 0.027, 0, 0.001], [-0.008, 0.02, 0.03, 0.001, 0], [-0.035, 0.0175, 0.037, 0.003, -0.002], [-0.065, 0.016, 0.041, 0.004, 0],
     [-0.088, 0.0155, 0.042, 0.004, 0.001], [-0.1, 0.0125, 0.038, 0.005, 0.001], [-0.106, 0.007, 0.028, 0.005, 0.001], [-0.108, 0.0005, 0.0005, 0.005, 0.001]];
-  const pg = loft(PR.map(([dy, t, w, ci, cz]) => ({ y: W.y + dy, rx: t, rz: w, cx: W.x + IN.x * ci, cz: W.z + cz, ex: 2.3 })), 20,
+  const pg = loft(PR.map(([dy, t, w, ci, cz]) => ({ y: W.y + dy, rx: t + (t > 0.001 ? gl : 0), rz: w + (w > 0.001 ? gl : 0), cx: W.x + IN.x * ci, cz: W.z + cz, ex: 2.3 })), 20,
     (a) => 0.003 * Math.max(0, Math.sin(a) * s)); // the back of the hand (outward) a little fuller than the palm
-  B.add(pg, 'hand' + Sx, skin, 'skin');
-  B.add(ellip(0.012, 0.03, 0.018, W.x + IN.x * 0.011, W.y - 0.05, W.z - 0.028, 10, 8), 'hand' + Sx, skin, 'skin'); // thenar
+  B.add(pg, 'hand' + Sx, skin, surf);
+  B.add(ellip(R(0.012), R(0.03), R(0.018), W.x + IN.x * 0.011, W.y - 0.05, W.z - 0.028, 10, 8), 'hand' + Sx, skin, surf); // thenar
   // fingers: index (front) to little (back)
   const F = [
     { z: -0.026, y: 0.096, L: [0.044, 0.027, 0.021], r: 0.0094 },
@@ -980,12 +1276,30 @@ function hand(B, s, skin, lipC) {
       rad.push(f.r * (1 - j * 0.07), f.r * (j === 2 ? 0.82 : 0.97 - j * 0.07));
       if (j < 2) th += bends[j];
     }
-    B.add(tube(pts, rad, 8), 'hand' + Sx, (x, y, z) => skin, 'skin');
-    B.add(ellip(f.r * 1.1, f.r * 1.05, f.r * 1.1, pts[0].x - IN.x * 0.003, pts[0].y + 0.002, pts[0].z, 8, 6), 'hand' + Sx, knuckle, 'skin');
+    B.add(tube(pts, rad.map(R), 8), 'hand' + Sx, (x, y, z) => skin, surf);
+    B.add(ellip(R(f.r * 1.1), R(f.r * 1.05), R(f.r * 1.1), pts[0].x - IN.x * 0.003, pts[0].y + 0.002, pts[0].z, 8, 6), 'hand' + Sx, knuckle, surf);
+    if (opt?.nails && !gl) {
+      // the nail: a thin curved plate on the back of the last phalanx (away from the grip it curls round), pale, its
+      // free edge whiter
+      const a = pts[4], b = pts[6], dir = b.clone().sub(a).normalize(), mid = a.clone().lerp(b, 0.62);
+      const out = mid.clone().sub(at(0.032, 0.092, f.z)), r = f.r * 0.86;
+      out.addScaledVector(dir, -out.dot(dir)).normalize();
+      const ng = ellip(r * 0.74, 0.0062, 0.0011, 0, 0, 0, 10, 8), m4 = new THREE.Matrix4().makeBasis(dir.clone().cross(out).normalize(), dir, out);
+      ng.applyMatrix4(m4).translate(mid.x + out.x * r * 0.93, mid.y + out.y * r * 0.93, mid.z + out.z * r * 0.93);
+      const nc = skin.clone().lerp(C(0xe8cfc4), 0.45), tip = C(0xefe3d8);
+      B.add(ng, 'hand' + Sx, (x, y, z) => nc.clone().lerp(tip, sstep(0.0035, 0.0058, (x - mid.x) * dir.x + (y - mid.y) * dir.y + (z - mid.z) * dir.z)), 'skin', null, { surf: () => [0.3, 0, 0.02, 0.1], max: () => [-1, 0.4, 1, 0] });
+    }
   });
   // thumb: from the base of the palm in front, down across the index finger
   const tp = [at(0.006, 0.032, -0.03), at(0.016, 0.055, -0.042), at(0.032, 0.074, -0.04), at(0.047, 0.088, -0.033), at(0.054, 0.097, -0.026)];
-  B.add(tube(tp, [0.0125, 0.0115, 0.0105, 0.0098, 0.0085], 10), 'hand' + Sx, skin, 'skin');
+  B.add(tube(tp, [0.0125, 0.0115, 0.0105, 0.0098, 0.0085].map(R), 10), 'hand' + Sx, skin, surf);
+  if (opt?.nails && !gl) { // the thumbnail
+    const a = tp[3], b = tp[4], dir = b.clone().sub(a).normalize(), mid = a.clone().lerp(b, 0.5), out = IN.clone().multiplyScalar(-1).addScaledVector(FW, 0.6);
+    out.addScaledVector(dir, -out.dot(dir)).normalize();
+    const ng = ellip(0.0068, 0.0064, 0.0011, 0, 0, 0, 10, 8), m4 = new THREE.Matrix4().makeBasis(dir.clone().cross(out).normalize(), dir, out);
+    ng.applyMatrix4(m4).translate(mid.x + out.x * 0.0082, mid.y + out.y * 0.0082, mid.z + out.z * 0.0082);
+    B.add(ng, 'hand' + Sx, skin.clone().lerp(C(0xe8cfc4), 0.45), 'skin', null, { surf: () => [0.3, 0, 0.02, 0.1], max: () => [-1, 0.4, 1, 0] });
+  }
 }
 
 // The boots. jack: the marching boot to below the knee, concertina folds at the ankle, a heel and welted sole.
@@ -1031,7 +1345,7 @@ function boot(B, s, kind) {
 // ---------------------------------------------------------------- headgear
 
 function helmetShell(m35) {
-  const n = 48, rows = [], uvs = [], RX = 0.111, RZ = m35 ? 0.128 : 0.129, CZ = 0.012;
+  const n = segs(48), rows = [], uvs = [], RX = 0.111, RZ = m35 ? 0.128 : 0.129, CZ = 0.012;
   const R = (a) => 1 / Math.hypot(Math.sin(a) / RX, Math.cos(a) / RZ);
   const prof = m35
     ? [['d', 0], ['d', 0.15], ['d', 0.3], ['d', 0.45], ['d', 0.6], ['d', 0.75], ['d', 0.9], ['d', 1.05], ['d', 1.18], ['d', 1.25], ['s', 0], ['k', 0.2], ['k', 0.45], ['k', 0.7], ['k', 0.88], ['k', 1], ['r', 0.5], ['r', 1], ['i', 1], ['i', 0.5], ['i', 0]]
@@ -1058,7 +1372,7 @@ function helmetShell(m35) {
 
 // the liner's leather band: a strip inside the shell following the rim line up from it
 function linerBand(m35) {
-  const n = 48, rows = [], uvs = [], RX = 0.111, RZ = 0.128, CZ = 0.012;
+  const n = segs(48), rows = [], uvs = [], RX = 0.111, RZ = 0.128, CZ = 0.012;
   const R = (a) => 1 / Math.hypot(Math.sin(a) / RX, Math.cos(a) / RZ);
   for (const up of [0.026, 0.004]) {
     const row = [], ur = [];
@@ -1100,7 +1414,8 @@ function shellAt(m35, a, y, out = { p: new V3(), n: new V3() }) {
 
 // The chin strap, worn three ways (by the man): snug under the chin (skin 0), over the rear skirt (1 and 3), or up
 // on the visor (2); the 1917 helmets shift the choice by one so a battery mixes them.
-function chinStrap(B, o, m35, strapC) {
+// field: the max head's field (crew_face.js; the strap lies on that face), else the hd head's
+function chinStrap(B, o, m35, strapC, field = null) {
   const style = ['chin', 'back', 'visor', 'back'][(o.skin + (m35 ? 0 : 1)) % 4], S = { p: new V3(), n: new V3() }, buckleC = C(0x6a6a62);
   const flat = (pts, up) => B.add(tube(pts, pts.map(() => [0.0016, 0.0072]), 6, { up }), 'head', strapC, 'leather');
   if (style === 'chin') {
@@ -1108,12 +1423,13 @@ function chinStrap(B, o, m35, strapC) {
     const vr = { jaw: [0, 0.003][o.skin % 2], nose: [0, 0.003][o.skin % 2] }, g = new V3();
     for (const s of SIDE) {
       const ctrl = [[s * 0.094, 1.636, 0.012], [s * 0.078, 1.6, 0.004], [s * 0.062, 1.572, -0.016], [s * 0.038, 1.553, -0.038], [0, 1.545, -0.05]];
-      const pts = new THREE.CatmullRomCurve3(ctrl.map((c) => new V3(...c))).getPoints(12), up = [];
+      const pts = new THREE.CatmullRomCurve3(ctrl.map((c) => new V3(...c))).getPoints(segs(12)), up = [];
       for (const p of pts) {
         const l = p.clone().sub(HC);
         if (p.y < 1.62) for (let it = 0; it < 4; it++) { // onto the face, 2.5 mm off it
-          const d = headSDF(l.x, l.y, l.z, vr) - 0.0025, e = 0.0006;
-          g.set(headSDF(l.x + e, l.y, l.z, vr) - headSDF(l.x - e, l.y, l.z, vr), headSDF(l.x, l.y + e, l.z, vr) - headSDF(l.x, l.y - e, l.z, vr), headSDF(l.x, l.y, l.z + e, vr) - headSDF(l.x, l.y, l.z - e, vr)).normalize();
+          const sd = field ?? ((a, b, c) => headSDF(a, b, c, vr));
+          const d = sd(l.x, l.y, l.z) - 0.0025, e = 0.0006;
+          g.set(sd(l.x + e, l.y, l.z) - sd(l.x - e, l.y, l.z), sd(l.x, l.y + e, l.z) - sd(l.x, l.y - e, l.z), sd(l.x, l.y, l.z + e) - sd(l.x, l.y, l.z - e)).normalize();
           l.addScaledVector(g, -d);
         }
         p.copy(l).add(HC);
@@ -1125,7 +1441,7 @@ function chinStrap(B, o, m35, strapC) {
     return;
   }
   // round the outside of the skirt a little above the rim: behind from side to side, or across the front
-  const a0 = style === 'back' ? Math.PI / 2 : -Math.PI / 2, a1 = style === 'back' ? 3 * Math.PI / 2 : Math.PI / 2, n = 28, pts = [], up = [];
+  const a0 = style === 'back' ? Math.PI / 2 : -Math.PI / 2, a1 = style === 'back' ? 3 * Math.PI / 2 : Math.PI / 2, n = segs(28), pts = [], up = [];
   for (let i = 0; i <= n; i++) {
     const a = lerp(a0, a1, i / n), F = Math.max(0, Math.cos(a)), Bk = Math.max(0, -Math.cos(a));
     shellAt(m35, a, rimY(m35, F, Bk) + (style === 'back' ? 0.016 : 0.012), S);
@@ -1137,7 +1453,7 @@ function chinStrap(B, o, m35, strapC) {
   B.add(bk.translate(q.x + qn.x * 0.002, q.y + qn.y * 0.002, q.z + qn.z * 0.002), 'head', buckleC, 'metal');
 }
 
-function headgear(B, o, cloth, ww2) {
+function headgear(B, o, cloth, ww2, field = null) {
   const strapC = C(ww2 ? COL.ystrap : COL.strap), liner = C(0x3a2a1c);
   if (o.headgear === 'm35' || o.headgear === 'stahlhelm') {
     const m35 = o.headgear === 'm35', hc = C(m35 ? COL.helm44 : COL.stahl);
@@ -1161,11 +1477,12 @@ function headgear(B, o, cloth, ww2) {
       shellAt(m35, a, rimY(m35, F, Bk) + 0.03, S);
       B.add(button(S.p.x, S.p.y, S.p.z, 0.0038, S.n), 'head', hc, 'paint');
     }
-    chinStrap(B, o, m35, strapC);
-    if (m35) { // the national colours' decal is long gone on a 1944 helmet; the left side keeps a worn eagle
+    chinStrap(B, o, m35, strapC, field);
+    if (m35) { // the national colours' decal is long gone on a 1944 helmet; the left side keeps a worn decal patch, left
+      // blank (no emblem, at any tier); the max tier's barely shows through the paint
       shellAt(true, -Math.PI / 2 + 0.25, 1.69, S);
-      const g = rbox(0.026, 0.022, 0.0016, 0.004).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 0, 1), S.n));
-      B.add(g.translate(S.p.x + S.n.x * 0.0004, S.p.y + S.n.y * 0.0004, S.p.z + S.n.z * 0.0004), 'head', hc.clone().multiplyScalar(0.84), 'paint');
+      const g = rbox(0.026, 0.022, 0.0016, field ? 0.009 : 0.004).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new V3(0, 0, 1), S.n));
+      B.add(g.translate(S.p.x + S.n.x * 0.0004, S.p.y + S.n.y * 0.0004, S.p.z + S.n.z * 0.0004), 'head', hc.clone().multiplyScalar(field ? 0.95 : 0.84), 'paint');
     }
   } else if (o.headgear === 'm43') {
     // Einheitsfeldmütze: soft crown dipping at the front, the turned-up flap buttoned at the front, the peak
@@ -1178,7 +1495,7 @@ function headgear(B, o, cloth, ww2) {
     B.add(loft([{ y: 1.68, rx: 0.0945, rz: 0.1095, cz: 0.006 }, { y: 1.722, rx: 0.0968, rz: 0.1118, cz: 0.006 }, { y: 1.724, rx: 0.0935, rz: 0.1085, cz: 0.006 }].map((r) => ({ ...r, ex: 2.2 })), 40, (a, y) => (y > 1.715 ? -0.004 * Math.max(0, Math.cos(a)) ** 4 : 0)), 'head', cloth.clone().multiplyScalar(0.96), 'wool');
     B.add(peak(), 'head', cloth.clone().multiplyScalar(0.94), 'wool');
     for (const s of SIDE) B.add(button(s * 0.011, 1.704, -0.111, 0.0055, new V3(0, 0, -1)), 'head', C(COL.button44), 'metal');
-    B.add(rbox(0.032, 0.017, 0.003, 0.002, 0, 1.748, -0.108, -0.1), 'head', C(0x9a9a8c), 'wool'); // the eagle
+    B.add(rbox(0.032, 0.017, 0.003, 0.002, 0, 1.748, -0.108, -0.1), 'head', C(0x9a9a8c), 'wool'); // the badge's place: a blank patch
     B.add(button(0, 1.731, -0.109, 0.0055, new V3(0, 0.1, -1)), 'head', C(COL.cockade), 'metal');
   } else if (o.headgear === 'feldmuetze') {
     // the round field cap of 1917: a dark band piped red top and bottom, a soft crown, the two cockades
@@ -1196,7 +1513,7 @@ function headgear(B, o, cloth, ww2) {
 
 // the M43 cap's peak: a curved stiff visor round the front, a little down
 function peak() {
-  const rows = [], uvs = [], n = 16;
+  const rows = [], uvs = [], n = segs(16);
   const a0 = -1.0, a1 = 1.0;
   for (const [dy, out] of [[0.004, 0], [0.004, 1], [-0.002, 1], [-0.002, 0]]) {
     const row = [], ur = [];
@@ -1212,4 +1529,5 @@ function peak() {
   return grid(rows, uvs, { flip: true });
 }
 
-registerCrewTier('hd', { geometry: hdBuild, material: hdMaterial, has: hdHas, step: hdStep, covers: hdFor });
+registerCrewTier('hd', { geometry: hdBuild, material: hdMaterial, has: hdHas, step: hdStep, covers: hdFor, profile: PROFILE.hd });
+registerCrewTier('max', { geometry: maxBuild, material: maxMaterial, has: maxHas, step: maxStep, covers: hdFor, profile: PROFILE.max, shadowProxy: true });

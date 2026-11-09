@@ -5,7 +5,7 @@ import { SMOKE, FLAME, SPARK, rand, rr } from './kinds.js';
 // Clods of earth, bricks, splinters and burning ammunition rounds on ballistic arcs. One typed-array
 // pool drawn as one instanced mesh. A clod that lands lies a few seconds and shrinks away; a burning
 // round trails sparks and smoke and pops where it lands (or when its fuse runs out in the air).
-const F = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'ex', 'ey', 'ez', 'wx', 'wy', 'wz', 'size', 'ax', 'ay', 'az', 'age', 'life', 'drag', 'kind', 'cr', 'cg', 'cb', 'rest', 'trail', 'gy', 'fuse'];
+const F = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'ex', 'ey', 'ez', 'wx', 'wy', 'wz', 'size', 'ax', 'ay', 'az', 'age', 'life', 'drag', 'kind', 'cr', 'cg', 'cb', 'rest', 'trail', 'gy', 'fuse', 'stream'];
 export const CLOD = { EARTH: 0, ROUND: 1, WATER: 2 };
 
 function lumpy(seed) {
@@ -22,6 +22,7 @@ function lumpy(seed) {
 }
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+const STREAM_PUFF = { drag: 1.4, hero: true }; // (one options object for every streamer puff: nothing made per frame)
 
 export class Clods {
   constructor(scene, max = 1600) {
@@ -40,8 +41,11 @@ export class Clods {
 
   clear() { this.n = 0; this.mesh.count = 0; }
 
-  /** Add one. kind EARTH/ROUND/WATER; fuse (s, 0 none) only for rounds. Returns the slot. */
-  add(kind, x, y, z, vx, vy, vz, size, r, g, b, { life = 12, drag = 0.04, fuse = 0, gy = 0, flat = 1 } = {}) {
+  /**
+   * Add one. kind EARTH/ROUND/WATER; fuse (s, 0 none) only for rounds. stream (s): the head of a dirt streamer (the
+   * max-quality battery's burst), trailing a plume of earth for that long. Returns the slot.
+   */
+  add(kind, x, y, z, vx, vy, vz, size, r, g, b, { life = 12, drag = 0.04, fuse = 0, gy = 0, flat = 1, stream = 0 } = {}) {
     let i;
     if (this.n < this.max) i = this.n++;
     else {
@@ -61,7 +65,7 @@ export class Clods {
     this.ax[i] = rr(0.7, 1.3); this.ay[i] = rr(0.6, 1.1) * flat; this.az[i] = rr(0.7, 1.3);
     this.age[i] = 0; this.life[i] = life; this.drag[i] = drag;
     this.kind[i] = kind; this.cr[i] = r; this.cg[i] = g; this.cb[i] = b;
-    this.rest[i] = 0; this.trail[i] = rand() * 0.1; this.gy[i] = gy; this.fuse[i] = fuse;
+    this.rest[i] = 0; this.trail[i] = rand() * 0.1; this.gy[i] = gy; this.fuse[i] = fuse; this.stream[i] = stream;
     return i;
   }
 
@@ -92,6 +96,14 @@ export class Clods {
           fx.addSmoke(SMOKE.TRAIL, x, y, z, rr(-1, 1), rr(0, 1.5), rr(-1, 1), rr(2.5, 4), 0.6, rr(2.5, 4), 0.32, 0.31, 0.3, 0.45, { drag: 0.9, buoy: 0.3 });
         }
         if (this.fuse[i] > 0 && this.age[i] >= this.fuse[i]) { fx._pop(x, y, z, this.size[i]); this.kill(i); continue; }
+      } else if (this.stream[i] > 0 && this.age[i] < this.stream[i]) {
+        // a streamer's head: a plume of earth and dust drawn out behind it, thinning as it goes (hero puffs)
+        this.trail[i] -= dt;
+        if (this.trail[i] <= 0 && fx.cheap()) {
+          this.trail[i] = 0.1;
+          const s = this.size[i], k = 1 - this.age[i] / this.stream[i];
+          fx.addSmoke(SMOKE.PUFF, x, y, z, this.vx[i] * 0.12 + rr(-0.6, 0.6), this.vy[i] * 0.12 + rr(-0.6, 0.6), this.vz[i] * 0.12 + rr(-0.6, 0.6), rr(1.6, 3), s * 1.4, s * rr(4, 6), this.cr[i] * 1.6, this.cg[i] * 1.6, this.cb[i] * 1.6, 0.18 + 0.28 * k, STREAM_PUFF);
+        }
       } else if (kind === CLOD.EARTH && this.size[i] > 0.7) {
         this.trail[i] -= dt;
         if (this.trail[i] <= 0 && fx.cheap()) {

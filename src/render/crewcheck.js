@@ -12,12 +12,20 @@
 // Contact sheet: &shots=shell@0.2,shell@0.6,ram@0.5,... (step@k of the first loading cycle, or a time in s)
 // &cams=az,el,dist[,ty];... (degrees, metres; one row per camera, aimed at the breech) &tile=360x300 draws
 // the gun and its men at those moments into a grid on the page for tools/shot.mjs.
+// The max-quality battery (shots/maxq/PLAN.md): &maxq=1 builds the HD rig (buildGun(kind, { hd: true })), the hero crew
+// (new GunCrew(rig, kind, { hero: true })) and poses the rig's recoil with render/herorig.js; &fire=onready fires a
+// gun the step it comes ready, as the real sim does (sim/guns.js: every round of a series, an order given while it
+// loads), instead of 3.2 s later; &tail=s runs s seconds past the second shot (default 2 with fire=onready). Their
+// metrics (results.<gun>.<scn>.shot, brief.<gun/scn>.shot): the ears and the pull at the shot, the commander's arm drop
+// against the shot, poses that last one frame, the hands on the handwheel knobs while the gear turns, the staff and the
+// spent case loose in mid-air, the ground men's jolt at the shot, the speed guard's catch-ups.
 import * as THREE from 'three';
 import { UNITS, piecePlacements } from '../sector.js';
 import { GUNS } from '../sim/tables.js';
 import { buildGun, loadGuns } from '../models/guns.js';
 import { GunCrew } from './crews.js';
 import { loadPose, carPose } from './guns.js';
+import { poseHeroRig } from './herorig.js';
 import { h2 } from '../world/mesher.js';
 import { pitSolids } from '../world/battery.js';
 import { CrewField } from './crewfield.js';
@@ -400,13 +408,70 @@ function placement(kind) {
   return { x: 0, z: 0 };
 }
 
+const HERO = q.get('maxq') === '1' || q.get('maxq') === '2', ONREADY = q.get('fire') === 'onready';
+const TAIL = Number(q.get('tail') ?? (ONREADY || HERO ? 2 : 0));
+// the shot's metrics (PLAN 3.3 and the motion targets), one record per run
+function shotAudit() {
+  return { shots: [], blips: 0, blipBy: {}, knob: { max: 0, sum: 0, n: 0, worst: '' }, loose: { staff: 0, kase: 0 }, shake: 0, guard: 0, last: new Map(), y0: new Map() };
+}
+const _k = new THREE.Vector3(), _k2 = new THREE.Vector3();
+function auditShot(crew, A, p, T) {
+  const tf = T - p.firedAt;
+  // the moment of each shot (the frame it went off: the crew is posed with tf = 0) and the frame before it (tf -0.033):
+  // the ears and the pull on both (the targets: ears 0.9 and the pull 0.8 over tf -0.05 to 0.02)
+  if (tf >= 0 && tf < 1e-6) A.shots.push({ T: +T.toFixed(3), ears: +crew.ears.toFixed(2), preEars: A.prev?.ears ?? 0, pull: +(crew.pull ?? 0).toFixed(2), prePull: A.prev?.pull ?? 0 });
+  A.prev = { ears: +crew.ears.toFixed(2), pull: +(crew.pull ?? 0).toFixed(2) };
+  // the commander's arm: the frame it passes half way down after being up, against the shot
+  const f = crew.feuer;
+  if (f != null) {
+    if (f > 0.9) A.armUp = T;
+    if (A.armUp != null && f < 0.5) { A.drops = A.drops ?? []; A.drops.push(T); A.armUp = null; }
+  }
+  // poses held for one frame only (a blip): the pose of the frame before differs from both its neighbours
+  for (const m of crew.men) {
+    const L = A.last.get(m) ?? [null, null];
+    const pose = m.root.visible ? m._pose : null;
+    if (L[0] != null && L[1] != null && L[1] !== L[0] && L[1] !== pose && pose != null) { A.blips++; const key = `${m.role}:${L[1]}`; A.blipBy[key] = (A.blipBy[key] ?? 0) + 1; }
+    A.last.set(m, [L[1], pose]);
+  }
+  // hands on the handwheel knobs while the gear turns (crew.knobHands: [{ man, side, knob }] from the hero drill)
+  if (crew.knobHands && crew.gearMoving) for (const e of crew.knobHands) {
+    if (!e.man.root.visible || !(e.w > 0.9)) continue; // (a hand let go on purpose, at the shot, is not a miss)
+    e.man.fig.anchors['hand' + e.side].getWorldPosition(_k); e.knob.getWorldPosition(_k2);
+    const d = _k.distanceTo(_k2);
+    A.knob.sum += d; A.knob.n++;
+    if (d > A.knob.max) { A.knob.max = d; A.knob.worst = `${e.man.role} ${e.side} ${d.toFixed(3)} @${crew.c?.s ?? crew.c?.st} k=${(crew.c?.k ?? 0).toFixed(2)}`; }
+  }
+  // the staff and the case: drawn, off the ground, in nobody's hand and not on their rests
+  const near = (o, len) => {
+    _k.set(0, 0, 0).applyMatrix4(o.matrix); _k2.set(0, 0, len).applyMatrix4(o.matrix);
+    for (const m of crew.men) if (m.root.visible) for (const sd of ['L', 'R']) { m.fig.anchors['hand' + sd].getWorldPosition(_f); if (segPt(_k, _k2, _f) < 0.1) return true; }
+    return Math.min(_k.y, _k2.y) < 0.15;
+  };
+  if (crew.staff.visible && !crew.staffRest && !near(crew.staff, crew.staffLen)) { A.loose.staff++; if ((A.loose.at ??= []).length < 6) A.loose.at.push(`${crew.c?.s ?? crew.c?.st}@${(crew.c?.k ?? 0).toFixed(2)}`); }
+  if (crew.caseProp?.visible && !crew.caseFree && !near(crew.caseProp, 0.4)) A.loose.kase++;
+  // the men on the ground (root below 0.3 m) must not jolt with the gun at the shot
+  for (const m of crew.men) {
+    if (!m.root.visible || m.y > 0.3) continue;
+    m.root.getWorldPosition(_k);
+    if (tf < 0 || tf > 2) A.y0.set(m, _k.y);
+    else if (A.y0.has(m)) A.shake = Math.max(A.shake, Math.abs(_k.y - A.y0.get(m)));
+  }
+  A.guard = crew.guardN ?? 0;
+  for (const m of crew.men) if (m.guardN) (A.guardBy ??= {})[m.role] = `${m.guardN} last ${m.guardAt}`;
+}
+
 function runGun(kind, scn, speed, scns0 = scn) {
   const g = GUNS[kind], heavy = g.load[0].step === 'depress';
-  const rig = buildGun(kind);
+  // (&hd=0: the hero drill on the standard rig, which has no gear, knobs, body or hooks: the drill's own fallbacks)
+  const rig = buildGun(kind, HERO && q.get('hd') !== '0' ? { hd: true, lean: true } : undefined);
+  if (HERO) rig.setDetail?.(q.get('maxq') === '2' ? 2 : 1);
   rig.root.rotation.order = 'YXZ';
   rig.root.userData.crewAt = placement(kind);
   const steel = new Steel(rig);
-  const crew = new GunCrew(rig, kind);
+  const crew = new GunCrew(rig, kind, HERO ? { hero: true } : undefined);
+  const SA = HERO || ONREADY ? shotAudit() : null;
+  let tShot = null, tEnd = Infinity; // (tShot: the time the gun came ready after its cycle)
   window.__lastCrew = crew;
   const pl0 = placement(kind), walls = pitSolids(kind, pl0.x, pl0.z).map((b) => ({ name: b.name, min: [b.x0, 0, b.z0], max: [b.x1, b.h, b.z1] }));
   const trav = g.traverse;
@@ -447,10 +512,12 @@ function runGun(kind, scn, speed, scns0 = scn) {
     sim.time = T;
     // ---- the sim's loading logic (guns.js), without the rest
     if (phase === 'ready' && T >= p.fireAt) {
-      p.firedAt = T; p.state = 'recoil'; p.loaded = false; p.rounds = 0; phase = 'recoil'; fired++; cycle++;
+      // (fire=onready: a series, as the real sim keeps p.rounds above 0 between its rounds, so the crew can see the next coming)
+      p.firedAt = T; p.state = 'recoil'; p.loaded = false; p.rounds = ONREADY ? 1 : 0; phase = 'recoil'; fired++; cycle++;
       p.cmd.az = az1; p.cmd.el = g.restEl;
-      if (fired >= 2) break;
+      if (fired >= 2) { if (!TAIL) break; tEnd = T + TAIL; phase = 'tail'; }
     }
+    if (T > tEnd) break;
     const slew = (elT) => {
       const da = p.cmd.az - p.az, de = elT - p.el, ma = g.azRate * DT, me = g.elRate * DT;
       p.az += Math.abs(da) <= ma ? da : Math.sign(da) * ma;
@@ -472,10 +539,11 @@ function runGun(kind, scn, speed, scns0 = scn) {
         if (!(st.step === 'depress' && Math.abs(p.el - g.loadEl) > 0.002) && !(st.step === 'lay' && !laid)) {
           if (st.step === 'ram') p.loaded = true;
           p.ji++;
-          if (p.ji >= g.load.length) { p.state = 'ready'; p.job = null; p.breech = 0; phase = 'ready'; p.rounds = 1; p.fireAt = T + 3.2; p.loaded = true; } else begin();
+          if (p.ji >= g.load.length) { p.state = 'ready'; p.job = null; p.breech = 0; phase = 'ready'; p.rounds = 1; p.fireAt = ONREADY ? T : T + 3.2; p.loaded = true; if (cycle >= 1) tShot = p.fireAt; } else begin();
         }
       }
     } else if (phase === 'ready') slew(p.cmd.el);
+    else if (phase === 'tail') slew(p.el);
     function begin() {
       const st = g.load[p.ji];
       let dur = st.dur * speed;
@@ -489,7 +557,7 @@ function runGun(kind, scn, speed, scns0 = scn) {
     const tf = T - p.firedAt;
     let r = 0;
     if (tf >= 0 && tf < g.runout + 1.2) r = tf < 0.14 ? Math.sin((tf / 0.14) * Math.PI / 2) : tf < 0.45 ? 1 : 1 - Math.min(1, Math.max(0, (tf - 0.45) / g.runout));
-    rig.setRecoil(r);
+    if (!(HERO && poseHeroRig(rig, p, tf, DT))) rig.setRecoil(r);
     rig.setCar?.(carPose(g, p, tf) * (rig.carRoll ?? 0)); // the railway car's roll-back and winch-in (its men ride it, crews.js)
     const lp = loadPose(p, 0);
     rig.setBreech(lp.breech);
@@ -498,6 +566,7 @@ function runGun(kind, scn, speed, scns0 = scn) {
     crew.update(p, sim, DT, 2);
     rig.root.updateMatrixWorld(true);
     auditMotion(crew, res, crew.c, T);
+    if (SA && cycle >= 1) auditShot(crew, SA, p, T);
     // &stop=step@k: end the run there (cycle 1) and leave the crew posed for a look (window.__lastCrew)
     // (&trace=role,t0,t1: that man's place, heading and pose each frame between the times, into window.__trace)
     if (q.get('trace')) { const [role, t0, t1] = q.get('trace').split(','), m = crew.byRole.get(role); if (m && T >= +t0 && T <= +t1) (window.__trace ??= []).push(`${T.toFixed(2)} ${p.job?.step ?? p.state} x${m.x.toFixed(2)} z${m.z.toFixed(2)} h${m.h.toFixed(2)} ${m._pose} ears${crew.ears.toFixed(2)}`); }
@@ -573,6 +642,11 @@ function runGun(kind, scn, speed, scns0 = scn) {
         }
       }
     }
+  }
+  if (SA) {
+    // each arm drop against the nearest shot (negative: before it)
+    const drops = (SA.drops ?? []).map((t) => { let b = NaN; for (const sh of SA.shots) if (!(Math.abs(t - sh.T) >= Math.abs(b))) b = t - sh.T; return +b.toFixed(3); });
+    res.shot = { shots: SA.shots, armDrop: drops, blips: SA.blips, blipBy: SA.blipBy, knob: SA.knob.n ? { max: +SA.knob.max.toFixed(3), mean: +(SA.knob.sum / SA.knob.n).toFixed(3), worst: SA.knob.worst } : null, loose: SA.loose, shake: +SA.shake.toFixed(4), guard: SA.guard, guardBy: SA.guardBy ?? {} };
   }
   res.plans = crew.men.filter((m) => Object.keys(m.plans).length).map((m) => m.role + ' ' + Object.entries(m.plans).map(([t, P]) => t + '[' + Array.from({ length: P.poly.n }, (_, i) => P.poly.x[i].toFixed(1) + ',' + P.poly.z[i].toFixed(1)).join(' ') + '] step' + (P.poly.step ?? 0).toFixed(1)).join(' '));
   return res;
@@ -661,6 +735,7 @@ async function main() {
   for (const [k, v] of Object.entries(out.results)) for (const [s, r] of Object.entries(v)) {
     const f = (o) => Object.fromEntries(Object.entries(o).map(([a, b]) => [a, +b.toFixed(3)]));
     out.brief[`${k}/${s}`] = { max: +r.max.toFixed(3), byRole: f(r.byRole), byTarget: f(r.byTarget), homes: r.homes, plans: r.plans, motion: Object.fromEntries(Object.entries(r.motion).map(([role, M]) => [role, `v${M.maxV.toFixed(1)} run${M.run.toFixed(1)}s jump${M.jumps} tp${M.teleports} snap${M.snaps} flick${M.flicker} slide${M.slide.toFixed(2)}m hand${M.handMax.toFixed(2)}/${M.handMiss}${M.handWorst && M.handMax > 0.15 ? ` [${M.handWorst}]` : ''} body${M.inBody} elbow${M.elbowIn} drop${M.drop ?? 0}`])),
+      ...(r.shot ? { shot: r.shot } : {}),
       motionEvents: Object.fromEntries(Object.entries(r.motion).filter(([, M]) => M.worst.length).map(([role, M]) => [role, M.worst.slice(0, Number(q.get('ev') ?? 8))])),
       slides: Object.fromEntries(Object.entries(r.motion).map(([role, M]) => [role, Object.entries(M.slideBy ?? {}).filter(([, v]) => v > 0.15).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(', ')]).filter(([, v]) => v)),
       top: r.worst.sort((a, b) => b.pen - a.pen).slice(0, Number(q.get('top') ?? 10)).map((w) => `${w.pen} ${w.role} ${w.part} vs ${w.vs} @${w.step} t=${w.t} k=${w.k} at ${w.at}${w.with ? ' with ' + w.with : ''}${w.pt ? ' pt ' + w.pt : ''}${w.own ? ' own ' + w.own : ''}`) };

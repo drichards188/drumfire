@@ -10,6 +10,9 @@
 //
 // The engine core (routing, delay, absorption, voice stealing, bank building) comes from the
 // iads and maxgfx frameworks. `new AudioEngine({ context })` takes an OfflineAudioContext for tests.
+import { TAU, mulberry, biquad, sweepLp, onePole, peak, normalize, burst, layer, mixInto, wrapInto, blast, thump, modes, roll, saturate, tail, resample, onset, distant, seamless, loopNoise, addTone, snap } from './audioDsp.js';
+import { HERO, heroTasks, heroRecordingTasks, chargeV } from './audioHero.js';
+
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 const pick = (list) => (list && list.length ? list[Math.floor(Math.random() * list.length)] : null);
 const smooth = (x, a, b) => {
@@ -28,8 +31,10 @@ const SHELL_VOICES = 6; // shells in flight that are heard at once, loudest firs
 const AUDIBLE = 0.002;
 
 // per-frame caps and minimum spacing (s) for queued world events; close events get triple caps
-const CAPS = { gun: 4, burst: 5, tremor: 2, load: 3, flare: 2, cook: 4, rocket: 3, launch: 2 };
-const GAPS = { gun: 0.02, burst: 0.02, tremor: 0.06, load: 0.05, flare: 0.2, cook: 0.05, rocket: 0.05, launch: 0.1 };
+const CAPS = { gun: 4, burst: 5, tremor: 2, load: 3, flare: 2, cook: 4, rocket: 3, launch: 2, foley: 6 };
+const GAPS = { gun: 0.02, burst: 0.02, tremor: 0.06, load: 0.05, flare: 0.2, cook: 0.05, rocket: 0.05, launch: 0.1, foley: 0 };
+const MAX_HRTF = 12; // the max-quality battery's close foley through HRTF panners (each one convolves): at most this many at once
+const FOLEY_LOOPS = 6; // its persistent gear loops (foleyLoop)
 
 // Real recordings in public/audio, cut into slices [start, length] (seconds, found by onset
 // analysis) that replace or layer into the synthesized banks once both are ready; anything
@@ -79,260 +84,7 @@ const COLOSSAL_KINDS = { gustav: 1, karl: 1 };
 export const LEVELS = { ui: 0.32, drumfire: 0.5, rain: 0.22, wind: 0.08, thud: 0.5, siren: 0.2 };
 
 // ================================================================== offline synthesis
-
-const TAU = Math.PI * 2;
-
-function mulberry(seed) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** RBJ biquad run in place: 'lp', 'hp' or 'bp' (0 dB peak). */
-function biquad(x, sr, type, f, q = 0.707) {
-  const w = (TAU * Math.min(f, sr * 0.45)) / sr;
-  const cs = Math.cos(w), a = Math.sin(w) / (2 * q);
-  let b0, b1, b2;
-  if (type === 'lp') {
-    b0 = (1 - cs) / 2;
-    b1 = 1 - cs;
-    b2 = b0;
-  } else if (type === 'hp') {
-    b0 = (1 + cs) / 2;
-    b1 = -(1 + cs);
-    b2 = b0;
-  } else {
-    b0 = a;
-    b1 = 0;
-    b2 = -a;
-  }
-  const a0 = 1 + a;
-  b0 /= a0;
-  b1 /= a0;
-  b2 /= a0;
-  const c1 = (-2 * cs) / a0, c2 = (1 - a) / a0;
-  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
-  for (let i = 0; i < x.length; i++) {
-    const v = x[i];
-    const y = b0 * v + b1 * x1 + b2 * x2 - c1 * y1 - c2 * y2;
-    x2 = x1;
-    x1 = v;
-    y2 = y1;
-    y1 = y;
-    x[i] = y;
-  }
-  return x;
-}
-
-/** Low-pass whose cutoff follows f(t), updated every 32 samples. */
-function sweepLp(x, sr, f) {
-  let y1 = 0, y2 = 0, x1 = 0, x2 = 0, b0 = 0, b1 = 0, b2 = 0, c1 = 0, c2 = 0;
-  for (let i = 0; i < x.length; i++) {
-    if ((i & 31) === 0) {
-      const w = (TAU * Math.min(f(i / sr), sr * 0.45)) / sr;
-      const cs = Math.cos(w), a = Math.sin(w) / 1.414;
-      const a0 = 1 + a;
-      b0 = (1 - cs) / 2 / a0;
-      b1 = (1 - cs) / a0;
-      b2 = b0;
-      c1 = (-2 * cs) / a0;
-      c2 = (1 - a) / a0;
-    }
-    const v = x[i];
-    const y = b0 * v + b1 * x1 + b2 * x2 - c1 * y1 - c2 * y2;
-    x2 = x1;
-    x1 = v;
-    y2 = y1;
-    y1 = y;
-    x[i] = y;
-  }
-  return x;
-}
-
-function onePole(x, sr, f) {
-  const k = 1 - Math.exp((-TAU * f) / sr);
-  let y = 0;
-  for (let i = 0; i < x.length; i++) {
-    y += k * (x[i] - y);
-    x[i] = y;
-  }
-  return x;
-}
-
-function peak(x) {
-  let p = 0;
-  for (let i = 0; i < x.length; i++) {
-    const v = Math.abs(x[i]);
-    if (v > p) p = v;
-  }
-  return p;
-}
-
-function normalize(x, to = 1) {
-  const p = peak(x);
-  if (p > 0) {
-    const k = to / p;
-    for (let i = 0; i < x.length; i++) x[i] *= k;
-  }
-  return x;
-}
-
-/** White noise shaped by an attack/decay envelope, `dur` seconds long. */
-function burst(sr, r, dur, attack, decay) {
-  const n = Math.ceil(dur * sr);
-  const x = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    x[i] = (r() * 2 - 1) * (1 - Math.exp(-t / attack)) * Math.exp(-t / decay);
-  }
-  return x;
-}
-
-/** A filtered noise layer at unit peak. */
-function layer(sr, r, { dur, attack = 0.001, decay, type = 'lp', f, q = 0.707, sweep = null }) {
-  const x = burst(sr, r, dur, attack, decay);
-  if (sweep) sweepLp(x, sr, sweep);
-  else biquad(x, sr, type, f, q);
-  if (type === 'bp' || type === 'lp') biquad(x, sr, 'hp', 18);
-  return normalize(x);
-}
-
-function mixInto(dst, src, at, gain, sr) {
-  const i0 = Math.round(at * sr);
-  const n = Math.min(src.length, dst.length - i0);
-  for (let i = 0; i < n; i++) dst[i0 + i] += src[i] * gain;
-}
-
-/** Like mixInto but wrapping around the end, so a loop's events have no seam. */
-function wrapInto(dst, src, at, gain, sr) {
-  const n = dst.length, i0 = Math.round(at * sr) % n;
-  for (let i = 0; i < src.length; i++) dst[(i0 + i) % n] += src[i] * gain;
-}
-
-/** Friedlander blast wave: instant (or `rise`) overpressure, positive phase T, then the suction phase. */
-function blast(x, sr, at, amp, T, b = 1.6, rise = 0.00006) {
-  const i0 = Math.round(at * sr), n = Math.ceil(T * 7 * sr), nr = Math.max(1, Math.round(rise * sr));
-  for (let i = 0; i < n && i0 + i < x.length; i++) {
-    const t = i / sr;
-    let p = (1 - t / T) * Math.exp((-b * t) / T);
-    if (i < nr) p *= i / nr;
-    x[i0 + i] += amp * p;
-  }
-}
-
-/** Damped sine whose pitch falls from f0 toward f1 with time constant tau. */
-function thump(x, sr, at, f0, f1, tau, amp, decay, attack = 0.0015) {
-  const i0 = Math.round(at * sr);
-  const n = Math.min(Math.ceil(decay * 7 * sr), x.length - i0);
-  let ph = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / sr;
-    ph += (TAU * (f1 + (f0 - f1) * Math.exp(-t / tau))) / sr;
-    x[i0 + i] += amp * (1 - Math.exp(-t / attack)) * Math.exp(-t / decay) * Math.sin(ph);
-  }
-}
-
-/** Struck metal: damped inharmonic modes [freq, amp, decay]. */
-function modes(x, sr, at, list, r, gain = 1) {
-  const i0 = Math.round(at * sr);
-  for (const [f, a, d] of list) {
-    const n = Math.min(Math.ceil(d * 6 * sr), x.length - i0);
-    const ph = r() * TAU, w = (TAU * f) / sr;
-    for (let i = 0; i < n; i++) x[i0 + i] += gain * a * Math.exp(-i / sr / d) * Math.sin(ph + w * i);
-  }
-}
-
-/** Rolling echo of a distant report off the ground, ruins, the Ypres ridges and the haze. */
-function roll(dst, src, sr, r, { count = 16, t0 = 0.15, t1 = 2, gain = 0.5, f = 600 }) {
-  const dark = onePole(Float32Array.from(src), sr, f);
-  onePole(dark, sr, f * 0.8);
-  for (let k = 0; k < count; k++) {
-    const u = Math.pow((k + r()) / count, 1.4);
-    const d = t0 + (t1 - t0) * u;
-    mixInto(dst, dark, d, gain * Math.exp(-2.6 * u) * (0.45 + 0.55 * r()), sr);
-  }
-}
-
-function saturate(x, drive) {
-  const k = 1 / Math.tanh(drive);
-  for (let i = 0; i < x.length; i++) x[i] = Math.tanh(drive * x[i]) * k;
-  return x;
-}
-
-/** Fade the last `sec` out so a buffer never ends on a click. */
-function tail(x, sr, sec = 0.05) {
-  const n = Math.min(x.length, Math.round(sec * sr));
-  for (let i = 0; i < n; i++) x[x.length - 1 - i] *= i / n;
-  return x;
-}
-
-/** Lower and longer (a bigger object), by resampling: `rate` under 1 lowers it. */
-function resample(x, rate) {
-  const n = Math.floor(x.length / rate), o = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const p = i * rate, j = Math.floor(p), f = p - j;
-    o[i] = (x[j] || 0) * (1 - f) + (x[j + 1] || 0) * f;
-  }
-  return o;
-}
-
-/** Where a recorded shot starts: 5 ms before its first sample within 20 dB of the peak. */
-function onset(x, sr) {
-  const m = peak(x) * 0.1;
-  let i = 0;
-  while (i < x.length && Math.abs(x[i]) < m) i++;
-  return Math.max(0, i - Math.round(0.005 * sr));
-}
-
-/** Distant versions: highs gone, a ground reflection and a rolling echo. */
-function distant(sr, r, dry, band, { len, roll: rl }) {
-  const n = Math.ceil(len * sr);
-  const x = new Float32Array(n);
-  mixInto(x, dry, 0, 1, sr);
-  mixInto(x, dry, 0.004 + r() * 0.008, 0.7, sr);
-  roll(x, dry, sr, r, rl);
-  if (band === 'far') {
-    biquad(x, sr, 'lp', 600, 0.6);
-    onePole(x, sr, 900);
-  } else biquad(x, sr, 'lp', 3000, 0.6);
-  biquad(x, sr, 'hp', 20);
-  return [tail(normalize(x, 0.95), sr, 0.2)];
-}
-
-// ------------------------------------------------------------------ loop helpers
-
-/** Crossfade the last (length - n) samples of x into its head (equal power) so n samples loop without a seam. */
-function seamless(x, n) {
-  const m = x.length - n;
-  const o = Float32Array.from(x.subarray(0, n));
-  for (let i = 0; i < m; i++) {
-    const w = (i / m) * Math.PI * 0.5;
-    o[i] = x[i] * Math.sin(w) + x[n + i] * Math.cos(w);
-  }
-  return o;
-}
-
-/** n samples of looping noise shaped by `shape` (which filters its argument in place). */
-function loopNoise(sr, r, n, shape) {
-  const m = Math.round(0.05 * sr), warm = Math.round(0.1 * sr);
-  const x = new Float32Array(warm + n + m);
-  for (let i = 0; i < x.length; i++) x[i] = r() * 2 - 1;
-  shape(x);
-  return normalize(seamless(x.subarray(warm), n));
-}
-
-/** A sine added to a loop of `sec` seconds, its frequency snapped to a whole number of cycles. */
-function addTone(x, sr, f, amp, sec, ph = 0) {
-  const w = (TAU * Math.max(1, Math.round(f * sec))) / sec / sr;
-  for (let i = 0; i < x.length; i++) x[i] += amp * Math.sin(ph + w * i);
-}
-
-/** Whole cycles of f in `sec` seconds, as a frequency that loops. */
-const snap = (f, sec) => Math.max(1, Math.round(f * sec)) / sec;
+// (the helpers, from the seeded random stream to the loop helpers, are in src/audioDsp.js)
 
 // ---------------------------------------------------------------- shell flight loops
 
@@ -1318,6 +1070,23 @@ export function recordedGunTasks(SR, make, rec, classes) {
 }
 
 /**
+ * The max-quality battery's banks built from the recordings (src/audioHero.js heroRecordingTasks: its body and the tail
+ * made of it), for the hero `kinds`; the slices cut by role as recordedGunTasks cuts them, when the first is built.
+ */
+export function heroRecTasks(SR, make, rec, kinds = []) {
+  const midSR = Math.min(SR, 32000);
+  const have = new Set(Object.keys(RECORDINGS).filter((key) => RECORDINGS[key].gun && rec[key]).map((key) => RECORDINGS[key].gun));
+  let roles = null;
+  const slices = () => {
+    if (roles) return roles;
+    roles = {};
+    for (const [key, s] of Object.entries(RECORDINGS)) if (s.gun && rec[key]) (roles[s.gun] ||= []).push(...cutSlices(rec[key].data, rec[key].sr, s.slices, midSR));
+    return roles;
+  };
+  return heroRecordingTasks(SR, make, slices, kinds, have);
+}
+
+/**
  * Everything built from the recordings, as bankTasks-style tasks [group, key, fn, over] whose banks take the
  * synthesized ones' places (over: 'gun' for a gun built from recordings, true for the rest): the guns of `classes`
  * (recordedGunTasks); the far ground bursts and the drumfire's thuds from the distant explosions; the explosion under
@@ -1451,8 +1220,19 @@ const standalone = (() => {
 })();
 
 export class AudioEngine {
-  constructor({ context = null, ww2 = false, ww1 = false } = {}) {
+  constructor({ context = null, ww2 = false, ww1 = false, hero = null } = {}) {
     this.ctx = null;
+    // the max-quality battery's kinds (src/audioHero.js; { kinds } or a list): their own report, burst and drill, built
+    // with the other banks; none (every other page) leaves every bank, call and sound as it was
+    this.hero = new Set([...(Array.isArray(hero) ? hero : hero?.kinds ?? [])].filter((k) => HERO[k]));
+    this.heroFoley = false; // set by render/foley.js once it plays the hero guns' drill (main then leaves load() out for them)
+    this.earsK = 0; // 0..1: the player's hands over his ears (setEars)
+    this.hrtfN = 0; // HRTF panners sounding (MAX_HRTF)
+    this.loops = new Map(); // foleyLoop's persistent voices by id
+    this.deafC = 0; // the deafness of the other guns' blasts alone (deafen): their steady ring, while a hero shot rings its own
+    this.ringK = 0; // the hero shots' ringing, 0..1, fading over about 6 s
+    this.hiK = 0; // the highs held down after a hero shot within 15 m, 0..1, coming back over 5 s
+    this.hearing = true; // the hearing effects (setHearing): the hero shots' ring and the covered ears
     this.wantWW1 = ww1; // render the WW1 banks (the Paris Gun) at start (else on its first shot, or enableWW1())
     this.ww1 = false;
     this.wantWW2 = ww2; // render the WW2 banks at start (else on the first WW2 call, or enableWW2())
@@ -1537,7 +1317,25 @@ export class AudioEngine {
       sc[k] = Math.sign(x) * (a < 0.8 ? a : 0.8 + 0.2 * Math.tanh((a - 0.8) / 0.2));
     }
     soft.curve = sc;
-    this.mix.connect(this.deafLp).connect(this.master).connect(comp).connect(wall).connect(soft).connect(ctx.destination);
+    if (this.hero.size) {
+      // the max-quality battery's ears: the dry mix and the mix with hands over the ears (the highs gone, the whole of it
+      // quieter), crossfaded by setEars; after the deafness a high shelf that holds the highs down for seconds after a shot
+      // close by, so that they come back last
+      this.earsDry = ctx.createGain();
+      this.earsCov = ctx.createGain();
+      this.earsCov.gain.value = 0;
+      const cov = ctx.createBiquadFilter();
+      cov.type = 'lowpass';
+      cov.frequency.value = 700;
+      cov.Q.value = 0.5;
+      this.hiShelf = ctx.createBiquadFilter();
+      this.hiShelf.type = 'highshelf';
+      this.hiShelf.frequency.value = 3000;
+      this.hiShelf.gain.value = 0;
+      this.mix.connect(this.earsDry).connect(this.deafLp);
+      this.mix.connect(cov).connect(this.earsCov).connect(this.deafLp);
+      this.deafLp.connect(this.hiShelf).connect(this.master).connect(comp).connect(wall).connect(soft).connect(ctx.destination);
+    } else this.mix.connect(this.deafLp).connect(this.master).connect(comp).connect(wall).connect(soft).connect(ctx.destination);
 
     // ringing ears after a near blast, not muffled by the deafness filter
     this.ringGain = ctx.createGain();
@@ -1579,6 +1377,26 @@ export class AudioEngine {
     this.white = this.pre?.white ?? this.noiseBuffer('white');
     this.brown = this.pre?.brown ?? this.noiseBuffer('brown');
     this.pink = this.pre?.pink ?? this.noiseBuffer('pink');
+    if (this.hero.size) {
+      // the hero shots' ringing ears: a narrow band of noise round 4.2 kHz and a tone that wanders, fading over seconds
+      this.heroRing = ctx.createGain();
+      this.heroRing.gain.value = 0;
+      this.heroRing.connect(this.master);
+      const nb = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain(), og = ctx.createGain();
+      nb.buffer = this.white;
+      nb.loop = true;
+      bp.type = 'bandpass';
+      bp.frequency.value = 4200;
+      bp.Q.value = 25;
+      ng.gain.value = 6; // (a band 170 Hz wide holds a hundredth of the noise's power)
+      og.gain.value = 0.5;
+      this.ringOsc = ctx.createOscillator();
+      this.ringOsc.frequency.value = 4200;
+      nb.connect(bp).connect(ng).connect(this.heroRing);
+      this.ringOsc.connect(og).connect(this.heroRing);
+      nb.start();
+      this.ringOsc.start();
+    }
 
     // render the essential sample banks now, the rest over the next frames
     const make = (chans, sr) => {
@@ -1592,6 +1410,7 @@ export class AudioEngine {
     this.raw = {};
     this.ww2 = this.wantWW2;
     const tasks = bankTasks(ctx.sampleRate, make, { ww2: this.ww2 });
+    if (this.hero.size) tasks.push(...heroTasks(ctx.sampleRate, make, [...this.hero])); // (after the rest: everything before renders as it always has)
     const split = tasks.indexOf(null);
     // with the worker still at it (prepare) even the essentials come from it: its finished banks wait in the message
     // queue until this busy stretch of the page (the end of loading) is over, a moment from now. A sound asked for
@@ -1644,8 +1463,10 @@ export class AudioEngine {
       w.onerror = () => this.workerFailed();
       this.jobs = 2; // the banks, then everything built from the recordings
       const ww2 = !!this.wantWW2, ww1 = !!this.wantWW1, none = () => null, all = Object.fromEntries(Object.keys(RECORDINGS).map((k) => [k, {}]));
-      this.expect = bankTasks(48000, none, { ww2 }).filter(Boolean).length + (ww1 ? bankTasks(48000, none, { ww1: 'only' }).length : 0) + recordingTasks(48000, none, all, () => [], this.gunClasses(ww2, ww1)).length;
-      w.postMessage({ SR: 48000, ww2, ww1 });
+      const hero = [...this.hero];
+      this.expect = bankTasks(48000, none, { ww2 }).filter(Boolean).length + (ww1 ? bankTasks(48000, none, { ww1: 'only' }).length : 0) + recordingTasks(48000, none, all, () => [], this.gunClasses(ww2, ww1)).length +
+        (hero.length ? heroTasks(48000, none, hero).length + heroRecTasks(48000, none, all, hero).length : 0);
+      w.postMessage(hero.length ? { SR: 48000, ww2, ww1, hero } : { SR: 48000, ww2, ww1 });
       this.prepareRecordings(w);
     } catch (e) {
       this.worker = null;
@@ -1724,7 +1545,7 @@ export class AudioEngine {
     if (!Object.keys(rec).length) return this.jobDone();
     this.recByWorker = true;
     this.recKeys = Object.keys(rec);
-    w.postMessage({ SR: 48000, rec, classes: this.gunClasses(this.wantWW2, this.wantWW1), keepSynth: this.keepSynth }, Object.values(rec).map((r) => r.data.buffer));
+    w.postMessage({ SR: 48000, rec, classes: this.gunClasses(this.wantWW2, this.wantWW1), keepSynth: this.keepSynth, ...(this.hero.size ? { hero: [...this.hero] } : {}) }, Object.values(rec).map((r) => r.data.buffer));
   }
 
   jobDone() {
@@ -1860,6 +1681,7 @@ export class AudioEngine {
     const synth = (group, key) => this.bank[group]?.[key]?.map((b) => ({ data: b.getChannelData(0), sr: b.sampleRate })) ?? null;
     const classes = this.gunClasses().filter((cls) => !this.recorded.has('gun_' + cls));
     for (const t of recordingTasks(this.ctx.sampleRate, this.make, all, synth, classes, { keepSynth: this.keepSynth })) this.pending.push(t);
+    if (this.hero.size) for (const t of heroRecTasks(this.ctx.sampleRate, this.make, all, [...this.hero])) this.pending.push(t);
     if (!this.pumping) this.pump();
     this.recApplied = true;
     this.recordingsInUse = Object.keys(this.rec);
@@ -1963,6 +1785,33 @@ export class AudioEngine {
   /** Muffle the mix and ring the ears: 0..1, decaying over a few seconds (called by close blasts, also usable from outside). */
   deafen(k) {
     this.deaf = Math.max(this.deaf, clamp(k, 0, 1));
+    this.deafC = Math.max(this.deafC, clamp(k, 0, 1));
+  }
+
+  /** A hero blast's deafness: the mix dulled as by any blast, but its own ringing (not the other guns' steady tones). */
+  heroDeafen(k) {
+    this.deaf = Math.max(this.deaf, clamp(k, 0, 1));
+    this.ringK = Math.max(this.ringK, 0.9 * clamp(k, 0, 1));
+  }
+
+  /** The hearing effects on or off (the gear menu): the hero shots' ringing and the covered ears. */
+  setHearing(on) {
+    this.hearing = !!on;
+    if (!on) this.setEars(0);
+  }
+
+  /**
+   * The player's hands over his ears, 0..1 (render/foley.js: his man's crew.ears while the view is his): the mix dulled
+   * and quieter through the covered path, and a shot then deafens him less. Nothing without a hero battery.
+   */
+  setEars(k) {
+    const e = this.hearing ? clamp(k || 0, 0, 1) : 0;
+    if (Math.abs(e - this.earsK) < 0.004 && (e === 0) === (this.earsK === 0)) return;
+    this.earsK = e;
+    if (!this.earsDry || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    this.earsDry.gain.setTargetAtTime(1 - 0.85 * e, now, 0.03);
+    this.earsCov.gain.setTargetAtTime(0.5 * e, now, 0.03);
   }
 
   throttled(name, gap) {
@@ -2010,8 +1859,12 @@ export class AudioEngine {
     return true;
   }
 
-  /** Positional voice: returns a route to connect sources to, or null when inaudible / out of voices. */
-  route(pos, { ref = 20, level = 1, reverb = 0, bus = this.sfx } = {}) {
+  /**
+   * Positional voice: returns a route to connect sources to, or null when inaudible / out of voices. `hrtf`: through an
+   * HRTF panner while fewer than MAX_HRTF are sounding (the hero's close foley); `air`: the distance filter's cutoff (Hz)
+   * in place of absorb(d).
+   */
+  route(pos, { ref = 20, level = 1, reverb = 0, bus = this.sfx, hrtf = false, air = null } = {}) {
     const ctx = this.ctx;
     const d = this.dist(pos);
     const g = this.gainAt(d, ref, level);
@@ -2021,8 +1874,10 @@ export class AudioEngine {
     }
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = this.absorb(d);
-    const pan = this.panner(false);
+    lp.frequency.value = air ?? this.absorb(d);
+    const h = hrtf && this.hrtfN < MAX_HRTF;
+    if (h) this.hrtfN++;
+    const pan = this.panner(h);
     this.setPannerPos(pan, pos.x, pos.y, pos.z);
     const out = ctx.createGain();
     out.gain.value = g;
@@ -2034,7 +1889,7 @@ export class AudioEngine {
       out.connect(send).connect(this.reverbSend);
       nodes.push(send);
     }
-    return { dest: lp, out, t0: ctx.currentTime + 0.01, d, g, end: 0, nodes, direct: false, stolen: false };
+    return { dest: lp, out, t0: ctx.currentTime + 0.01, d, g, end: 0, nodes, direct: false, stolen: false, hrtf: h };
   }
 
   /** Non-positional voice (UI, ambience one-shots). `force` skips the cap (rare cues). */
@@ -2078,6 +1933,7 @@ export class AudioEngine {
     for (const v of this.voices) {
       if (v.end + 0.1 < now) {
         for (const n of v.nodes) n.disconnect();
+        if (v.hrtf) this.hrtfN--;
         if (v.direct) this.directVoices--;
         else if (!v.stolen) this.posVoices--;
       } else this.voices[j++] = v;
@@ -2097,7 +1953,7 @@ export class AudioEngine {
       this.bedEnergy += g * 0.15;
       return;
     }
-    this.combat = Math.min(1, this.combat + g * 0.5);
+    if (kind !== 'foley' && !(this.hero.size && (kind === 'voice' || kind === 'load'))) this.combat = Math.min(1, this.combat + g * 0.5);
     const delay = Math.min(d / speed, MAX_DELAY) + extra;
     if (delay > 0.08) {
       if (this.inFlight.length < 512) this.inFlight.push({ at: this.ctx.currentTime + delay, kind, pos, ref, level, play, g });
@@ -2210,8 +2066,10 @@ export class AudioEngine {
    * A gun firing at `pos`; `calibre` in inches (2.95 to 18). Class by calibre: light (field gun, sharp
    * crack), the 60-pdr, the 6-inch, the 9.2 and the 15-inch with the railway guns (the slam).
    */
-  gun(pos, calibre = 6) {
+  gun(pos, calibre = 6, opts) {
     if (!this.ctx) return;
+    // the max-quality battery's own report: with `hero` set, a hero kind and its banks built (else as any gun of its class)
+    if (opts?.hero && this.heroOn(opts.kind)) return this.heroGun(pos, calibre, opts);
     const cls = classOf(calibre), c = CLS[cls];
     const rate = Math.pow(c.cal / Math.max(calibre, 1), 0.2) * (0.97 + Math.random() * 0.06);
     this.enqueue('gun', pos, c.ref, c.level, (p) => {
@@ -2254,15 +2112,224 @@ export class AudioEngine {
     }, { speed: GROUND_SPEED });
   }
 
+  // ------------------------------------------------------------------ the max-quality battery (src/audioHero.js)
+
+  /** A hero kind of this page whose banks are built: its own report, burst and drill play (else its class's, as anywhere). */
+  heroOn(kind) {
+    const H = HERO[kind], B = H && this.hero.has(kind) ? this.bank[H.group] : null;
+    return !!(B?.crack && B.body);
+  }
+
+  /** The distance filter for the hero's close sounds: a few metres of air take almost nothing off (absorb() is the battlefield's). */
+  heroAir(d) {
+    return Math.min(20000, Math.max(this.absorb(d), 20000 * (1 - d / 60)));
+  }
+
+  /**
+   * The Mörser 18's report in layers (src/audioHero.js): the crack and, on the supersonic charges, the shell's bow wave;
+   * the recorded body; the gun's steel at the end of the stroke; the landscape's tail all round (the run-out is the
+   * drill's, render/foley.js, on the recoil's cues); and within 60 m the same report off the ground (an image source below it, a few ms late, softened). The crack
+   * falls off steeply with distance and the body gently to a floor, so the gun beside you is louder than No. 2 at 80 m; a
+   * weaker charge is a smaller report, and the blast is stronger ahead of the muzzle than behind it. `opts`: `kind`,
+   * `charge` (index or m/s) or `v`, `dir` (the bore), `ground` (its height under the muzzle). Beyond 2 km it is the
+   * class's distant rendering.
+   */
+  heroGun(pos, calibre, opts) {
+    const H = HERO[opts.kind], B = this.bank[H.group], c = CLS.heavy, P = here(pos);
+    const v = chargeV(H, opts), e = clamp((v / H.charges[H.charges.length - 1]) ** 2, 0.15, 1);
+    const dv = opts.dir, dl = dv ? Math.hypot(dv.x, dv.y, dv.z) || 1 : 1;
+    const dir = dv ? { x: dv.x / dl, y: dv.y / dl, z: dv.z / dl } : null;
+    const gy = Number.isFinite(opts.ground) ? opts.ground : P.y - H.trunnion - H.muzzle * (dir ? Math.max(0, dir.y) : 0.5);
+    this.enqueue('gun', P, c.ref, c.level, (p) => {
+      const d = this.dist(p);
+      if (d >= c.near) {
+        const r = this.route(p, { ref: c.ref, level: c.level, reverb: 0.35, bus: this.blastBus });
+        if (!r) return;
+        this.playBuf(r, this.variant(this.classBank('gun_', 'heavy'), d, c.near, c.mid), { rate: Math.pow(c.cal / Math.max(calibre, 1), 0.2) * (0.97 + Math.random() * 0.06) });
+        this.finish(r);
+        return;
+      }
+      const L = this.listenerPos;
+      const cosT = dir ? ((L.x - p.x) * dir.x + (L.y - p.y) * dir.y + (L.z - p.z) * dir.z) / Math.max(d, 0.01) : 0, fwd = (1 + cosT) / 2;
+      const cg = clamp((20 / Math.max(d, 1)) ** 0.5, 0.25, 1.9) * (0.4 + 0.6 * e) * (0.6 + 0.4 * fwd);
+      const bg = (0.6 + 0.4 * e) * (0.8 + 0.2 * fwd) * clamp((30 / Math.max(d, 1)) ** 0.6, 0.55, 1);
+      const rate = (1 + 0.04 * (1 - e)) * (0.98 + 0.04 * Math.random());
+      const crack = pick(B.crack), body = pick(B.body);
+      const r = this.route(p, { ref: c.ref, level: c.level, reverb: 0.3, bus: this.blastBus, air: this.heroAir(d) });
+      if (!r) return;
+      this.playBuf(r, crack, { gain: cg });
+      if (v > 360 && B.bow) this.playBuf(r, pick(B.bow), { at: 0.006 + 0.006 * Math.random(), gain: 0.6 * cg * clamp((v - 343) / 220, 0, 1) });
+      this.playBuf(r, body, { at: 0.001, rate, gain: bg });
+      if (d < 60 && B.mech) this.playBuf(r, pick(B.mech), { at: H.stroke, gain: clamp(8 / d, 0, 1) * (0.7 + 0.3 * e) });
+      this.finish(r);
+      // the landscape answering, all round and no duller a few metres off (a voice of its own, not the muzzle's)
+      const t = B.tail && this.direct({ level: this.gainAt(d, c.ref, c.level) * H.tail * (0.7 + 0.3 * e), bus: this.blastBus, reverb: 0.25, force: true, at: 0.055 });
+      if (t) {
+        this.playBuf(t, pick(B.tail), { rate: 0.98 + 0.04 * Math.random() });
+        this.finish(t);
+      }
+      // the ground: the same crack and body from the image below it, a few ms behind (given exactly: enqueue cannot)
+      if (d < 60) {
+        const q = { x: p.x, y: 2 * gy - p.y, z: p.z }, di = this.dist(q), lag = Math.max(0, (di - d) / SOUND_SPEED);
+        const ri = this.route(q, { ref: c.ref, level: c.level * 0.45, bus: this.blastBus, air: Math.min(this.absorb(di), 2500) });
+        if (ri) {
+          this.playBuf(ri, crack, { at: lag, gain: cg });
+          this.playBuf(ri, body, { at: lag + 0.001, rate, gain: bg });
+          this.finish(ri);
+        }
+      }
+      this.heroShock(d, p, e, B, CLS.heavy.deaf);
+    });
+    // through the ground, ahead of the air: your own gun's, not No. 2's at 80 m
+    this.heroTremor(P, 15, 0.54 * (0.6 + 0.4 * e));
+  }
+
+  /**
+   * A hero blast reaching the listener at `d`: the mix dulled (less with the ears covered), its own ringing, the highs
+   * held down after one within 15 m, the slap by distance (the close shock: direct, 2 ms behind the crack), the working
+   * sounds ducked, the push in the chest within 15 m. main's shake and dazzle (onShock) as for the class.
+   */
+  heroShock(d, p, e, B, deaf, { slapR = 4, push = true } = {}) {
+    const f = clamp(1 - d / deaf, 0, 1);
+    if (f > 0) {
+      this.heroDeafen(0.85 * f ** 1.4 * (1 - 0.6 * this.earsK) * (0.7 + 0.3 * e));
+      this.onShock?.({ d, k: f, pos: p });
+    }
+    if (d < 15) this.hiK = Math.max(this.hiK, (1 - d / 15) * (1 - 0.5 * this.earsK));
+    const sg = Math.min(0.4, slapR / Math.max(d, 1)) * (0.6 + 0.4 * e); // (the body and the crack are the near field here: a lighter slap)
+    if (sg > 0.04) {
+      const r = this.direct({ level: sg, bus: this.blastBus, force: true, at: 0.0075 });
+      if (r) {
+        this.playBuf(r, pick(this.bank.slap?.big));
+        this.finish(r);
+      }
+      this.duck(0.2 + 0.5 * clamp(d / 160, 0, 1), 2.2, true);
+    }
+    if (push && d < 15 && B.pressure) {
+      const r = this.direct({ level: 0.5 * (1 - d / 15) * (0.5 + 0.5 * e), bus: this.blastBus, force: true, at: 0.006 });
+      if (r) {
+        this.playBuf(r, pick(B.pressure));
+        this.finish(r);
+      }
+    }
+  }
+
+  /** The ground wave of a hero shot: full within `ref` m, then 1/d (your own gun's, not the whole battery's alike). */
+  heroTremor(pos, ref, level) {
+    this.enqueue('tremor', pos, ref, level, (p) => {
+      const r = this.direct({ level: this.gainAt(this.dist(p), ref, level), bus: this.blastBus, filter: { type: 'lowpass', freq: 160 }, force: true });
+      if (!r) return;
+      this.playBuf(r, pick(this.bank.tremor?.small));
+      this.finish(r);
+    }, { speed: GROUND_SPEED });
+  }
+
+  /**
+   * The hero kind's shell bursting on the ground: the heavy ground burst's body (its recorded explosion under it) with
+   * the 21 cm detonation's crack, fragments and stones laid on (audioHero.js) within the near band; its shock deafens
+   * within 60 m only, the slap by distance.
+   */
+  heroBurst(pos, calibre, kind) {
+    const B = this.bank[HERO[kind].group], cls = classOf(calibre), c = CLS[cls], s = c.cal / 6;
+    const ref = 55 * Math.pow(s, 0.9) + 20, level = 1.2 + 0.1 * Math.min(s, 2.5), near = 800 * s;
+    const rate = Math.pow(c.cal / Math.max(calibre, 1), 0.2) * (0.96 + Math.random() * 0.08);
+    this.enqueue('burst', pos, ref, level, (p) => {
+      const r = this.route(p, { ref, level, reverb: 0.35, bus: this.blastBus });
+      if (!r) return;
+      const set = this.classBank('burst_ground_', cls), d = r.d;
+      if (d < near) {
+        this.playBuf(r, pick(set?.near), { at: 0.002, rate, gain: 0.8 });
+        this.playBuf(r, pick(B.burst), { rate: 0.97 + 0.06 * Math.random(), gain: clamp((90 / Math.max(d, 1)) ** 0.5, 0.4, 1.2) });
+      } else this.playBuf(r, this.variant(set, d, near, 4000 * Math.sqrt(s)), { rate });
+      this.finish(r);
+      const bd = 30 * Math.pow(s, 1.1), f = clamp(1 - d / bd, 0, 1);
+      if (f > 0) this.onShock?.({ d, k: f, pos: p });
+      const fh = clamp(1 - d / 60, 0, 1);
+      if (fh > 0) this.heroDeafen(0.85 * fh ** 1.4 * (1 - 0.6 * this.earsK));
+      const sg = Math.min(1.1, 25 / Math.max(d, 1));
+      if (sg > 0.04 && d < 90 * Math.pow(s, 1.1)) {
+        const q = this.direct({ level: sg, bus: this.blastBus, force: true });
+        if (q) {
+          this.playBuf(q, pick(this.bank.slap?.big));
+          this.finish(q);
+        }
+        this.duck(0.2 + 0.5 * clamp(d / 160, 0, 1), 2.2, true);
+      }
+    });
+    if (c.cal >= 9) this.tremor(pos, c, 0.5 + 0.5 * Math.min(1, s / 2.5));
+  }
+
+  /**
+   * One sound of a hero battery's drill (render/foley.js): `name` a key of its foley group (`group`, foley_mlaf) at `pos`,
+   * a world sound (the travel delay, full within `ref` m and 1/d beyond), through an HRTF panner within 25 m (at most
+   * MAX_HRTF at once), on the working sounds' bus (`loud`: the blasts', which the shot's slap does not duck: the run-out).
+   * `at` (s) later; `until` (s): cut there with a quick fade (a slide that must stop when the block does); `rate`.
+   */
+  foley(name, pos, { gain = 1, rate = 1, ref = 10, until = null, at = 0, group = 'foley_mlaf', loud = false } = {}) {
+    if (!this.ctx) return;
+    const list = this.bank[group]?.[name];
+    if (!list?.length) return;
+    this.enqueue('foley', pos, ref, gain, (p) => {
+      const d = this.dist(p);
+      const r = this.route(p, { ref, level: gain, reverb: 0.12, bus: loud ? this.blastBus : this.sfx, hrtf: d < 25, air: this.heroAir(d) });
+      if (!r) return;
+      const buf = pick(list), src = this.ctx.createBufferSource(), t0 = r.t0 + at;
+      src.buffer = buf;
+      src.playbackRate.value = rate;
+      src.connect(r.dest);
+      r.nodes.push(src);
+      src.start(t0);
+      let end = t0 + buf.duration / rate;
+      if (until != null && until < buf.duration / rate) {
+        end = t0 + Math.max(0.03, until);
+        r.out.gain.setTargetAtTime(0, end - 0.02, 0.012);
+        src.stop(end + 0.06);
+      }
+      r.end = end + 0.08;
+      this.finish(r);
+    });
+  }
+
+  /**
+   * A persistent looping voice of a hero battery (its gears turning: loop.mlaf_elev, loop.mlaf_trav) in slot `id` (at
+   * most FOLEY_LOOPS), set every frame: where it is, its level (full within 6 m) and its rate; 0 lets it rest. Made on
+   * first use above zero, through an HRTF panner while there are some free; nothing is allocated after that.
+   */
+  foleyLoop(id, name, pos, gain = 0, rate = 1) {
+    if (!this.ctx) return;
+    let v = this.loops.get(id);
+    if (!v) {
+      const buf = this.bank.loop?.[name]?.[0];
+      if (!(gain > 0.001) || !buf || this.loops.size >= FOLEY_LOOPS) return;
+      const ctx = this.ctx, g = ctx.createGain(), lp = ctx.createBiquadFilter(), hrtf = this.hrtfN < MAX_HRTF, pan = this.panner(hrtf);
+      if (hrtf) this.hrtfN++;
+      g.gain.value = 0;
+      lp.type = 'lowpass';
+      lp.frequency.value = 20000;
+      const src = this.loop(buf);
+      src.connect(g).connect(lp).connect(pan).connect(this.sfx);
+      v = { src, g, lp, pan, name, gain: 0 };
+      this.loops.set(id, v);
+    }
+    const d = this.dist(pos), now = this.ctx.currentTime, gn = gain * Math.min(1, 6 / Math.max(d, 1));
+    if (gn < 0.0005 && v.gain < 0.0005) return; // resting
+    v.gain = gn;
+    v.g.gain.setTargetAtTime(gn, now, 0.05);
+    v.src.playbackRate.setTargetAtTime(clamp(rate, 0.25, 4), now, 0.05);
+    v.lp.frequency.setTargetAtTime(this.heroAir(d), now, 0.1);
+    this.setPannerPos(v.pan, pos.x, pos.y, pos.z, 0.03);
+  }
+
   /**
    * A shell bursting at `pos` (metres, world). `fuze`: 'air' or 'time' bursts in the air (a hail of
    * shrapnel); anything else (default) is a ground burst: a crump, earth thrown up and debris falling.
    * A V-2 (`fuze: 'v2'` or `kind: 'v2'`) comes with the sonic boom's double crack and, last, the roar of its fall.
    */
-  burst(pos, calibre = 6, { fuze = 'impact', ground, kind } = {}) {
+  burst(pos, calibre = 6, { fuze = 'impact', ground, kind, hero = false } = {}) {
     if (!this.ctx) return;
     const cls = classOf(calibre), c = CLS[cls], s = c.cal / 6;
     const air = cls !== 'colossal' && (ground === false || fuze === 'air' || fuze === 'time' || fuze === 'shrapnel');
+    if (hero && !air && cls !== 'colossal' && this.heroOn(kind) && this.bank[HERO[kind].group].burst) return this.heroBurst(pos, calibre, kind);
     if (fuze === 'v2' || kind === 'v2') this.v2Arrival(pos, s);
     const ref = 55 * Math.pow(s, 0.9) + 20, level = air ? 1.05 : 1.2 + 0.1 * Math.min(s, 2.5);
     const rate = Math.pow(c.cal / Math.max(calibre, 1), 0.2) * (0.96 + Math.random() * 0.08);
@@ -2855,6 +2922,16 @@ export class AudioEngine {
     const df = clamp(this.deaf, 0, 1);
     const cutoff = df > 0.01 ? 20000 * Math.pow(350 / 20000, Math.pow(df, 0.6)) : 20000;
     this.deafLp.frequency.setTargetAtTime(cutoff, now, df > 0.5 ? 0.04 : 0.25);
-    this.ringGain.gain.setTargetAtTime(0.04 * df * df, now, 0.1);
+    if (this.heroRing) {
+      // a hero page: the other guns ring the steady tones by their own deafness; a hero shot its own wandering ring, and
+      // the highs it held down come back last
+      this.deafC = Math.max(0, this.deafC - dt * 0.4);
+      this.ringGain.gain.setTargetAtTime(0.04 * this.deafC * this.deafC, now, 0.1);
+      this.ringK = Math.max(0, this.ringK - dt * 0.15);
+      this.hiK = Math.max(0, this.hiK - dt * 0.2);
+      this.heroRing.gain.setTargetAtTime(this.hearing ? 0.025 * this.ringK : 0, now, 0.15);
+      if (this.ringK > 0) this.ringOsc.frequency.setTargetAtTime(4000 + 400 * (0.5 + 0.5 * Math.sin(now * 0.37) * Math.sin(now * 0.13 + 1)), now, 0.5);
+      this.hiShelf.gain.setTargetAtTime(-18 * this.hiK, now, 0.1);
+    } else this.ringGain.gain.setTargetAtTime(0.04 * df * df, now, 0.1);
   }
 }

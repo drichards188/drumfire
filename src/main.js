@@ -37,7 +37,9 @@ import { warmUp } from './render/warmup.js';
 // always boots (import.meta.glob also bundles whichever exist).
 const OPTIONAL = import.meta.glob(['./sim/sim.js', './ui/panel.js', './ui/range.js', './audio.js', './models/guns.js', './models/looks.js', './world/index.js', './craters.js', './render/index.js', './ww2/render.js', './ww2/ui.js', './ww2/tutorial.js', './ww2/gunnerView.js',
   './ww2/voices.js', // the German crew voices (only the WW2 open battle's, the Karl's and the WW1 open battle's pages build them)
-  './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js']);
+  './ww1/theatre.js', './ww1/render.js', './ww1/ui.js', './ww1/tutorial.js', './render/crews_ww1.js',
+  // the max-quality battery's own modules (HERO below), loaded only on a page that has one
+  './models/maxq.js', './render/herorig.js', './render/herofx.js', './render/foley.js']);
 const optional = async (path) => {
   try {
     return (await OPTIONAL[path]?.()) ?? null;
@@ -83,6 +85,29 @@ const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
 const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
+// The max-quality battery (DESIGN.md "Max-quality battery"): the basic training's lent battery (src/ww1/tutorial.js
+// `maxq`) drawn, moved, sounded and lit at the game's best: the close-detail gun build, the close crew tiers, its own
+// blasts, foley and motion, the page's resolution and shadows raised. ?maxq=0 turns it off to compare, 1 is the lesson's
+// default, 2 is full (no lean shortcuts, the closest crew tier at any distance: review captures and A/B); on the test
+// range ?maxq=1 (or 2) makes the range's battery the hero. No other page has one: every new path is behind HERO.units.
+// `lean` (level 1 under navigator.webdriver, the headless tools): cheaper bakes, the same features, so the tests stay
+// fast. `kinds`: only kinds with a close-detail build.
+const MAXQ_KINDS = new Set(['mrs18']);
+const HERO = (() => {
+  const v = query.get('maxq'), asked = v == null ? null : v === '0' ? 0 : v === '2' ? 2 : 1;
+  const level = WW1_LESSON?.maxq ? asked ?? 1 : RANGE ? asked ?? 0 : 0;
+  const pick = !level ? [] : WW1_LESSON ? UNITS.filter((u) => WW1_LESSON.units.includes(u.id)) : UNITS.filter((u) => u.kind === query.get('kind')).slice(0, 1);
+  const units = new Set(pick.filter((u) => MAXQ_KINDS.has(u.kind)).map((u) => u.id));
+  return Object.freeze({ level: units.size ? level : 0, lean: units.size > 0 && level === 1 && !!navigator.webdriver, units, kinds: new Set(UNITS.filter((u) => units.has(u.id)).map((u) => u.kind)) });
+})();
+const isHero = (unitId) => HERO.units.has(unitId);
+const wrapPi = (a) => ((((a + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI;
+// the max-quality lesson's page builds only the battery it lends (its rigs, crews and scenery; the ridge's other pits are
+// never seen in it), which pays for the close-detail build in load time and memory
+const LESSON_ONLY = HERO.units.size > 0 && !!WW1_LESSON?.kinds;
+// its parts, each switched live from the gear menu (Max-quality battery) to compare: the close-detail guns, the close
+// crew tiers, the guns' materials, the rig's motion, its effects, its sounds, the supersampling, the tight shadows
+const heroOn = { detail: true, tiers: true, materials: true, motion: true, effects: true, sound: true, ssaa: true, shadows: true };
 // the WW2 batteries on a WW1 page (the career's ridge): their models, pictures and sounds load beside the 1918 ones
 const WW2_GUNS = new Set(['lefh18', 'sfh18', 'nbw41', 'k18', 'mrs18', 'karl', 'gustav', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40']);
 const WW2_ON_RIDGE = WW1 && UNITS.some((u) => WW2_GUNS.has(u.kind));
@@ -179,7 +204,8 @@ async function init() {
   const camera = new THREE.PerspectiveCamera(50, vw / vh, 0.3, 80000);
   camera.position.set(-1800, 30, -340);
 
-  const startQuality = QUALITY[query.get('quality')] ? query.get('quality') : 'Medium';
+  // (the max-quality lesson starts at High; an explicit ?quality wins, and the headless tools keep Medium)
+  const startQuality = QUALITY[query.get('quality')] ? query.get('quality') : HERO.units.size && !navigator.webdriver ? 'High' : 'Medium';
 
   await step(0.05, 'Painting the sky');
   const atmosphere = new Atmosphere(renderer, scene);
@@ -219,6 +245,11 @@ async function init() {
     ww1tut: WW1 ? await optional('./ww1/tutorial.js') : null,
     ww1crews: WW1 ? await optional('./render/crews_ww1.js') : null,
     range: RANGE ? await optional('./ui/range.js') : null,
+    // the max-quality battery's (HERO): its guns' materials, the rig's motion, the effects and the drill's foley at its guns
+    maxq: HERO.units.size ? await optional('./models/maxq.js') : null,
+    herorig: HERO.units.size ? await optional('./render/herorig.js') : null,
+    herofx: HERO.units.size ? await optional('./render/herofx.js') : null,
+    foley: HERO.units.size ? await optional('./render/foley.js') : null,
   };
   // a WW1 page: the 1917 dress and the Bertha's 1917 colours, set before any rig or crew is built
   if (WW1 && mods.guns?.GUN_ERA) mods.guns.GUN_ERA.ww1 = true;
@@ -245,6 +276,7 @@ async function init() {
   // one rig per piece, on the terrain, facing the unit's zero line; the render layer (phase 2)
   // replaces these with rigs posed from the sim. Until then main recoils them on a fire event.
   const rigs = new Map(); // `${unitId}:${piece}` -> rig
+  const heroTimes = { build: 0, maxq: 0, render: 0 }; // (the max-quality battery's load, ms: __drumfire.heroLoad)
   const unitRoot = {}; // unit id -> Object3D at the centre of the unit (the camera's target)
   for (const u of UNITS) {
     const places = piecePlacements(u);
@@ -255,9 +287,13 @@ async function init() {
     scene.add(g);
     unitRoot[u.id] = g;
     if (!mods.guns?.buildGun) continue;
+    if (LESSON_ONLY && !WW1_LESSON.units.includes(u.id)) continue;
     for (const p of places) {
       try {
-        const rig = mods.guns.buildGun(p.kind);
+        // (the max-quality battery's guns from the close-detail build; every other gun exactly as before)
+        const tb = performance.now();
+        const rig = isHero(u.id) ? mods.guns.buildGun(p.kind, { hd: true, lean: HERO.lean }) : mods.guns.buildGun(p.kind);
+        if (isHero(u.id)) heroTimes.build += performance.now() - tb;
         if (!rig?.root) throw new Error('no rig');
         rig.root.position.set(p.x, terrain.heightAt(p.x, p.z), p.z);
         rig.root.rotation.y = headingFor(p.bearing);
@@ -268,6 +304,19 @@ async function init() {
         // polished breech (models/looks.js); the battle's lineup is the career's, fixed for the page
         // (a lesson's lent battery: its levels)
         if (mods.looks && (RESEARCH_ERA || WW1_LESSON?.levels?.[u.kind])) mods.looks.applyLook(rig, p.kind, gunEraOf(p.kind), RESEARCH_ERA ? career.lineupLevels(RESEARCH_ERA)[u.kind] ?? {} : WW1_LESSON.levels[u.kind]);
+        // the max-quality battery's materials over the look (models/maxq.js), before the fog patch, the compile and the
+        // warm-up; its per-frame handle stays on the rig (render/guns.js updates it)
+        if (isHero(u.id) && mods.maxq?.applyMaxq) {
+          try {
+            const lv = WW1_LESSON?.levels?.[u.kind] ?? {};
+            const scheme = (lv.camo ?? 0) >= 1 ? mods.looks?.camoScheme?.(gunEraOf(p.kind), rig.scheme) ?? rig.scheme : rig.scheme;
+            const tm = performance.now();
+            rig.maxq = mods.maxq.applyMaxq(rig, { kind: p.kind, scheme, renderer, level: HERO.level, lean: HERO.lean, seed: u.id * 16 + p.i, quality: startQuality }) ?? null;
+            heroTimes.maxq += performance.now() - tm;
+          } catch (e) {
+            console.warn(`applyMaxq(${p.kind}) failed: ${e.message}`);
+          }
+        }
         rigs.set(`${u.id}:${p.i}`, rig);
       } catch (e) {
         console.warn(`buildGun(${p.kind}) failed: ${e.message}`);
@@ -291,11 +340,16 @@ async function init() {
     sim = null;
   }
   let renderLayer = null;
+  const tr0 = performance.now();
   try {
-    renderLayer = mods.render?.createRender?.({ scene, sim, terrain, fx, rigs, camera }) ?? null;
+    renderLayer = mods.render?.createRender?.({ scene, sim, terrain, fx, rigs, camera, ...(HERO.units.size ? { hero: HERO } : {}), ...(LESSON_ONLY ? { onlyRigs: true } : {}) }) ?? null;
   } catch (e) {
     console.warn('render layer failed:', e.message);
   }
+  heroTimes.render = performance.now() - tr0;
+  // the max-quality battery's close crew tiers start building now (render/crewhd.js prebuild: mostly in a worker), so they
+  // overlap the rest of the loading; awaited, time-guarded, before the shaders are compiled
+  const heroPrebuild = HERO.units.size ? renderLayer?.guns?.prebuildHero?.() ?? null : null;
 
   // the WW2 mode's own pictures: the special weapons' sites and stages, rockets and missiles, aircraft (src/ww2/render.js)
   let ww2r = null;
@@ -309,7 +363,7 @@ async function init() {
   // Gun's shot, the British aircraft. `modeR` is whichever German mode's layer this page has.
   let ww1r = null;
   try {
-    if (WW1 && sim && mods.ww1render?.createWW1Render) ww1r = mods.ww1render.createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns });
+    if (WW1 && sim && mods.ww1render?.createWW1Render) ww1r = mods.ww1render.createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns: mods.guns, ...(LESSON_ONLY ? { only: new Set(WW1_LESSON.units) } : {}) });
   } catch (e) {
     console.warn('WW1 render failed:', e.message);
   }
@@ -334,12 +388,15 @@ async function init() {
   const post = new PostFX(renderer, scene, camera);
   const dynRes = new DynamicResolution(renderer);
   // the blast's refraction ring and the heat shimmer over a muzzle (fx sends pooled vectors: post copies)
-  fx.onShock = (pos, radius, speed, strength) => post.shockwave?.(pos, { radius, speed, strength });
+  // (a hero blast's ring, when fx says so: post fades and clamps it near the max-quality battery's guns)
+  fx.onShock = (pos, radius, speed, strength, o) => post.shockwave?.(pos, HERO.units.size && heroOn.effects && (o === true || o?.hero) ? { radius, speed, strength, hero: true } : { radius, speed, strength });
   fx.onHeat = (pos, radius, life) => post.heat?.(pos, { radius, life });
   const chase = new ChaseCamera(camera, canvas, { ground: terrain.heightAt });
   let audio = null;
   try {
-    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(WW2 ? { ww2: true } : WW1 ? { ww1: true } : undefined) : null;
+    // (the max-quality battery's own banks are rendered in the worker with the rest: `hero`, only on its page)
+    const aopts = WW2 ? { ww2: true } : WW1 ? { ww1: true } : undefined;
+    audio = mods.audio?.AudioEngine ? new mods.audio.AudioEngine(HERO.units.size ? { ...aopts, hero: { kinds: [...HERO.kinds] } } : aopts) : null;
     // (and on the career's ridge when the lineup has the V-1 or the V-2 off the map: their buzz and their arrival)
     if (WW2 || WW2_ON_RIDGE || (RESEARCH_ERA && ['v1', 'v2'].some((k) => career.unlocked(k)))) audio?.enableWW2?.();
     if (WW1) audio?.enableWW1?.();
@@ -348,6 +405,13 @@ async function init() {
   } catch (e) {
     console.warn('AudioEngine failed:', e.message);
   }
+  // the max-quality battery's hooks in the render layer, now that the audio engine and the post chain exist
+  if (HERO.units.size) renderLayer?.guns?.setHero?.({ audio, post, poseHeroRig: mods.herorig?.poseHeroRig, createHeroFx: mods.herofx?.createHeroFx, createFoley: mods.foley?.createFoley, on: heroOn });
+  // a blast at one of its guns: its own dazzle (fx.flashScale: no white-out by day); `hero` when the audio engine says,
+  // else by the place (its guns' rigs, within 12 m)
+  const heroRigs = [...rigs].filter(([k]) => isHero(+k.split(':')[0])).map(([, r]) => r);
+  const nearHero = (pos) => !!pos && heroRigs.some((r) => Math.hypot(r.root.position.x - pos.x, r.root.position.z - pos.z) < 12);
+  const heroDazzle = (hero) => (hero && heroOn.effects ? fx.flashScale?.(true) ?? 1 : 1);
   // sound starts on the first user gesture (browsers refuse earlier), whichever it is; start() also resumes a context
   // the browser made suspended when the battle started it without one
   const wake = () => {
@@ -363,9 +427,9 @@ async function init() {
   addEventListener('keydown', wake);
   // a close blast's pressure wave reached the listener (after the 343 m/s delay): shake and dazzle land with the sound
   if (audio) {
-    audio.onShock = ({ k }) => {
+    audio.onShock = ({ k, pos, hero }) => {
       chase.shake(Math.min(1, k * 1.1));
-      post.dazzle?.(Math.min(1, k * 0.7));
+      post.dazzle?.(Math.min(1, k * 0.7) * (HERO.units.size ? heroDazzle(hero ?? nearHero(pos)) : 1));
     };
   }
   const panelEl = document.getElementById('panel');
@@ -463,8 +527,12 @@ async function init() {
   // The canvas always has the display's own resolution (up to 2x); the scene renders at the quality
   // preset's pixel ratio times the dynamic scale and the post chain's last pass scales it up (post.js
   // UpscaleShader), so a lower resolution reads as slightly soft, never as blocks.
-  const outputPixelRatio = () => Math.min(devicePixelRatio, 2);
-  const scenePixelRatio = () => Math.min(devicePixelRatio, QUALITY[params.quality].pixelRatio) * (params.dynamicRes ? resScale : 1);
+  // The max-quality lesson supersamples at High and Ultra: the canvas and the scene at the preset's ratio even above the
+  // display's (1.5 or 2 on a 1x screen; up to 2), the browser's downscale the filter; dynres still trims the scene to 0.67
+  // of it under load. Every other page as before.
+  const ssaa = () => HERO.units.size > 0 && heroOn.ssaa && QUALITY[params.quality].pixelRatio > 1;
+  const outputPixelRatio = () => (ssaa() ? Math.min(2, Math.max(devicePixelRatio, QUALITY[params.quality].pixelRatio)) : Math.min(devicePixelRatio, 2));
+  const scenePixelRatio = () => Math.min(ssaa() ? outputPixelRatio() : devicePixelRatio, QUALITY[params.quality].pixelRatio) * (params.dynamicRes ? resScale : 1);
   const applyPixelRatio = () => {
     renderer.setPixelRatio(outputPixelRatio());
     renderer.setSize(vw, vh, false);
@@ -484,6 +552,7 @@ async function init() {
     post.dof.material.needsUpdate = true;
     fx.setBudget(q.fx);
     terrain.setQuality(name);
+    if (HERO.units.size && renderLayer?.guns) renderLayer.guns.heroLow = name === 'Low'; // (the max-quality crews: hd for max)
     gui.controllersRecursive().forEach((c) => c.updateDisplay());
   };
   const toneMaps = {
@@ -508,6 +577,8 @@ async function init() {
   fPlay.add(params, 'timeScale', TIME_SCALES).name('Time compression ([ ])').listen().onChange((v) => hud.setTimeScale(v));
   fPlay.add(params, 'fov', 30, 80, 1).name('Field of view');
   fPlay.add(params, 'shake').name('Camera shake').onChange((v) => (chase.shakeOn = v));
+  // (the max-quality battery's ringing ears and covered-ears filter after its shots; the dulling by a close blast stays)
+  if (HERO.units.size) fPlay.add({ on: true }, 'on').name('Hearing effects').onChange((v) => audio?.setHearing?.(v));
   if (WW2) {
     fPlay.add(params, 'gunnerAssist').name('At a gun: crew help (C)').listen().onChange((v) => {
       saveAssist(v);
@@ -557,6 +628,31 @@ async function init() {
   fAtmo.add(params, 'turbidity', 0, 20, 0.1).name('Turbidity').onChange(() => (atmosphere.lastEnvKey = ''));
   fAtmo.add(params, 'rayleigh', 0, 4, 0.01).name('Rayleigh').onChange(() => (atmosphere.lastEnvKey = ''));
   fAtmo.close();
+  // the max-quality battery's A/B (its page only): the whole of it or each part on and off, live (the close-detail build
+  // stays loaded: detail 0 shows the standard meshes; the materials swap back to the look's)
+  if (HERO.units.size) {
+    const heroMaterials = (on) => {
+      for (const r of heroRigs) {
+        if (!r.maxq) continue;
+        if (r.maxq.setEnabled) { r.maxq.setEnabled(on); continue; }
+        r.root.traverse((o) => {
+          if (!o.isMesh || !o.userData.mqStd) return;
+          if (!on) { if (o.material !== o.userData.mqStd) { o.userData.mqOn = o.material; o.material = o.userData.mqStd; } } else if (o.userData.mqOn) o.material = o.userData.mqOn;
+        });
+      }
+      patchSceneFog(scene); // (the look's materials were never in the scene until now)
+    };
+    const PARTS = { detail: 'Close-detail guns', tiers: 'Close crew tiers', materials: 'Gun materials', motion: 'Rig motion', effects: 'Its effects', sound: 'Its sounds', ssaa: 'Supersampling', shadows: 'Tight shadows' };
+    const flip = (k) => { if (k === 'ssaa') applyPixelRatio(); else if (k === 'materials') heroMaterials(heroOn.materials); };
+    const fMax = gui.addFolder('Max-quality battery');
+    const all = { on: true };
+    fMax.add(all, 'on').name('All on').onChange((v) => {
+      for (const k of Object.keys(PARTS)) if (heroOn[k] !== v) { heroOn[k] = v; flip(k); }
+      fMax.controllersRecursive().forEach((c) => c.updateDisplay());
+    });
+    for (const [k, name] of Object.entries(PARTS)) fMax.add(heroOn, k).name(name).onChange(() => flip(k));
+    fMax.close();
+  }
   post.setGrade(params.grade);
 
   const guiHost = document.getElementById('gui-host');
@@ -587,11 +683,38 @@ async function init() {
     // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
     chase.goalYaw += 0.75;
     chase.goalPitch = 0.17;
+    if (isHero(u.id)) heroOverview(u);
     hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}`, WIP_KINDS.has(u.kind) ? WIP_LINE : '');
     renderLayer?.select?.(u.id);
     modeR?.reselect?.(); // a V-weapon site frames its step again
     drumfire.events.select?.(u.id, i);
   };
+  // The max-quality battery's overview: from the side the sun lights (31 to 49 degrees off its bearing, either side) and
+  // far enough back that every gun of it is in the frame with a margin (its spread across the view against the view's
+  // width); of those, the one that stands closest (the guns largest), so its first sight shows both guns modelled by the
+  // light. The chase camera stands at bearing PI - yaw from its focus and looks back along (-sin b, cos b).
+  function heroOverview(u) {
+    try {
+      const ps = (sim?.unitById?.(u.id)?.pieces ?? []).map((p) => p.pos), c = unitRoot[u.id].position;
+      if (ps.length < 2) return;
+      const sb = sun.bearing * DEG, half = Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect) * 0.8; // (a fifth of the width spare)
+      let best = null;
+      for (const off of [-0.85, -0.7, -0.55, 0.55, 0.7, 0.85]) {
+        const bc = sb + off, lx = Math.cos(bc), lz = Math.sin(bc), dx = -Math.sin(bc), dz = Math.cos(bc);
+        let dist = 45;
+        for (const p of ps) {
+          const ox = p.x - c.x, oz = p.z - c.z, lat = Math.abs(ox * lx + oz * lz) + 6, depth = ox * dx + oz * dz;
+          dist = Math.max(dist, lat / Math.tan(half) - depth);
+        }
+        if (!best || dist < best.dist - 0.5) best = { bc, dist };
+      }
+      chase.goalYaw = chase.yaw + wrapPi(Math.PI - best.bc - chase.yaw);
+      chase.goalDist = Math.min(110, best.dist);
+      chase.goalPitch = 0.16;
+    } catch (e) {
+      console.warn('hero overview:', e.message);
+    }
+  }
   // F: ride the selected unit's newest shell in flight to its burst; back to the unit when it ends
   const backToUnit = () => {
     following = false;
@@ -851,6 +974,7 @@ async function init() {
         sim,
         hud,
         defs: WW2 ? mods.ww2tut?.WW2_TUTORIALS ?? [] : WW1 ? mods.ww1tut?.WW1_TUTORIALS ?? [] : undefined,
+        dock: HERO.units.size > 0, // (the max-quality lesson: the card leaves the 3D view in the steps that light it)
         host: {
           // a WW2 lesson on another operation: load the page there (the theatre is fixed per page)
           redirect(def) {
@@ -918,6 +1042,17 @@ async function init() {
             gunFocus.rotation.y = headingFor(p.bearing ?? u.zero);
             gunFocus.updateMatrixWorld();
             chase.setTarget(gunFocus);
+            if (isHero(u.id)) {
+              // the max-quality battery: closer and lower, and from the side the sun lights, 40 degrees off its bearing on
+              // the side nearer the breech, so the gun is modelled by the light and not seen against it (the chase
+              // camera stands at bearing PI - yaw from its focus)
+              const behind = (p.bearing ?? u.zero) + Math.PI, sb = sun.bearing * DEG;
+              const bc = Math.abs(wrapPi(sb - 0.7 - behind)) <= Math.abs(wrapPi(sb + 0.7 - behind)) ? sb - 0.7 : sb + 0.7;
+              chase.goalYaw = chase.yaw + wrapPi(Math.PI - bc - chase.yaw);
+              chase.goalPitch = 0.12;
+              chase.goalDist = 17;
+              return;
+            }
             chase.goalYaw += 0.75;
             chase.goalPitch = 0.17;
             chase.goalDist = Math.min(26, KIND[u.kind].dist);
@@ -1026,13 +1161,20 @@ async function init() {
         rig.root.updateMatrixWorld(true);
         rig.anchors.muzzle.getWorldPosition(_p);
       } else asVec(piece?.pos ?? unit.pos, _p).addScaledVector(_dir, 4);
-      fx.gunBlast?.(_p, _dir, cal, { night });
-      audio?.gun?.(_p, cal);
+      // the max-quality battery's blast and report take their own paths in fx and audio; every other gun's as before
+      const hero = isHero(unit.id) && HERO.kinds.has(piece?.kind ?? unit.kind);
+      const kind = piece?.kind ?? unit.kind, charge = unit.order?.charge ?? null;
+      // (the hero blast's dust and spatter by the ground under the gun: its pad, not the muzzle)
+      const base = rig?.root.position ?? piece?.pos ?? unit.pos;
+      if (hero && heroOn.effects) fx.gunBlast?.(_p, _dir, cal, { night, hero, kind, el: piece?.el ?? 0, charge, ground: terrain.groundAt?.(base.x, base.z) ?? 'mud' });
+      else fx.gunBlast?.(_p, _dir, cal, { night });
+      if (hero && heroOn.sound) audio?.gun?.(_p, cal, { kind, hero, charge, dir: _dir, ground: rig?.root.position.y ?? terrain.heightAt(base.x, base.z) });
+      else audio?.gun?.(_p, cal);
       if (rig && !renderLayer) rig.rec = 1;
       // with sound running the shake and dazzle arrive with the pressure wave (audio.onShock)
       if (!audio?.ctx) {
         chase.shake(blastTrauma(cal, nearD(_p)));
-        post.dazzle?.(blastTrauma(cal, nearD(_p), 0.6) * 0.8);
+        post.dazzle?.(hero ? blastTrauma(cal, nearD(_p), 0.6) * 0.8 * heroDazzle(true) : blastTrauma(cal, nearD(_p), 0.6) * 0.8);
       }
       if (!fx.gunBlast) fx.onFlash?.(_p, 0xffc070, flashOf(cal), 0.25);
     },
@@ -1040,6 +1182,8 @@ async function init() {
       const p = asVec(piece?.pos ?? unit.pos, _p);
       // the German guns' "ready" is the recorded German report (ww2/voices.js), never the synthesized English bark
       if ((WW2 || WW1) && stepName === 'ready') return;
+      // (the max-quality battery's drill is sounded by its own foley, render/foley.js, once that carries it)
+      if (audio?.heroFoley && heroOn.sound && isHero(unit.id)) return;
       audio?.load?.(stepName, p, piece?.kind ?? unit.kind);
     },
     // any burst, own or enemy
@@ -1047,8 +1191,10 @@ async function init() {
       tutorial?.onBurst(shell, pos, info);
       const cal = info.calibre ?? shell?.calibre ?? 6;
       asVec(pos, _q);
+      // (the max-quality battery's own shells burst by their own paths in fx and audio)
+      const hero = HERO.units.size > 0 && isHero(shell?.unitId) && HERO.kinds.has(shell?.kind);
       if (info.fuze === 'shrapnel' && fx.shrapnel) fx.shrapnel(_q, cal);
-      else fx.shellBurst?.(_q, { calibre: cal, fuze: info.fuze, ground: info.ground, crater: info.crater });
+      else fx.shellBurst?.(_q, hero && heroOn.effects ? { calibre: cal, fuze: info.fuze, ground: info.ground, crater: info.crater, hero, kind: shell.kind } : { calibre: cal, fuze: info.fuze, ground: info.ground, crater: info.crater });
       if (info.crater > 0 && info.ground !== 'water') {
         try {
           craters?.add?.(_q.x, _q.z, info.crater, info.crater * 0.4, { scorch: Math.min(1.5, 0.6 + cal / 15), water: info.ground === 'water' });
@@ -1056,14 +1202,15 @@ async function init() {
           console.warn('craters.add failed:', e.message);
         }
       }
-      audio?.burst?.(_q, cal, { fuze: shell?.kind === 'v2' ? 'v2' : info.fuze, ground: info.ground, kind: shell?.kind });
+      audio?.burst?.(_q, cal, hero && heroOn.sound ? { fuze: info.fuze, ground: info.ground, kind: shell.kind, hero } : { fuze: shell?.kind === 'v2' ? 'v2' : info.fuze, ground: info.ground, kind: shell?.kind });
       renderLayer?.onBurst?.(_q, info);
       const d = nearD(_q);
       // re-seat the dressing on the new crater, only where it is built in detail (near the camera)
       if (info.crater > 0 && d < 1400) world?.invalidate?.(_q.x, _q.z, info.crater + 6);
       if (!audio?.ctx) chase.shake(blastTrauma(cal, d, 0.9));
       if (d < 120 * (cal / 9) + 40) {
-        post.shockwave?.(_q, { radius: 40 + cal * 12, speed: 343, strength: Math.min(1, 0.4 + cal / 20) });
+        // (a hero burst sends its own ring from fx: not a second one here)
+        if (!(hero && heroOn.effects)) post.shockwave?.(_q, { radius: 40 + cal * 12, speed: 343, strength: Math.min(1, 0.4 + cal / 20) });
         if (!audio?.ctx) post.dazzle?.(Math.min(1, (1 - d / (120 * (cal / 9) + 40)) * 0.9));
       }
     },
@@ -1145,11 +1292,13 @@ async function init() {
       if (what === 'order') {
         audio?.ui?.('feldfernsprecher');
         if (sim.gunner.st?.post !== 'cmd') hud.hint('A new fire command for the gun: the Geschützführer reads it back (1)', 2600);
-      } else if (what === 'mark') audio?.ui?.('click');
+      } else if (what === 'mark') { if (!(heroOn.sound && renderLayer?.guns?.foley?.mark?.(a))) audio?.ui?.('click'); } // (a hero gun's own detent)
       else if (what === 'nofire') gview?.flash(`Cannot fire: ${a}.`);
     },
   };
-  const drumfire = { events: {}, hooks: {}, onFrame: [] };
+  // (hero: the max-quality battery, main's HERO above, on its page only; null elsewhere)
+  const drumfire = { events: {}, hooks: {}, onFrame: [], hero: HERO.units.size ? HERO : null };
+  if (query.has('maxq')) drumfire.loadTimes = heroTimes; // (a page asked about the switch, ?maxq=0 too: its load's parts, ms)
   window.__drumfire = drumfire;
   if (sim) {
     sim.events = sim.events || {};
@@ -1380,6 +1529,20 @@ async function init() {
   }).observe(view);
 
   // ---------------------------------------------------------------- first frame
+  // the max-quality battery's close crew tiers (started after the render layer, above) and the hero smoke's atlas, awaited
+  // (time-guarded); then the fog patch again for whatever its modules added since the first, before the compile
+  if (HERO.units.size) {
+    await step(0.8, 'Mustering the detachment');
+    const t0 = performance.now();
+    // (and the hero smoke's atlas, built in a worker by fx: the first shot has it; time-guarded)
+    const atlas = fx.heroAtlasReady ? Promise.race([Promise.resolve(fx.heroAtlasReady).catch(() => null), new Promise((r) => setTimeout(r, 15000))]) : null;
+    drumfire.heroLoad = { buildMs: Math.round(heroTimes.build), maxqMs: Math.round(heroTimes.maxq), renderLayerMs: Math.round(heroTimes.render), prebuildMs: Math.round((await heroPrebuild) ?? 0), atlasMs: 0, wallMs: 0 };
+    const ta = performance.now();
+    if (atlas) await atlas;
+    drumfire.heroLoad.atlasMs = Math.round(performance.now() - ta);
+    drumfire.heroLoad.wallMs = Math.round(performance.now() - t0);
+    patchSceneFog(scene);
+  }
   await step(0.85, 'Compiling shaders');
   applyQuality(startQuality);
   weather.set(params.weather, true);
@@ -1424,6 +1587,25 @@ async function init() {
   let ambTimer = 0;
   let frameAvg = 16;
   const bracketPt = new THREE.Vector3();
+  const fxEnv = { sunDir: null, sunColor: null, sunIntensity: 0, ambient: null, night: 0 };
+  // The max-quality lesson's shadows: the sun's frustum drawn in round the battery while the camera is near it, in steps
+  // (the camera within 22 m of a hero gun: 50 m either way; 45 m: 70; 110 m: 120; else the preset's own), with hysteresis
+  // (in at 0.85 of a bound, out at 1.15) so the texel snap holds; at a gun in person 70 (its other gun stands 60 m off).
+  // The normal bias follows the texel (0.7 of it; the atmosphere's own 0.06 back at the preset's extent).
+  const HERO_SHADOW = [[22, 50], [45, 70], [110, 120]];
+  let heroShadowI = HERO_SHADOW.length;
+  const heroShadow = (atGun, off = false) => {
+    let d = Infinity;
+    if (!off) for (const r of heroRigs) if (r.root.visible) d = Math.min(d, camera.position.distanceTo(r.root.position));
+    let i = heroShadowI;
+    while (i > 0 && d < HERO_SHADOW[i - 1][0] * 0.85) i--;
+    while (i < HERO_SHADOW.length && d > HERO_SHADOW[i][0] * 1.15) i++;
+    if (atGun && !off && d < 30) i = 1;
+    heroShadowI = i;
+    const q = QUALITY[params.quality], ext = i < HERO_SHADOW.length ? HERO_SHADOW[i][1] : q.shadowExtent;
+    if (ext !== atmosphere.shadowExtent) atmosphere.setShadowQuality(q.shadowMap, ext); // (applyQuality resets it: put back)
+    atmosphere.sun.shadow.normalBias = ext === q.shadowExtent ? 0.06 : 0.7 * ((2 * ext) / q.shadowMap);
+  };
 
   const frame = (forcedDt, draw = true) => {
     timer.update();
@@ -1534,6 +1716,7 @@ async function init() {
 
     terrain.update(camera);
 
+    if (HERO.units.size) heroShadow(atGun && heroOn.shadows, !heroOn.shadows);
     atmosphere.update(chase.focus, t, camera);
     const light = atmosphere.sun;
     light.intensity = (atmosphere.sunBase ?? light.intensity) * params.sunGain;
@@ -1551,7 +1734,8 @@ async function init() {
       deck: weather.state.deck ?? 0,
     });
     fx.wind.set(-4 * weather.state.wind, 0, 1.6 * weather.state.wind);
-    fx.update(dt, camera, { ...lightEnv, night: atmosphere.night });
+    Object.assign(fxEnv, lightEnv).night = atmosphere.night; // (one object, not a new one a frame)
+    fx.update(dt, camera, fxEnv);
     flares.wind.copy(fx.wind);
     flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * post.pixelRatio));
     weather.update(dt, t, camera, atmosphere);

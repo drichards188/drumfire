@@ -1,6 +1,6 @@
 import { YARD } from './sector.js';
 import { setHighlight } from './ui/highlight.js';
-import { setSpotlight } from './ui/spotlight.js';
+import { setSpotlight, holeRects } from './ui/spotlight.js';
 
 // Tutorials: six lessons, each a list of steps run on the scripted range (main.js host.enter:
 // sim.newGame({ scripted: true }): no director, nothing spawns on its own, our pieces take no damage, the
@@ -750,11 +750,17 @@ export class Tutorials {
    * follow() (F), following(), hint(text), frame(dt, draw).
    */
   // defs: the lessons (the British TUTORIALS by default; the WW2 mode passes its own, src/ww2/tutorial.js)
-  constructor({ sim, hud, host, defs = TUTORIALS }) {
+  // dock: the max-quality lesson's page (main.js HERO): in a spotlit step that lights the 3D view the card leaves the
+  // view for a free corner of the console (dockCard), so the battery is seen whole
+  constructor({ sim, hud, host, defs = TUTORIALS, dock = false }) {
     this.sim = sim;
     this.hud = hud;
     this.host = host;
     this.defs = defs;
+    this.dock = dock;
+    this.spotList = [];
+    this.dockH = 0;
+    if (dock && typeof addEventListener === 'function') addEventListener('resize', () => this.dockCard());
     this.run = null; // the lesson in progress
     this.auto = null;
     this.done = this.load();
@@ -889,6 +895,8 @@ export class Tutorials {
   stopRun() {
     setHighlight([]);
     setSpotlight(null);
+    this.spotList = [];
+    this.dockCard();
     this.gunInput = null;
     this.script?.quiet?.();
     this.script?.clear?.();
@@ -924,15 +932,53 @@ export class Tutorials {
     setHighlight(run.def.spotlight ? [] : step.hi ?? []);
     if (run.def.spotlight) this.spot(step, true);
     this.render();
+    if (run.def.spotlight) this.dockCard();
   }
 
   // the spotlight's holes: the step's `spot` (a list, or (T) => list, read again every frame), else its `hi`
   spot(step, now = false) {
     const list = (typeof step.spot === 'function' ? step.spot(this) : step.spot) ?? step.hi ?? [];
     const key = list.join('|');
-    if (!now && key === this.spotKey) return;
+    if (!now && key === this.spotKey) return false;
     this.spotKey = key;
+    this.spotList = list;
     setSpotlight(list);
+    return true;
+  }
+
+  // The max-quality lesson (`dock`): in a step whose spotlight lights the 3D view the card stands over the console's
+  // first corner (the map's, the fire order's, the guns', the message pad's) that holds none of the step's holes, so the
+  // battery is seen whole; with no corner clear it stays in the view. Decided when a step opens, when its spotlight
+  // changes and when the card grows (a text that quotes the sim), never per frame; the class `tc-docked` and the CSS
+  // variables --tc-x and --tc-y place it (style.css).
+  dockCard() {
+    if (typeof document === 'undefined') return;
+    const body = document.body, card = this.card, panel = document.getElementById('panel');
+    const off = () => { body.classList.remove('tc-docked'); this.dockH = 0; };
+    if (!this.dock || !this.run || !card || !panel || !this.spotList.includes('#view')) { off(); return; }
+    body.classList.add('tc-docked');
+    const P = panel.getBoundingClientRect(), m = 10, top = P.top + 48;
+    const holes = holeRects(this.spotList.filter((n) => n !== '#view'));
+    // each corner in turn, the card at 360, 330 or 300 px (measured at that width: it grows as it narrows), at the corner
+    // or slid up to 160 px from it to clear a hole's edge
+    for (const corner of [0, 1, 2, 3]) for (const cw of [360, 330, 300]) {
+      body.style.setProperty('--tc-w', `${Math.min(cw, Math.round(P.width - 2 * m))}px`);
+      const w = card.offsetWidth, h = card.offsetHeight;
+      const cx = corner % 2 ? P.right - m - w : P.left + m, cy = corner < 2 ? top : P.bottom - m - h;
+      const clear = (x, y) => x >= P.left && y >= P.top && x + w <= P.right && y + h <= P.bottom && !holes.some((r) => x < r.x1 && x + w > r.x0 && y < r.y1 && y + h > r.y0);
+      const xs = [cx, ...holes.flatMap((r) => [r.x1 + 2, r.x0 - 2 - w])], ys = [cy, ...holes.flatMap((r) => [r.y1 + 2, r.y0 - 2 - h])];
+      let best = null;
+      for (const x of xs) for (const y of ys) {
+        const d = Math.abs(x - cx) + Math.abs(y - cy);
+        if (d <= 160 && (!best || d < best[2]) && clear(x, y)) best = [x, y, d];
+      }
+      if (!best) continue;
+      body.style.setProperty('--tc-x', `${Math.round(best[0])}px`);
+      body.style.setProperty('--tc-y', `${Math.round(best[1])}px`);
+      this.dockH = h;
+      return;
+    }
+    off();
   }
 
   next(skip = false) {
@@ -964,7 +1010,7 @@ export class Tutorials {
     this.script?.quiet?.();
     this.script?.clear?.();
     setHighlight([]);
-    if (run.def.spotlight) setSpotlight([]); // (the card alone: the lesson is over)
+    if (run.def.spotlight) { setSpotlight([]); this.spotList = []; this.dockCard(); } // (the card alone: the lesson is over)
     this.gunInput = null;
     this.host.setScale(1);
     this.report = {
@@ -987,7 +1033,7 @@ export class Tutorials {
     this.track();
     def.keep?.(this);
     step.tick?.(this, rawDt);
-    if (def.spotlight && typeof step.spot === 'function') this.spot(step);
+    if (def.spotlight && typeof step.spot === 'function' && this.spot(step)) this.dockCard();
     if (this.auto) this.autoStep(step, rawDt);
     if (this.run !== run || run.finished || run.def.steps[run.i] !== step) return;
     run.raw += rawDt;
@@ -1107,6 +1153,8 @@ export class Tutorials {
     next.hidden = false;
     next.textContent = run.i === n - 1 && !step.done ? 'Finish' : 'Next';
     next.disabled = !!step.done && !run.ok;
+    // (a docked card that has grown or shrunk is placed again: it may now reach a hole, or fit a better corner)
+    if (this.dockH && Math.abs(card.offsetHeight - this.dockH) > 6) this.dockCard();
   }
 
   // an `instant` lesson's tick for the step just done, on the card a moment (the card has already moved on)

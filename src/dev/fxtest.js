@@ -9,16 +9,25 @@
 // ?fx=trail (18 Nebelwerfer rockets, a V-1 and a V-2 in flight at once, for the cost), ?fx=gustav (an
 // 80 cm burst; &cal=23.6 for Karl), ?fx=gustavgun (the 80 cm gun firing). &scale=k runs the flyers
 // k times faster per step (time compression).
+// The max-quality battery (shots/maxq/PLAN.md 3.7): &hero=1 fires the hero shot or burst (fx/hero.js) and runs
+// render/herofx.js on a stand-in view: &kind=mrs18, &charge=0.7 (the muzzle speed over the top charge's), &gground=mud
+// (the ground at the gun), &model=1 (the gun itself, laid at &elev, the muzzle where the blast starts; &crewless),
+// &dz=0 (no dazzle; by default a hero blast dazzles as main does when its pressure wave reaches the camera, scaled by
+// fx.flashScale), &tgt=x,y,z (the point the camera looks at), &campos=x,y,z (the camera exactly there; both with y over
+// the ground at the origin), &drill=1 (the gun's loading cycle after the shot: the
+// breech fumes and the wisps as the barrel comes down, stepped on the sim's numbers).
 import * as THREE from 'three';
 import { globalUniforms, patchSceneFog, MAX_FLARE_LIGHTS } from '../shaderlib.js';
 import { Atmosphere } from '../atmosphere.js';
 import { FX, seedFx } from '../fx.js';
 import { PostFX } from '../post.js';
 import { Flares } from '../flares.js';
+import { createHeroFx } from '../render/herofx.js';
 
 const q = new URLSearchParams(location.search);
 const num = (k, d) => (q.has(k) ? Number(q.get(k)) : d);
 const kind = q.get('fx') || 'burst';
+const hero = q.get('hero') === '1';
 const live = q.has('live');
 const adapt = q.has('adapt'); // render in-between frames while stepping, so the auto exposure adapts as in play
 let night = q.get('night') === '1';
@@ -82,12 +91,68 @@ const flares = new Flares(scene, { ground });
 fx.onFlash = (p, c, i, life, o) => flares.flash(p, c, i, life, o);
 fx.onShock = (p, radius, speed, strength) => post.shockwave(p, { radius, speed, strength });
 fx.onHeat = (p, radius, life) => post.heat(p, { radius, life });
+// the hero battery's effects: its atlas, its waves and shimmers, and the gun's lingering smoke on a stand-in view
+const heroFx = hero ? createHeroFx(fx, post, { lean: false }) : null;
+if (heroFx) await fx.heroAtlasReady; // (the sandbox always takes the full atlas, even headless)
+if (heroFx && q.get('heat') === '0') fx.heroHeat = null; // (&heat=0: no hero shimmer, to see it by difference)
 const U = globalUniforms;
 const updateFlashes = (dt) => flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / H);
 const flashes = flares.flashes;
 
-// ------------------------------------------------------------ scene setup per effect
+// ------------------------------------------------------------ the hero gun (&model=1)
 const D2R = Math.PI / 180;
+let rig = null, view = null;
+if (hero && q.get('model') === '1' && kind === 'gun') {
+  const { buildGun } = await import('../models/guns.js');
+  rig = buildGun(q.get('kind') || 'mrs18');
+  rig.root.rotation.y = -Math.PI / 2; // the muzzle (-Z) toward +X, as the sandbox fires
+  rig.root.position.set(0, ground(0, 0), 0);
+  scene.add(rig.root);
+  rig.setTraverse?.(0);
+  rig.setElevation?.(num('elev', 40) * D2R);
+  rig.root.updateMatrixWorld(true);
+  rig.root.traverse((o) => { if (o.isMesh) { o.castShadow = false; } });
+}
+// the stand-in for render/guns.js's view of a hero gun: the piece's shot time and loading step (&drill=1 runs the
+// Mrs 18's cycle after the shot on the sim's step lengths), so herofx.update sees what it sees in the game
+const DRILL = [['depress', 5], ['open', 2], ['shell', 8], ['ram', 3], ['cartridge', 4], ['close', 2], ['prime', 1.5], ['lay', 6]];
+// a stand-in crew: the cycle clock (tl, as render/crews.js has it) and the spent case (caseProp, caseT: thrown back out
+// of the chamber at the cue caseOut, onto the deck behind the breech, as the drill throws it)
+const cycleAt = (step, k) => { let t = 0; for (const [s, d] of DRILL) { if (s === step) return t + k * d; t += d; } return NaN; };
+if (hero) view = { rig, piece: { kind: q.get('kind') || 'mrs18', firedAt: -1e9, state: 'ready', job: null }, crew: q.has('drill') ? { tl: { now: -Infinity, at: cycleAt, end: cycleAt('lay', 1) }, caseProp: new THREE.Object3D(), caseT: Infinity } : null };
+const _c0 = new THREE.Vector3();
+let caseFrom = null;
+function drill(T) {
+  const p = view.piece;
+  if (!q.has('drill') || p.firedAt < -900) return;
+  let t = T - p.firedAt - 4.2; // the recoil state first
+  p.job = null;
+  view.crew.tl.now = t;
+  const tc = cycleAt('open', 0.66), cp = view.crew.caseProp;
+  view.crew.caseT = t >= tc ? t - tc : Infinity;
+  if (rig && t >= tc) {
+    if (!caseFrom) { rig.anchors.breech.getWorldPosition(_c0); caseFrom = _c0.clone(); }
+    // backward (-X: the gun fires toward +X) at 2.4 m/s and up at 0.6, falling onto the deck (1.1 m) and lying there
+    const a = view.crew.caseT, gy0 = ground(0, 0) + 1.1;
+    cp.position.set(caseFrom.x - 2.4 * Math.min(a, 0.55), Math.max(gy0, caseFrom.y + 0.6 * a - 4.9 * a * a), caseFrom.z);
+    cp.updateMatrixWorld(true);
+  } else caseFrom = null;
+  if (t < 0) return;
+  for (let i = 0; i < DRILL.length; i++) {
+    const [step, dur] = DRILL[i];
+    if (t < dur) { p.job = { step, t, dur, i, n: DRILL.length }; break; }
+    t -= dur;
+  }
+  if (rig) {
+    // the barrel down to 0 for loading and back for the laying (as render/guns.js poses it)
+    const el = num('elev', 40) * D2R, j = p.job;
+    const k = !j ? 0 : j.step === 'depress' ? j.t / j.dur : j.step === 'lay' ? 1 - j.t / j.dur : 1;
+    rig.setElevation?.(el * (1 - k));
+    rig.root.updateMatrixWorld(true);
+  }
+}
+
+// ------------------------------------------------------------ scene setup per effect
 const cal = num('cal', 15);
 const tCap = num('t', 1.5);
 const GUN = new THREE.Vector3(0, 0, 0);
@@ -97,6 +162,7 @@ function setup() {
   const sc = Math.min(1.1, cal / 15);
   if (kind === 'gun') {
     GUN.set(0, ground(0, 0) + 3.2, 0);
+    if (rig) rig.anchors.muzzle.getWorldPosition(GUN);
     target.set(10 * sc, GUN.y + 2, 0);
     camSpec = [num('az', 190), 8, 40 + 100 * sc];
   } else if (kind === 'burst') {
@@ -139,9 +205,11 @@ function setup() {
   }
   const c = q.get('cam');
   if (c) camSpec = c.split(',').map(Number);
+  if (q.has('tgt')) { const [x, y, z] = q.get('tgt').split(',').map(Number); target.set(x, ground(0, 0) + y, z); } // (y over the ground at the origin)
   const [az, el, d] = camSpec;
   camera.position.set(target.x + Math.sin(az * D2R) * Math.cos(el * D2R) * d, target.y + Math.sin(el * D2R) * d, target.z - Math.cos(az * D2R) * Math.cos(el * D2R) * d);
   camera.position.y = Math.max(camera.position.y, ground(camera.position.x, camera.position.z) + 2);
+  if (q.has('campos')) { const [x, y, z] = q.get('campos').split(',').map(Number); camera.position.set(x, ground(0, 0) + y, z); } // (&campos=x,y,z: exactly there, y over the ground at the origin)
   camera.lookAt(target);
   camera.updateMatrixWorld();
 }
@@ -278,9 +346,18 @@ function trigger() {
   if (kind === 'gun') {
     const el = num('elev', 40) * D2R;
     const dir = new THREE.Vector3(Math.cos(el), Math.sin(el), 0);
-    fx.gunBlast(GUN, dir, cal, { night });
+    if (rig) { rig.setElevation?.(el); rig.root.updateMatrixWorld(true); rig.anchors.muzzle.getWorldPosition(GUN); }
+    if (hero) {
+      fx.gunBlast(GUN, dir, cal, { night: night ? 1 : 0, hero, kind: view.piece.kind, el, charge: num('charge', 1), ground: q.get('gground') || 'mud' });
+      view.piece.firedAt = 0;
+      heroFx.fired(view, 0);
+      // main's dazzle when the pressure wave reaches the camera (audio.onShock: k = 1 - d / 80 for this class)
+      const d = camera.position.distanceTo(GUN);
+      dzAt = q.get('dz') === '0' ? Infinity : d / 343;
+      dzK = Math.max(0, 1 - d / 80) * 0.7 * fx.flashScale(true);
+    } else fx.gunBlast(GUN, dir, cal, { night });
   } else if (kind === 'burst') {
-    fx.shellBurst(new THREE.Vector3(0, ground(0, 0), 0), { calibre: cal, fuze: q.get('fuze') || 'impact', ground: q.get('ground') || 'mud', crater: true });
+    fx.shellBurst(new THREE.Vector3(0, ground(0, 0), 0), { calibre: cal, fuze: q.get('fuze') || 'impact', ground: q.get('ground') || 'mud', crater: true, ...(hero ? { hero, kind: q.get('kind') || 'mrs18' } : {}) });
   } else if (kind === 'shrapnel') {
     fx.shrapnel(new THREE.Vector3(0, ground(0, 0) + 30, 0), cal || 4.5, new THREE.Vector3(0.5, -1, 0.1));
   } else if (kind === 'cookoff') {
@@ -300,7 +377,7 @@ function trigger() {
 }
 
 const env = { sunDir: atmosphere.lightDir, sunColor: new THREE.Color(), sunIntensity: 6.5, ambient: new THREE.Color() };
-let T = 0, scriptI = 0, clock = 0;
+let T = 0, scriptI = 0, clock = 0, dzAt = Infinity, dzK = 0;
 const upd = { n: 0, sum: 0, max: 0, peak: 0 }; // cost of fx.update while stepping
 function frameEnv() {
   const light = atmosphere.sun;
@@ -329,13 +406,17 @@ function postSettings() {
   post.lens.uniforms.uCA.value = 0.003;
 }
 
+const fxEnv = { sunDir: null, sunColor: null, sunIntensity: 6.5, ambient: null, night: 0 }; // (one object, not one a frame)
 function step(dt) {
   while (scriptI < script.length && script[scriptI].t <= T) script[scriptI++].f();
   stepFlyers(dt);
   T += dt;
   clock += dt;
+  if (T >= dzAt) { post.dazzle(dzK); dzAt = Infinity; }
+  if (view) { drill(T); heroFx.update(view, dt, T); }
+  fxEnv.sunDir = env.sunDir; fxEnv.sunColor = env.sunColor; fxEnv.sunIntensity = env.sunIntensity; fxEnv.ambient = env.ambient; fxEnv.night = atmosphere.night;
   const u0 = performance.now();
-  fx.update(dt, camera, { ...env, night: atmosphere.night });
+  fx.update(dt, camera, fxEnv);
   upd.n++; upd.sum += performance.now() - u0; upd.max = Math.max(upd.max, performance.now() - u0); upd.peak = Math.max(upd.peak, fx.smoke.n);
   updateFlashes(dt);
   post.update(clock, dt, atmosphere.sunDir, env.sunColor, sunEl());

@@ -853,6 +853,39 @@ hole reaches the control; keys work everywhere. The card and the hints stand abo
 no visible element darkens nothing; `[]` darkens all but the card (the welcome and the finished card). A spotlit lesson
 draws no `.tut-hi` pulse: the holes have their own rim. At a gun the card moves to the view's upper right.
 
+**Max-quality battery** (2026-11-07, branch `tutorial-max-quality`; the plan in `shots/maxq/PLAN.md`). The basic
+training's lent battery (unit 11, two 21 cm Mörser 18) is drawn, moved, sounded and lit at the game's best; everything
+for it is behind one switch and applies to that battery only, so every other page, battle, tool and the hangar is as
+before.
+- **The switch.** The lesson field `maxq: true` (`src/ww1/tutorial.js` `training`) and `?maxq=0|1|2` (0 off, 1 on, the
+  lesson's default, 2 full: no lean shortcuts and the closest crew tier at any distance, for review captures and A/B).
+  On the test range `?range=1&mode=ww1&kind=mrs18&maxq=1` makes the range's battery the hero; no other page has one.
+  main builds `HERO = { level, lean, units: Set<unitId>, kinds: Set<kind> }` once (frozen; `window.__drumfire.hero`, null
+  elsewhere); `lean` is level 1 under `navigator.webdriver` (cheaper bakes, the same features); `kinds` holds only kinds
+  with a close-detail build (`MAXQ_KINDS`: `mrs18`). A hero page without `?quality` starts at High (not headless).
+- **Main.** Hero rigs come from `buildGun(kind, { hd, lean })`; `applyMaxq(rig, { kind, scheme, renderer, level, lean,
+  seed, quality })` (`src/models/maxq.js`, an optional import) runs after `applyLook`, before the fog patch, the compile
+  and the warm-up, its handle kept as `rig.maxq`. `createRender({ ..., hero })`; `renderLayer.guns.setHero({ audio, post,
+  poseHeroRig, createHeroFx, createFoley })` once audio and post exist (`src/render/herorig.js`, `herofx.js`,
+  `foley.js`, optional imports on a hero page only). `new AudioEngine({ ..., hero: { kinds } })`. The fire handler passes
+  `{ night, hero, kind, el, charge }` to `fx.gunBlast` and `{ kind, hero, charge, dir }` to `audio.gun` for a hero gun
+  only; the burst handler `{ ..., hero, kind }` to `fx.shellBurst`, `audio.burst` and `post.shockwave` for a hero shell
+  only; `fx.onShock`'s fifth argument (`true` or `{ hero }`) puts `hero` on the ring; a hero blast's dazzle is scaled by
+  `fx.flashScale?.(true)` (`hero` from `audio.onShock`'s payload, else a blast within 12 m of a hero rig); `audio.load`
+  is not called for a hero unit once `audio.heroFoley` is set. Before 'Compiling shaders' a step 'Mustering the
+  detachment' awaits `renderLayer.guns.prebuildHero()` (`CrewHD.prebuild`, time-guarded) and patches the fog again.
+- **Render layer** (`src/render/guns.js`). Hero views are `v.hero`, rigs `rig.hero`; the crews `new GunCrew(rig, kind,
+  { hero: true })`, never thinned (level 2 always). Each frame per hero view: `poseHeroRig(rig, p, tf, dt)` after the
+  laying (tf Infinity before a first shot; when it returns true the plain recoil and the root's kick stand aside), the
+  crew tiers man by man through `CrewHD.wantFig` (max within 9 m of the camera, out at 11; hd within 45 m, out at 55;
+  every man max at its gun in first person or at level 2; hd for max at Low quality), `rig.setDetail` by distance (2 at
+  the gun in person or within 15 m, out at 17; 1 within 40 m, out at 45; 0 beyond; level 2 keeps 2),
+  `rig.maxq.update(dt, p, now)`, `herofx.update(v, dt, now)` and `foley.update(v, dt, now, camera)` after the drill has
+  posed the men; `herofx.fired(v, firedAt)` from `GunViews.fired`. A hook that throws is switched off with one warning.
+- **Review.** `/?mode=ww1&tutorial=training&maxq=0|1|2`, `/?range=1&mode=ww1&kind=mrs18&maxq=1`, and the model viewer's
+  `/models.html?kind=mrs18&hd=1&detail=0|1|2&maxq=1|2&paint=dgelb|upgreen&tier=std|hd|max&crew=1` (a German gun's crew
+  in the gun's own dress, as in the game).
+
 ## Dicke Bertha mode (demo)
 
 A first-person demo on the German side, meant to become a mode of the main game if it works: `bertha.html`
@@ -2491,3 +2524,4 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (menu: the Research screen fits one screenful, 2026-11-06) At the user's request the screen is laid out for the common desktop sizes: no page heading (the top bar's tab names it), a strip with the research under way and one line of help, the tree in its own scrolling pane (line names sticky) taking most of the width, and the battery shown in a full-height side pane (`clamp(340px, 25vw, 450px)`) that scrolls on its own. `#menu.on-research` widens the column to 1,760 px and makes the menu a flex column so the screen takes whatever the top bar leaves (one row or two); the tree's rows follow the viewport height (`--rs-row`). At 1920x1080 the whole tree shows without scrolling; under 1000 px wide or 560 px high the screen flows down the page as before.
 - (menu: Try it for the off-map weapons, 2026-11-06) The Paris Gun, V-1 and V-2 have no place on the test range (one gun in its pit); on Research and in the hangar their button reads "Try it · guided run" and opens their special mission's guided first run (`menu.js` `TRY_GUIDE`, the lesson from `menuItems.js` `GUIDE`). The Gotha strike keeps a disabled range button: it can only be called in an open battle.
 - (ui: the message slips, 2026-11-06) At the user's request each slip in MESSAGES AND SIGNALS reads in the Smart Brevity order: a title row (the round, battery and gun of a report; an order's task name, `head` and `body` from `messages.js`; else the text before its first ': ' or '! ', `messagePad.js` `splitTitle`) with the time, the one line that matters at the card's full width (the pencilled correction with APPLY, ON TARGET, or the message), the observer's own words small under it (the English in brackets dropped when the note already says it), and the source and task in one line at the foot (all of it on hover). The tutorial tags `report` and `apply` are kept. The kind is the class `s-<kind>` (a bare `kill` took style.css's kill-feed rule: the slip laid out as a row, its message one letter wide, and faded out after 4 s).
+- (main, render: the max-quality battery, 2026-11-07) The basic training's lent Mörser 18 battery behind one switch (Tutorial, "Max-quality battery"): the lesson field `maxq`, `?maxq=0|1|2`, main's `HERO` (`window.__drumfire.hero`); `buildGun(kind, opts)` with `{ hd, lean }` for hero rigs only; `createRender({ hero })`, `GunViews(..., { hero })`, `GunViews.setHero`, `prebuildHero`; `GunCrew(rig, kind, { hero })`; `CrewHD(scene, { tiers })`, `wantFig`, `prebuild`; `AudioEngine({ hero })`; the `hero` options of `fx.gunBlast`, `fx.shellBurst`, `audio.gun`, `audio.burst` and `post.shockwave`; `fx.flashScale`; `applyMaxq`. Without the switch every call is the one before. `tools/shot.mjs --until-timeout ms`; `tools/trainingtest.mjs` waits for the lesson inside its page (a slow load no longer fails a case).

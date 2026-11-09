@@ -638,8 +638,8 @@ export function runwayTexture() {
 
 // Hooks a patch into a material's onBeforeCompile and program cache key without disturbing the
 // ones the framework sets later (shaderlib's patchMaterial assigns both after the model is built):
-// the assignments are captured and run first, then the patch.
-function chainPatch(mat, key, patch) {
+// the assignments are captured and run first, then the patch. Exported for models/maxq.js (the max-quality materials).
+export function chainPatch(mat, key, patch) {
   let outer = null, outerKey = null;
   Object.defineProperty(mat, 'onBeforeCompile', {
     configurable: true,

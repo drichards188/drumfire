@@ -40,16 +40,27 @@ function mount() {
 // a data-tut name lights every element with it; a CSS selector ('#view', '[data-tut~="report"]') its first match only
 const find = (name) => (/^[#.[]/.test(name) ? [document.querySelector(name)] : [...document.querySelectorAll(`[data-tut~="${name}"]`)]);
 
-// the rectangles to cut, padded and clipped to the screen; one inside another is dropped
-function targets() {
+// the rectangles a list of names lights, padded and clipped to the screen
+function rectsOf(names) {
   const W = innerWidth, H = innerHeight, out = [];
-  for (const name of list) for (const e of find(name)) {
+  for (const name of names) for (const e of find(name)) {
     if (!e) continue;
     const r = e.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;
     const x0 = Math.max(0, r.left - PAD), y0 = Math.max(0, r.top - PAD), x1 = Math.min(W, r.right + PAD), y1 = Math.min(H, r.bottom + PAD);
     if (x1 - x0 > 2 && y1 - y0 > 2) out.push({ x0, y0, x1, y1 });
   }
+  return out;
+}
+
+// the holes a list would cut, as screen rectangles { x0, y0, x1, y1 } (src/tutorial.js keeps a docked card off them)
+export function holeRects(names) {
+  return typeof document === 'undefined' || !names?.length ? [] : rectsOf(names);
+}
+
+// the rectangles to cut, padded and clipped to the screen; one inside another is dropped
+function targets() {
+  const out = rectsOf(list);
   const inside = (a, b) => a.x0 >= b.x0 && a.y0 >= b.y0 && a.x1 <= b.x1 && a.y1 <= b.y1;
   return out.filter((a, i) => !out.some((b, j) => j !== i && inside(a, b) && (!inside(b, a) || j < i)))
     .sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);

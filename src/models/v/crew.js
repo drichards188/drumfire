@@ -163,7 +163,8 @@ const geoCache = new Map();
 // The skeleton's numbers and the palette for other geometry tiers (crew_hd.js, the close first-person figures),
 // which bind to these very bones: read only, so every pose and drill works on any tier unchanged.
 export const CREW_FRAME = Object.freeze({ BI, L_TH, L_SH, L_UA, L_FA, SH_X, SH_Y, SH_Z, HIP_X, HIP_Y, ANKLE_Y, TILE, COL });
-// tiers by name: { geometry(o) -> BufferGeometry | null (null: the tier has nothing for this outfit), material() }
+// tiers by name: { geometry(o, fig) -> BufferGeometry | null (null: the tier has nothing for this outfit), material(fig) };
+// fig (the figure the geometry is for, or null) lets a tier vary its men (crew_hd.js 'max': each man his own face)
 const TIERS = {};
 export function registerCrewTier(name, tier) { TIERS[name] = tier; }
 export const crewTier = (name) => TIERS[name] ?? null;
@@ -206,6 +207,9 @@ function emrTexture() {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.NoColorSpace; // linear multipliers on the vertex colour
   t.anisotropy = 4;
+  // rows as written: WHITE_UV must read the flat patch at the canvas's top left (flipped, it read the pattern's bottom
+  // rows and tinted every flat-coloured figure red-brown, about 0.70, 0.51, 0.50)
+  t.flipY = false;
   return t;
 }
 
@@ -499,7 +503,8 @@ function buildGeometry(o) {
   for (const s of SIDE) {
     const S = SFX[SIDE.indexOf(s)], x = s * SH_X;
     B.add(lathe([[-0.345, 0], [-0.332, 0.04], [-0.3, 0.052], [-0.22, 0.056], [-0.12, 0.06], [-0.04, 0.063], [0.0, 0.061], [0.03, 0.044], [0.048, 0]], AS, x, SH_Y, SH_Z, 1, 1.06), 'upperArm' + S, top, tc);
-    if (o.shirt == null) B.add(box(0.012, 0.11, 0.085, x + s * 0.059, SH_Y - 0.14, SH_Z, 0, 0, s * 0.04), 'upperArm' + S, cloth, true); // sleeve pocket
+    // the sleeve pocket of the modern field uniforms only (no 1917 tunic or M40 blouse has one)
+    if (o.shirt == null && (o.pattern === 'emr' || o.pattern === 'mm14' || o.pattern === 'olive')) B.add(box(0.012, 0.11, 0.085, x + s * 0.059, SH_Y - 0.14, SH_Z, 0, 0, s * 0.04), 'upperArm' + S, cloth, true); // sleeve pocket
     if (o.armband) B.add(lathe([[-0.05, 0.062], [0.05, 0.062]], 9, x, SH_Y - 0.12, SH_Z, 1, 1.06), 'upperArm' + S, o.armband);
     const ey = SH_Y - L_UA;
     B.add(lathe([[-0.275, 0], [-0.268, 0.044], [-0.25, 0.048], [-0.2, 0.047], [-0.12, 0.05], [-0.04, 0.054], [0.0, 0.054], [0.032, 0.04], [0.048, 0]], AS, x, ey, SH_Z, 1, 1.06), 'forearm' + S,
@@ -851,7 +856,7 @@ export function buildCrewman(opts = {}) {
   const fig = {
     root, mesh, bones, anchors: { handL, handR, carry }, grip: opts.grip ?? 0.2, outfit: o,
     groundSlope: { x: 0, z: 0 },
-    pose: (name, t = 0, blend = 1) => solvePose(fig, name, t, blend),
+    pose: (name, t = 0, blend = 1, mods = null) => solvePose(fig, name, t, blend, mods),
     reach: (side, point, blend = 1, fingers = null, palm = null, pole = null) => reach(fig, side, point, blend, fingers, palm, pole),
     dispose: () => mesh.skeleton.dispose(),
     tier: tg ? opts.tier : null,
@@ -866,13 +871,32 @@ export function buildCrewman(opts = {}) {
 function setTier(fig, name) {
   if ((fig.tier ?? null) === (name ?? null)) return true;
   const T = name ? TIERS[name] : null;
-  const g = T ? T.geometry(fig.outfit) : crewGeometry(fig.outfit);
+  const g = T ? T.geometry(fig.outfit, fig) : crewGeometry(fig.outfit);
   if (!g) return false;
   fig.mesh.geometry = g;
-  fig.mesh.material = T ? T.material() : crewMaterial();
+  fig.mesh.material = T ? T.material(fig) : crewMaterial();
   fig.tier = T ? name : null;
+  // a tier that asks for it (crew_hd.js 'max') casts its shadow with the standard geometry: its detail is lost in a 9
+  // to 15 cm shadow texel, its 130k triangles a man in the shadow pass are not (an invisible twin on the same bones)
+  if (T?.shadowProxy) {
+    if (!fig.shadow) {
+      const p = fig.shadow = new THREE.SkinnedMesh(crewGeometry(fig.outfit), shadowMaterial());
+      p.name = 'crewman-shadow';
+      p.bind(fig.mesh.skeleton, fig.mesh.bindMatrix);
+      p.boundingSphere = fig.mesh.boundingSphere;
+      p.castShadow = true; p.receiveShadow = false;
+      fig.root.add(p);
+    }
+    fig.shadow.visible = true;
+    fig.mesh.castShadow = false;
+  } else if (fig.shadow) {
+    fig.shadow.visible = false;
+    fig.mesh.castShadow = true;
+  }
   return true;
 }
+let shadowMat = null;
+const shadowMaterial = () => (shadowMat ??= Object.assign(new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }), { name: 'crew-shadow' }));
 
 // the varied outfits buildCrew cycles through (a loading crew is mostly caps and hi-vis vests)
 export const CREW_OUTFITS = [
@@ -886,7 +910,9 @@ export function buildCrew(n, opts = {}) {
 // ---------------------------------------------------------------- poses
 
 export const CREW_POSES = ['stand', 'walk', 'carry', 'carryWalk', 'carryShoulder', 'crouch', 'reachUp', 'push', 'climb', 'signal', 'operate', 'sidestep', 'stoopWalk',
-  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead', 'run'].filter((p, i, a) => a.indexOf(p) === i);
+  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead', 'run',
+  // the max-quality battery's drill (render/crews_hero.js; HERO_POSES below)
+  'pull', 'feuer', 'crank', 'layCrank', 'pivot'].filter((p, i, a) => a.indexOf(p) === i);
 export const CREW_GAITS = {
   walk: { stride: 1.25, period: 0.98 }, // metres the root moves per cycle, seconds per cycle at a natural pace
   carryWalk: { stride: 0.9, period: 1.1 },
@@ -1295,6 +1321,106 @@ const POSES = {
   },
 };
 
+// ---- the max-quality battery's drill (render/crews_hero.js, shots/maxq/PLAN.md track M): poses of their own, so the
+// existing ones keep their meaning for every other gun (the Bertha demo's lanyard, the 53 users of operate)
+const HERO_POSES = {
+  // pull: the firer on the lanyard, facing the firing lever: t 0 the cord held slack at the belt, 0.5 taken up taut
+  // (the arm out along it, the weight going onto the rear foot), 1 drawn (the hand back by the hip, the shoulders
+  // turned into it, sitting back). The caller puts the right hand on the cord's line with fig.reach; the pose's own
+  // target is that line straight ahead at chest height.
+  pull(S, t) {
+    const taut = sstep(0, 0.5, t), draw = sstep(0.5, 1, t);
+    S.hips.set(0.02, 0.955 - 0.03 * taut - 0.015 * draw, 0.03 + 0.05 * taut + 0.09 * draw);
+    S.hipsRot.set(0.02 + 0.05 * taut + 0.06 * draw, -0.12 - 0.1 * draw, 0);
+    S.spine.set(0.01 + 0.03 * taut, -0.06 * draw, 0); S.chest.set(0.02, -0.1 * draw, -0.02);
+    S.neck.set(0.06, 0.08 + 0.06 * draw, 0); S.head.set(0.02, 0.05, 0);
+    S.feet[0].ankle.set(-0.15, ANKLE_Y, -0.2); S.feet[0].rot.set(0, 0.12, 0); S.feet[0].pole.set(-0.2, 0, -1);
+    S.feet[1].ankle.set(0.17, ANKLE_Y, 0.26); S.feet[1].rot.set(0, -0.35, 0); S.feet[1].pole.set(0.3, 0, -1);
+    setIK(S.arms[1], lerp(0.2, 0.24, draw), lerp(lerp(1.0, 1.22, taut), 0.98, draw), lerp(lerp(-0.25, -0.5, taut), 0.12, draw), 0, -0.3, -1, -1, 0, 0, 0.7, -0.6, 0.25);
+    const a = S.arms[0];
+    a.ua.set(0.15 + 0.2 * taut, 0, -0.18 - 0.1 * draw); a.fa = 0.35; a.hand.set(0.05, 0, -0.08);
+  },
+  // feuer: the gun commander's signal: t 1 the right arm straight up ("Fertig!"), 0 down at his side, so the cut from 1
+  // to 0 is "Feuer!"; t below 0 the follow-through (to -0.4: the arm swung on past the hip, the body after it)
+  feuer(S, t) {
+    const up = clamp(t, 0, 1), fol = clamp(-t / 0.4, 0, 1);
+    POSES.stand(S, 0);
+    S.spine.x = -0.02 - 0.05 * fol; S.chest.x = 0.02 - 0.03 * fol; S.head.x = -0.05 - 0.08 * up;
+    S.shrug[1] = 0.02 * up;
+    const a = S.arms[1];
+    a.ua.set(lerp(0.04, 2.95, up) + 0.55 * fol, 0, 0.11 + 0.1 * up - 0.06 * fol); a.fa = lerp(0.22, 0.12, up) - 0.1 * fol; a.hand.set(0.05, 0, 0.06);
+  },
+  // crank: square to a handwheel in front of him at chest height, knees soft, turning it with the right hand; t is the
+  // wheel's angle in turns, so the torso and the shoulders roll with the handle. The caller puts the right hand on the
+  // handle's knob (fig.reach) and may lay the left on the rim; the pose's own targets are a wheel 0.42 m ahead.
+  crank(S, t) {
+    const a = TAU * t, c = Math.cos(a), sn = Math.sin(a);
+    S.hips.set(0.0, 0.935, 0.03);
+    S.hipsRot.set(-0.05, 0.03 * sn, 0);
+    S.spine.set(-0.07, 0.04 * sn, 0.015 * c); S.chest.set(-0.03, 0.045 * sn, 0.01 * c); S.neck.set(0.16, -0.03 * sn, 0); S.head.set(0.14, 0, 0);
+    S.shrug[1] = 0.012 * (1 + c);
+    S.feet[0].ankle.set(-0.15, ANKLE_Y, -0.06); S.feet[0].rot.set(0, 0.1, 0); S.feet[1].ankle.set(0.16, ANKLE_Y, 0.07); S.feet[1].rot.set(0, -0.15, 0);
+    setIK(S.arms[1], 0.1 + 0.12 * c, 1.12 + 0.12 * sn, -0.42, 0, -0.3, -1, -1, 0, 0, 0.7, -0.6, 0.3);
+    setIK(S.arms[0], -0.22, 1.06, -0.38, 0.1, -0.45, -1, 0, -1, 0.45, -0.7, -0.6, 0.5);
+  },
+  // layCrank: the layer with his eye held still at the panoramic sight (the lay pose), cranking the elevating wheel with
+  // his right hand (the caller puts it on the knob); t is the wheel's angle in turns, which only his shoulders follow
+  layCrank(S, t) {
+    POSES.lay(S, 0);
+    const a = TAU * t;
+    S.chest.y += 0.02 * Math.sin(a); S.chest.z += 0.01 * Math.cos(a); S.shrug[1] = 0.01 * (1 + Math.cos(a));
+  },
+  // pivot: stepping round on the spot. t = the turn so far / PIVOT_STEP (signed: left turns count up): every step the
+  // stance foot keeps its place in the world while the root turns over it (counter-rotated in the root frame), the other
+  // foot lifts and comes round to its place beside it at the new heading. A pure function of the turn, so it plays the
+  // same backward (a right turn).
+  pivot(S, t) {
+    POSES.stand(S, 0);
+    const n = Math.floor(t), u = t - n, H = PIVOT_STEP;
+    for (let i = 0; i < 2; i++) {
+      const f = S.feet[i], hx = i ? 0.12 : -0.12, hz = i ? -0.01 : 0.01, hy = i ? -0.06 : 0.06;
+      // left: planted at the cycle's start, swings in its second half; right: swings in the first half, planted after
+      const stance = i ? u >= 0.5 : u < 0.5, plantAt = i ? 0.5 : 0;
+      let ang, lift = 0;
+      if (stance) ang = -(u - plantAt) * H;
+      else {
+        const v = i ? u / 0.5 : (u - 0.5) / 0.5, from = -0.5 * H; // (from its last plant, half a step back, to its place)
+        ang = from * (1 - sstep(0, 1, v)); lift = 0.055 * Math.sin(Math.PI * v);
+      }
+      const c = Math.cos(ang), sn = Math.sin(ang);
+      f.ankle.set(hx * c + hz * sn, ANKLE_Y + lift, -hx * sn + hz * c);
+      f.rot.set(lift * 2, hy + ang, 0);
+      f.pole.set(i ? 0.15 : -0.15, 0, -1).applyAxisAngle(_yAx, ang);
+    }
+    const w = Math.sin(TAU * t);
+    S.hips.x = -0.025 * w; S.hips.y = 0.962 - 0.008 * Math.abs(Math.cos(TAU * t)); S.hipsRot.z = -0.02 * w;
+  },
+};
+Object.assign(POSES, HERO_POSES);
+const _yAx = new V3(0, 1, 0);
+export const PIVOT_STEP = 0.6; // radians the root turns per pivot cycle (one step of each foot)
+
+// The life layer (the max-quality battery's crews, render/crews_hero.js): small offsets laid over any pose before the
+// IK, so planted feet and gripped hands stay where the pose put them. mods = { breath (rad of chest pitch, signed: the
+// caller owns the phase), shift (-1..1: the weight onto the left or the right leg), flinch (0..1: the duck at a
+// blast), lookYaw, lookPitch (rad: the head turned, 40 % at the neck and 60 % at the head, clamped to 1 and 0.5),
+// lean (rad: the torso forward) }.
+function applyMods(S, m) {
+  const f = m.flinch || 0, b = m.breath || 0, sh = m.shift || 0, ln = m.lean || 0, py = m.plantYaw || 0;
+  if (py) {
+    // the root was turned by plantYaw over feet that stay where they stood: they counter-turn about it (the body twists
+    // at the hips and the knees, a quarter turn at most, so the planted soles do not slide)
+    const c = Math.cos(-py), sn = Math.sin(-py);
+    for (const ft of S.feet) { const x = ft.ankle.x, z = ft.ankle.z; ft.ankle.x = x * c + z * sn; ft.ankle.z = -x * sn + z * c; ft.rot.y -= py; ft.pole.applyAxisAngle(_yAx, -py); }
+  }
+  if (b) { S.chest.x += b; S.shrug[0] += b * 0.25; S.shrug[1] += b * 0.25; }
+  if (sh) { S.hips.x += sh * 0.03; S.hipsRot.z += sh * 0.035; S.spine.z -= sh * 0.02; }
+  if (ln) { S.spine.x -= ln * 0.6; S.chest.x -= ln * 0.4; S.neck.x += ln * 0.5; }
+  if (f) { S.spine.x -= 0.12 * f; S.hips.y -= 0.035 * f; S.head.x += 0.15 * f; S.shrug[0] += 0.04 * f; S.shrug[1] += 0.04 * f; }
+  const ly = clamp(m.lookYaw || 0, -1, 1), lp = clamp(m.lookPitch || 0, -0.5, 0.5);
+  if (ly || lp) { S.neck.y += ly * 0.4; S.head.y += ly * 0.6; S.neck.x += lp * 0.4; S.head.x += lp * 0.6; }
+}
+
 // ---------------------------------------------------------------- solver
 
 const NB = CREW_BONES.length;
@@ -1453,12 +1579,13 @@ function shoulderFor(i, a, qC, pC, shrug, out) {
   out.y += 0.018 * sstep(0, 0.42, _support.y);
 }
 
-function solvePose(fig, name, t, blend) {
+function solvePose(fig, name, t, blend, mods = null) {
   const fn = POSES[name] || POSES.stand;
   const B = fig.mesh.skeleton.bones, k = clamp(blend, 0, 1);
   if (k <= 0) return;
   reset(S);
   fn(S, t, fig);
+  if (mods) applyMods(S, mods);
   const grounded = name !== 'climb' && name !== 'dead';
   const gx = grounded ? (fig.groundSlope?.x || 0) : 0, gz = grounded ? (fig.groundSlope?.z || 0) : 0;
   if (gx || gz) inclineFeet(gx, gz);

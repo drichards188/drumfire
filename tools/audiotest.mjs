@@ -1,19 +1,40 @@
 // Renders every synthesized sound bank offline and reports duration, peak, RMS and problems, then
 // checks the guns, bursts and loops for the properties that make them sound right, the British banks and the
 // WW2 (German side) ones. Exits 1 on a failure.
-//   node tools/audiotest.mjs
-import { bankTasks, classOf, recordingTasks, RECORDINGS } from '../src/audio.js';
+//   node tools/audiotest.mjs            (--record: print the bank hashes of this build, to paste into HASHES below)
+import { bankTasks, classOf, recordingTasks, RECORDINGS, heroRecTasks } from '../src/audio.js';
+import { heroTasks, HERO, FOLEY_CUES } from '../src/audioHero.js';
 
 const make = (chans, sr) => ({ chans, sr });
 const rows = [];
 const keep = {}; // every buffer of every bank, for the analysis below
 let bad = 0;
 const t0 = performance.now();
+const RECORD = process.argv.includes('--record');
+// Every bank's samples, hashed (FNV-1a over the float bits of every channel of every take, with the lengths and rates):
+// the British, WW2 and WW1 banks and everything built from the recordings' stand-ins must render bit-identically to the
+// build these were recorded from (2026-11-07, before the max-quality battery's sound: src/audioDsp.js, src/audioHero.js).
+const hashOf = (out) => {
+  let h = 0x811c9dc5;
+  const mix = (w) => { h = Math.imul(h ^ w, 16777619); };
+  for (const b of out) {
+    mix(b.sr | 0);
+    for (const c of b.chans) {
+      mix(c.length);
+      const u = new Uint32Array(c.buffer, c.byteOffset, c.length);
+      for (let i = 0; i < u.length; i++) h = Math.imul(h ^ u[i], 16777619);
+    }
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
+};
+const hashes = {};
 // the British game must render the same banks as before, in the same order, whether or not WW2 is wanted
 const brit = bankTasks(48000, make).map((t) => t && t[0] + '.' + t[1]).join(' ');
 const both = bankTasks(48000, make, { ww2: true });
 const only = bankTasks(48000, make, { ww2: 'only' }).map((t) => t[0] + '.' + t[1]);
 const britIdentical = both.slice(0, brit.split(' ').length).map((t) => t && t[0] + '.' + t[1]).join(' ') === brit;
+// the WW1 German mode's banks (the Paris Gun), hashed only
+for (const [group, key, fn] of bankTasks(48000, make, { ww1: 'only' })) hashes['ww1:' + group + '.' + key] = hashOf(fn());
 for (const task of both) {
   if (!task) continue;
   const [group, key, fn] = task;
@@ -21,6 +42,7 @@ for (const task of both) {
   const out = fn();
   const ms = performance.now() - t;
   keep[group + '.' + key] = out;
+  hashes[group + '.' + key] = hashOf(out);
   for (const [i, b] of out.entries()) {
     let peak = 0, sum = 0, nan = 0, n = 0;
     for (const c of b.chans) for (let k = 0; k < c.length; k++) {
@@ -276,6 +298,7 @@ check(abTasks.findIndex((t) => t[0] === 'gun_med' && t[3] === true) < abTasks.fi
 const recStats = {};
 for (const [group, key, fn] of recTasks) {
   const t = performance.now(), out = fn(), ms = performance.now() - t;
+  hashes['rec:' + group + '.' + key] = hashOf(out);
   for (const [i, b] of out.entries()) {
     const x = mono(b);
     let p = 0, s = 0, nan = 0;
@@ -296,5 +319,201 @@ if (recStats.huge && recStats.field) {
 }
 
 console.log('\nCLASSES: ' + [2.95, 3.3, 5, 6, 8, 9.2, 12, 15, 16.5, 18, 23.6, 31.5].map((c) => `${c} in -> ${classOf(c)}`).join(', '));
+
+// ---- HERO mrs18: the max-quality battery's banks (src/audioHero.js), as a page with { hero: { kinds: ['mrs18'] } } builds
+// them: after every other bank, in both of the worker's jobs (the recordings' stand-ins above for the second)
+{
+  const kinds = ['mrs18'], H = HERO.mrs18;
+  const th = performance.now(), synthT = heroTasks(48000, make, kinds), recT = heroRecTasks(48000, make, stand, kinds), hb = {};
+  let bytes = 0;
+  for (const [group, key, fn] of [...synthT, ...recT]) {
+    const out = fn(), id = group + '.' + key, rec = !!hb[id];
+    if (rec) hb[id + ':synth'] = hb[id];
+    hb[id] = out;
+    for (const [i, b] of out.entries()) {
+      let pk = 0, nan = 0;
+      for (const c of b.chans) for (const v of c) if (!Number.isFinite(v)) nan++; else pk = Math.max(pk, Math.abs(v));
+      if (!rec) bytes += b.chans.reduce((n, c) => n + c.byteLength, 0);
+      const issue = nan ? `NaN x${nan}` : pk < 0.05 ? 'SILENT' : pk > 1.0001 ? 'CLIPS' : '';
+      if (issue) { bad++; console.log(`  ${id}[${i}] ${issue}`); }
+    }
+  }
+  // the build time, warm (a second build, as the worker's JIT would be after the other banks): the faster of the two
+  const th2 = performance.now();
+  for (const [, , fn] of [...heroTasks(48000, make, kinds), ...heroRecTasks(48000, make, stand, kinds)]) fn();
+  const ms = Math.min(performance.now() - th2, th2 - th);
+  console.log(`\nHERO mrs18: ${synthT.length} banks + ${recT.length} from the recordings, ${(bytes / 1e6).toFixed(1)} MB, built in ${ms.toFixed(0)} ms`);
+  check(ms < 600, `the hero banks should build in under 600 ms (${ms.toFixed(0)} ms)`);
+  check(bytes < 20e6, `the hero banks should hold under 20 MB (${(bytes / 1e6).toFixed(1)} MB)`);
+  check(synthT.every(([g, k]) => !keep[g + '.' + k]), 'a hero bank takes the name of a bank of the game');
+  for (const k of ['crack', 'bow', 'body', 'tail', 'mech', 'runout', 'pressure', 'burst']) check(!!hb[H.group + '.' + k], `${H.group}.${k} missing`);
+  for (const c of FOLEY_CUES.mrs18) check(!!hb[(c.group ?? H.foley) + '.' + c.s], `${c.group ?? H.foley}.${c.s} (a drill cue) missing`);
+  for (const k of ['step_grate', 'step_earth', 'step_mud', 'step_grass', 'kit', 'wheelMark', 'wheelStop', 'fireLever']) check(!!hb[H.foley + '.' + k], `${H.foley}.${k} missing`);
+  const B = (k, i = 0) => hb[k]?.[i];
+  // the energy share above f0 (and under 100 Hz) between t0 and t1 s, a Tukey window with 1 ms tapers
+  const share = (b, t0, t1, f0 = 2000) => {
+    const x = mono(b), sr = b.sr, i0 = Math.max(0, Math.round(t0 * sr)), L = Math.min(x.length, Math.round(t1 * sr)) - i0, tp = Math.round(0.001 * sr);
+    let n = 1;
+    while (n < L) n <<= 1;
+    const re = new Float64Array(n), im = new Float64Array(n);
+    for (let i = 0; i < L; i++) re[i] = x[i0 + i] * (i < tp ? 0.5 - 0.5 * Math.cos((Math.PI * i) / tp) : i > L - tp ? 0.5 - 0.5 * Math.cos((Math.PI * (L - i)) / tp) : 1);
+    fft(re, im);
+    let m = 0, h = 0, lo = 0;
+    for (let k = 1; k < n / 2; k++) { const pw = re[k] * re[k] + im[k] * im[k], f = (k * sr) / n; m += pw; if (f > f0) h += pw; if (f < 100) lo += pw; }
+    return { hi: h / m, lo: lo / m };
+  };
+  const onsetOf = (b) => { const x = mono(b); let m = 0; for (const v of x) m = Math.max(m, Math.abs(v)); let i = 0; while (i < x.length && Math.abs(x[i]) < 0.1 * m) i++; return { i, m }; };
+  const minus30 = (b, win = 0.025) => { const e = envelope(b, win), top = Math.max(...e); let end = 0; for (let k = 0; k < e.length; k++) if (e[k] > top * 0.0316) end = k; return (end + 1) * win; };
+  const worstStep = (b, t0, t1, win = 0.025) => { const e = envelope(b, win); let w = 0; for (let k = Math.round(t0 / win); k < Math.min(e.length - 1, Math.round(t1 / win)); k++) w = Math.max(w, Math.abs(20 * Math.log10((e[k] + 1e-9) / (e[k + 1] + 1e-9)))); return w; };
+  {
+    let worst90 = 0, minHi = 1;
+    for (const b of hb[H.group + '.crack']) {
+      const x = mono(b), { i, m } = onsetOf(b);
+      let j = i;
+      while (j < x.length && Math.abs(x[j]) < 0.9 * m) j++;
+      worst90 = Math.max(worst90, ((j - i) / b.sr) * 1000);
+      minHi = Math.min(minHi, share(b, i / b.sr, i / b.sr + 0.01).hi);
+    }
+    console.log(`crack: 10 to 90 % in ${worst90.toFixed(2)} ms at most, > 2 kHz in its first 10 ms at least ${(minHi * 100).toFixed(1)} %`);
+    check(worst90 < 1, 'the crack should rise to 90 % within 1 ms');
+    check(minHi >= 0.25, 'the crack should hold at least 25 % of its first 10 ms above 2 kHz');
+  }
+  for (const id of [H.group + '.body:synth', H.group + '.body']) {
+    const list = hb[id] ?? [];
+    let lo = 1, e30a = 99, e30b = 0;
+    for (const b of list) {
+      const { i } = onsetOf(b), t = i / b.sr;
+      lo = Math.min(lo, share(b, t + 0.06, t + 0.5).lo);
+      const e30 = minus30(b);
+      e30a = Math.min(e30a, e30);
+      e30b = Math.max(e30b, e30);
+    }
+    console.log(`${id.padEnd(22)} x${list.length}: < 100 Hz from 60 to 500 ms at least ${(lo * 100).toFixed(0)} %, -30 dB at ${e30a.toFixed(1)} to ${e30b.toFixed(1)} s`);
+    check(lo >= 0.5, `${id}: at least 50 % under 100 Hz from 60 to 500 ms`);
+    check(e30a >= 1.2 && e30b <= 3.4, `${id}: down 30 dB between 1.2 and 3.4 s (the tail carries on)`);
+  }
+  for (const id of [H.group + '.tail:synth', H.group + '.tail']) {
+    const list = hb[id] ?? [];
+    let step = 0, e30a = 99, e30b = 0;
+    for (const b of list) {
+      step = Math.max(step, worstStep(b, 0.3, 5));
+      const e30 = minus30(b);
+      e30a = Math.min(e30a, e30);
+      e30b = Math.max(e30b, e30);
+    }
+    console.log(`${id.padEnd(22)} x${list.length}: worst step between 25 ms windows from 0.3 to 5 s ${step.toFixed(1)} dB, -30 dB at ${e30a.toFixed(1)} to ${e30b.toFixed(1)} s`);
+    check(step <= 9, `${id}: continuous (no step over 9 dB between 25 ms windows from 0.3 to 5 s)`);
+    check(e30a >= 5 && e30b <= 8, `${id}: down 30 dB between 5 and 8 s`);
+  }
+  {
+    // the report as the engine lays it (AudioEngine.heroGun): the crack, the body 1 ms on, the tail 45 ms on at H.tail,
+    // all at 48 kHz: one continuous roll from the shot into the landscape's answer (the synthesized takes: the stand-ins
+    // for the recordings here are guns with an echo of their own; /audio.html?hero=mrs18 measures the real ones)
+    const up = (b) => (b.sr === 48000 ? mono(b) : resample48(mono(b), b.sr));
+    let step = 0, e30a = 99, e30b = 0;
+    for (let k = 0; k < 3; k++) {
+      const cr = up(B(H.group + '.crack', k)), bo = up(B(H.group + '.body:synth', k)), ta = up(B(H.group + '.tail:synth', k));
+      const x = new Float32Array(Math.round(8.2 * 48000));
+      for (const [y, at, g] of [[cr, 0, 1], [bo, 0.001, 1], [ta, 0.045, H.tail]]) for (let i = 0, i0 = Math.round(at * 48000); i < y.length && i0 + i < x.length; i++) x[i0 + i] += y[i] * g;
+      const b = { chans: [x], sr: 48000 };
+      step = Math.max(step, worstStep(b, 0.3, 5));
+      const e30 = minus30(b);
+      e30a = Math.min(e30a, e30);
+      e30b = Math.max(e30b, e30);
+    }
+    console.log(`report (crack + body + tail as heroGun lays them): worst step 0.3 to 5 s ${step.toFixed(1)} dB, -30 dB at ${e30a.toFixed(1)} to ${e30b.toFixed(1)} s`);
+    check(step <= 9, 'the report should roll on without a gap (no step over 9 dB between 25 ms windows from 0.3 to 5 s)');
+    check(e30a >= 3 && e30b <= 8, 'the report with its tail should sound for 3 to 8 s (dry: the engine\'s compressor holds it longer)');
+  }
+  // the energy-weighted mean frequency of a sound's first `t1` s (a Tukey window: spectrum() above tapers the onset away)
+  const cen = (k, t1 = 0.4) => {
+    const b = B(k), x = mono(b), sr = b.sr, L = Math.min(x.length, Math.round(t1 * sr)), tp = Math.round(0.001 * sr);
+    let n = 1;
+    while (n < L) n <<= 1;
+    const re = new Float64Array(n), im = new Float64Array(n);
+    for (let i = 0; i < L; i++) re[i] = x[i] * (i < tp ? 0.5 - 0.5 * Math.cos((Math.PI * i) / tp) : i > L - tp ? 0.5 - 0.5 * Math.cos((Math.PI * (L - i)) / tp) : 1);
+    fft(re, im);
+    let m = 0, mf = 0;
+    for (let q = 1; q < n / 2; q++) { const pw = re[q] * re[q] + im[q] * im[q]; m += pw; mf += pw * (q * sr) / n; }
+    return mf / m;
+  };
+  const mech = cen(H.group + '.mech'), grate = cen(H.foley + '.step_grate'), earth = cen(H.foley + '.step_earth'), lock = cen(H.foley + '.blockLock'), stop = cen(H.foley + '.blockStop');
+  const cd = B(H.foley + '.caseDrop'), cdF = peakF(cd, 0, 150, 3000), cdE = envelope(cd, 0.01), cdTop = Math.max(...cdE), cd05 = 20 * Math.log10(cdE[50] / cdTop);
+  console.log(`mech centroid ${mech.toFixed(0)} Hz; caseDrop strongest partial ${cdF.toFixed(0)} Hz, ${cd05.toFixed(0)} dB at 0.5 s; steps: grating ${grate.toFixed(0)} Hz, earth ${earth.toFixed(0)} Hz; block: lock ${lock.toFixed(0)} Hz, stop ${stop.toFixed(0)} Hz`);
+  check(mech > 800, 'the gun steel should ring above 800 Hz');
+  check(cdF >= 250 && cdF <= 600 && cd05 > -30, 'the case should ring low (250 to 600 Hz) and still sound at 0.5 s');
+  check(grate >= 1.5 * earth, 'boots on the grating should be brighter than on the earth');
+  check(lock < stop, 'the block locking should be deeper than its stop');
+  for (const k of ['loop.mlaf_elev', 'loop.mlaf_trav']) {
+    const x = mono(B(k));
+    let q = 0;
+    for (const v of x) q += v * v;
+    const jump = Math.abs(x[x.length - 1] - x[0]) / Math.sqrt(q / x.length);
+    console.log(`${k.padEnd(16)} ${(x.length / B(k).sr).toFixed(1)} s  seam ${jump.toFixed(2)}  centroid ${spectrum(B(k)).centroid.toFixed(0)}`);
+    check(jump < 3, k + ' does not loop cleanly');
+  }
+  const pr = mono(B(H.group + '.pressure'));
+  let dc = 0;
+  for (const v of pr) dc += v;
+  check(Math.abs(dc / pr.length) < 0.01, 'the pressure pulse should carry no DC');
+}
+
+// ---- bit identity of every bank against the recorded build (HASHES)
+if (RECORD) console.log('\nHASHES = ' + JSON.stringify(hashes));
+else {
+  const HASHES = recordedHashes();
+  const want = Object.keys(HASHES), changed = want.filter((k) => hashes[k] !== HASHES[k]), extra = Object.keys(hashes).filter((k) => !(k in HASHES));
+  console.log(`\nBANK HASHES: ${want.length - changed.length} of ${want.length} banks bit-identical to the recorded build${extra.length ? `, ${extra.length} new: ${extra.join(' ')}` : ''}`);
+  for (const k of changed) console.log(`  ${k}: ${hashes[k] ?? 'missing'} (was ${HASHES[k]})`);
+  check(!changed.length, `${changed.length} banks changed: ${changed.slice(0, 8).join(' ')}`);
+}
 console.log(`\n${bad ? bad + ' problem buffers' : 'all buffers sound'}, ${fail.length} failed checks, ${(performance.now() - t0).toFixed(0)} ms total`);
 process.exit(bad || fail.length ? 1 : 0);
+
+// the bank hashes of the build before the max-quality battery's sound (node tools/audiotest.mjs --record)
+function recordedHashes() {
+  return {
+    'ww1:gun_paris.near': '2b643b74', 'ww1:gun_paris.mid': '60568a49', 'ww1:gun_paris.far': '8b0a6689',
+    'loop.tear': '5a0c7693', 'loop.rush': 'd4b45800', 'loop.whistle': 'a9688001', 'loop.train': 'd85e8dc0',
+    'loop.scream': '51bc59f7', 'ui.click': '4846203c', 'slap.small': '3c1279f5', 'slap.big': 'b40260d4',
+    'gun_field.near': '6df301fd', 'gun_field.mid': '63a0ca16', 'gun_field.far': 'a542aace',
+    'gun_huge.near': 'b8227327', 'gun_huge.mid': '0f5f06be', 'gun_huge.far': 'd93adf90',
+    'burst_ground_med.near': '176e2bd8', 'burst_ground_med.mid': '7072560c', 'burst_ground_med.far': 'f8a3a1db',
+    'burst_ground_huge.near': 'b12d5002', 'burst_ground_huge.mid': '21e70129', 'burst_ground_huge.far': '9c942ecf',
+    'gun_light.near': '9da2799d', 'gun_light.mid': 'e0ffbdaf', 'gun_light.far': 'cd72330d',
+    'gun_med.near': '355a2f45', 'gun_med.mid': '79b02386', 'gun_med.far': '58744864', 'gun_heavy.near': '8ea6d8b3',
+    'gun_heavy.mid': 'e5f30677', 'gun_heavy.far': 'c47b41c8', 'burst_ground_light.near': 'a514868d',
+    'burst_ground_light.mid': '2f1072a8', 'burst_ground_light.far': 'bb5cd3f4',
+    'burst_ground_field.near': 'deb6eb89', 'burst_ground_field.mid': '611195d6',
+    'burst_ground_field.far': '0842dfc9', 'burst_ground_heavy.near': '04042716',
+    'burst_ground_heavy.mid': '94f80b71', 'burst_ground_heavy.far': '0cd318e3', 'burst_air_light.near': '56dd5daa',
+    'burst_air_light.mid': '5b571cbe', 'burst_air_light.far': 'ee48abf8', 'burst_air_field.near': '79deb86a',
+    'burst_air_field.mid': '096cc8d4', 'burst_air_field.far': 'af1ec399', 'burst_air_med.near': '2c413cd5',
+    'burst_air_med.mid': '5a1f9fad', 'burst_air_med.far': '6ec00085', 'burst_air_heavy.near': '47f23f62',
+    'burst_air_heavy.mid': '8b32e9c3', 'burst_air_heavy.far': '2a8178c9', 'tremor.small': '5697f976',
+    'tremor.big': '1de27fca', 'loop.drumfire': '61cd955a', 'loop.rain': '03fffeac', 'thud.far': 'c882782d',
+    'load.trolley': 'a66a9b60', 'load.crane': 'e43f61a5', 'load.ram': '609e7273', 'load.breech': 'e8c6ef0f',
+    'load.screw': 'ef5cd939', 'load.clang': '86fb23e8', 'load.cartridge': '29a3d510', 'load.ready': '6f0c54f5',
+    'load.fire': '31f5cead', 'flare.pop': 'be57a4a0', 'flare.hiss': '9b1bae89', 'cook.crackle': 'be68a351',
+    'ui.phone': 'da88c6f1', 'ui.wireless': 'cb3eeed8', 'ui.paper': '3a886fab', 'ui.bell': '76b17c6f',
+    'ui.whistle': '2c3e3561', 'loop.moan': 'a6c6bc0c', 'loop.buzz': '537cec7b', 'rocket.near': 'ddfd9dca',
+    'rocket.far': '6a6f5ee5', 'v1.launch': '6f6ba523', 'v1.far': '747c9eda', 'loop.v2': 'ace60a98',
+    'v2.pre': '137c0ba7', 'v2.main': '4955338c', 'v2.ignite': '718bfbc1', 'v2.boom': '77807497',
+    'v2.fall': 'e39978f9', 'loop.sabre': '302e23bd', 'loop.siren': '3a94df7a', 'ui.feld': 'b9f3ea2a',
+    'ui.funk': '0620effb', 'gun_colossal.near': '8d71ed08', 'gun_colossal.mid': '760f560d',
+    'gun_colossal.far': '9f89c8a4', 'burst_ground_colossal.near': 'c2098db8',
+    'burst_ground_colossal.mid': 'e0f45820', 'burst_ground_colossal.far': 'e04f78f2',
+    'rec:burst_ground_light.far': 'e2fd53c5', 'rec:burst_ground_field.far': '019583a6',
+    'rec:burst_ground_med.far': '9344037c', 'rec:burst_ground_heavy.far': '4ed569f1',
+    'rec:burst_ground_huge.far': 'c4a53e6e', 'rec:thud.far': 'ac27a4fb', 'rec:burst_ground_light.near': 'b583ac39',
+    'rec:burst_ground_field.near': 'd3c69f3f', 'rec:burst_ground_med.near': '17988bf1',
+    'rec:burst_ground_heavy.near': '0b112389', 'rec:burst_ground_huge.near': '26b94a3f', 'rec:load.case': '6e2304cc',
+    'rec:gun_light.near': 'b7925572', 'rec:gun_light.mid': 'b5b7580f', 'rec:gun_light.far': '1c23e1a7',
+    'rec:gun_field.near': '8d728e4a', 'rec:gun_field.mid': 'cbaa4132', 'rec:gun_field.far': 'b7291bb1',
+    'rec:gun_med.near': '0c682389', 'rec:gun_med.mid': '3a19d6d4', 'rec:gun_med.far': '51a3c050',
+    'rec:gun_heavy.near': '6c438166', 'rec:gun_heavy.mid': 'cdc14b07', 'rec:gun_heavy.far': 'b439275a',
+    'rec:gun_huge.near': '390aa6d7', 'rec:gun_huge.mid': 'dc745a5f', 'rec:gun_huge.far': 'd7884dfb',
+    'rec:gun_colossal.near': 'bc05595c', 'rec:gun_colossal.mid': '24b05952', 'rec:gun_colossal.far': '56612943',
+    'rec:gun_paris.near': '7bfb5bcc', 'rec:gun_paris.mid': '69f64191', 'rec:gun_paris.far': 'ae9b858f',
+  };
+}

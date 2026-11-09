@@ -4,8 +4,10 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { buildGun, GUN_KINDS, GUN_KINDS_WW2, GUN_KINDS_WW1, loadGuns } from '../models/guns.js';
 import { GUNS } from '../sim/tables.js';
 import { crewForRoleWW1 } from '../render/crews_ww1.js';
-import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole } from '../models/v/crew.js';
+import { buildCrewman, CREW_POSES, CREW_GAITS, CREW_OUTFITS, crewForRole, crewForRoleDE } from '../models/v/crew.js';
 import '../models/v/crew_hd.js'; // registers the close tier (&hd=1)
+import { CAMO, vehicleMats } from '../models/kit.js';
+import '../models/looks.js'; // (adds the camouflage upgrade's schemes to CAMO: &paint=upgreen)
 
 // Standalone model viewer for the guns, the crews, and (when the field models agent's files exist) the
 // shells and targets.
@@ -20,7 +22,18 @@ import '../models/v/crew_hd.js'; // registers the close tier (&hd=1)
 //   &headgear=.. &vest=.. &pattern=.. &skin=0..3 &mix=1 (varied outfits along ?all=crew)
 //   &look=x,y,z the point the camera orbits (default the middle of everything shown)
 //   ?all=de the six German outfits (1917 and 1944) in a row; &hd=1 their close first-person tier (crew_hd.js)
+// The max-quality battery's review (DESIGN.md "Max-quality battery"; the gun kinds with a close-detail build):
+//   &hd=1  the gun's close-detail build (buildGun(kind, { hd: true }); &lean=1 its cheaper bakes), and the crew's 'hd' tier
+//   &detail=0|1|2  rig.setDetail: the standard meshes, the close build, the close build and its micro detail
+//   &paint=dgelb|upgreen|..  the gun in that paint scheme (models/kit.js CAMO; upgreen is the camouflage upgrade's)
+//   &maxq=1|2  the max-quality materials over it (models/maxq.js applyMaxq; 2 without lean shortcuts)
+//   &tier=std|hd|max  the crew figures' geometry tier (&crew=1 and kind=crew; 'max' once crew_hd.js registers it)
+//   &crew=1 on a German gun: its crew in the gun's own dress (the 1918 guns in 1917 dress, the WW2 guns in 1944 dress)
 const q = new URLSearchParams(location.search);
+const crewTierQ = q.get('tier') ? (q.get('tier') === 'std' ? null : q.get('tier')) : q.get('hd') === '1' ? 'hd' : null;
+// the dress a gun's crew wears in the game (render/crews.js crewOutfit)
+const crewDress = (kind, role, i) => (GUNS[kind]?.era === 'ww1' ? crewForRoleWW1(role, i) : GUNS[kind]?.side === 'german' ? crewForRoleDE(role, i) : crewForRole(role, i));
+const maxqMod = q.get('maxq') && q.get('maxq') !== '0' ? await (async () => { try { const f = Object.values(import.meta.glob('../models/maxq.js'))[0]; return f ? await f() : null; } catch (e) { console.warn('models/maxq.js failed', e.message); return null; } })() : null;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -117,7 +130,7 @@ function addItem(kind, x) {
     const o = kOutfit ? { outfit: kOutfit, skin: items.length % 4 } : q.get('mix') === '1' ? CREW_OUTFITS[items.length % CREW_OUTFITS.length]
       : q.get('outfit') ? { outfit: q.get('outfit'), skin: Number(q.get('skin') || 0), ...(q.get('headgear') ? { headgear: q.get('headgear') } : {}) }
         : { headgear: q.get('headgear') || undefined, vest: q.get('vest') || undefined, pattern: q.get('pattern') || undefined, skin: Number(q.get('skin') || 0) };
-    const fig = buildCrewman(q.get('hd') === '1' ? { ...o, tier: 'hd' } : o); // &hd=1: the close first-person tier (crew_hd.js)
+    const fig = buildCrewman(crewTierQ ? { ...o, tier: crewTierQ } : o); // &hd=1 or &tier=: a close tier (crew_hd.js)
     root = fig.root;
     const name = kind.startsWith('crew:') ? kind.slice(5) : (crewPose || 'stand');
     rig = { crew: fig, pose: name };
@@ -157,8 +170,20 @@ function addItem(kind, x) {
       root.add(alliedMod.allied.buildAlliedTraffic(id, 3));
     }
   } else {
-    rig = buildGun(kind);
+    rig = q.get('hd') === '1' ? buildGun(kind, { hd: true, lean: q.get('lean') === '1' }) : buildGun(kind);
     root = rig.root;
+    // (&paint: the scheme's materials in place of the gun's own, as models/looks.js applyLook swaps them)
+    const paint = q.get('paint');
+    if (paint && CAMO[paint] && rig.mats?.camo) {
+      const to = vehicleMats(paint), from = rig.mats;
+      root.traverse((o) => { if (!o.isMesh) return; if (o.material === from.camo) o.material = to.camo; else if (o.material === from.paint) o.material = to.paint; });
+    }
+    if (maxqMod?.applyMaxq) {
+      try {
+        rig.maxq = maxqMod.applyMaxq(rig, { kind, scheme: paint && CAMO[paint] ? paint : rig.scheme, renderer, level: Number(q.get('maxq')) || 1, lean: q.get('lean') === '1', seed: items.length, quality: 'Ultra' }) ?? null;
+      } catch (e) { console.warn('applyMaxq failed', e.message); }
+    }
+    if (q.get('detail') != null) rig.setDetail?.(Number(q.get('detail')));
   }
   root.position.x = x;
   scene.add(root);
@@ -167,7 +192,7 @@ function addItem(kind, x) {
   let tris = 0, draws = 0;
   root.traverse((o) => { if (o.isMesh) { draws++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
   const box = new THREE.Box3().setFromObject(root);
-  items.push({ root, rig, kind, box, tris, draws });
+  items.push({ root, rig, kind, box, tris, draws, ...drawnOf(root) });
   if (rig && rig.crew) { rig.props = crewProps(rig.crew); showCrewProps(rig, rig.pose, crewT); }
   if (rig && rig.pivots) {
     for (const [key, v] of Object.entries(pose)) {
@@ -184,7 +209,8 @@ function addItem(kind, x) {
     if (q.get('load')) rig.setShell?.(q.get('load'), true);
     if (q.get('crew') === '1' && rig.anchors.crew) {
       rig.crewFigs = rig.anchors.crew.map((c, i) => {
-        const fig = buildCrewman(GUNS[kind]?.era === 'ww1' ? crewForRoleWW1(c.role, i) : crewForRole(c.role, i)); // the WW1 German pieces' crews in 1917 dress
+        const o = crewDress(kind, c.role, i); // (the 1918 guns' crews in 1917 dress, the WW2 guns' in 1944 dress)
+        const fig = buildCrewman(crewTierQ ? { ...o, tier: crewTierQ } : o);
         fig.root.position.set(c.x, c.y, c.z);
         fig.root.rotation.y = c.heading;
         fig.pose(c.pose || 'stand', i * 0.13, 1);
@@ -200,6 +226,19 @@ function addItem(kind, x) {
   document.body.appendChild(label);
   labels.push({ el: label, root });
   return items[items.length - 1];
+}
+
+// what is drawn: the meshes whose whole parent chain is visible (the close-detail tiers hide what they replace)
+function drawnOf(root) {
+  let drawnTris = 0, drawnDraws = 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let p = o; p; p = p.parent) if (!p.visible) return;
+    drawnDraws++;
+    const g = o.geometry;
+    drawnTris += ((g.index ? g.index.count : g.attributes.position.count) / 3) * (o.isInstancedMesh ? o.count : 1);
+  });
+  return { drawnTris: Math.round(drawnTris), drawnDraws };
 }
 
 const all = q.get('all');
@@ -289,6 +328,10 @@ if (ortho) {
 }
 if (q.get('night') === '1') { sun.intensity = 0.2; scene.environmentIntensity = 0.15; scene.background = new THREE.Color(0x10151c); if (scene.fog) scene.fog.color.set(0x10151c); }
 info.textContent = items.map((i) => `${i.kind}: ${Math.round(i.tris)} tris, ${i.draws} draws, ${i.box.getSize(new THREE.Vector3()).toArray().map((v) => v.toFixed(1)).join(' x ')} m`).join('\n');
+// (the close-detail review: what is drawn at this detail level, the tier and the materials)
+if (q.get('hd') === '1' || q.get('detail') != null || q.get('maxq') || q.get('tier')) {
+  info.textContent += '\n' + items.map((i) => `${i.kind} drawn: ${i.drawnTris} tris, ${i.drawnDraws} meshes${i.rig?.hd ? `, hd detail ${i.rig.detail ?? '?'}` : ''}${i.rig?.maxq ? ', maxq' : ''}${crewTierQ ? `, crew tier ${crewTierQ}` : ''}`).join('\n');
+}
 
 // A loading and firing demonstration for a gun rig: t in seconds of a 18 s loop.
 const smooth = (a, b, x) => { const k = Math.min(1, Math.max(0, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
@@ -318,6 +361,8 @@ function gunCycle(rig, t) {
 
 const clock = new THREE.Clock();
 let tPrev = 0;
+// (the piece the max-quality materials read in the viewer: never fired, unworn; &rounds=N for the soot of N rounds)
+const VIEW_PIECE = { az: 0, el: 0, firedAt: -999, wear: 0, rounds: 0, fired: Number(q.get('rounds') || 0), state: 'idle', job: null };
 function frame() {
   const t = clock.getElapsedTime(), dtv = Math.min(0.1, t - tPrev);
   tPrev = t;
@@ -333,6 +378,7 @@ function frame() {
   }
   for (const it of items) {
     if (it.rig && it.rig.update) it.rig.update(dtv);
+    if (it.rig?.maxq?.update) it.rig.maxq.update(dtv, VIEW_PIECE, t);
     if (it.rig && it.rig.crewFigs && anim) it.rig.crewFigs.forEach((f, i) => f.pose(it.rig.anchors.crew[i].pose || 'stand', fract(t / 3 + i * 0.13), 1 - Math.exp(-8 * dtv)));
   }
   for (const l of labels) {
@@ -347,4 +393,4 @@ function frame() {
 }
 renderer.setAnimationLoop(frame);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
-window.__viewer = { scene, items, camera, controls, renderer };
+window.__viewer = { scene, items, camera, controls, renderer, recount: () => items.forEach((i) => Object.assign(i, drawnOf(i.root))) };

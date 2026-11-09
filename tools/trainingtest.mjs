@@ -27,8 +27,11 @@ if (kinds.includes('late')) for (const s of S) if (s.done && s.id !== 'look') ca
 if (kinds.includes('guncard')) for (const id of GUN) cases.push({ kind: 'guncard', id });
 if (kinds.includes('leave')) for (const id of GUN) cases.push({ kind: 'leave', id });
 
-// in the page: one case after another on the same lesson page, each from a fresh start of the lesson
-const PAGE = (list) => `(() => {
+// in the page: one case after another on the same lesson page, each from a fresh start of the lesson (it first waits for
+// the lesson itself: a loaded machine can take minutes over the page, longer than shot.mjs's --until)
+const PAGE = (list) => `(async () => {
+  for (let i = 0; i < 1200 && !window.__drumfire?.tutorial?.active; i++) await new Promise((r) => setTimeout(r, 500));
+  if (!window.__drumfire?.tutorial?.active) return ${JSON.stringify(list)}.map((c) => ({ c: c.kind + (c.id ? ':' + c.id : ''), ok: false, stalled: ['(the lesson never started)'] }));
   const D = window.__drumfire, T = D.tutorial, sim = D.sim, S = T.defs.find((d) => d.id === 'training').steps;
   const KEYS = { E: { work: true }, A: { az: 1 }, D: { az: -1 }, W: { el: 1 }, S: { el: -1 } };
   const idx = (id) => S.findIndex((s) => s.id === id);
@@ -78,7 +81,7 @@ const PAGE = (list) => `(() => {
 const runJob = (list) => new Promise((resolve) => {
   const shot = fileURLToPath(new URL('./shot.mjs', import.meta.url));
   const p = spawn(process.execPath, [shot, '/?mode=ww1&tutorial=training&quality=Low', `shots/trainingtest-${Math.random().toString(36).slice(2, 7)}.png`,
-    '--size', '800x500', '--until', 'window.__drumfire?.tutorial?.active', '--eval', PAGE(list)], { env: { CHROME: 'chromium-1217', ...process.env } });
+    '--size', '800x500', '--until', 'window.__drumfire?.tutorial?.active', '--until-timeout', '300000', '--eval', PAGE(list)], { env: { CHROME: 'chromium-1217', ...process.env } });
   let text = '';
   p.stdout.on('data', (d) => (text += d));
   p.stderr.on('data', (d) => (text += d));

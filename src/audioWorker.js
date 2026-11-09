@@ -4,16 +4,20 @@
 // of them as they arrive. `SR` only enters the banks as min(SR, 32000) and min(SR, 24000), so 48000 renders them
 // exactly as a 44.1 or 48 kHz context would. A second job (prepareRecordings) brings the recordings, decoded:
 // everything built from them (recordingTasks) comes back marked `over`, to take the synthesized banks' places; the
-// synthesized takes the recordings are laid under are kept here from the first job for that.
-import { bankTasks, recordingTasks } from './audio.js';
+// synthesized takes the recordings are laid under are kept here from the first job for that. A page with a max-quality
+// battery (`hero`: its kinds) gets that battery's banks too, after all the others in each job (src/audioHero.js).
+import { bankTasks, recordingTasks, heroRecTasks } from './audio.js';
+import { heroTasks } from './audioHero.js';
 
 const kept = {}; // group -> key -> [{ chans, sr }] of the first job, for recordingTasks' synth()
 const KEEP = /^(gun_|burst_ground_|thud$)/;
 
-self.onmessage = ({ data: { SR, ww2, ww1, rec, classes, keepSynth } }) => {
+self.onmessage = ({ data: { SR, ww2, ww1, rec, classes, keepSynth, hero } }) => {
   const make = (chans, sr) => ({ chans, sr });
   const synth = (group, key) => kept[group]?.[key]?.map((s) => ({ data: s.chans[0], sr: s.sr })) ?? null;
-  const tasks = rec ? recordingTasks(SR, make, rec, synth, classes, { keepSynth }) : [...bankTasks(SR, make, { ww2 }), ...(ww1 ? bankTasks(SR, make, { ww1: 'only' }) : [])];
+  // (the max-quality battery's banks, `hero` its kinds, come after all the others in each job: src/audioHero.js)
+  const tasks = rec ? [...recordingTasks(SR, make, rec, synth, classes, { keepSynth }), ...(hero ? heroRecTasks(SR, make, rec, hero) : [])]
+    : [...bankTasks(SR, make, { ww2 }), ...(ww1 ? bankTasks(SR, make, { ww1: 'only' }) : []), ...(hero ? heroTasks(SR, make, hero) : [])];
   for (const t of tasks) {
     if (!t) continue;
     const [group, key, fn, over = false] = t, v = fn(), xfer = [];

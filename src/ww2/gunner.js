@@ -358,6 +358,7 @@ export class Gunner {
       } else if ((at(owner) && work) || crew(owner)) job.t += dt * (at(owner) ? Math.max(1, job.dur / HOLD) : 1 / crewK);
       if (job.t > t0) {
         prog++;
+        job.adv = sim.time; // (when the step last moved on: the render lets a paused drill settle, render/crews_hero.js; nothing here reads it)
         if (!job.on) { job.on = true; sim.events.load?.(u, p, s.step); }
       }
       if (s.step === 'open') p.breech = Math.min(1, job.t / job.dur);
@@ -464,7 +465,7 @@ export class Gunner {
 
   begin(p) {
     const g = GUNS[p.kind], s = g.load[p.ji];
-    p.job = { step: s.step, t: 0, dur: s.dur, i: p.ji, n: g.load.length, el0: p.el, on: false };
+    p.job = { step: s.step, t: 0, dur: s.dur, i: p.ji, n: g.load.length, el0: p.el, on: false, adv: this.sim?.time ?? 0 };
   }
 
   shoot(u, p) {

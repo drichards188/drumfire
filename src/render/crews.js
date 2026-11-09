@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildCrewman, CREW_POSES, CREW_GAITS } from '../models/v/crew.js';
+import { buildCrewman, CREW_POSES, CREW_GAITS, PIVOT_STEP } from '../models/v/crew.js';
 import { buildShell, buildCartridge } from '../models/shells.js';
 import { GUNS, STEP } from '../sim/tables.js';
 import { ramp, smooth, lerp, wrapPi, headingOf, clamp01 } from './anim.js';
@@ -8,6 +8,9 @@ import { crewForRoleDE } from '../models/v/crew.js';
 import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crews_de.js';
 import { ROLES_HEAVY, heavyBuild, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
 import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, TIMED_WW1, BLOCK_MAN_WW1, BAG_SIDE_WW1, LOADER_AT_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
+import { shotIn } from './herocues.js';
+import { heroFrame, heroAct, heroFirer, heroMods, heroStaff, heroStaffMan, heroLive, heroBlockMan, heroRope, heroCase, heroCaseBuild, heroCaseMan, heroRamK, heroRamEffort } from './crews_hero.js';
+import { AMMO_KINDS, heroAmmoDims, heroAmmoBuild, heroAmmoFrame, heroChargeMan, heroFuzeMan, heroChargeSeated, chamberA } from './crews_ammo.js';
 // a node and every parent up to the rig's root are visible (an anchor whose part the rig has hidden is not)
 const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent) if (!n.visible) return false; return !!node; };
 
@@ -58,6 +61,9 @@ const travel = (k) => {
 const R_STAND = 0.3, R_WALK = 0.3;
 // Paces of the walks the cycle clock schedules (m/s): a man carrying a round, a man with a cartridge, empty handed.
 const V_CARRY = 1.1, V_BAG = 1.2, V_WALK = 1.3, V_PAIR = 0.9, PAIR_OMEGA = 1.3, ONE_OMEGA = 3.2; // (two men with a 70 to 110 kg shell between them)
+// the hero drill (crews_hero.js): the pair's pace with the Mörser 18's 113 kg (they set off earlier instead of hurrying),
+// and the speed guard's limit
+const V_PAIR_HERO = 0.75, V_BACK_HERO = 1.05, V_GUARD = 1.6;
 // kinds whose carriers walk on the cycle clock (GunCrew.timeline): they set off in the step before the one their round
 // is for, at a walking pace, instead of covering the whole way inside a 1 to 2 s step at a run
 // (the German field and heavy guns; the British guns keep their step-bound drill for now)
@@ -124,20 +130,46 @@ class Man {
       // a quarter turn at most, away from the muzzle: a man spun round on the spot slides his feet
       // (a man facing the muzzle's way could be sent either way round from one frame to the next: he turns outward)
       let d = wrapPi(c.az + Math.PI - h);
-      if (Math.abs(d) > 2.6) d = Math.abs(d) * ((x - c.pvx) * c.rt.x + (z - c.pvz) * c.rt.z < 0 ? 1 : -1);
+      const side = (x - c.pvx) * c.rt.x + (z - c.pvz) * c.rt.z < 0 ? 1 : -1;
+      // (the hero drill eases into the side's way between 2.2 and 2.8 rad: switched at 2.6 a man the traverse carried
+      // across it spun 1.7 rad in a frame)
+      if (c.hero) d += (Math.abs(d) * side - d) * smooth(Math.abs(d), 2.2, 2.8);
+      else if (Math.abs(d) > 2.6) d = Math.abs(d) * side;
       h += d * 0.32 * c.ears;
+      if (c.hero) this.plantTurn = (this.plantTurn ?? 0) + d * 0.32 * c.ears; // (his feet stay put: crew.js plantYaw)
       if (c.ears > 0.5) pose = 'ears';
     }
     if (this.spot.car) { x += c.carX; z += c.carZ; } // standing on the railway car: it rolls back along the track with the gun
+    if (c.hero && y > 0.3 && c.rig.body) {
+      // (on the walkways and the deck he rides the gun's shudder, render/herorig.js; the men on the ground stand still)
+      const B = c.rig.body, th = B.rotation.x;
+      z += y * th; y += B.position.y - z * th;
+    }
+    if (c.hero) {
+      // the speed guard (a safety net, counted in crew.guardN for crewaudit): never faster than a brisk walk from where he
+      // was the frame before; a time jump or a man shown again lands at once
+      const now = c.c?.now ?? 0, dt = now - (this.gt ?? -1e9);
+      if (dt >= 0 && dt <= 0.5) { // (a frame with the sim held moves nobody)
+        const dx = x - this.x, dz = z - this.z, d = Math.hypot(dx, dz), lim = V_GUARD * dt + 0.002;
+        if (d > lim) { x = this.x + dx / d * lim; z = this.z + dz / d * lim; c.guardN = (c.guardN ?? 0) + 1; this.guardN = (this.guardN ?? 0) + 1; this.guardAt = `${c.c?.s ?? c.c?.st}@${(c.c?.k ?? 0).toFixed(2)} ${pose}`; }
+      }
+      this.gt = now;
+    }
     this.x = x; this.y = y; this.z = z; this.h = h;
     this.root.position.set(x, y, z);
     this.root.rotation.y = h;
     if (this.fig.groundSlope) { this.fig.groundSlope.x = groundSlope?.x ?? 0; this.fig.groundSlope.z = groundSlope?.z ?? 0; }
     // cross-fade only for a moment after the pose changes: filtering every frame made a walk or a handwheel's turning
     // lag behind its own cycle (the planted foot slid and the steps went mushy)
+    // (the hero drill: the player's own drill paused (no crew help, his key let go): a man caught in a stride stands, a
+    // load stays at his belt, and he walks on from there when it resumes; crews_hero.js heroFrame sets c.paused)
+    if (c.hero && c.paused && (pose === 'walk' || pose === 'carryWalk' || pose === 'sidestep' || pose === 'pivot' || pose === 'stoopWalk')) { pose = pose === 'carryWalk' ? 'carry' : 'stand'; t = c.idleT + this.seed; }
     const name = POSES.has(pose) ? pose : (FALLBACK[pose] ?? 'stand'), now = c.c?.now ?? 0;
     if (name !== this.lastPose) { this.lastPose = name; this.poseAt = now; }
-    this.fig.pose(name, t, now - this.poseAt >= 0 && now - this.poseAt < 0.3 ? c.blend : 1);
+    if (c.hero) { // (PLAN 3.3: what the foley and the effects read per man; heel strikes at phase 0 (left) and 0.5 (right))
+      this.pose = name; this.gait = CREW_GAITS[name] ? name : null; this.phase = this.gait ? t - Math.floor(t) : 0; this.onDeck = y > 0.3;
+    }
+    this.fig.pose(name, t, now - this.poseAt >= 0 && now - this.poseAt < 0.3 ? c.blend : 1, c.hero && c.c ? heroMods(c, this, x, y, z, h, name) : null);
   }
 
   // walk from a to b ({x, z}) a fraction k of the way, holding y; gait 'walk' | 'carryWalk'
@@ -176,6 +208,7 @@ class Man {
 
   hide() {
     this.root.visible = false;
+    this.gt = -1e9;
   }
 }
 
@@ -190,9 +223,12 @@ function crewOutfit(role, i, kind) {
 }
 
 export class GunCrew {
-  constructor(rig, kind) {
+  // opts.hero: the max-quality battery's drill (shots/maxq/PLAN.md 3.3): everything new in it is behind this.hero, so
+  // the drills of the other guns stay as they were
+  constructor(rig, kind, opts = {}) {
     this.rig = rig;
     this.kind = kind;
+    this.hero = !!opts?.hero;
     this.men = [];
     this.level = 2;
     this.blend = 1;
@@ -204,6 +240,12 @@ export class GunCrew {
     const tv = rig.pivots.traverse;
     this.pvx = tv ? tv.position.x : 0; this.pvz = tv ? tv.position.z : 0;
     this.T = new THREE.Vector3(); this.B = new THREE.Vector3(); this.Mz = new THREE.Vector3(); this.S = new THREE.Vector3();
+    if (this.hero && rig.setBreech && !rig.heroBreechK) {
+      // (the hero's block man turns the block's crank with it: crews_hero.js reads the block's travel from here)
+      const sb = rig.setBreech;
+      rig.heroBreechK = { k: 0 };
+      rig.setBreech = (k) => { rig.heroBreechK.k = k; sb(k); };
+    }
     this.u = new THREE.Vector3(0, 0, -1);
     this.bd = { x: 0, z: -1 }; this.rt = { x: 1, z: 0 };
     this.aT = -1.5;
@@ -247,6 +289,10 @@ export class GunCrew {
     this.setup();
     this.field = null;
     this.makeField();
+    if (this.hero) { heroRope(this); heroCaseBuild(this); } // (the hero's cord and spent case, built now: crews_hero.js)
+    // (the hero's real rounds, crews_ammo.js: the Gr 18, the case 6351 and its charge, the ready ammunition; their
+    // measures now, the props now or, with opts.ammoLater, once the atlases are drawn: render/guns.js prebuildHero)
+    if (this.hero && AMMO_KINDS.has(kind)) { heroAmmoDims(this); if (opts?.ammoLater) this.ammoPending = true; else heroAmmoBuild(this); }
     if (rig.loadingStage) {
       this.makeLoadingCart();
       // The real transverse handle on this interrupted-screw carrier.
@@ -339,6 +385,9 @@ export class GunCrew {
   plan(m, tag, l, ax, az, bx, bz, r, ignoreBlock = false, down = false, fl = 'work', relax = 0.28, ext = null) {
     const P = m.plans[tag] ??= { poly: newPoly(), k: [1e9, 1e9, 1e9, 1e9, 0, 1e9] };
     const k = P.k;
+    // (the hero drill: a route a man is walking stays his until he is off it, its ends blended to where they are now
+    // (heroLive); searched again under his feet it jumped him a metre or two when the gun had traversed meanwhile)
+    if (this.hero && P.lock && k[0] !== 1e9) return P.poly;
     if (this.planHold) { // (prepare)
       if (k[0] !== 1e9) return P.poly;
       // nothing planned yet (the unit was just selected) and nobody walks now: a straight stand-in between the same
@@ -369,6 +418,9 @@ export class GunCrew {
     return P.poly;
   }
 
+  // the rig root's inverse world matrix for this frame (prepare)
+  invRoot() { return _inv; }
+
   // the man whose place the player has taken (the WW2 gunner, src/ww2/gunnerView.js): drawn with his head and neck
   // hidden, the first-person camera at his eyes; null gives him his head back
   setPlayer(role) {
@@ -398,7 +450,7 @@ export class GunCrew {
     if (this.loadingCart) this.loadingCart.visible = vis;
     if (this.chargeRest) this.chargeRest.visible = vis;
     for (const m of this.men) if (!vis) m.hide();
-    if (!vis) for (const o of [this.shellA, this.shellB, this.bag, this.staff, this.rope]) o.visible = false;
+    if (!vis) for (const o of [this.shellA, this.shellB, this.bag, this.staff, this.rope, ...(this.extraProps ?? [])]) o.visible = false;
   }
 
   // ---------------------------------------------------------------- frame
@@ -483,6 +535,7 @@ export class GunCrew {
   update(p, sim, rawDt, level) {
     this.level = level;
     if (level <= 0) { this.setLevel(level); return; }
+    if (this.ammoPending) { this.ammoPending = false; heroAmmoBuild(this); } // (not built ahead: built now)
     const rig = this.rig, g = GUNS[p.kind];
     const now = sim.time + (sim.alpha ?? 0) * STEP;
     this.blend = 1 - Math.exp(-14 * Math.max(rawDt, 0.008));
@@ -492,7 +545,9 @@ export class GunCrew {
     const s = job ? job.step : null;
     const k = job ? clamp01((job.t + (sim.alpha ?? 0) * STEP) / Math.max(0.01, job.dur)) : 0;
     const tf = now - p.firedAt;
-    const tw = p.state === 'ready' && p.rounds > 0 ? Math.max(0, p.fireAt - now) : Infinity;
+    // the hero drill sees the shot coming in every path (herocues.js shotIn), the others only once the gun is ready
+    const tw = this.hero ? shotIn(p, now, sim.time) : p.state === 'ready' && p.rounds > 0 ? Math.max(0, p.fireAt - now) : Infinity;
+    this.shotT = tw;
     // ears covered for the shot: the men turn half away over a second before it and are back at work a second after
     // (a 3 s hold kept the loader's hands on his ears while the block was to be opened, and a 0.3 s spin read as a jump)
     const warn = tw < 1.6 ? smooth(1.6 - tw, 0, 1.0) : 0;
@@ -504,11 +559,15 @@ export class GunCrew {
     this.ears = dtE < 0 || dtE > 0.5 ? want : this.ears + Math.max(-dtE / 0.7, Math.min(dtE / 0.7, want - this.ears));
     const c = { p, s, k, tf, tw, now, st: p.state, loaded: p.loaded, i: job ? job.i : -1 };
     this.c = c;
-    this.tl = this.timeline(p, k);
+    if (this.hero) { this.sim = sim; this.paused = !!(p.manned && job && sim.time - (job.adv ?? sim.time) > 0.15); }
+    this.tl = this.timeline(p, k, job ? (job.t + (sim.alpha ?? 0) * STEP) / Math.max(0.01, job.dur) : 0, now);
+    if (this.hero) heroFrame(this, c);
     this.state(c);
     // Mechanisms and their contact points must belong to this frame before hands are solved.
     this.mechanisms(c);
     rig.root.updateMatrixWorld(true);
+    if (this.hero) heroCase(this, c); // (the spent case's flight and the pile: crews_hero.js)
+    if (this.ammo) heroAmmoFrame(this, c); // (the hero's rounds: the stock, the container, the fuze; crews_ammo.js)
     // casualties: the last men of the list leave the gun (never the player's man: the next one down goes instead)
     const casualties = Math.max(0, p.crewMax - p.crew);
     const pi = this.player ? this.men.indexOf(this.player) : -1;
@@ -525,7 +584,7 @@ export class GunCrew {
     // rig that hides a part (the Gustav's assembly) hides what lies on it. The next shell is the shell stack's; the
     // shell in hand, the cartridges, the staff and the rope are the gun's (its tray).
     if (!shown(rig.anchors.shellStack, rig.root)) this.shellB.visible = false;
-    if (!shown(rig.anchors.tray, rig.root)) for (const o of [this.shellA, this.shellB, this.bag, this.staff, this.rope]) o.visible = false;
+    if (!shown(rig.anchors.tray, rig.root)) for (const o of [this.shellA, this.shellB, this.bag, this.staff, this.rope, ...(this.extraProps ?? [])]) o.visible = false;
   }
 
   // The loading cycle on one clock: tl.at(step, k) is the second of the cycle at fraction k of that step, tl.now the
@@ -533,18 +592,54 @@ export class GunCrew {
   // attract mode; a stretched depress counts as its table length). tl.now is -Infinity before a cycle (unloaded) and
   // +Infinity after one (loaded, or a re-lay), so a walk window is simply clamp((now - a) / (b - a)). A pure function of
   // the job like everything here, and it lets a man set off in the step before the one he serves.
-  timeline(p, k) {
+  timeline(p, k, kRaw = k, now = 0) {
     const L = GUNS[p.kind]?.load, j = p.job;
     const T = this.tlo ??= { now: 0, end: 0, st: new Map(), at(step, kk = 0) { const e = this.st.get(step); return e ? e[0] + kk * e[1] : 0; } };
     if (!L || !L.length) return null;
     const live = !!j && j.n === L.length && L[j.i]?.step === j.step;
-    const r = live && j.step !== 'depress' ? j.dur / Math.max(0.01, L[j.i].dur) : (T.r ?? 1);
+    // (the hero drill's first cycle knows the crew's pace from the start, as the sim sets it, heroPace: taken as 1 until
+    // the first step after the depress, it jumped there and every walker on the clock with it)
+    const r = live && j.step !== 'depress' ? j.dur / Math.max(0.01, L[j.i].dur) : (T.r ?? (this.hero ? this.heroPace(p) : 1));
     if (live) T.r = r;
     let t = 0;
-    for (const s of L) { const e = T.st.get(s.step) ?? [0, 0]; e[0] = t; e[1] = s.dur * r; T.st.set(s.step, e); t += e[1]; }
+    // (the hero drill counts this cycle's depress at its real length, el / elRate, kept until the next cycle: the table's
+    // 5 s made the clock run at 0.4 of real time through a long depress, and every walker on it sped up 2.5 times at its end)
+    if (this.hero && live && j.step === 'depress') T.dep = j.dur; else if (this.hero && live && j.i === 0) T.dep = null;
+    for (const s of L) { const e = T.st.get(s.step) ?? [0, 0]; e[0] = t; e[1] = this.hero && s.step === 'depress' && T.dep ? T.dep : s.dur * r; T.st.set(s.step, e); t += e[1]; }
     T.end = t;
     T.now = live ? T.at(j.step, k) : p.loaded || p.state === 'ready' || p.state === 'laying' ? Infinity : -Infinity;
+    if (this.hero) this.heroClock(T, live ? j : null, kRaw, now);
     return T;
+  }
+
+  // (the hero drill) The crew's pace as the sim sets each step's length (sim/guns.js beginStep): short of men slower, the
+  // drill upgrade quicker; the unit is looked up once per piece object
+  heroPace(p) {
+    if (this.paceFor !== p) { this.paceFor = p; this.paceUnit = this.sim?.units?.find?.((u) => u.pieces?.includes?.(p)) ?? null; }
+    const sim = this.sim, u = this.paceUnit;
+    const crewK = Math.min(2.6, Math.max(1, (p.crewNeed ?? p.crewMax ?? 1) / Math.max(1, p.crew ?? 1))) * (sim?.attract ? 0.6 : 1);
+    return crewK * (u?.mods ? u.mods.load : 1) * (sim?.drillK ?? 1);
+  }
+
+  // (the hero drill) The cycle clock without the stall at each step's end: the sim drops the overshoot of a step that
+  // ends (up to one 0.05 s step) and the job's k is clamped at 1 meanwhile, so the clock stood still for a frame or two
+  // at every boundary and every walker on it froze. Here it runs on past the step's end until the sim moves on, and
+  // what it gained is given back over the next 0.3 s. Converges; reset by a time jump.
+  heroClock(T, j, kRaw, now) {
+    const H = this.clk ??= { i: -1, step: null, last: -Infinity, carry: 0, at: -1e9, simAt: -1e9 };
+    const dt = now - H.simAt, jump = !(dt >= 0 && dt <= 0.5);
+    H.simAt = now;
+    if (!j) { H.i = -1; H.step = null; H.last = T.now; H.carry = 0; return; }
+    const raw = T.at(j.step, Math.min(kRaw, 1 + STEP / Math.max(0.01, j.dur)));
+    if (j.i !== H.i || j.step !== H.step) {
+      // (on at the frame's pace from where it was: the sim kept only part of the frame's time for the step that ended)
+      const want = H.last + dt * (T.r ?? 1);
+      H.carry = !jump && Number.isFinite(H.last) && want > raw && want - raw <= 2 * STEP ? want - raw : 0;
+      H.at = now; H.i = j.i; H.step = j.step;
+    }
+    if (jump) H.carry = 0;
+    T.now = raw + H.carry * (1 - smooth(now - H.at, 0, 0.3));
+    H.last = T.now;
   }
 
   // a carrier's phase on the cycle clock: [phase, progress, has the round] (carryMan's phases: hold, go, place, back, pick)
@@ -555,10 +650,15 @@ export class GunCrew {
     // set off as late as a carrying pace allows (never before the cycle; the cartridge not before the shell is rammed),
     // with time to turn on the spot at either end
     const g0 = Math.max(shell ? 0 : T.at('shell', 0.8), p0 - goLen / (shell ? V_CARRY : V_BAG) - goTurn);
+    if (this.ammo && !shell) {
+      // (the hero's cartridge man: when he sets off, lets go of the case and is back at his post, crews_ammo.js)
+      const cp = this.cp ??= new Float64Array(3), b0 = p1;
+      cp[0] = g0; cp[1] = p1; cp[2] = Math.min(T.end, b0 + Math.max(0.7, backLen / V_BACK_HERO + backTurn));
+    }
     if (now < g0) return ['hold', 0, true, 0];
     if (now < p0) return ['go', (now - g0) / Math.max(0.01, p0 - g0), true, p0 - g0];
     if (now < p1) return ['place', (now - p0) / Math.max(0.01, p1 - p0), true, 0];
-    const b0 = shell ? Math.max(p1, T.at('ram', 0.06)) : p1, b1 = Math.min(T.end, b0 + Math.max(0.7, backLen / V_WALK + backTurn));
+    const b0 = shell ? Math.max(p1, T.at('ram', 0.06)) : p1, b1 = Math.min(T.end, b0 + Math.max(0.7, backLen / (this.hero ? V_BACK_HERO : V_WALK) + backTurn));
     if (now < b0) return ['place', 1, true, 0];
     if (now < b1) return ['back', (now - b0) / Math.max(0.01, b1 - b0), false, b1 - b0];
     // a moment's breath, then the next round taken up from the stack, done before the cycle ends
@@ -581,7 +681,7 @@ export class GunCrew {
     this.aRam0 = this.timed() && this.aT > -this.half ? -(this.half + 0.06) : this.aT;
     if (s === 'ram') {
       this.shellOnTray = true;
-      this.ramK = smooth(k, 0.18, 0.72);
+      this.ramK = this.hero ? heroRamK(k) : smooth(k, 0.18, 0.72); // (the hero's ram in four beats: crews_hero.js)
       a = lerp(this.aRam0, aEnd, this.ramK);
     }
     this.shellA_a = a;
@@ -590,12 +690,13 @@ export class GunCrew {
     // (the light guns' rammer draws the staff back in the first third of the next step at a walk, his body with it:
     // pulled out in the last tenth of the ram it shot back at 3 m/s)
     const slow = this.timed() && LIGHT.has(this.kind);
-    if (s === 'ram') this.staffA = (a ?? this.aRam0) - this.half - (slow ? 0 : (aEnd - this.aRam0) * smooth(k, 0.78, 0.92));
+    if (s === 'ram') this.staffA = (a ?? this.aRam0) - this.half - (slow ? 0 : (aEnd - this.aRam0) * (this.hero ? smooth(k, 0.66, 0.94) : smooth(k, 0.78, 0.92)));
     else if (slow && s === 'cartridge' && k < 0.42) this.staffA = aEnd - this.half - (aEnd - this.aRam0) * smooth(k, 0, 0.3);
     else if (s === 'cartridge') {
       const push = smooth(c.k, 0.55, 0.72) - smooth(c.k, 0.78, 0.95);
       if (c.k > 0.5 && c.k < 0.97 && !LIGHT.has(this.kind)) this.staffA = lerp(-0.7, 0.1, push);
     }
+    if (this.hero && s === 'cartridge') this.staffA = null; // (the hero's cased charge goes in by hand only)
     if (ww1State(this, c)) return;
     if (heavyState(this, c)) return;
     const owner = this.ramList?.[0] ?? this.men.find((m) => m.beh === 'ram');
@@ -625,6 +726,7 @@ export class GunCrew {
       this.staff.updateMatrix();
       this.staffGrip = engage;
       this.staffOwner = owner;
+      if (this.hero) heroStaff(this, c); // (on its hooks between rams)
     }
   }
 
@@ -634,8 +736,12 @@ export class GunCrew {
     m.home(h);
     const p = c.p, s = c.s, k = c.k;
     m.noEars = false;
+    if (this.hero) { m.carry = null; m.plantTurn = 0; } // (carry set by the behaviour below: 'shell', 'charge', 'staff', 'lanyard', 'case', or null)
     if (ww1Act(this, m, c, h)) return;
     if (heavyAct(this, m, c, h)) return;
+    if (this.ammo && m.role === 'ammo1' && heroFuzeMan(this, m, c, h)) return; // (the next round's fuze set: crews_ammo.js)
+    if (this.hero && (m.role === 'rammer2' || m.role === 'ammo1') && heroCaseMan(this, m, c, h)) return;
+    if (this.hero && heroAct(this, m, c, h)) return;
     const de = DE_ACT[m.beh]; // the Nebelwerfer's drill (crews_de.js)
     if (de) { de(this, m, c, h); return; }
     const moving =Math.abs(p.cmd.az - p.az) > 3e-4 || Math.abs(p.cmd.el - p.el) > 3e-4 || s === 'lay' || s === 'depress';
@@ -667,9 +773,11 @@ export class GunCrew {
 
   lanyardMan(m, c, h) {
     if (BLOCK_MAN[this.kind] === m.role && this.blockMan(m, c, h)) return;
+    if (this.hero && heroFirer(this, m, c, h)) return;
     const on = c.s === 'prime' ? c.k > 0.2 : c.st === 'ready' || c.st === 'laying' || (c.st === 'recoil' && c.tf < 0.5);
     // he keeps the lanyard taut and his eyes on the gun through the shot (turning away and back read as a jerk)
     m.noEars = true;
+    if (this.hero && on) m.carry = 'lanyard';
     // the pull: the hand snaps back at the shot
     m.put(h.x, h.y, h.z, h.h, on ? 'lanyard' : 'stand', on ? clamp01(c.tf * 3) : this.idleT + m.seed);
     const rope = this.rope;
@@ -696,12 +804,13 @@ export class GunCrew {
     this.grip.getWorldPosition(_a).applyMatrix4(_inv);
     // where he stands: 0.6 m from the handle's mid stroke on his side of it, at his own floor level, clear of the steel
     const home = this.tmp[1], G = this.GL; m.home(home);
-    const dx = home.x - G.x, dz = home.z - G.z, dl = Math.hypot(dx, dz) || 1, out = this.tmp[4];
-    this.toF(m, G.x + dx / dl * 0.6, G.z + dz / dl * 0.6, out);
+    const dx = home.x - G.x, dz = home.z - G.z, dl = Math.hypot(dx, dz) || 1, out = this.tmp[4], gap = this.hero ? 0.45 : 0.6;
+    this.toF(m, G.x + dx / dl * gap, G.z + dz / dl * gap, out); // (the hero's man works the crank's knob, low on the block: nearer)
     this.field.blk.length = 0;
     this.field.snap('work', m.li, out.x, out.z, R_STAND, out, m.world);
     // (the turns at either end take their own time: tied to a short walk's progress they were a one-frame snap)
     const at = this.rootXZ(m, out, _pp2), d = Math.hypot(at.x - home.x, at.z - home.z), walk = Math.max(1.7, d / V_WALK + 1.1);
+    this.blockWalk = walk; // (the hero's firer turns to his cord once he is back from the block: crews_hero.js)
     // one visit per stroke: [arrive, start work, end work, back home]
     let w = null;
     for (const st of ['open', 'close']) {
@@ -710,12 +819,20 @@ export class GunCrew {
     }
     if (!w) return false;
     const face = headingOf(G.x - at.x, G.z - at.z);
+    if (this.hero && this.rig.knobs?.crank && (now < w[1] || now > w[2])) {
+      // (the hero's block man steps with the block's travel, crews_hero.js heroBlockMan: his walks start and end where
+      // that stepping does, at the block's travel half out on the side it starts or ends)
+      const kb = now < w[1] ? (w[4] === 'open' ? 0 : 1) : (w[4] === 'open' ? 1 : 0), dd = (kb - 0.5) * 0.425;
+      at.x += this.rt.x * dd; at.z += this.rt.z * dd;
+    }
     if (now < w[1]) {
       const k = smooth(now, w[0] + 0.45, w[1] - 0.5), moving = k > 0 && k < 1 && d > 0.05;
       const hd = d > 0.05 ? headingOf(at.x - home.x, at.z - home.z) : face;
       let hh = home.h + wrapPi(hd - home.h) * smooth(now, w[0], w[0] + 0.7);
       hh += wrapPi(face - hh) * smooth(now, w[1] - 0.7, w[1]);
-      m.put(lerp(home.x, at.x, k), h.y, lerp(home.z, at.z, k), hh, moving ? 'walk' : 'stand', moving ? d * k / STRIDE : this.idleT + m.seed);
+      // (turning on the spot: in the turn windows, not walking, and a turn worth a step)
+      const pv = this.hero && !moving && (now < w[0] + 0.7 || now > w[1] - 0.7) && Math.abs(wrapPi(face - home.h)) + Math.abs(wrapPi(hd - home.h)) > 0.1;
+      m.put(lerp(home.x, at.x, k), h.y, lerp(home.z, at.z, k), hh, moving ? 'walk' : pv ? 'pivot' : 'stand', moving ? d * k / STRIDE : pv ? wrapPi(hh - home.h) / PIVOT_STEP : this.idleT + m.seed);
       return true;
     }
     if (now > w[2]) {
@@ -723,10 +840,12 @@ export class GunCrew {
       const hd = d > 0.05 ? headingOf(home.x - at.x, home.z - at.z) : home.h;
       let hh = face + wrapPi(hd - face) * smooth(now, w[2], w[2] + 0.7);
       hh += wrapPi(home.h - hh) * smooth(now, w[3] - 0.7, w[3]);
-      m.put(lerp(at.x, home.x, k), h.y, lerp(at.z, home.z, k), hh, moving ? 'walk' : 'stand', moving ? d * k / STRIDE : this.idleT + m.seed);
+      const pv = this.hero && !moving && (now < w[2] + 0.7 || now > w[3] - 0.7) && Math.abs(wrapPi(face - home.h)) + Math.abs(wrapPi(hd - face)) > 0.1;
+      m.put(lerp(at.x, home.x, k), h.y, lerp(at.z, home.z, k), hh, moving ? 'walk' : pv ? 'pivot' : 'stand', moving ? d * k / STRIDE : pv ? wrapPi(hh - face) / PIVOT_STEP : this.idleT + m.seed);
       return true;
     }
     const k = (now - w[1]) / Math.max(0.01, w[2] - w[1]), grip = smooth(k, 0, 0.1) * (1 - smooth(k, 0.9, 1));
+    if (this.hero && heroBlockMan(this, m, this.c, h, at, face, k)) return true;
     m.put(at.x, h.y, at.z, face, 'ramLoad', smooth(k, 0.1, 0.85));
     m.hand('R', _a.x, _a.y, _a.z, grip);
     m.hand('L', _a.x - this.rt.x * 0.06, _a.y - 0.08, _a.z - this.rt.z * 0.06, grip);
@@ -860,12 +979,13 @@ export class GunCrew {
         return;
       }
     }
+    if (this.hero && heroStaffMan(this, m, c, h)) return; // (the staff's owner taking it up or laying it back)
     const rammers = this.ramList ??= this.men.filter((q) => q.beh === 'ram');
     const idx = rammers.indexOf(m);
     const on = this.staffA != null;
     // lunge forward with the stroke, then fall back
     let adv = 0;
-    if (c.s === 'ram') adv = this.ramK * (this.half + 0.12 - this.aRam0) * 0.65 * (1 - smooth(c.k, 0.8, 1));
+    if (c.s === 'ram') adv = this.ramK * (this.half + 0.12 - this.aRam0) * 0.65 * (1 - (this.hero ? smooth(c.k, 0.66, 0.95) : smooth(c.k, 0.8, 1)));
     else if (c.s === 'cartridge' && on) {
       adv = 0.25 * smooth(c.k, 0.55, 0.72) * (1 - smooth(c.k, 0.78, 0.95));
       if (this.timed()) {
@@ -889,17 +1009,32 @@ export class GunCrew {
     if (adv > 0) {
       // the body stops at the steel; the staff goes on without him
       this.blockers(m);
-      if (this.pairLead && this.pairBk && (c.s === 'ram' && c.k < 0.7)) this.field.blk.push(this.pairBk[0], this.pairBk[1]);
+      if (this.hero) {
+        // (the hero drill: the carrying pair where they are now, not their tray spots dropped all at once at ram k 0.7, a
+        // 0.29 m jump; searched in centimetres)
+        for (const q of this.men) {
+          if (!/^pair/.test(q.beh) || !q.root.visible) continue;
+          const b = q.bkLive ??= [0, 0, 0.3];
+          this.toF(m, q.x, q.z, _pp); b[0] = _pp.x; b[1] = _pp.z;
+          this.field.blk.push(b);
+        }
+      } else if (this.pairLead && this.pairBk && (c.s === 'ram' && c.k < 0.7)) this.field.blk.push(this.pairBk[0], this.pairBk[1]);
       let reach = 0;
-      const rr = this.timed() ? R_STAND + 0.02 : 0.5;
-      while (reach < adv && this.field.free("work", m.li, m.sx, m.sz + back - reach - 0.05, rr, m.world)) reach += 0.05;
+      const rr = this.timed() ? R_STAND + 0.02 : 0.5, st = this.hero ? 0.01 : 0.05;
+      while (reach < adv && this.field.free("work", m.li, m.sx, m.sz + back - reach - st, rr, m.world)) reach += st;
       adv = Math.min(adv, reach);
     }
-    const effort = this.ramK * (1 - smooth(c.k, 0.76, 0.95));
-    const stepping = (adv > 0.025 && ((c.k > 0.18 && c.k < 0.7) || c.k > 0.8 || (this.timed() && c.s === 'cartridge' && (c.k > 0.15 && c.k < 0.5))))
+    if (this.hero) {
+      // and never faster than a walk (state that converges; a time jump lands at once)
+      const now = c.now, dt = now - (m.advAt ?? -1e9);
+      if (dt >= 0 && dt <= 0.5) adv = Math.max((m.advS ?? 0) - V_WALK * dt, Math.min((m.advS ?? 0) + V_WALK * dt, adv));
+      m.advS = adv; m.advAt = now;
+    }
+    const effort = this.hero && c.s === 'ram' ? heroRamEffort(c.k, this.ramK) : this.ramK * (1 - smooth(c.k, 0.76, 0.95));
+    const stepping = (adv > 0.025 && (this.hero && c.s === 'ram' ? (c.k > 0.18 && c.k < 0.55) || c.k > 0.66 : (c.k > 0.18 && c.k < 0.7) || c.k > 0.8 || (this.timed() && c.s === 'cartridge' && (c.k > 0.15 && c.k < 0.5))))
       || (back > 0 && (c.s === 'shell' && c.k < 0.15 || c.s === 'ram' && c.k > 0.55 && c.k < 0.8));
     m.put(h.x + this.bd.x * adv, h.y, h.z + this.bd.z * adv, h.h, stepping ? on ? 'carryWalk' : 'walk' : on ? 'ramLoad' : 'stand', stepping ? (adv - back) / (on ? CSTRIDE : STRIDE) : on ? effort : this.idleT + m.seed);
-    if (this.staffOwner && (on || m === this.staffOwner)) {
+    if (this.staffOwner && (on || m === this.staffOwner) && !(this.hero && this.staffRest)) {
       const hu = this.u.x * this.u.x + this.u.z * this.u.z || 1;
       const base = m.home(this.tmp[1]), startBack = this.pairLead && !this.timed() && c.s === 'ram' ? 1.2 : 0;
       const fwd = this.timed() && c.s === 'cartridge' ? adv : 0; // (the timed rammers' walk up for the cartridge)
@@ -910,10 +1045,12 @@ export class GunCrew {
       const d = Math.max(0.3, Math.min(this.staffLen - 0.5, start - (this.aT + sm)));
       const hold = Math.min(1.05, this.staffLen - 0.1), e = this.staffGrip ?? 0;
       for (const [side, dd] of [['R', d], ['L', Math.min(this.staffLen - 0.1, d + 0.38)]]) {
-        _a.set(0, 0, lerp(hold, dd, e)).applyMatrix4(this.staff.matrix);
-        const grip = m === this.staffOwner && side === 'R' ? 1 : smooth(e, 0.45, 0.95);
+        // (the hero's owner comes from holding it at his hip, the left hand half a metre nearer the head: crews_hero.js)
+        _a.set(0, 0, lerp(this.hero && m === this.staffOwner && side === 'L' ? hold - 0.5 : hold, dd, e)).applyMatrix4(this.staff.matrix);
+        const grip = m === this.staffOwner && (side === 'R' || this.hero) ? 1 : smooth(e, 0.45, 0.95);
         m.hand(side, _a.x, _a.y, _a.z, grip);
       }
+      if (this.hero && (this.staffGrip ?? 0) > 0.3) m.carry = 'staff';
     }
     // on the heavies the first two heave the breech block round by hand (where they stand at it: BLOCK_MAN's kinds
     // have another man go to the block)
@@ -953,7 +1090,10 @@ export class GunCrew {
       fq.x = m.cqOut.x; fq.z = m.cqOut.z;
     }
     const rc = this.rig.loadingStage && !shell ? 0.2 : shell ? Math.min(0.75, Math.hypot(0.42, this.half) + this.srad * 0.5) : R_WALK;
+    const hold0 = this.planHold;
+    if (this.hero && m.walkSoon) this.planHold = false; // (fresh routes just before he sets off: pairMan)
     const goP = this.plan(m, 'go', this.lw, fh.x, fh.z, fq.x, fq.z, rc, false, false, fl), backP = this.plan(m, 'back', this.lw, fq.x, fq.z, fh.x, fh.z, R_WALK, false, true, fl);
+    this.planHold = hold0;
     // the root-space place at the end of the walk
     if (m.world) { q.x = fq.x; q.z = fq.z; } else this.rootXZ(m, fq, q);
     const home = this.tmp[1];
@@ -977,8 +1117,16 @@ export class GunCrew {
     // the timed walks turn on the spot at their ends (pairAlong) instead of in their first and last eighth, a snap in a
     // short walk; A.s is how far along the route he is
     let move = travel(kk), A = null;
+    if (this.hero && timed) {
+      const G = m.plans.go, Bk = m.plans.back; if (G) G.lock = phase === 'go'; if (Bk) Bk.lock = phase === 'back';
+      m.walkSoon = (phase === 'hold' && have) || (phase === 'place' && kk > 0.6); // (his next walk is near)
+    }
+    // (the hero's cartridge man: the charge made up at its container before the walk, and the surplus put away after it:
+    // crews_ammo.js; true when that posed him)
+    if (this.ammo && !shell) { carry.visible = false; if (heroChargeMan(this, m, c, h, phase, have)) return; }
     if (timed && (phase === 'go' || phase === 'back')) {
       A = this.pairAlong(phase === 'go' ? goP : backP, kk, W, phase === 'go' ? home.h - rotA : faceQ - rotA, phase === 'go' ? faceQ - rotA : home.h - rotA, this._ca ??= {}, 0.12, ONE_OMEGA);
+      if (this.hero) heroLive(phase === 'go' ? goP : backP, A.s, phase === 'go' ? fh : fq, phase === 'go' ? fq : fh, A);
       move = A.s / Math.max(0.01, (phase === 'go' ? goP : backP).len);
     }
     const y = phase === 'go' ? lerp(hy, wy, goP.step >= 0 ? smooth(move * goP.len, goP.step - 0.3, goP.step + 0.1) : smooth(move, 0.6, 0.95))
@@ -988,7 +1136,8 @@ export class GunCrew {
     const lift = smooth(kk, 0.22, 0.92), release = phase === 'place' ? smooth(kk, 0.82, 1) : 0;
     if (A) {
       const r = this.rootXZ(m, A, _pp3), gait = phase === 'go' && have ? 'carryWalk' : 'walk';
-      m.put(r.x, y, r.z, A.h + rotA, A.moving ? gait : phase === 'go' && have ? 'carry' : 'stand', A.moving ? A.dist / (gait === 'carryWalk' ? CSTRIDE : STRIDE) : this.idleT + m.seed);
+      if (this.hero && A.moving && Number.isFinite(A.turn) && A.turnAll > 0.1) m.put(r.x, y, r.z, A.h + rotA, 'pivot', A.turn / PIVOT_STEP); // (steps round on the spot)
+      else m.put(r.x, y, r.z, A.h + rotA, A.moving ? gait : phase === 'go' && have ? 'carry' : 'stand', A.moving ? A.dist / (gait === 'carryWalk' ? CSTRIDE : STRIDE) : this.idleT + m.seed);
     } else switch (phase) {
       case 'go': m.follow(goP, move, y, have ? 'carryWalk' : 'walk', home.h, face); break;
       case 'place': {
@@ -1002,6 +1151,7 @@ export class GunCrew {
       default: m.put(home.x, hy, home.z, home.h, have ? 'carry' : 'stand', this.idleT + m.seed);
     }
     if (!have) { carry.visible = false; return; }
+    if (this.hero && !(phase === 'place' && kk >= 0.86)) m.carry = shell ? 'shell' : 'charge';
     // The carrier retains ownership until the whole shell rests on the tray. His hands then
     // withdraw while the round stays put; the next step starts from exactly that transform.
     const fx = -Math.sin(m.h), fz = -Math.cos(m.h), len = shell ? this.slen : this.bagLen;
@@ -1023,16 +1173,17 @@ export class GunCrew {
         pitch = Math.asin(this.u.y) * r;
       } else {
         // Align outside the breech first, then push the entire charge through its face.
+        // (the hero's case 6351 goes in until its rim is at the chamber's mouth: crews_ammo.js chamberA)
         const hb = len / 2 + 0.16, s1 = smooth(kk, 0.02, 0.38), s2 = smooth(kk, 0.4, 0.84);
-        const a = lerp(-hb, len / 2 + 0.1, s2);
-        const hx = this.B.x + this.u.x * a, hh = this.B.y + this.u.y * a + 0.05, hz = this.B.z + this.u.z * a;
+        const a = lerp(-hb, this.ammo ? chamberA(this) + len / 2 : len / 2 + 0.1, s2);
+        const hx = this.B.x + this.u.x * a, hh = this.B.y + this.u.y * a + (this.ammo ? 0 : 0.05), hz = this.B.z + this.u.z * a; // (the hero's case on the bore's axis)
         cx = lerp(cx, hx, s1); cy = lerp(cy, hh, s1); cz = lerp(cz, hz, s1);
         yaw += wrapPi(this.az - yaw) * s1;
         pitch = Math.asin(this.u.y) * s1;
       }
     }
     _c.set(cx, cy, cz);
-    this.placeProp(carry, _c, yaw, pitch, shell || phase !== 'place' || kk < 0.86);
+    this.placeProp(carry, _c, yaw, pitch, shell || phase !== 'place' || kk < 0.86 || !!this.ammo); // (the hero's stays seated)
     const nx = -Math.sin(yaw) * Math.cos(pitch), ny = Math.sin(pitch), nz = -Math.cos(yaw) * Math.cos(pitch);
     if (!shell && phase === 'place' && this.timed() && kk > 0.38) {
       // the cartridge pushed home: both hands on its base, leaning in, letting go as it passes out of reach
@@ -1044,7 +1195,7 @@ export class GunCrew {
     // Grip at two actual points on the pitched round, with palms underneath it.
     const grip = (phase === 'pick' ? smooth(kk, 0, 0.2) : 1) * (this.rig.loadingStage && !shell && phase === 'place' ? 1 - smooth(kk, 0.36, 0.52) : 1 - release);
     for (const [side2, sg] of [['L', -1], ['R', 1]]) {
-      m.hand(side2, cx + nx * len * 0.3 * sg, cy + ny * len * 0.3 * sg - this.srad * 0.85, cz + nz * len * 0.3 * sg, grip);
+      m.hand(side2, cx + nx * len * 0.3 * sg, cy + ny * len * 0.3 * sg - (this.ammo && !shell ? 0.115 : this.srad * 0.85), cz + nz * len * 0.3 * sg, grip); // (the hero's case is 0.24 m across)
     }
   }
 
@@ -1244,7 +1395,12 @@ export class GunCrew {
       const sg = Math.sign((ca.x - cb.x) * -az + (ca.z - cb.z) * ax) || 1;
       wp.x = cb.x - az * sg * 1.1; wp.z = cb.z + ax * sg * 1.1;
     } else { wp.x = cb.x - ax * 1.1; wp.z = cb.z - az * 1.1; }
+    // (the hero drill: searched afresh in the second before the pair sets off, though the gun is still traversing, so the
+    // route they then walk is not one from the last lay: crews_hero.js heroLive blends what is left over)
+    const hold0 = this.planHold;
+    if (this.hero && lead.walkSoon) this.planHold = false;
     const goP = this.plan(lead, 'go', this.lw, ca.x, ca.z, wp.x, wp.z, 0.8, false, false, fl, 0.5, { x: cb.x, z: cb.z }), backP = this.plan(lead, 'back', this.lw, cb.x, cb.z, ca.x, ca.z, 0.8, false, true, fl, 0.5, { x: wp.x, z: wp.z, head: true });
+    this.planHold = hold0;
     backP.x[0] = cb.x; backP.z[0] = cb.z;
     let kk = 0, phase = 'wait', W = 0;
     const T = this.tl;
@@ -1255,14 +1411,17 @@ export class GunCrew {
       this.toF(lead, this.S.x, this.S.z, _pp);
       const atStack = headingOf(_pp.x - ca.x, _pp.z - ca.z), atTray = headingOf(tf.x - cb.x, tf.z - cb.z);
       const now = T.now, p0 = T.at('shell', 0.84), p1 = T.at('shell', 1);
-      const g0 = Math.max(1, p0 - goP.len / V_PAIR - this.pairTurns(goP, atStack, atTray)), l0 = Math.max(0, g0 - 1.1);
-      const b0 = T.at('ram', 0.04), b1 = Math.min(T.end, b0 + Math.max(1, backP.len / V_WALK + this.pairTurns(backP, atTray, atStack)));
+      const g0 = Math.max(1, p0 - goP.len / (this.hero ? V_PAIR_HERO : V_PAIR) - this.pairTurns(goP, atStack, atTray)), l0 = Math.max(0, g0 - 1.1);
+      if (this.ammo) this.pairLift = l0; // (when the pair takes the round up: ammo1 has its fuze set before, crews_ammo.js)
+      const b0 = T.at('ram', 0.04), b1 = Math.min(T.end, b0 + Math.max(1, backP.len / (this.hero ? V_BACK_HERO : V_WALK) + this.pairTurns(backP, atTray, atStack)));
+      if (this.hero) lead.walkSoon = (now > g0 - 1.2 && now < g0) || (now > b0 - 1.2 && now < b0);
       if (now >= l0 && now < g0) { phase = 'lift'; kk = (now - l0) / Math.max(0.01, g0 - l0); }
       else if (now >= g0 && now < p0) { phase = 'go'; kk = (now - g0) / Math.max(0.01, p0 - g0); W = p0 - g0; }
       else if (now >= p0 && now < b0) { phase = 'place'; kk = Math.min(1, (now - p0) / Math.max(0.01, p1 - p0)); }
       else if (now >= b0 && now < b1) { phase = 'back'; kk = (now - b0) / Math.max(0.01, b1 - b0); W = b1 - b0; }
     } else if (s === 'shell') { phase = k < 0.14 ? 'lift' : k < 0.84 ? 'go' : 'place'; kk = phase === 'go' ? (k - 0.14) / 0.7 : phase === 'place' ? (k - 0.84) / 0.16 : k / 0.14; W = c.p.job.dur * 0.7; }
     else if (s === 'ram') { phase = 'back'; kk = ramp(k, 0.04, 0.72); W = c.p.job.dur * 0.68; }
+    if (this.hero) { const G = lead.plans.go, Bk = lead.plans.back; if (G) G.lock = phase === 'go'; if (Bk) Bk.lock = phase === 'back'; }
     // the centre (field frame) and its heading, then the man 0.42 m to his side of it
     let hd, moving = false, dist = 0, along = 0;
     if (phase === 'go' || phase === 'back') {
@@ -1270,6 +1429,7 @@ export class GunCrew {
       this.toF(lead, this.S.x, this.S.z, _pp);
       const atStack = headingOf(_pp.x - ca.x, _pp.z - ca.z), atTray = headingOf(tf.x - cb.x, tf.z - cb.z);
       const A = this.pairAlong(P, kk, W, phase === 'go' ? atStack : atTray, phase === 'go' ? atTray : atStack, this._pa ??= {});
+      if (this.hero) heroLive(P, A.s, phase === 'go' ? ca : cb, phase === 'go' ? cb : ca, A);
       C.x = A.x; C.z = A.z; hd = A.h; moving = A.moving; dist = A.dist; along = A.s;
     } else if (phase === 'place') { C.x = cb.x; C.z = cb.z; hd = headingOf(tf.x - cb.x, tf.z - cb.z); } else {
       C.x = ca.x; C.z = ca.z;
@@ -1286,6 +1446,7 @@ export class GunCrew {
     const fx = C.x + Math.cos(hd) * 0.42 * side, fz = C.z - Math.sin(hd) * 0.42 * side, rot = !m.world;
     const rr = this.rootXZ(m, { x: fx, z: fz }, _pp2), rx = rr.x, rz = rr.z, rh = rot ? hd + this.az : hd;
     const pushing = phase === 'place' && kk > 0.42 && kk < 0.9;
+    if (this.hero && (phase === 'lift' || phase === 'go' || (phase === 'place' && kk < 0.88))) m.carry = 'shell';
     const pose = phase === 'lift' ? 'lift' : phase === 'go' ? 'carryWalk' : pushing ? 'push' : phase === 'place' ? (kk >= 0.9 ? 'stand' : 'carry') : phase === 'back' ? 'walk' : 'stand';
     const gait = phase === 'go' ? CSTRIDE : STRIDE;
     m.put(rx, y, rz, rh, pose, moving ? dist / gait : phase === 'wait' ? this.idleT + m.seed : phase === 'lift' ? smooth(kk, 0.3, 1) : pushing ? smooth(kk, 0.42, 0.85) : 0);
@@ -1360,14 +1521,19 @@ export class GunCrew {
       a0 *= f; a1 *= f;
     }
     const t = clamp01(u) * W, tw = Math.max(0.01, W - a0 - a1);
+    out.turn = NaN; // (the angle turned so far while turning on the spot at either end; NaN while walking)
     if (t < a0) {
       polyAt(P, 0, _pt, headingOf, smooth, wrapPi);
       const e = smooth(t, 0, a0);
       out.x = _pt.x; out.z = _pt.z; out.h = hStart + d0 * e; out.s = 0; out.dist = Math.abs(d0) * e * arc; out.moving = e > 0 && e < 1;
+      if (out.moving) out.turn = d0 * e;
+      out.turnAll = Math.abs(d0);
     } else if (t > W - a1) {
       polyAt(P, P.len, _pt, headingOf, smooth, wrapPi);
       const e = smooth(t, W - a1, W);
       out.x = _pt.x; out.z = _pt.z; out.h = h1 + d1 * e; out.s = P.len; out.dist = Math.abs(d0) * arc + P.len + Math.abs(d1) * e * arc; out.moving = e > 0 && e < 1;
+      if (out.moving) out.turn = d0 + d1 * e;
+      out.turnAll = Math.abs(d1);
     } else {
       const sw = travel((t - a0) / tw) * P.len;
       polyAt(P, sw, _pt, headingOf, smooth, wrapPi);
@@ -1485,6 +1651,7 @@ export class GunCrew {
     }
     // state() has placed the staff before the hands; it remains in its owner's grasp at rest.
     this.staff.visible = !!this.staffOwner && this.level > 0;
+    if (this.ammo) heroChargeSeated(this, c); // (the hero's case stays in the chamber until the block is across it)
   }
 
   craneShells(c) {

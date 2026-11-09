@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { SMOKE, FLAME, FLASH, SPARK, rand, rr, clamp, rdir } from './kinds.js';
 import { CLOD } from './clods.js';
 import { runRocketEmitter } from './rockets.js';
+import { heroBlast, heroBurst, runHeroEmitter } from './hero.js';
 
 // The artillery set: muzzle blast, shell burst, shrapnel and ammunition cook-off. Everything here
 // spawns into the fx pools; the things that happen later (the column, the base surge, the mushroom,
@@ -12,7 +13,7 @@ const V = new THREE.Vector3(), U = new THREE.Vector3(), W = new THREE.Vector3(),
 const TAU = Math.PI * 2;
 
 // Distance level of detail: far bursts get fewer, bigger particles, so a barrage fits the pool.
-function lod(fx, p) {
+export function lod(fx, p) {
   const d = fx._cam.distanceTo(p);
   let q = clamp(1.12 - d / 5200, 0.3, 1) * clamp(fx.budget, 0.4, 1.25);
   if (!fx.cheap()) q *= 0.6; // the pool is getting full: keep the big shapes, drop the filler
@@ -26,24 +27,24 @@ function lod(fx, p) {
 }
 // Far off, things are drawn larger so a burst stays a readable shape (the flyers are enlarged the same way):
 // 1 up to 600 m, 3.2 at 3.6 km and beyond.
-const farScale = (fx, p) => clamp(1 + (fx._cam.distanceTo(p) - 600) / 1400, 1, 3.2);
-const cnt = (n, q, min = 2) => Math.max(min, Math.round(n * q));
+export const farScale = (fx, p) => clamp(1 + (fx._cam.distanceTo(p) - 600) / 1400, 1, 3.2);
+export const cnt = (n, q, min = 2) => Math.max(min, Math.round(n * q));
 // The WW2 giants (Karl 23.6 in, the V-1 22, the V-2 26, Gustav 31.5): 0 up to 18.75 in (where the old
 // scale clamp of 1.25 sits, so every calibre up to there is exactly as before), 1 at Gustav. They scale
 // on past the clamp, more gently, and the terms that could white the screen out (the flash, the
 // shockwave, the long column) are capped.
-const bigK = (calibre) => (calibre > 18.75 ? clamp((calibre - 18.75) / 12.75, 0, 1.2) : 0);
+export const bigK = (calibre) => (calibre > 18.75 ? clamp((calibre - 18.75) / 12.75, 0, 1.2) : 0);
 
 // A flash seen by the lights: one of the pooled point lights for the nearest blasts, and the analytic
 // lights through fx.onFlash (main wires it to flares.flash).
-function flash(fx, p, color, intensity, life, pool = 0.04, radius = 12) {
+export function flash(fx, p, color, intensity, life, pool = 0.04, radius = 12) {
   fx.light(p, intensity * pool, life, color);
   fx.flashAt(p, color, intensity, life, radius);
 }
 
 // A torus of smoke (a smoke ring, a mushroom head): n puffs on a ring of radius R around c with its
 // axis ax, core radius rho, drifting along the axis at fwd, the core turning at swirl.
-function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
+export function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
   U.set(Math.abs(ax.y) < 0.9 ? 0 : 1, Math.abs(ax.y) < 0.9 ? 1 : 0, 0).cross(ax).normalize();
   W.crossVectors(ax, U);
   for (let i = 0; i < n; i++) {
@@ -62,7 +63,10 @@ function vortex(fx, c, ax, R, rho, n, fwd, swirl, life, s0, s1, col, a, o) {
  * cone of smoke and dust, the dust ring racing out over the ground, grit and leaves, a smoke ring and
  * the cordite cloud that hangs and drifts.
  */
-export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
+export function gunBlast(fx, p, dir, calibre = 9.2, opts = {}) {
+  // the max-quality battery's own shot (fx/hero.js); every other gun keeps this one
+  if (opts.hero) { heroBlast(fx, p, dir, calibre, opts); return; }
+  const night = opts.night ?? false;
   const big = bigK(calibre), sc = clamp(calibre / 15, 0.16, 1.25) * (1 + 0.4 * big), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const sL = Math.min(sc, 1.25), sF = Math.min(sc, 1.4); // capped scale for opacity, and for the flash and shock
   const q = lod(fx, p), z = fx.lodZ;
@@ -171,7 +175,7 @@ export function gunBlast(fx, p, dir, calibre = 9.2, { night = false } = {}) {
 
 // Launch speed that makes a drag-and-gravity climb (dv/dt = -D v - g) peak at height h:
 // h = v/D - (g/D^2) ln(1 + D v / g), solved by bisection.
-function apexSpeed(h, D, g) {
+export function apexSpeed(h, D, g) {
   let lo = Math.sqrt(2 * g * h), hi = D * h + 3 * lo;
   for (let i = 0; i < 14; i++) {
     const v = (lo + hi) * 0.5;
@@ -182,7 +186,7 @@ function apexSpeed(h, D, g) {
 }
 
 // ---------------------------------------------------------------- shell burst
-const GROUNDS = {
+export const GROUNDS = {
   // albedos: the smoke shader lights puffs about three times as bright as the albedo in full sun
   mud: { c1: [0.065, 0.047, 0.032], c2: [0.13, 0.092, 0.063], dust: [0.3, 0.255, 0.2], smoke: [0.06, 0.047, 0.038], flash: 1, h: 1, water: false, clod: [0.07, 0.05, 0.035] },
   water: { c1: [0.5, 0.5, 0.47], c2: [0.27, 0.24, 0.2], dust: [0.5, 0.52, 0.52], smoke: [0.3, 0.3, 0.29], flash: 0.35, h: 1.12, water: true, clod: [0.6, 0.62, 0.62] },
@@ -190,7 +194,7 @@ const GROUNDS = {
 };
 GROUNDS.concrete = { ...GROUNDS.rubble, c1: [0.3, 0.29, 0.27], c2: [0.22, 0.21, 0.2], dust: [0.4, 0.39, 0.37], smoke: [0.14, 0.135, 0.13], clod: [0.32, 0.31, 0.29] };
 // h: height, w: width, flash, ring: dust ring speed, clod: count, up: how steeply the clods go
-const FUZES = {
+export const FUZES = {
   impact: { h: 1, w: 1, flash: 1, ring: 1, clod: 1, up: 1 },
   delay: { h: 1.3, w: 0.62, flash: 0.35, ring: 0.7, clod: 0.8, up: 1.15 },
   instant: { h: 0.5, w: 1.5, flash: 1.6, ring: 1.3, clod: 1.2, up: 0.55 },
@@ -201,7 +205,9 @@ const FUZES = {
  * 15). ground: 'mud' | 'water' | 'rubble' | 'concrete'. fuze: 'impact' | 'delay' | 'instant'.
  * crater: a hole was dug (the lip then sheds more earth).
  */
-export function shellBurst(fx, p, { calibre = 9.2, fuze = 'impact', ground = 'mud', crater = true } = {}) {
+export function shellBurst(fx, p, opts = {}) {
+  if (opts.hero) { heroBurst(fx, p, opts); return; }
+  const { calibre = 9.2, fuze = 'impact', ground = 'mud' } = opts;
   const big = bigK(calibre), sc = clamp(calibre / 15, 0.14, 1.25) * (1 + 0.45 * big), fa = farScale(fx, p), k8 = Math.pow(sc, 0.8) * fa, ks = Math.sqrt(sc) * Math.sqrt(fa);
   const sF = Math.min(sc, 1.4); // capped scale for the flash and the shock
   const q = lod(fx, p), z = fx.lodZ;
@@ -449,6 +455,7 @@ export function runEmitter(fx, E, i, dt) {
   const t = E.t[i], x = E.x[i], y = E.y[i], z = E.z[i];
   switch (E.type[i]) {
     case 1: {
+      if (E.h[i]) { runHeroEmitter(fx, E, i, dt); break; }
       const k = 1 - (t - E.when[i]) / E.dur[i]; // thins out as it goes
       E.acc[i] += E.rate[i] * dt * Math.max(0.15, k);
       const sc = E.a[i], big = E.b[i];
@@ -466,6 +473,7 @@ export function runEmitter(fx, E, i, dt) {
       break;
     }
     case 2: {
+      if (E.h[i]) { runHeroEmitter(fx, E, i, dt); break; }
       const sc = E.a[i], q = E.f[i], n = cnt(26 * (0.3 + 0.7 * sc), q, 8), k8 = Math.pow(sc, 0.8);
       for (let j = 0; j < n; j++) {
         const a = ((j + rand()) / n) * TAU, v = rr(9, 22) * Math.sqrt(sc) * E.b[i];
@@ -485,6 +493,7 @@ export function runEmitter(fx, E, i, dt) {
       break;
     }
     case 6: {
+      if (E.h[i]) { runHeroEmitter(fx, E, i, dt); break; }
       const sc = E.a[i], k8 = Math.pow(sc, 0.8), q = E.f[i];
       AX.set(0, 1, 0);
       V.set(x, y + E.b[i] * 0.72, z);
@@ -521,6 +530,10 @@ export function runEmitter(fx, E, i, dt) {
       E.type[i] = 0;
       break;
     }
+    case 8: // the hero shot's smoke ring
+    case 9: // the hero burst's fragment strikes
+      runHeroEmitter(fx, E, i, dt);
+      break;
     default:
       if (E.type[i] >= 10) runRocketEmitter(fx, E, i, dt);
       break;

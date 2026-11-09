@@ -6,6 +6,10 @@
 // teleports, snap heading snaps, flick pose flicker, slide metres of planted feet sliding, hand worst miss (m) /
 // frames over 8 cm, body frames with a hand in the torso, elbow frames with an elbow turned across the body.
 // With --shots it also saves the contact sheet (one column per moment, one row per camera). Needs the dev server.
+// The max-quality battery (shots/maxq/PLAN.md): --maxq [1|2] the HD rig and the hero drill, --fire onready the real sim's
+// firing (a gun fires the step it comes ready), --tail s the seconds run past the second shot; with either, the shot's
+// metrics are printed under each run (ears and pull at the shot, the commander's arm drop, one-frame poses, the knobs,
+// loose props, the ground men's jolt, speed-guard catch-ups).
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 
@@ -13,11 +17,12 @@ const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const kinds = args[0] && !args[0].startsWith('--') ? args[0] : 'lefh18';
 const qs = new URLSearchParams({ gun: kinds, scn: opt('--scn', '0,1,2'), speed: opt('--speed', '1'), ev: opt('--ev', '8'), top: opt('--top', '10') });
-for (const k of ['shots', 'cams', 'tile']) if (opt('--' + k)) qs.set(k, opt('--' + k));
+for (const k of ['shots', 'cams', 'tile', 'fire', 'tail', 'hd']) if (opt('--' + k)) qs.set(k, opt('--' + k));
+if (args.includes('--maxq')) { const v = opt('--maxq'); qs.set('maxq', v && !v.startsWith('--') ? v : '1'); }
 const out = opt('--out', 'shots/crewaudit.png');
 const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1217', 'chromium-1247']
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`).find((p) => fs.existsSync(p));
-const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ executablePath: exe, args: [...(process.env.GPU === '1' ? ['--use-angle=gl', '--use-gl=angle', '--enable-gpu'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader']), '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1800, height: 1200 } });
 await page.addInitScript(() => { const O = window.WebSocket; window.WebSocket = function (u, p) { if (String(u).includes('5201')) return { close() {}, send() {}, addEventListener() {} }; return new O(u, p); }; });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
@@ -33,6 +38,11 @@ else for (const [k, b] of Object.entries(r.brief)) {
   for (const [role, m] of Object.entries(b.motion)) console.log(`   ${role.padEnd(10)} ${m}`);
   for (const [role, evs] of Object.entries(b.motionEvents)) for (const e of evs) console.log(`     ${role}: ${e}`);
   if (args.includes('--slides')) for (const [role, v] of Object.entries(b.slides ?? {})) console.log(`     ${role} slides: ${v}`);
+  if (b.shot) {
+    const S = b.shot;
+    console.log(`   shot: ${S.shots.map((x) => `T${x.T} ears ${x.preEars}/${x.ears} pull ${x.prePull}/${x.pull}`).join('; ')}`);
+    console.log(`   shot: arm drop ${JSON.stringify(S.armDrop)} blips ${S.blips} ${JSON.stringify(S.blipBy)} knob ${S.knob ? `${S.knob.max}/${S.knob.mean} [${S.knob.worst}]` : '-'} loose staff ${S.loose.staff}${S.loose.at ? ` ${S.loose.at.join(',')}` : ''} case ${S.loose.kase} shake ${S.shake} guard ${S.guard} ${JSON.stringify(S.guardBy ?? {})}`);
+  }
 }
 if (qs.get('shots')) {
   const box = await page.evaluate(() => { const c = document.querySelector('canvas'); return c ? [c.width, c.height] : null; });

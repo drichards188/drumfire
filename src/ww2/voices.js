@@ -44,6 +44,12 @@ const TRAY = new Set(['k18', 'mrs18', 'bertha', 'm16', 'k38', 'm99']);
 const WERFER = new Set(['nbw41', 'nbw42', 'swg40']);
 const LIFT = new Set(['gustav', 'max38', 'gamma']);
 const BAGS = new Set(['k18', 'mrs18', 'bertha', 'gustav', 'karl', 'max38', 'gamma']);
+// The max-quality battery (shots/maxq/PLAN.md, the AudioEngine's hero kinds): its crew shouts from the man who speaks
+// (the line's speaker: gf the gun commander, lk the loader, by their roles on the gun; render/foley.js speakerAt), the
+// man whose post the player holds says nothing (he does not shout to himself: the gunner's posts), and its drill takes
+// the lines of its own breech: a sliding block with a brass cartridge case, fired by a lanyard (refs/k18_mrs18).
+const HERO_SPEAKERS = { mrs18: { gf: 'officer', lk: 'loader1' } };
+const POST_SPEAKER = { cmd: 'gf', load: 'lk' };
 const KARL_STAGE = { driving: 'k_drive', emplace: 'k_emplace', pivot: 'k_pivot', lowering: 'k_lower', down: 'k_down', raising: 'k_raise' };
 // the Abteilung's call for a new mission by target kind (WW1's British kinds: the dumps and the road traffic; their
 // batteries are m_cb as every battery, and the Mark IV laager is left to m_any)
@@ -222,7 +228,7 @@ export class CrewVoices {
 
   on_load(u, p, step) {
     if (!this.voiced(u, p)) return;
-    const k = p.kind, multi = u.pieces.length > 1, i = p.i;
+    const k = p.kind, multi = u.pieces.length > 1, i = p.i, hero = !!this.audio?.hero?.has?.(k);
     let id = null;
     if (k === 'nbw41') id = { open: 'w_open', shell: 'w_shell', prime: 'w_prime', lay: 'w_lay', cover: 'w_cover', ready: `w_r${i + 1}` }[step];
     else if (step === 'ready') id = multi && i < 4 ? `r_${i + 1}` : 'r_single';
@@ -230,15 +236,24 @@ export class CrewVoices {
     else id = {
       depress: 's_depress', open: 's_open', ram: 's_ram', close: 's_close',
       shell: LIFT.has(k) ? 's_shell_hoist' : k === 'karl' ? 's_shell_crane' : TRAY.has(k) ? 's_shell_tray' : 's_shell',
-      cartridge: BAGS.has(k) ? 's_cart_bags' : 's_cart',
-      prime: BAGS.has(k) ? 's_prime_tube' : 's_prime',
+      cartridge: BAGS.has(k) && !hero ? 's_cart_bags' : 's_cart',
+      prime: BAGS.has(k) && !hero ? 's_prime_tube' : 's_prime',
     }[step];
     if (!id) return;
+    // the max-quality battery: said by the man whose line it is, where he stands; not by the player's own man
+    const who = hero ? { pi: i, speaker: this.lines[id]?.speaker } : null;
+    if (hero && this.ownPost(u, p, who.speaker)) return;
     // a gun with rounds still ordered fires the moment it is ready: no report. Otherwise the report waits a moment, so
     // that an order to fire given at once (an AI crew fires as soon as a gun is ready) goes instead of it
-    if (step === 'ready') { if (!((p.rounds ?? 0) > 0)) this.say([id], { ch: 'gun', priority: 2, key: 'ready', pos: p.pos, unit: u.id, hold: 0.4 }); }
+    if (step === 'ready') { if (!((p.rounds ?? 0) > 0)) this.say([id], { ch: 'gun', priority: 2, key: 'ready', pos: p.pos, unit: u.id, hold: 0.4, ...who }); }
     // a step said less than 15 s ago is left out: a field howitzer firing for effect calls every other cycle, not each
-    else if (this.throttle(`step:${id}`, 15)) this.say([id], { ch: 'gun', priority: 0, key: 'step', pos: p.pos, unit: u.id });
+    else if (this.throttle(`step:${id}`, 15)) this.say([id], { ch: 'gun', priority: 0, key: 'step', pos: p.pos, unit: u.id, ...who });
+  }
+
+  // the player stands in this gun's man of `speaker` (the gunner's post: the commander's, the loader's)
+  ownPost(u, p, speaker) {
+    const st = this.sim?.gunner?.st;
+    return !!st && st.unitId === u.id && st.pi === p.i && !!speaker && POST_SPEAKER[st.post] === speaker;
   }
 
   on_fire(u, p, shell) {
@@ -471,13 +486,13 @@ export class CrewVoices {
 
   // ---------------------------------------------------------------- the queues
 
-  /** Queue an utterance: ids played back to back on a channel. opts: { ch, priority, key, pos (gun), unit } */
-  say(ids, { ch = 'tel', priority = 1, key = null, pos = null, unit = null, hold = 0 } = {}) {
+  /** Queue an utterance: ids played back to back on a channel. opts: { ch, priority, key, pos (gun), unit, pi and speaker (the man who says it) } */
+  say(ids, { ch = 'tel', priority = 1, key = null, pos = null, unit = null, hold = 0, pi = null, speaker = null } = {}) {
     if (!this.live() || !ids.length || !ids.every((id) => this.lines[id])) return;
     const q = this.queue[ch], t = now();
     // a newer line of the same kind replaces one still waiting
     if (key) for (let i = q.length - 1; i >= 0; i--) if (q[i].key === key && (q[i].unit === unit || unit == null)) q.splice(i, 1);
-    q.push({ ids, priority, key, pos: pos ? { x: pos.x, y: (pos.y ?? 0) + 1.7, z: pos.z } : null, unit, at: t, due: t + hold });
+    q.push({ ids, priority, key, pos: pos ? { x: pos.x, y: (pos.y ?? 0) + 1.7, z: pos.z } : null, unit, at: t, due: t + hold, pi, speaker });
     q.sort((a, b) => b.priority - a.priority || a.at - b.at);
     if (q.length > 6) q.length = 6;
     // an order at the guns cuts a lesser callout short (the officer's "Feuer!" over the loader's "Verschluss zu!")
@@ -548,6 +563,9 @@ export class CrewVoices {
   // At the guns: a shout in the open, heard from where it is shouted, after its travel time, through the distance filters.
   shout(item, bufs, text, dur) {
     const a = this.audio, c = a.ctx;
+    // (the max-quality battery: from the man who says it, where he stands as the line starts)
+    const role = item.speaker && HERO_SPEAKERS[this.sim?.unitById?.(item.unit)?.pieces?.[item.pi]?.kind]?.[item.speaker];
+    if (role && a.speakerAt?.(item.unit, item.pi, role, (this.spk ??= { x: 0, y: 0, z: 0 }))) item.pos = { x: this.spk.x, y: this.spk.y, z: this.spk.z };
     a.enqueue('voice', item.pos, REF, LEVEL, (p) => {
       if (item.cancelled) return;
       const r = a.route(p, { ref: REF, level: LEVEL, reverb: 0.22 });

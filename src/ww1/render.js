@@ -34,7 +34,8 @@ const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha', 'fk16', 'k16']); // (the 
 const smooth = (t, a, b) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3(0, 0, -1);
 
-export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns }) {
+// only: a Set of unit ids whose scenery alone is built (main: the max-quality lesson, its lent battery); null: every unit's
+export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, unitRoot, guns, only = null }) {
   const sites = new Map(); // key -> { root, ...setters } of a big gun's firing position
   const gunPositions = new Map(); // piece key -> the regular guns' pits
   const planes = new Map(); // aircraft id -> pool entry
@@ -54,6 +55,7 @@ export function createWW1Render({ scene, sim, terrain, fx, rigs, renderLayer, un
   const there = (q, s) => { const u = s.unitById(q.unitId); return !!u && (q.pi == null || u.pieces.some((p) => p.i === q.pi)); };
   for (const u of sim.units) {
     const id = u.id, kind = u.kind;
+    if (only && !only.has(id)) continue;
     const pieces = u.pieces.map((p) => ({ i: p.i, x: p.pos.x, z: p.pos.z, bearing: p.bearing }));
     const builder = SITE_OF[kind] ? guns?.EXTRAS?.[SITE_OF[kind]] : null;
     if (builder && pieces.length > 1) {
