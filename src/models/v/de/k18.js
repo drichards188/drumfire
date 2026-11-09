@@ -99,9 +99,10 @@ function build(G, { scheme = 'dgelb' } = {}) {
   const gir = [[-2.05, 0.6], [-2.05, 1.02], [4.95, 1.02], [5.62, 0.86], [5.62, 0.46], [4.4, 0.4], [-0.9, 0.4], [-1.55, 0.5]];
   for (const s of [-1, 1]) {
     T.add('camo', sideProfile(gir, 0.24).translate(s * 0.5, 0, 0));
-    T.add('camo', box(0.3, 0.025, 7.0, s * 0.5, 1.0325, 1.45)); // top flange
+    // (the flanges stop 0.43 m out: the firing lever, 0.41 m out, passes them at 50 to 70 degrees)
+    T.add('camo', box(0.22, 0.025, 7.0, s * 0.54, 1.0325, 1.45)); // top flange
     T.add('steel', box(0.11, 0.022, 7.0, s * 0.5, 1.049, 1.45)); // the running rail of the top carriage
-    T.add('camo', box(0.3, 0.025, 5.4, s * 0.5, 0.4125, 1.75)); // bottom flange
+    T.add('camo', box(0.22, 0.025, 5.4, s * 0.54, 0.4125, 1.75)); // bottom flange
     const xo = s * 0.621;
     T.add('camo', rivetRow(V(xo, 0.97, -2.0), V(xo, 0.97, 4.9), 0.16, V(s, 0, 0), 0.017));
     T.add('camo', rivetRow(V(xo, 0.46, -0.85), V(xo, 0.46, 4.4), 0.16, V(s, 0, 0), 0.017));
@@ -109,9 +110,11 @@ function build(G, { scheme = 'dgelb' } = {}) {
   }
   T.add('camo', box(0.76, 0.42, 0.12, 0, 0.8, -1.99)); // front transom
   T.add('camo', box(0.76, 0.08, 0.3, 0, 0.4, -1.0)); // lower transom carrying the front roller
-  for (const z of [2.55, 3.75]) T.add('camo', box(0.76, 0.5, 0.1, 0, 0.72, z));
+  // nothing between the girders from the pivot back to z 3.3: in recoil at mid elevation (barrel and top carriage
+  // both run back) the breech ring comes down to 0.3 m over the ground as far back as z 3.2
+  T.add('camo', box(0.76, 0.5, 0.1, 0, 0.72, 3.75));
   T.add('camo', box(1.0, 0.42, 0.06, 0, 0.66, 5.62)); // trail end plate
-  T.add('camo', box(0.76, 0.04, 2.9, 0, 0.42, 4.05)); // trail floor
+  T.add('camo', box(0.76, 0.04, 2.2, 0, 0.42, 4.4)); // trail floor
   T.add('camo', box(1.24, 0.04, 1.75, 0, DECK - 0.02, 4.125)); // the deck over the trail behind the top carriage's run
   for (let z = 3.4; z < 5.0; z += 0.3) T.add('camo', box(1.1, 0.012, 0.025, 0, DECK + 0.006, z)); // cleats
   T.add('camo', rivetRow(V(-0.58, DECK + 0.001, 3.3), V(-0.58, DECK + 0.001, 4.95), 0.15, V(0, 1, 0), 0.014));
@@ -211,7 +214,7 @@ function build(G, { scheme = 'dgelb' } = {}) {
       const top = topAt(cheek, z) - 0.03;
       C.add('camo', box(0.035, top - RAIL - 0.08, 0.05, s * 0.595, (top + RAIL + 0.08) / 2, z));
     }
-    C.add('dark', box(0.2, 0.05, 3.96, s * 0.5, RAIL + 0.025, 0.55)); // slide shoes
+    C.add('dark', box(0.17, 0.05, 3.96, s * 0.515, RAIL + 0.025, 0.55)); // slide shoes (clear of the firing lever at 45 degrees)
     C.add('camo', xTube(s * 0.53, s * 0.66, 0.21, 0.21, 24, TRY, TRZ)); // trunnion bearing housing
     C.add('camo', box(0.13, 0.08, 0.5, s * 0.595, TRY + 0.21, TRZ)); // its cap
     for (const z of [-0.2, 0.3]) C.add('steel', yTube(TRY + 0.25, TRY + 0.29, 0.025, 0.025, 6, s * 0.595, TRZ + z));
@@ -221,9 +224,13 @@ function build(G, { scheme = 'dgelb' } = {}) {
     C.add('steel', xTube(s * 0.6, s * 0.86, 0.035, 0.035, 8, EQ.lo[0], EQ.lo[1]));
   }
   C.add('camo', box(1.06, 0.48, 0.12, 0, RAIL + 0.3, -1.38)); // front transom
-  C.add('camo', box(1.06, 0.38, 0.95, 0, RAIL + 0.25, 2.07)); // rear box over the slide
-  C.add('camo', rivetRow(V(-0.5, 1.47, 1.65), V(0.5, 1.47, 1.65), 0.14, V(0, 0, -1), 0.016));
-  C.add('dark', box(0.9, 0.08, 0.2, 0, 1.36, 2.6)); // buffer stop
+  // the rear box over the slide: a box girder inside each cheek and an open slot between them, because the breech
+  // swings down through there (at rest from about 20 degrees up; in recoil the ring runs back over the whole box). At
+  // its widest (the firing lever, the ring's ledge) the breech is 0.41 m either side of the bore.
+  for (const s of [-1, 1]) {
+    C.add('camo', box(0.08, 0.38, 0.95, s * 0.49, RAIL + 0.25, 2.07));
+    C.add('camo', rivetRow(V(s * 0.49, 1.501, 1.7), V(s * 0.49, 1.501, 2.5), 0.16, V(0, 1, 0), 0.016));
+  }
   // elevating gear: the pinion on the left cheek meshing with the cradle's arc, the handwheel and its gearbox; the
   // traversing handwheel on the right
   C.add('steel', xTube(-0.53, -0.4, 0.06, 0.06, 12, TRY - 0.787, TRZ - 0.069));
@@ -427,8 +434,21 @@ function build(G, { scheme = 'dgelb' } = {}) {
 
   hb(rig, -1.45, 0, -2.5, 1.45, 3.0, 1.0);
   hb(rig, -1.65, 0, 1.0, 1.65, 2.7, 5.9);
-  return finishRig(rig, G.kind, G.kind);
+  finishRig(rig, G.kind, G.kind);
+
+  // ---- the crew's keep-out, never drawn: the crew field (render/crewfield.js) reads every mesh, hidden ones too, for
+  // where a man may stand and walk. What was opened for the breech's swing and recoil (the slot between the cheeks,
+  // the transom at z 2.55, the front of the trail floor, the strips off the shoes and flanges) has no floor to stand
+  // on, so the field keeps those volumes as they were and the drill is the one it was. Added after finishRig, so they
+  // cast no shadow, with a material no pass draws.
+  const keepOut = (parent, geoms) => { for (const g of geoms) { const m = new THREE.Mesh(g, KEEP_OUT); m.name = 'keepOut'; m.visible = false; parent.add(m); } };
+  keepOut(car, [box(1.06, 0.38, 0.95, 0, RAIL + 0.25, 2.07), box(0.9, 0.08, 0.2, 0, 1.36, 2.6),
+    ...[-1, 1].map((s) => box(0.03, 0.05, 3.96, s * 0.415, RAIL + 0.025, 0.55))]);
+  keepOut(trav, [box(0.76, 0.5, 0.1, 0, 0.72, 2.55), box(0.76, 0.04, 0.7, 0, 0.42, 2.95),
+    ...[-1, 1].flatMap((s) => [box(0.08, 0.025, 7.0, s * 0.39, 1.0325, 1.45), box(0.08, 0.025, 5.4, s * 0.39, 0.4125, 1.75)])]);
+  return rig;
 }
+const KEEP_OUT = new THREE.MeshBasicMaterial({ visible: false });
 
 // The height of a [z, y] outline's top edge at z.
 function topAt(poly, z) {

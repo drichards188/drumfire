@@ -34,6 +34,10 @@ const PAIRS = [
   ['bridge', 'breech'], ['bridge', 'recoil'], ['bridge', 'elevation'], ['bridge', 'tray'], ['bridge', 'traverse', 1], ['cshell', 'bridge'], ['staff', 'bridge'], ['trolley', 'bridge', 1],
   ['tray', 'breech'], ['recoil', 'breech', 1], ['traverse', 'breech'], ['traverse', 'recoil'], ['traverse', 'tray'], ['traverse', 'elevation', 1], ['elevation', 'recoil', 1], ['elevation', 'breech'], ['crane', 'hoist', 1], ['hoist', 'crane', 1], ['traverse', 'bridge', 1], ['traverse', 'trolley', 1],
   ['trolley', 'tray'], ['trolley', 'recoil'], ['trolley', 'elevation'], ['trolley', 'traverse', 1], ['trolley', 'breech'], ['trolley', 'root', 1],
+  // a top carriage that slides on the lower one (the German Mörserlafette and its kin: pivot 'carriage'); the breech
+  // swings down between its cheeks, which the pairs above never tested (the British guns have no such pivot)
+  ['breech', 'carriage'], ['recoil', 'carriage'], ['loadTray', 'carriage'], ['cshell', 'carriage'], ['cbag', 'carriage'], ['staff', 'carriage'],
+  ['elevation', 'carriage', 1], ['carriage', 'traverse', 1], ['carriage', 'root'],
 ];
 
 // ------------------------------------------------------------------ geometry helpers
