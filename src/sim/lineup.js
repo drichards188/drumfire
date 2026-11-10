@@ -18,6 +18,7 @@ import { mulberry32 } from '../noise.js';
 const TRAFFIC = new Set(['crossroads', 'railyard', 'aconvoy', 'bconvoy']); // a mission only while the traffic is there
 const WAIT = 600; // the longest a scripted mission waits for a free hand (s)
 const IDLE = 80; // a battery idle this long is given work (s), and again this long after its last
+const IDLE_LEVEL = 15; // the same on a threat level when the lineup has nothing at all in hand (s)
 const PRIORITY = { cb: 8, destroy: 5 };
 const BATTERIES = new Set(['battery', 'abattery', 'amedium', 'sbattery', 'bgun15', 'bgun92', 'bgun6', 'bgun60', 'bgunrail', 'bfield']); // a counter-battery mission (1917, WW2, the 1918 ridge)
 
@@ -32,9 +33,10 @@ export class LineupDay {
     this.stats = { moved: 0, dropped: 0, waited: 0, work: 0 }; // for the tests
   }
 
-  // the script's entries, each run with `scripting` set
+  // the script's entries, each run with `scripting` set (an entry's other fields, a threat level's `attack` and
+  // `order` marks, kept)
   wrap(script) {
-    return script.map((e) => ({ t: e.t, fn: () => { this.scripting = true; try { e.fn(); } finally { this.scripting = false; } } }));
+    return script.map((e) => ({ ...e, fn: () => { this.scripting = true; try { e.fn(); } finally { this.scripting = false; } } }));
   }
 
   // the mission a site would give (as the directors' siteMission makes it), for crews.canServe and crews.score
@@ -69,9 +71,12 @@ export class LineupDay {
   busy(t) {
     return this.sim.missions.some((m) => m.targetId === t.id && m.state !== 'done' && m.state !== 'failed') || this.queue.some((q) => q.id === t.id);
   }
-  // the sites the day may send a battery to instead: alive, standing, not the heavy and long guns' own, not traffic
+  // the sites the day may send a battery to instead: alive, standing, not the heavy and long guns' own, not traffic,
+  // and on a threat level only one it offers (the director's `canOffer`) and not one whose mission would be done before
+  // a round was fired (a silenced battery or a broken-up laager, `spent`)
   pool() {
-    return this.sim.targets.filter((t) => t.alive && !t.offmap && t.present !== false && !t.site?.role && !TRAFFIC.has(t.kind) && !this.busy(t));
+    const d = this.sim.director;
+    return this.sim.targets.filter((t) => t.alive && !t.offmap && t.present !== false && !t.site?.role && !TRAFFIC.has(t.kind) && !this.busy(t) && !d.spent?.(t) && d.canOffer?.(t) !== false);
   }
   // another site of the same kind for one no battery can serve, or null. (Not of another kind: that took the script's
   // later sites early, when the guns were busy, and the work below already finds an idle battery something to do)
@@ -106,6 +111,8 @@ export class LineupDay {
   update() {
     const sim = this.sim, d = sim.director, now = sim.time;
     if (sim.state !== 'playing') return;
+    // a threat level's orders done (ww1/director.js close): nothing more is given
+    if (d.noOrders) { this.queue.length = 0; return; }
     // the queue: the stale and the gone dropped, then, while there is a free hand, the one that best suits the lineup
     this.queue = this.queue.filter((q) => {
       const ok = now <= q.until && sim.targetById(q.id)?.alive;
@@ -125,9 +132,11 @@ export class LineupDay {
     }
     // work: by day or night, from the bombardment to Zero hour, while there is a free hand and nothing waits
     if (sim.phase < 2 || sim.barrage || this.queue.length || this.inHand() >= this.capacity()) return;
+    // (a threat level's battle ends on its orders, so a lineup with nothing at all in hand is not kept waiting)
+    const wait = sim.level && this.inHand() === 0 ? IDLE_LEVEL : IDLE;
     for (const u of sim.units) {
       const since = this.idle.get(u.id);
-      if (since == null || now - since < IDLE) continue;
+      if (since == null || now - since < wait) continue;
       const choices = this.pool().filter((t) => this.serves(u, t));
       if (!choices.length) continue;
       let best = null, bs = -Infinity;

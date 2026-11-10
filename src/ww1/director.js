@@ -7,7 +7,7 @@
 // timetable ahead of our assault. Win: our assault takes the British line; loss: two sectors lost, or every gun.
 import { SECTORS, LINES, lineX } from '../sector.js';
 import { TARGETS, SHELLS, G, GUNS } from '../sim/tables.js';
-import { DirectorWW2 } from '../ww2/director.js';
+import { DirectorWW2, LULL, LAPSE } from '../ww2/director.js';
 import { BRIT_BATTERIES } from './targets.js';
 import { SUPER_WW1 } from './ops.js';
 import { tierOf, siteVerdict } from '../capability.js';
@@ -24,13 +24,25 @@ const GUNS_SHRAPNEL = new Set(['k17', 'lefh18', 'fk16', 'wespe', 'rk92']); // (t
 export const ZERO_NEED = { Easy: 0.54, Normal: 0.6, Hard: 0.64 };
 export const FIELD = { dur: 60, every: 3.2 }; // the division's field batteries on the Sperrfeuer line
 
-// The threat levels (threat.js, sim.level; the German career's open battle). The day ends with its `day` (X-Zeit on a
-// 'full' one, as without a level); a shorter day is won by holding the front to its end with enough of its site
-// missions done (`need`, their share). The level's sites only (its `sites`, capability.js tierOf); one no battery of
-// the lineup can finish goes to the neighbouring Gruppe (a radio line, no pay, no penalty). The attacks: the first
-// `attacks` of ATTACKS inside the day; with `tanks`, a tank laager that still has half its tanks four minutes before an
-// attack on its side sends them in with it (TANK_K the attack's size).
-export const DAY_END = { morning: 900, day: 1300, night: 1850 };
+// The threat levels (threat.js, sim.level; the German career's open battle). A level's battle ends on its missions,
+// never on the clock (the user's rule, 2026-11-10: nobody sits out the rest of a day with the work done):
+//   the orders  the day's sites, traffic and attacks come as before until `need` fire missions are done (destroy, cb,
+//               harass); more than `fails` failed (destroy and cb: traffic that gets away was only a chance in
+//               passing) lose it, and so does running out of anything in reach before `need` (nothingLeft)
+//   the close   no new orders; the attacks the level still owes come one after another, the day running on to each
+//   the finale  a shorter day is won (lost if the orders ran out short); a 'full' one goes on to X-Zeit, whose assault
+//               decides it. Two sectors lost or every gun lost end any day at once, as always.
+// The day's clock (pace): on through a lull as before, never past the day's end (`DAY_END`, X-Zeit for a full one)
+// before the close (a slow day does not run out: the sky waits), and in the close on to each attack owed and X-Zeit.
+// (Kept abreast of the orders done as well, it brought the attacks and the counter-battery calls on faster than the
+// crews work: the failures and lost sectors piled up, 2026-11-10.) The level's sites only (its `sites`, capability.js
+// tierOf); one no battery of the lineup can finish goes to the neighbouring Gruppe (a radio line, no pay, no
+// penalty). The attacks: the first `attacks` of ATTACKS; with `tanks`, a tank laager that still has half its tanks
+// four minutes before an attack on its side sends them in with it (TANK_K the attack's size).
+export const DAY_END = { morning: 900, day: 1300, night: 1850, full: 1850 };
+const ZERO_T = 1850; // X-Zeit on the day's clock (ops.js phase 5)
+const ORDERS = ['destroy', 'cb', 'harass'], FAILS = ['destroy', 'cb'];
+const missions = (n) => `${n} fire mission${n === 1 ? '' : 's'}`;
 const ATTACKS = [[925, 'B', 0.6], [1230, 'D', 0.5], [1090, 'C', 0.6], [1530, 'A', 0.5], [1700, 'B', 0.55]];
 const TANK_K = 1.3;
 const LAAGER = { A: 'T1', B: 'T1', C: 'T2', D: 'T2' };
@@ -55,9 +67,11 @@ export class DirectorWW1 extends DirectorWW2 {
   reset() {
     super.reset();
     const sim = this.sim, L = sim.level;
-    this.dayEnded = false;
     this.handedOff = new Set();
-    this.endAt = L && this.op.kind === 'battle' ? DAY_END[L.day] ?? null : null;
+    this.verdicts = new Map(); // site id -> whether a battery of the lineup can finish it (canOffer)
+    // a level's orders (levelUpdate): its day's end on the clock, whether the close has begun and why
+    this.lv = L && this.op.kind === 'battle' ? { endT: DAY_END[L.day] ?? ZERO_T, closing: false, short: false } : null;
+    this.noOrders = false; // the close: the lineup's day and the specialists give nothing more (sim/lineup.js)
     // the strongpoints in the X-Zeit lanes (ops.js RIDGE_FORTS): the level's `forts` of them, in their order (one in
     // each lane first); none without a level
     const forts = sim.targets.filter((t) => t.site?.role === 'fort');
@@ -79,13 +93,25 @@ export class DirectorWW1 extends DirectorWW2 {
     const L = this.sim.level;
     if (!L) return true;
     if (!L.sites.includes(tierOf(t))) return false;
-    if (NO_HANDOFF.has(t.kind)) return true;
-    if (siteVerdict(this.bats, { kind: t.kind, pos: t.pos, role: t.site?.role ?? null }, { deadlineK: L.deadline }) !== 'no') return true;
+    if (this.canOffer(t)) return true;
     if (!this.handedOff.has(t.id)) {
       this.handedOff.add(t.id);
       this.sim.radio(`Nachbargruppe: ${t.name} is beyond what our batteries can finish; the neighbouring Gruppe takes it.`, 'info');
     }
     return false;
+  }
+
+  // the same without a word (the lineup's day asks it of the sites it gives as work, sim/lineup.js pool; it used to
+  // pick ones the level does not offer, be refused and leave the battery idle for another 80 s). The verdict per site
+  // is kept: the lineup's batteries (this.bats) are fixed for the battle
+  canOffer(t) {
+    const L = this.sim.level;
+    if (!L) return true;
+    if (!L.sites.includes(tierOf(t))) return false;
+    if (NO_HANDOFF.has(t.kind)) return true;
+    const c = this.verdicts;
+    if (!c.has(t.id)) c.set(t.id, siteVerdict(this.bats, { kind: t.kind, pos: t.pos, role: t.site?.role ?? null }, { deadlineK: L.deadline }) !== 'no');
+    return c.get(t.id);
   }
 
   obsName(o) {
@@ -149,8 +175,8 @@ export class DirectorWW1 extends DirectorWW2 {
 
   siteMission(id, over = {}) {
     const sim = this.sim;
-    // a threat level's sites only (offers)
-    if (sim.level) { const t0 = sim.targetById(id); if (!t0 || !this.offers(t0)) return null; }
+    // a threat level's sites only (offers), and none whose mission would be done before a round is fired (spent)
+    if (sim.level) { const t0 = sim.targetById(id); if (!t0 || !this.offers(t0) || this.spent(t0)) return null; }
     // a lineup's day may send it to another site, hold it back or leave it out (sim/lineup.js: the German career's)
     if (this.day) { const g = this.day.gate(id, over); if (!g) return null; ({ id, over } = g); }
     const t = sim.targetById(id);
@@ -199,6 +225,17 @@ export class DirectorWW1 extends DirectorWW2 {
     if (tank) m.aimPart = tank;
     if (intel) m.intel = true;
     return m;
+  }
+
+  // a threat level's site already out of action by its rules (missionsUpdate): a British battery silenced (half its
+  // guns out, or the base rule), a tank laager broken up (half its tanks out). Its silenced battery's last guns still
+  // fire, and watchBatteries opened a Gegenbatterie on it every 200 s that was done at once, unfired: a free mission
+  // (about fourteen a game on level 3, most of what its count was met with)
+  spent(t) {
+    if (!this.sim.level || !t?.alive || t.parts.length < 2) return false;
+    if (BRIT_BATTERIES.has(t.kind)) return this.sim.targetAI.silenced(t) || this.sim.targetAI.alivePartCount(t) * 2 <= t.parts.length;
+    if (t.kind === 'btanks') return this.sim.targetAI.alivePartCount(t) * 2 <= t.parts.length;
+    return false;
   }
 
   // the live tank of a laager nearest a point
@@ -250,27 +287,139 @@ export class DirectorWW1 extends DirectorWW2 {
 
   update(dt) {
     const sim = this.sim;
-    // a threat level's shorter day: it ends at its hour
-    if (this.endAt != null && !this.dayEnded && this.dayTime >= this.endAt && sim.state === 'playing') return this.dayEnd();
     super.update(dt);
     if (!sim.scripted) this.fieldFire();
+    if (this.lv) this.levelUpdate();
   }
 
-  // the end of a level's shorter day: won when the front holds (two sectors lost end it at once, as always) and the
-  // level's number of site missions (`need`) were done; the end card says which (sim.over)
-  dayEnd() {
-    const sim = this.sim, L = sim.level, st = sim.stats.missions;
-    this.dayEnded = true;
-    let done = 0;
-    for (const k of ['destroy', 'cb', 'harass']) done += st[k]?.done ?? 0;
-    const need = L.need ?? 1, win = done >= need;
-    const lost = Object.values(sim.front).filter((v) => v <= 0).length;
-    const when = { morning: 'The morning', day: 'The day', night: 'The night' }[L.day] ?? 'The day';
-    sim.over = {
-      title: win ? 'The front is held' : 'The day is lost',
-      sub: `${when} is over: ${done} fire missions done, ${need} needed${lost ? `; ${lost} sector${lost > 1 ? 's' : ''} lost` : ''}.`,
-    };
-    this.setState(win ? 'victory' : 'defeat', `${when} is over. ${win ? 'The front is held' : 'Not enough was done'}: ${done} fire missions done, ${need} needed.`);
+  // ------------------------------------------------------------------ a threat level's orders (see the top)
+  // the fire missions done and failed so far
+  orders() {
+    const st = this.sim.stats.missions;
+    let done = 0, failed = 0;
+    for (const k of ORDERS) done += st[k]?.done ?? 0;
+    for (const k of FAILS) failed += st[k]?.failed ?? 0;
+    return { done, failed };
+  }
+  fighting() {
+    return this.sim.assaults.some((a) => a.state !== 'resolved');
+  }
+  // the day's clock of the next attack the level still owes, or null
+  nextAttack() {
+    for (let i = this.si; i < this.script.length; i++) if (this.script[i].attack) return this.script[i].t;
+    return null;
+  }
+  // the attacks still to come or under way
+  owed() {
+    let n = this.fighting() ? 1 : 0;
+    for (let i = this.si; i < this.script.length; i++) if (this.script[i].attack) n++;
+    return n;
+  }
+
+  levelUpdate() {
+    const sim = this.sim, L = sim.level, lv = this.lv;
+    if (sim.state !== 'playing' || sim.barrage) return;
+    if (!lv.closing) {
+      const { done, failed } = this.orders();
+      if (failed > L.fails) return this.levelEnd(false, 'The day is lost', `Too many fire missions failed: ${failed}, with ${L.fails} allowed. ${done} of ${L.need} done.`);
+      if (done >= L.need) return this.close(false);
+      if (this.nothingLeft()) return this.close(true);
+      return;
+    }
+    // the close: the attacks still owed, one after another (pace runs the day on to each), then the finale
+    if (this.owed()) return;
+    if (L.day !== 'full') {
+      const { done } = this.orders(), lost = Object.values(sim.front).filter((v) => v <= 0).length;
+      const held = L.attacks ? `${L.attacks > 1 ? 'their attacks' : 'their attack'} answered` : 'the front quiet';
+      if (lv.short) return this.levelEnd(false, 'The day is lost', `Nothing more in reach of our batteries: ${done} of ${L.need} fire missions done.`);
+      return this.levelEnd(true, 'The front is held', `${missions(done)} done, ${held}${lost ? `; ${lost} sector lost` : ''}.`);
+    }
+    if (this.dayTime >= ZERO_T) this.zeroHour();
+  }
+
+  // the orders are over: done, or nothing more in reach (short)
+  close(short) {
+    const sim = this.sim, L = sim.level, lv = this.lv;
+    lv.closing = true;
+    lv.short = short;
+    this.noOrders = true;
+    // (the specialists: only the strongpoints, which still matter at X-Zeit)
+    this.specialists.allow = new Set([...(this.specialists.allow ?? [])].filter((r) => r === 'fort'));
+    const n = this.owed(), { done } = this.orders();
+    const head = short ? `Nothing more in reach of our batteries (${done} of ${L.need} fire missions done).` : `Orders done: ${missions(done)}.`;
+    const next = L.day === 'full' ? (n ? `Their ${n > 1 ? `${n} attacks` : 'attack'} still to come, then X-Zeit.` : 'X-Zeit is next.')
+      : n ? `Hold the line: their ${n > 1 ? `${n} attacks` : 'attack'} still to come.` : '';
+    sim.radio(`${head} ${next}`.trim(), short ? 'warn' : 'kill');
+  }
+
+  levelEnd(win, title, sub) {
+    this.sim.over = { title, sub };
+    this.setState(win ? 'victory' : 'defeat', `${title}. ${sub}`);
+  }
+
+  // nothing more the orders can bring: no mission in hand (one without a clock only while a battery can take it), no
+  // attack under way, nothing waiting in the lineup's queue, no scripted order still to come, no site a battery left
+  // standing reaches (the lineup's work) and no role site the specialists could open
+  nothingLeft() {
+    const sim = this.sim;
+    if (this.fighting() || this.day?.queue.length) return false;
+    for (let i = this.si; i < this.script.length; i++) if (this.script[i].order) return false;
+    const can = (u, m) => (sim.crews.canTake ? sim.crews.canTake(u, m) : sim.crews.canServe(u, m));
+    for (const m of sim.missions) {
+      if (m.state === 'done' || m.state === 'failed' || m.kind === 'sos' || m.kind === 'barrage') continue;
+      if (m.deadline != null || sim.units.some((u) => u.alive && can(u, m))) return false;
+    }
+    if (this.day && this.day.pool().some((t) => this.day.reachable(t))) return false;
+    return !this.specialists.pending();
+  }
+
+  // the day's clock on a level (see the top); without one, DirectorWW2's lull rule
+  pace(dt) {
+    const sim = this.sim, lv = this.lv;
+    if (!lv || !this.day) return super.pace(dt);
+    if (sim.state !== 'playing' || sim.barrage) { this.lapsing = false; return; }
+    const L = sim.level, fighting = this.fighting();
+    let to = -Infinity, quiet = false;
+    if (lv.closing) {
+      // on to the next attack owed, then to X-Zeit; never while one is under way
+      if (!fighting) to = this.nextAttack() ?? (L.day === 'full' ? ZERO_T : -Infinity);
+    } else {
+      // a lull: on to the next scripted thing (see the top for why not abreast of the orders done)
+      const busy = fighting || this.day.queue.length > 0 || sim.missions.some((m) => m.state === 'open' || m.state === 'ranging' || m.state === 'ffe');
+      if (busy) this.lullAt = null;
+      else if (this.lullAt == null) this.lullAt = sim.time;
+      else if (sim.time - this.lullAt >= LULL && this.si < this.script.length) { to = this.script[this.si].t; quiet = true; }
+      // never the next attack on top of one under way, never past the day's end before the close (the clock waits)
+      const na = fighting ? this.nextAttack() : null;
+      if (na != null) to = Math.min(to, na - 1);
+      to = Math.min(to, lv.endT - 1);
+      if (this.dayTime > lv.endT - 1) this.ahead = lv.endT - 1 - sim.time;
+    }
+    const left = to - this.dayTime;
+    if (left <= 0) { this.lapsing = false; return; }
+    if (quiet && !this.lapsing) sim.radio('All quiet on our front: the hours pass until the next orders.', 'info');
+    this.lapsing = true;
+    this.ahead += Math.min(left, dt * Math.max(8, left / LAPSE));
+  }
+
+  // no new Gegenbatterie once the orders are over
+  watchBatteries() {
+    if (this.noOrders) return;
+    super.watchBatteries();
+  }
+
+  // the HUD's box on a level's orders (main: hud.setGoal): { label, value, sub, warn }, or null without a level
+  goal() {
+    const sim = this.sim, L = sim.level, lv = this.lv;
+    if (!lv || sim.state !== 'playing') return null;
+    if (sim.barrage) return { label: 'X-Zeit', value: 'Feuerwalze', sub: 'get our men into their line' };
+    if (lv.closing) {
+      const n = this.owed();
+      if (n) return { label: 'Hold the line', value: `${n} attack${n > 1 ? 's' : ''}`, sub: L.day === 'full' ? 'still to come, then X-Zeit' : 'still to come, then the day is won' };
+      return { label: 'Next', value: L.day === 'full' ? 'X-Zeit' : 'the end', sub: '' };
+    }
+    const { done, failed } = this.orders();
+    return { label: L.day === 'full' ? 'Missions to X-Zeit' : 'Fire missions', value: `${done} / ${L.need}`, sub: `${failed} failed, ${L.fails} allowed`, warn: failed >= L.fails };
   }
 
   // an attack on a threat level: with its tanks when its side's laager still has half of them
@@ -323,26 +472,27 @@ export class DirectorWW1 extends DirectorWW2 {
     return S;
   }
 
-  // a threat level's day: the same sites and traffic as the open battle's, the level's attacks, all inside its day
+  // a threat level's day: the same sites and traffic as the open battle's, the level's attacks, all inside its day.
+  // Marked: an `order` (a site or traffic, none once the orders are over) and an `attack`. X-Zeit is not on the clock:
+  // the close brings it (levelUpdate)
   levelScript() {
-    const L = this.sim.level, S = [], D = this, end = DAY_END[L.day] ?? Infinity;
-    const at = (t, fn) => { if (t < end) S.push({ t, fn }); };
-    at(0, () => D.siteMission('F1', { observer: 'foo', deadline: 700 }));
-    at(70, () => D.siteMission('T1', { deadline: 650 }));
-    at(200, () => D.siteMission('D1'));
-    at(300, () => D.siteMission('F2', { observer: 'foo', deadline: 700 }));
-    at(345, () => D.siteMission('T2'));
-    at(420, () => D.siteMission('H1'));
-    at(500, () => D.siteMission('D2'));
-    at(560, () => D.convoy());
-    at(640, () => D.train());
+    const L = this.sim.level, S = [], D = this, end = DAY_END[L.day] ?? ZERO_T;
+    const order = (t, fn) => { if (t < end) S.push({ t, order: true, fn: () => { if (!D.noOrders) fn(); } }); };
+    order(0, () => D.siteMission('F1', { observer: 'foo', deadline: 700 }));
+    order(70, () => D.siteMission('T1', { deadline: 650 }));
+    order(200, () => D.siteMission('D1'));
+    order(300, () => D.siteMission('F2', { observer: 'foo', deadline: 700 }));
+    order(345, () => D.siteMission('T2'));
+    order(420, () => D.siteMission('H1'));
+    order(500, () => D.siteMission('D2'));
+    order(560, () => D.convoy());
+    order(640, () => D.train());
     for (const [t, sec, size] of ATTACKS.slice(0, L.attacks)) {
-      if (L.tanks) at(t - 240, () => D.tanksMoving(sec));
-      at(t, () => D.levelAssault(sec, size));
+      if (L.tanks) order(t - 240, () => D.tanksMoving(sec));
+      S.push({ t, attack: true, fn: () => D.levelAssault(sec, size) });
     }
-    for (const t of [1330, 1450, 1590, 1710]) at(t, () => D.convoy());
-    for (const t of [1360, 1640]) at(t, () => D.train());
-    if (L.day === 'full') at(1850, () => D.zeroHour());
+    for (const t of [1330, 1450, 1590, 1710]) order(t, () => D.convoy());
+    for (const t of [1360, 1640]) order(t, () => D.train());
     return S.sort((a, b) => a.t - b.t);
   }
 

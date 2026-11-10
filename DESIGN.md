@@ -669,13 +669,25 @@ bit-identical); with it the lineup's `opposition` is not used.
   before the modifiers) and the level's for the enemy's: `cb`, `dmg`, `assault`, `sig` (times 1.5 under the modifier
   `sound`), `zero`, and `time` from the level's `deadline`. `difficultyName` is 'Normal'. `sim.modifiers` is a Set of
   MODIFIERS ids; `sim.supplyK` the ammunition columns' pace (shells 0.6, rain 0.6; guns.js resupply).
-- **The day** (`ww1/director.js` `levelScript`): the open battle's sites and traffic, the first `attacks` of `ATTACKS`
-  (B 925 s, D 1230, C 1090, A 1530, B 1700), all inside the day (`DAY_END`: morning 900 s, day 1300, night 1850; a
-  'full' day goes on to X-Zeit at 1850). With `tanks`, four minutes before an attack its side's laager (A, B: T1; C,
-  D: T2) gets a mission, and if it still has half its tanks at the attack they go in with it (`TANK_K` 1.3 its size).
-- **Winning.** A shorter day (`dayEnd`, at its hour) is won with the front held and `need` site missions (destroy, cb,
-  harass) done; `sim.over` gives the end card's title and line. A full day is won at X-Zeit with `zero` of our men in.
-  Two sectors lost or every gun lost end any day, as always.
+- **The day** (`ww1/director.js` `levelScript`): the open battle's sites and traffic (entries marked `order`), the
+  first `attacks` of `ATTACKS` (B 925 s, D 1230, C 1090, A 1530, B 1700; marked `attack`), all inside the day's span
+  (`DAY_END`: morning 900 s, day 1300, night and full 1850). With `tanks`, four minutes before an attack its side's
+  laager (A, B: T1; C, D: T2) gets a mission, and if it still has half its tanks at the attack they go in with it
+  (`TANK_K` 1.3 its size). The day's clock never ends a level (below): it runs on through a lull as the career's day
+  does (`pace`, 15 s with nothing in hand) and stops just short of the span's end until the orders are over.
+- **Ending on the orders** (2026-11-10, the user's rule: a level ends on its missions, never on the clock;
+  `levelUpdate`). The orders: until `need` fire missions are done (destroy, cb, harass), the script's orders, the
+  counter-battery calls, the lineup's work and the specialists come as before. More than `fails` failed (destroy and
+  cb; traffic that gets away is not counted) loses at once, "Too many fire missions failed". When nothing more can
+  come (`nothingLeft`: nothing in hand, no attack under way, no queue, no scripted order left, no site in reach for the
+  lineup's work, no role site the specialists could open) the orders close short. The close (`close`, `noOrders`): no
+  new orders (the script's `order` entries do nothing, `lineup.js` stops, `watchBatteries` stops, the specialists keep
+  only 'fort'); the attacks still owed come one after another, the day lapsing to the next whenever none is under way;
+  then a shorter day is won ("The front is held"; lost if it closed short) and a full day lapses to 1850 and runs
+  `zeroHour`, won with `zero` of our men in. Two sectors lost or every gun lost end any day at once, as always;
+  `sim.over` gives the end card's title and line. `goal()` is the HUD's box (main `hud.setGoal`, `#goal` at the top of
+  the 3D view): missions done of `need` with the failures, then the attacks still to hold, then X-Zeit. On a level the
+  lineup's work and the specialists come after 15 s instead of 80 and 90 when nothing at all is in hand.
 - **The sites** (`offers`): only the level's `sites` (capability.js `tierOf`: soft, armour, heavy, deep, hard, fort; the
   role sites by their role, specialists.js `allow`). A site no battery of the lineup can finish (`siteVerdict` 'no') goes to
   the neighbouring Gruppe: a radio line once, no mission, no pay, no penalty (the traffic is never handed on).
@@ -683,7 +695,10 @@ bit-identical); with it the lineup's `opposition` is not used.
   no RE8; `raids` the Camel raids' rate in place of `cb` (`EnemyWW2.raidRate`, 0 none, twice under `air`).
 - **Fairer targets on a level.** A tank laager's guns are laid on one tank at a time (`m.aimPart`; the observer reads
   against it, `ObserversWW1.refPoint`; the next tank when it is out), and it is broken up, done, with half its tanks out;
-  a British battery is silenced with half its guns out. The crews adjust their fire for effect (`CrewsWW1.await`,
+  a British battery is silenced with half its guns out. Such a site is `spent`: no new mission on it (its last guns
+  still fire, and every 200 s `watchBatteries` used to open a Gegenbatterie on it that was done at once, unfired:
+  about fourteen free missions a game on level 3), and the lineup's work only gives sites the level offers
+  (`canOffer`, the pure half of `offers`; it used to pick ones the level refused and idle the battery 80 s more). The crews adjust their fire for effect (`CrewsWW1.await`,
   `firing`): the observer's "on target" allows 45 m each way, which a 10 cm shell does not forgive.
 - **The Feuerwalze on a level** (the friendly fire every lineup beyond a lone K 17 died of): fired by the field guns and
   howitzers only (`FEUERWALZE`: K 17, sFH 13, leFH 18, sFH 18; any but the super-heavies when the lineup has none), with
@@ -715,8 +730,13 @@ bit-identical); with it the lineup's `opposition` is not used.
   (each level's bar the lowest reference firepower of it and the levels above: from level 6 a super-heavy takes a field
   battery's slot). `REFERENCE` is each level's reference lineup (at most five batteries and one off-map, `SLOTS`).
 - **Balance** (`node tools/leveltest.mjs [seeds] [--levels] [--lineup ref|below] [--mods roll] [--jobs] [--games]`, all
-  auto, 72 seeds, each level's reference lineup): 92, 89, 92, 71, 60, 53, 36, 31, 19, 10 % won for levels 1 to 10
-  (2026-11-02, with the strongpoints and the new tree's references: level 3 the C/92 and an FK 16 battery, 8 to 10 each
+  auto, 72 seeds, each level's reference lineup; it prints how each game ended): 96, 94, 90, 74, 61, 56, 38, 33, 18, 8
+  % won for levels 1 to 10 (2026-11-10, ending on the orders: `need` 1, 2, 4, 6, 7, 8, 8, 9, 9, 10, `fails` 3, 3, 4, 5,
+  then 6, and `zero` for 5 to 10 re-tuned to 0.675, 0.63, 0.69, 0.61, 0.62, 0.58, since X-Zeit comes sooner with fewer
+  British batteries silenced; the mean battle 6.9, 12.9, 23.3, 21.6, 30.8, 29.9, 31.3, 29.1, 29.5, 24.9 min, before
+  15, 21.7, 30, 30.8, then about 40). With `--mods roll` (36 seeds) 100, 97, 86, 81, 33, 19, 6, 14, 3, 3 (before 92,
+  94, 92, 69, 42, 36, 11, 11, 8, 6): a modifier that slows the work now costs failures. Before that: 92, 89, 92, 71,
+  60, 53, 36, 31, 19, 10 % (2026-11-02, with the strongpoints and the new tree's references: level 3 the C/92 and an FK 16 battery, 8 to 10 each
   with a super-heavy; `zero` re-tuned for 6 to 10). Before the strongpoints: 97, 97, 86, 71, 60, 51, 35, 28, 19, 11. The
   old level 10 lineup at its best but with no super-heavy (K 18, sFH 18, sFH 13, leFH 18, Mörser 18, V-2) now wins
   26, 19, 1, 0, 1 % at levels 6 to 10, the new one (K 38, sFH 18, Hummel, leFH 18, Gamma, V-2) 74, 50, 35, 10, 14.
@@ -2491,3 +2511,4 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (menu: the Research screen fits one screenful, 2026-11-06) At the user's request the screen is laid out for the common desktop sizes: no page heading (the top bar's tab names it), a strip with the research under way and one line of help, the tree in its own scrolling pane (line names sticky) taking most of the width, and the battery shown in a full-height side pane (`clamp(340px, 25vw, 450px)`) that scrolls on its own. `#menu.on-research` widens the column to 1,760 px and makes the menu a flex column so the screen takes whatever the top bar leaves (one row or two); the tree's rows follow the viewport height (`--rs-row`). At 1920x1080 the whole tree shows without scrolling; under 1000 px wide or 560 px high the screen flows down the page as before.
 - (menu: Try it for the off-map weapons, 2026-11-06) The Paris Gun, V-1 and V-2 have no place on the test range (one gun in its pit); on Research and in the hangar their button reads "Try it · guided run" and opens their special mission's guided first run (`menu.js` `TRY_GUIDE`, the lesson from `menuItems.js` `GUIDE`). The Gotha strike keeps a disabled range button: it can only be called in an open battle.
 - (ui: the message slips, 2026-11-06) At the user's request each slip in MESSAGES AND SIGNALS reads in the Smart Brevity order: a title row (the round, battery and gun of a report; an order's task name, `head` and `body` from `messages.js`; else the text before its first ': ' or '! ', `messagePad.js` `splitTitle`) with the time, the one line that matters at the card's full width (the pencilled correction with APPLY, ON TARGET, or the message), the observer's own words small under it (the English in brackets dropped when the note already says it), and the source and task in one line at the foot (all of it on hover). The tutorial tags `report` and `apply` are kept. The kind is the class `s-<kind>` (a bare `kill` took style.css's kill-feed rule: the slip laid out as a row, its message one letter wide, and faded out after 4 s).
+- (threat levels: they end on their orders, 2026-11-10) At the user's request ("I don't want users stuck sitting around for x minutes per mission") no threat level ends on the clock. Each has `need` fire missions and `fails` allowed (`threat.js`); the orders done close the day, the attacks still owed come one after another, then a shorter day is won and a full one goes to X-Zeit; more than `fails` failed loses; running out of anything in reach closes the orders short (`ww1/director.js` `levelUpdate`, `close`, `nothingLeft`, `pace`, `goal`; DESIGN.md "Threat levels", Ending on the orders). Found on the way: on a level a silenced British battery's last guns kept firing and each Gegenbatterie on it was done at once, unfired (about fourteen free missions a game on level 3, most of what the old `need` 10 and 17 were met with); such sites are now `spent`, and the lineup's work asks `canOffer` so it no longer idles a battery on a site the level refuses (`sim/lineup.js` `pool`, also `noOrders` and a 15 s wait on a level with nothing in hand; `sim/specialists.js` the same 15 s and `pending()`; script entries keep their marks through `LineupDay.wrap`). A clock kept abreast of the orders done was tried and dropped: it brought the attacks and the counter-battery calls on faster than the crews work. `need`, `fails` and `zero` (5 to 10) tuned on 72 seeds to the old curve (Balance). The HUD's `#goal` box (`hud.setGoal`) and the menu's facts (Goal, Fails allowed, Attacks, Pay; Length is gone) show the orders; the levels' `sub` and `lines` say them. `tools/leveltest.mjs` prints the failures and how each game ended, and stops a game at two hours as unfinished. The British, WW2 and WW1 (no level) tests, `researchtest` and `supporttest` are bit-identical.

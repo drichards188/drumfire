@@ -23,7 +23,7 @@ export const clockOf = (keys, t) => {
   return keys[keys.length - 1][1] + (t - keys[keys.length - 1][0]) / 600;
 };
 
-const LULL = 15, LAPSE = 10; // a lull's length before the day runs on (s), and the most it then takes to the next thing (s)
+export const LULL = 15, LAPSE = 10; // a lull's length before the day runs on (s), and the most it then takes to the next thing (s)
 
 export class DirectorWW2 extends Director {
   get op() {

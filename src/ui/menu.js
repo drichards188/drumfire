@@ -697,7 +697,6 @@ export function mountMenu(root = document.getElementById('menu')) {
   // as one card. The foot: how to play a special mission, its difficulty, and the go button.
   const CAP_NAME = { soft: 'Soft targets', armour: 'Tank laagers', heavy: 'Their heavy batteries', deep: 'Deep targets', hard: 'Concrete', fort: 'Strongpoints (28 cm and up)' };
   const CAP_SAY = { ready: 'ready', slow: 'slow', no: 'out of reach' };
-  const DAY = { morning: 'Morning', day: 'Until evening', night: 'Day and night', full: 'Full day' };
   // a special mission's or the training's line under its card (ten words or so)
   const TAGLINE = {
     'ww1:paris': 'Build the giant gun, then shell targets 120 km away.',
@@ -790,8 +789,9 @@ export function mountMenu(root = document.getElementById('menu')) {
     head.title = t.lines.join('\n');
     const fact = (k, v) => { const f = el('div', 'lv-fact'); f.append(el('small', null, k), el('b', null, v)); return f; };
     const facts = el('div', 'lv-facts');
-    facts.append(fact('Length', DAY[t.day] ?? t.day), fact('Goal', t.need ? `${t.need} fire mission${t.need > 1 ? 's' : ''}` : 'Win at X-Zeit'),
-      fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
+    // (a level ends on its orders, never on the clock: ww1/director.js)
+    facts.append(fact('Goal', t.day === 'full' ? `${t.need} missions, X-Zeit` : `${t.need} fire mission${t.need > 1 ? 's' : ''}`),
+      fact('Fails allowed', String(t.fails)), fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
     const threats = el('div', 'lv-chips');
     if (t.cb >= 0.5) threats.append(chip(t.cb >= 0.7 ? 'Counter-battery' : 'Some counter-battery'));
     if (t.spotters || t.raids) threats.append(chip(t.raids ? 'Air raids' : 'Spotter aircraft'));

@@ -106,6 +106,13 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border: 1px s
 #score-box span, #clock span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }
 #score-box b { font: 700 24px var(--mono); }
 #clock b { font: 700 18px var(--mono); letter-spacing: 0.08em; color: var(--paper); }
+/* a threat level's orders (ww1/director.js goal): the fire missions done of those needed, the failures allowed */
+#goal { position: absolute; top: 18px; left: 50%; translate: -50% 0; text-align: center; text-shadow: var(--shadow); white-space: nowrap; }
+#goal span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }
+#goal b { display: block; font: 700 20px var(--mono); letter-spacing: 0.06em; color: var(--paper); }
+#goal small { display: block; font: 10px var(--mono); letter-spacing: 0.04em; color: var(--ui-dim); }
+#goal.warn small { color: var(--amber); }
+body.tutorial #goal { display: none; }
 #timescale { position: absolute; top: 114px; right: 22px; display: flex; align-items: center; gap: 8px; font: 700 12px var(--mono); color: var(--ui-dim); text-shadow: var(--shadow); }
 #timescale.fast { color: var(--amber); }
 #timescale.slow { color: var(--friend); }

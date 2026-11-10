@@ -45,6 +45,9 @@ export class Specialists {
     for (const u of sim.units) {
       if (u.alive && u.missionId == null && !u.firing) { if (!this.idle.has(u.id)) this.idle.set(u.id, now); } else this.idle.delete(u.id);
     }
+    // (a threat level's battle ends on its orders: with nothing at all in hand, an able battery is not kept waiting)
+    const quick = !!sim.level && !sim.missions.some((m) => (m.state === 'open' || m.state === 'ranging' || m.state === 'ffe') && m.kind !== 'sos' && m.kind !== 'barrage');
+    const idleT = quick ? 15 : IDLE, gapT = quick ? 15 : 120;
     for (const role of Object.keys(ROLES)) {
       const R = ROLES[role];
       if ((this.allow && !this.allow.has(role)) || (sim.night && !R.night)) continue;
@@ -64,15 +67,28 @@ export class Specialists {
       const choices = this.sites.filter((t) => t.alive && t.site.role === role && !open.some((m) => m.targetId === t.id) && sim.units.some((u) => {
         if (!u.alive || !can(u, this.probe(t, role))) return false;
         able.add(u.id);
-        if (now - (this.idle.get(u.id) ?? now) > IDLE) idle = true;
+        if (now - (this.idle.get(u.id) ?? now) > idleT) idle = true;
         return true;
       }));
       if (!choices.length) continue;
       // (a strongpoint: one open for each battery able to serve them, the first soon after the registration)
       if (R.many) { if (open.length >= able.size || (open.length && now < this.next[role])) continue; }
-      else if (now < this.next[role] && !(idle && now - this.ended[role] > 120)) continue;
+      else if (now < this.next[role] && !(idle && now - this.ended[role] > gapT)) continue;
       this.open(choices[Math.floor(this.rng() * choices.length)], role);
     }
+  }
+
+  // whether a role site could still be opened, whatever the wait before the next (the level's roles, the night rule, a
+  // battery able to take it): a threat level's orders are not over while one could be (ww1/director.js nothingLeft)
+  pending() {
+    const sim = this.sim;
+    const can = (u, m) => (sim.crews.canTake ? sim.crews.canTake(u, m) : sim.crews.canServe(u, m));
+    return this.sites.some((t) => {
+      const role = t.site.role;
+      if (!t.alive || (this.allow && !this.allow.has(role)) || (sim.night && !ROLES[role].night)) return false;
+      if (sim.missions.some((m) => m.targetId === t.id && m.state !== 'done' && m.state !== 'failed')) return false;
+      return sim.units.some((u) => u.alive && can(u, this.probe(t, role)));
+    });
   }
 
   open(t, role) {

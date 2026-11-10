@@ -1421,6 +1421,7 @@ async function init() {
   let t = 0;
   let sunTimer = 0;
   let hudTimer = 0;
+  let goalTimer = 0;
   let ambTimer = 0;
   let frameAvg = 16;
   const bracketPt = new THREE.Vector3();
@@ -1598,6 +1599,11 @@ async function init() {
 
     // HUD, console, audio
     hud.setClock(hour);
+    // a threat level's orders (ww1/director.js goal), four times a second
+    if ((goalTimer -= rawDt) <= 0) {
+      goalTimer = 0.25;
+      hud.setGoal(sim && !sim.attract ? sim.director?.goal?.() ?? null : null);
+    }
     if (panel && sim) {
       const view2 = { sim, selectedId: UNITS[selected].id, dt: rawDt, time: sim.time };
       if (panel.update.length >= 2) panel.update(rawDt, view2);

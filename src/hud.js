@@ -70,6 +70,20 @@ export class HUD {
     }
   }
 
+  /** A threat level's orders (the director's goal(): { label, value, sub, warn }); null hides the box. */
+  setGoal(g) {
+    const key = g ? `${g.label}|${g.value}|${g.sub}|${g.warn ? 1 : 0}` : '';
+    if (key === this.goalKey) return;
+    this.goalKey = key;
+    const el = $('goal');
+    el.hidden = !g;
+    if (!g) return;
+    $('goal-label').textContent = g.label;
+    $('goal-val').textContent = g.value;
+    $('goal-sub').textContent = g.sub;
+    el.classList.toggle('warn', !!g.warn);
+  }
+
   /** Time compression indicator (1 = real time). */
   setTimeScale(k) {
     $('ts-val').textContent = `x${k < 1 ? k.toFixed(2).replace(/0$/, '') : k}`;
