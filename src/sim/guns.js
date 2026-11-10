@@ -16,6 +16,9 @@ export const wrapPi = (a) => {
   return a > Math.PI ? a - TAU : a < -Math.PI ? a + TAU : a;
 };
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+// the fuze a battery starts with: delay for the concrete-breakers, instant for the rest. Set once; on manual nothing
+// changes it after (director.js assign: only a crew on auto picks the fuze for each mission)
+const DELAY_START = new Set(['gustav', 'karl', 'bertha', 'gamma', 'beta']);
 
 // The pieces a `fire` command with `guns` sets going: 1, 2 or 'all' (the pieces most ready first, then
 // loaded ones, then the rest, in gun order, so "1" is No. 1 unless it is down or busy), or a list of piece
@@ -57,7 +60,7 @@ export function createUnits(sim) {
       mode: 'auto', pieces, missionId: null, charges: g0.charges.length, arc: def.arc ?? g0.traverse,
       ammo: { ...stock }, signature: 0, def, gate: def.special ? 'not ready' : null, mods,
       order: {
-        x: def.pos.x, z: def.pos.z, line: def.zero, range: 0, charge: -1, el: g0.restEl, tof: 0, fuze: 'instant',
+        x: def.pos.x, z: def.pos.z, line: def.zero, range: 0, charge: -1, el: g0.restEl, tof: 0, fuze: DELAY_START.has(def.kind) ? 'delay' : 'instant',
         rounds: 1, adj: { add: 0, right: 0 }, target: null, ok: false, reason: '', chargeAuto: true, h: 0, sheaf: null, shift: 0,
       },
       stats: { rounds: 0, hits: 0, kills: 0 },

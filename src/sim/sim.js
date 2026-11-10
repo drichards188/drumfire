@@ -335,7 +335,7 @@ export class Sim {
       case 'lay':
         if (u.missionId != null) d.release(u);
         u.order.rounds = 1;
-        u.order.fuze = 'instant';
+        // (the fuze stays the player's: laying never changes it, director.js assign)
         u.order.chargeAuto = true;
         g.setTarget(u, args.x, args.z, {});
         this.tell(u);

@@ -95,8 +95,10 @@ export class Director {
     m.unitId ??= u.id;
     u.missionId = m.id;
     const reg = m.kind === 'sos' || m.kind === 'barrage' ? 0.12 : m.kind === 'harass' ? 0.4 : 1;
-    const fuze = this.defaultFuze(m, u);
-    u.order.fuze = fuze;
+    // the fuze for the mission is the crew's choice only on auto; on manual or holding the player's own stays (the
+    // user's rule, 2026-11-10: nothing changes the fuze or the guns selector behind the player's back)
+    if (u.mode === 'auto') u.order.fuze = this.defaultFuze(m, u);
+    const fuze = u.order.fuze;
     u.order.chargeAuto = true;
     const lat = m.kind === 'sos' || m.kind === 'barrage';
     g.setTarget(u, m.x, m.z, { h: m.alt, biasScale: reg, fuze, sheaf: lat ? 55 : null, shift: lat ? (u.id - 3) * 65 : 0 });

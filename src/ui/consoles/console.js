@@ -243,10 +243,12 @@ export function mountConsole(ctx) {
     const tab = (sim.rangeTable && sim.rangeTable(unit.kind, o.charge || 0)) || [];
     let apex = 0;
     if (tab.length && o.range != null) { let best = 1e9; for (const e of tab) { const d = Math.abs(e.range - o.range); if (d < best) { best = d; apex = e.apex || 0; } } }
-    // the guns selector follows the mission (directing gun while ranging, every gun for effect) until the player
-    // picks one; it falls back to the default whenever the mission, its state, the report or the series length changes
-    const gkey = `${unit.id}|${m ? m.id + m.state + !!m.onTarget : ''}|${(o.rounds || 1) > 1}`;
-    if (memo.gunsKey !== gkey || memo.guns == null) { memo.gunsKey = gkey; memo.guns = gunsDefault(m, o); }
+    // the guns selector follows the mission (directing gun while ranging, every gun for effect) only while the battery
+    // is on auto: then it falls back to the default whenever the mode, the mission, its state, the report or the series
+    // length changes. On manual it stays where the player put it (the user's rule, 2026-11-10)
+    const gkey = `${unit.id}|${unit.mode}|${m ? m.id + m.state + !!m.onTarget : ''}|${(o.rounds || 1) > 1}`;
+    if (memo.guns == null || (unit.mode === 'auto' && memo.gunsKey !== gkey)) memo.guns = gunsDefault(m, o);
+    memo.gunsKey = gkey;
     if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
     order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU(), problem: prob });
     if (special) special.update(unit, sim);

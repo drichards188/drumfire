@@ -285,7 +285,7 @@ For the selected unit; clicking the buttons does the same.
 | Tab, Shift+Tab | move the mission cursor |
 | Enter | take the mission under the cursor |
 | Space | fire the guns chosen by the GUNS selector |
-| G | GUNS selector: 1 GUN (the directing gun, for ranging), SECTION, BATTERY (hidden for one-piece units). It sits on 1 GUN while ranging and goes to all guns for effect; G or a click overrides it |
+| G | GUNS selector: 1 GUN (the directing gun, for ranging), SECTION, BATTERY (hidden for one-piece units). On auto it sits on 1 GUN while ranging and goes to all guns for effect; on manual it stays where you put it (G or a click) |
 | Arrow keys | correct the aim: up adds range, down drops, left and right shift the line (Shift = 10 yards, otherwise the current step; metres in the German modes) |
 | X | cycle the correction step (10, 25, 50, 100, 200 yards) |
 | Q, E | charge down, up |

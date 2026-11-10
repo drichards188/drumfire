@@ -25,11 +25,13 @@ try {
 
 // ---------------------------------------------------------------- the scripted player
 // A competent battery commander: answers the rockets at once, ranges with the reports and applies them
-// exactly, fires for effect, lifts the barrage on time, goes to hold when counter-battery fire builds up.
+// exactly, fires for effect, lifts the barrage on time, goes to hold when counter-battery fire builds up. It sets the
+// fuze for each mission itself, the one the crew would (director.defaultFuze): on manual nothing sets it for the player.
 function playerFor(kinds) {
   const mem = new Map();
   let ids = null;
   return (sim) => {
+    const pickFuze = (u, m) => { sim.command(u.id, 'fuze', { fuze: sim.director.defaultFuze(m, u) }); return true; };
     const now = sim.time;
     ids ??= kinds.map((k) => sim.units.find((u) => u.kind === k)?.id).filter((id) => id != null);
     const sos = sim.missions.find((m) => m.kind === 'sos' && m.state !== 'done' && m.state !== 'failed');
@@ -57,6 +59,7 @@ function playerFor(kinds) {
           s.pre = forming.id;
           if (u.missionId != null) sim.director.release(u);
           s.st = 'idle';
+          sim.command(id, 'fuze', { fuze: 'instant' });
           sim.command(id, 'lay', { x: p.x, z: p.z });
           sim.command(id, 'rounds', { n: 1 });
         }
@@ -64,7 +67,7 @@ function playerFor(kinds) {
       if (sos) {
         if (s.sosOn !== sos.id && now - sos.t0 > 3) {
           s.sosOn = sos.id;
-          if (sim.crews.canServe(u, sos) && sim.director.assign(u, sos) && u.order.ok) {
+          if (sim.crews.canServe(u, sos) && pickFuze(u, sos) && sim.director.assign(u, sos) && u.order.ok) {
             if (u.kind === 'bl60') sim.command(id, 'fuze', { fuze: 'shrapnel' });
             sim.command(id, 'fire', {});
             s.st = 'sos';
@@ -96,6 +99,7 @@ function playerFor(kinds) {
             }
           }
           if (!best) break;
+          pickFuze(u, best);
           sim.command(id, 'mission', { id: best.id });
           s.m = best;
           s.seen = 0;
@@ -156,6 +160,7 @@ function playerFor(kinds) {
         case 'barrage':
           if (m.lift !== s.lift) {
             s.lift = m.lift;
+            pickFuze(u, m);
             sim.command(id, 'mission', { id: m.id });
             sim.command(id, 'fire', {});
           } else if (!u.firing) sim.command(id, 'fire', {});
