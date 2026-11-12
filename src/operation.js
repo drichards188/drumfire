@@ -92,6 +92,9 @@ export const ARCHETYPES = [
 // what a mission pays (×the level's pay, research.js battleReward): each main objective, each secondary, every
 // secondary done (the full clear), each medal; a main is about two and a half secondaries (Helldivers 2's ratio)
 export const OBJECTIVE_PAY = { main: 100, side: 40, clear: 80, medal: 25 };
+// the latest an attack goes over on the day's clock: X-Zeit is at 1850 s (ww1/director.js ZERO_T), and an attack takes a
+// while to cross and be decided
+const LAST_ATTACK = 1780;
 // the medals on the end card (not objectives: failed early, they would nag the rest of the battle)
 export const MEDALS = {
   nogun: { title: 'No gun lost', why: 'Every gun of the Gruppe in action to the end.' },
@@ -129,6 +132,11 @@ export function generateOperation(level, seed, batteries) {
     attacks.push({ t: Math.round(at), sector: sec, size: [0.6, 0.6, 0.5, 0.5, 0.55][i] ?? 0.5 });
     at += 230 + rnd() * 110;
   }
+  // (all of them over before X-Zeit, 1850 s on the day's clock, which waits at 1849 s until it is called: an attack
+  // due later massed and never went over, an attack under way for ever, and no X-Zeit for a lineup all on auto. The
+  // gaps squeezed to fit, the count kept)
+  const last = attacks.at(-1)?.t ?? 0, t0 = attacks[0]?.t ?? 0;
+  if (last > LAST_ATTACK) for (const a of attacks) a.t = Math.round(t0 + ((a.t - t0) * (LAST_ATTACK - t0)) / (last - t0));
   const xzeit = rnd() < (L.xzeit ?? 0);
 
   // the archetype: one whose main kinds the lineup can serve at this level, rolled

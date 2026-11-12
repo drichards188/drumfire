@@ -51,6 +51,13 @@ const armed = (u) => u.pieces.some((p) => p.state !== 'dead' && p.loaded) || (u.
 const REOPEN = 45; // s before a main's failed fire mission comes again
 const MAIN_LIVE = 2; // the main objectives' fire missions open at once
 const SPACING = 40; // s between two objectives' missions opening
+// a mission done on a level: BEAT s before the next is given (the objectives', the lineup's, a duel, a column: not an
+// attack's counter-preparation, on the attack's clock, nor a call on a British battery firing), so the player sees it
+// done (the report, the toast, the pay) before anything new rings; then, with nothing else in hand, the day runs on
+// (pace) and the next thing on its clock comes within LAPSE_LV s, early; if it gives nothing to do, the lineup gives an
+// idle battery a site (sim/lineup.js IDLE_LEVEL): about five seconds from the last mission done to the next.
+// (The lull waits half a second past the beat: a mission held for the beat opens first, and then it is no lull.)
+const BEAT = 3, LULL_LV = BEAT + 0.5, LAPSE_LV = 1.25;
 const ROLE_WINDOW = 900; // s: a deep or concrete objective's window (the specialists' own missions have 1500: a failure took half an hour)
 // the objectives of the moment (a level's mission): the duel, a British battery that has one of ours under its fire
 // (from a counter-battery rate of DUEL_CB, level 3), offered when its fix is firm enough to tell (DUEL_LOCK: about 200
@@ -117,6 +124,10 @@ export class DirectorWW1 extends DirectorWW2 {
     sim.objectivePay = 0;
     this.reopen = []; // [{ at, id }]: an objective whose mission failed, its next mission
     this.objAt = 0; // the next objective's mission opens no sooner (objectiveMissions)
+    this.beatAt = 0; // a mission just done: nothing new is given before then (BEAT; sim/lineup.js reads it too)
+    this.saidLull = null; // the lull (its lullAt) whose lapse has been announced, and its leg's end and rate (pace)
+    this.lapseTo = null;
+    this.lapseRate = 0;
     this.trafficCut = 0; // their supply held up by a train or convoy wrecked until then (ww1/enemy.js supply)
     this.duelAt = 0; // no new duel before then
     this.massed = new Map(); // an attack's day time -> its assault massing in their front line (counter-preparation)
@@ -173,6 +184,11 @@ export class DirectorWW1 extends DirectorWW2 {
     super.finish(m, ok, why);
     const sim = this.sim, ob = sim.objectives;
     if (!ob) return;
+    // a mission done: a beat before the next; an objective's frees its place at once (not SPACING after the last opened)
+    if (ok) {
+      this.beatAt = sim.time + BEAT;
+      if (m.obj) this.objAt = Math.min(this.objAt ?? 0, this.beatAt);
+    }
     // a train or a convoy wrecked holds their supply up for a while (a level's mission only)
     if (ok && m.kind === 'harass') this.trafficCut = sim.time + TRAFFIC_CUT.dur;
     if (!m.obj) return;
@@ -491,7 +507,7 @@ export class DirectorWW1 extends DirectorWW2 {
   // time (SPACING), a failed one again after REOPEN (sim/objectives.js says which are open)
   objectiveMissions() {
     const sim = this.sim, ob = sim.objectives;
-    if (!ob || sim.state !== 'playing' || sim.barrage || this.lv?.finale || sim.time < (this.objAt ?? 0)) return;
+    if (!ob || sim.state !== 'playing' || sim.barrage || this.lv?.finale || sim.time < Math.max(this.objAt ?? 0, this.beatAt ?? 0)) return;
     const live = (m) => m.state !== 'done' && m.state !== 'failed';
     let mains = sim.missions.filter((m) => m.objMain && live(m)).length;
     for (const o of ob.openTargets()) {
@@ -555,7 +571,7 @@ export class DirectorWW1 extends DirectorWW2 {
       const busy = fighting || this.day.queue.length > 0 || sim.missions.some((m) => !m.pop && (m.state === 'open' || m.state === 'ranging' || m.state === 'ffe'));
       if (busy) this.lullAt = null;
       else if (this.lullAt == null) this.lullAt = sim.time;
-      else if (sim.time - this.lullAt >= LULL && this.si < this.script.length) { to = this.script[this.si].t; quiet = true; }
+      else if (sim.time - this.lullAt >= LULL_LV && this.si < this.script.length) { to = this.script[this.si].t; quiet = true; }
       const na = fighting ? this.nextAttack() : null;
       if (na != null) to = Math.min(to, na - 1);
       to = Math.min(to, ZERO_T - 1);
@@ -565,9 +581,24 @@ export class DirectorWW1 extends DirectorWW2 {
     const left = to - this.dayTime;
     if (left <= 0) { this.lapsing = false; return; }
     // (said once a lull: one lapse may run on to the next thing on the clock and the next, when they give nothing to do)
-    if (quiet && !this.lapsing) sim.radio('All quiet on our front: the hours pass until the next thing.', 'info');
+    let first = false;
+    if (quiet && this.saidLull !== this.lullAt) {
+      this.saidLull = this.lullAt;
+      first = true;
+      // (ahead of time after a mission done, the lull begun in its beat; after one failed, only the hours passing)
+      const early = this.lullAt < this.beatAt;
+      sim.radio(`${early ? 'Ahead of time: all quiet' : 'All quiet'} on our front, the hours pass until the next thing.`, 'info');
+      if (early) sim.events.ahead?.();
+    }
+    // a lull's lapse: the clock at an even rate, there LAPSE_LV s after it starts, and a quarter of a second more for
+    // each thing on the clock it reaches that gives nothing to do (the rate set for each leg: worked out again each
+    // step from what is left it slows as it nears and comes late); on to X-Zeit called, LAPSE's ease
+    if (quiet && (first || this.lapseTo !== to)) {
+      this.lapseTo = to;
+      this.lapseRate = left / (first ? LAPSE_LV : 0.25);
+    }
     this.lapsing = true;
-    this.ahead += Math.min(left, dt * Math.max(8, left / LAPSE));
+    this.ahead += Math.min(left, dt * Math.max(8, quiet ? this.lapseRate : left / LAPSE));
   }
 
   // no new Gegenbatterie once X-Zeit is called
@@ -715,7 +746,7 @@ export class DirectorWW1 extends DirectorWW2 {
   // going quiet is the other answer; the HUD shows how far off their rounds fall (fixOf).
   duelUpdate() {
     const sim = this.sim, ob = sim.objectives, lv = this.lv;
-    if (!ob || lv.finale || sim.state !== 'playing' || sim.barrage || sim.phase < 2 || sim.level.cb < DUEL.cb || sim.time < this.duelAt) return;
+    if (!ob || lv.finale || sim.state !== 'playing' || sim.barrage || sim.phase < 2 || sim.level.cb < DUEL.cb || sim.time < Math.max(this.duelAt, this.beatAt)) return;
     // (one timed thing at a time besides the attacks: no duel while an attack masses or goes in, or another is open)
     if (ob.list.some((o) => o.bonus && o.state === 'open') || this.massed.size || this.fighting()) return;
     let best = null;
@@ -742,7 +773,7 @@ export class DirectorWW1 extends DirectorWW2 {
   popUpdate(dt) {
     const sim = this.sim, ob = sim.objectives, lv = this.lv;
     this.columnsMove(dt);
-    if (!ob || lv.finale || sim.state !== 'playing' || sim.barrage || sim.phase < 2 || sim.night || sim.time < this.popAt) return;
+    if (!ob || lv.finale || sim.state !== 'playing' || sim.barrage || sim.phase < 2 || sim.night || sim.time < Math.max(this.popAt, this.beatAt)) return;
     // (one moment at a time: none while an attack masses or goes in, or another of the moment is open)
     if (this.fighting() || this.massed.size || ob.list.some((o) => o.bonus && o.state === 'open')) return;
     this.popColumn();
@@ -899,6 +930,8 @@ export class DirectorWW1 extends DirectorWW2 {
     const sim = this.sim, L = sim.level, op = sim.operation, S = [], D = this;
     const order = (t, fn) => S.push({ t, order: true, fn: () => { if (!D.noOrders) fn(); } });
     for (const a of op.attacks) {
+      // (never one the day's clock cannot reach before X-Zeit: it would mass and never go over; operation.js fits them)
+      if (a.t > ZERO_T - 1) continue;
       if (L.tanks) order(a.t - 240, () => D.tanksMoving(a.sector));
       // (its men mass in their front line first: counter-preparation, then they go over)
       S.push({ t: a.t - MASS_T, attack: true, fn: () => D.massing(a) });

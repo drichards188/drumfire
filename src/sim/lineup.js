@@ -18,7 +18,9 @@ import { mulberry32 } from '../noise.js';
 const TRAFFIC = new Set(['crossroads', 'railyard', 'aconvoy', 'bconvoy']); // a mission only while the traffic is there
 const WAIT = 600; // the longest a scripted mission waits for a free hand (s)
 const IDLE = 80; // a battery idle this long is given work (s), and again this long after its last
-const IDLE_LEVEL = 15; // the same on a threat level when the lineup has nothing at all in hand (s)
+// the same on a threat level when the lineup has nothing at all in hand (s), from the last mission's end (the
+// director's lull): after its beat and the day's run on to the next thing on its clock (ww1/director.js BEAT)
+const IDLE_LEVEL = 5;
 const PRIORITY = { cb: 8, destroy: 5 };
 const BATTERIES = new Set(['battery', 'abattery', 'amedium', 'sbattery', 'bgun15', 'bgun92', 'bgun6', 'bgun60', 'bgunrail', 'bfield']); // a counter-battery mission (1917, WW2, the 1918 ridge)
 
@@ -119,7 +121,9 @@ export class LineupDay {
       if (!ok) this.stats.dropped++;
       return ok;
     });
-    while (this.queue.length && this.inHand() < this.capacity()) {
+    // (a threat level's beat after a mission done, ww1/director.js BEAT: nothing new is given until it is over)
+    const beat = !!sim.level && now < (d.beatAt ?? 0);
+    while (!beat && this.queue.length && this.inHand() < this.capacity()) {
       let k = 0, ks = -Infinity;
       this.queue.forEach((q, i) => { const s = this.suit(sim.targetById(q.id)); if (s > ks) { ks = s; k = i; } });
       const [q] = this.queue.splice(k, 1), t = sim.targetById(q.id);
@@ -131,11 +135,14 @@ export class LineupDay {
       if (u.alive && u.missionId == null && !u.firing) { if (!this.idle.has(u.id)) this.idle.set(u.id, now); } else this.idle.delete(u.id);
     }
     // work: by day or night, from the bombardment to Zero hour, while there is a free hand and nothing waits
-    if (sim.phase < 2 || sim.barrage || this.queue.length || this.inHand() >= this.capacity()) return;
+    if (beat || sim.phase < 2 || sim.barrage || this.queue.length || this.inHand() >= this.capacity()) return;
     // (a threat level's battle ends on its orders, so a lineup with nothing at all in hand is not kept waiting)
-    const wait = sim.level && this.inHand() === 0 ? IDLE_LEVEL : IDLE;
+    const quick = !!sim.level && this.inHand() === 0;
+    if (quick && d.lapsing) return;
+    const wait = quick ? IDLE_LEVEL : IDLE;
     for (const u of sim.units) {
-      const since = this.idle.get(u.id);
+      let since = this.idle.get(u.id);
+      if (since != null && quick && d.lullAt != null) since = Math.max(since, d.lullAt);
       if (since == null || now - since < wait) continue;
       const choices = this.pool().filter((t) => this.serves(u, t));
       if (!choices.length) continue;

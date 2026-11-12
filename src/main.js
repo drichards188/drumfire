@@ -1152,6 +1152,11 @@ async function init() {
     },
     // the battle's pay as it is earned (sim.credit): the reward feed and the career (onReward, above)
     reward(id, pts, why) { onReward(id, pts, why); },
+    // a level's work done ahead of time (ww1/director.js pace): the day runs on, the next thing comes early
+    ahead() {
+      if (sim?.attract) return;
+      hud.hint('Ahead of time: the day runs on to what comes next', 2400);
+    },
     // a level's mission (src/sim/objectives.js): an objective done, failed or reported, the mains all done, the full clear
     objective(o, change) {
       if (sim?.attract) return;

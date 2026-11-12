@@ -128,7 +128,7 @@ The open battle's timetable was written for the whole Group. With your lineup in
 - **Reach.** A mission no battery of yours can serve (out of range, out of arc, or the wrong gun for it) goes to another site of the same kind one can, or is left out. Counter-battery calls, convoys and trains only come for what you can reach.
 - **Cadence.** Missions wait while your hands are full: about one at a time per battery, three at least. A free hand gets the waiting mission that best suits one of your batteries.
 - **Work.** A battery idle for 80 seconds is given a site that suits it: concrete and hostile batteries for the heavies, lighter targets for the field guns, the balloon for the 60-pounders. A big lineup gets more to do.
-- **No waiting.** When everything is done and nothing is coming, the day runs on as a time lapse after 15 seconds: the clock moves quickly to the next order, attack or the end of the day.
+- **No waiting.** When everything is done and nothing is coming, the day runs on as a time lapse after 15 seconds: the clock moves quickly to the next order, attack or the end of the day. At a threat level it is quicker: a mission done gets a 3 second beat, then the day runs on ("Ahead of time") and the next thing comes about 5 seconds after it.
 
 Battles without a lineup (the tests, the WW1 sandbox) run the fixed day.
 
