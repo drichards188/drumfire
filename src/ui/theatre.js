@@ -19,6 +19,10 @@ export const TH = {
   // (unit) => how the reports and the missions list name a battery, or null for the British words (its full name on
   // a report, its type on the list); the German pages give its callsign, as the board and the tabs do
   unitName: null,
+  // IDLE on a battery's tab means it has no mission (ui/panel.js; STANDBY: on one, the guns not at work): the German
+  // battles. Otherwise IDLE is the guns' state, as in the British game and the special missions' drills (the Paris
+  // Gun, the V-weapons, the Gustav siege), whose guns take no fire missions
+  idleMission: false,
 };
 
 export function setUiTheatre(t) {

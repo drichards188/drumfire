@@ -20,6 +20,7 @@ export function ww2Ui(th) {
     mppMax: 120,
     unitName: (u) => u.callsign || u.name, // a battery by its callsign on the reports and the list (ui/theatre.js)
     salient: battle,
+    idleMission: battle, // IDLE on a battery's tab: no mission (ui/panel.js)
     sectors: th.sectors,
     ref: ww2Ref,
     refHint: 'r 54.32  h 46.87 : the grid in km (Rechtswert, Hochwert)',

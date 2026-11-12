@@ -271,14 +271,19 @@ export class Panel {
       // ready states (it used to show only once the guns had loaded and could not fire); no shells or no crew wait
       // for the guns to be idle, as before
       const code = blockCode(sim.guns?.problem?.(u) ?? ''), bad = code === 'OUT OF ARC' || code === 'OUT OF RANGE' || code === 'TOO CLOSE';
+      // (the German battles, TH.idleMission: IDLE is a battery with no mission, whatever its guns hold (the pips show
+      // them), unless they are firing; one on a mission whose guns are not at work is on STANDBY. Elsewhere IDLE is
+      // the guns' state: none loading, laid or firing)
+      const free = !!TH.idleMission && u.missionId == null;
       let txt, tc;
       if (np && nDead === np) { txt = 'DEAD'; tc = 'dead'; }
       else if (bad) { txt = code; tc = 'bad'; }
+      else if (free && !nFire) { const out = !nReady && !nLoad && code; txt = out || 'IDLE'; tc = out ? 'bad' : 'free'; }
       else if (nReady) { txt = np > 1 ? `${nReady}/${np - nDead} READY` : 'READY'; tc = 'rdy'; }
       else if (nFire) { txt = 'FIRING'; tc = 'fir'; }
       else if (nLoad) { txt = `LOAD ${Math.floor(best * 100)}%`; tc = 'ldg'; }
       else if ((txt = code)) tc = 'bad'; // no shells, no crew
-      else { txt = 'IDLE'; tc = 'idle'; }
+      else { txt = TH.idleMission ? 'STANDBY' : 'IDLE'; tc = 'idle'; }
       // a launch site: the pip fills with the drill, the words say what it waits for
       const sp = KINDS[u.kind]?.launcher ? u.special : null;
       if (sp && t.pips[0] && nDead === 0) {
@@ -290,6 +295,9 @@ export class Panel {
         if (pp.w !== w) { pp.f.style.width = `${w}%`; pp.w = w; }
       }
       setText(t.ltxt, txt);
+      const tip = tc === 'free' ? 'IDLE: no mission. Take one from the missions list (Tab, Enter) or click a target on the board.'
+        : txt === 'STANDBY' ? 'STANDBY: on a mission, the guns not yet at work.' : '';
+      if (t.ltxt.title !== tip) t.ltxt.title = tip;
       if (t.ltxtCls !== tc) { t.ltxt.className = `tltxt st-${tc}`; t.ltxtCls = tc; }
       setCls(t.el, 'sel', u.id === view.selectedId);
       setCls(t.el, 'dead', dead);

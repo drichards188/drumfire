@@ -68,11 +68,14 @@
 .tltxt.st-fir { color: #ffd37a; animation: blink .3s steps(2, jump-none) infinite; }
 .tltxt.st-dead { color: #ff6a50; text-decoration: line-through; }
 .tltxt.st-bad { color: #ff6a50; }
+/* IDLE on the German battles: no mission (ui/panel.js, TH.idleMission), brighter than STANDBY so it stands out */
+.tltxt.st-free { color: #e6d29c; }
 .tab.sel .tltxt { color: #6d5d3a; }
 .tab.sel .tltxt.st-ldg { color: #9a5f08; }
 .tab.sel .tltxt.st-rdy { color: #2f7312; text-shadow: none; }
 .tab.sel .tltxt.st-fir { color: #a8561a; }
 .tab.sel .tltxt.st-dead { color: #a8241b; }
+.tab.sel .tltxt.st-free { color: #7d5f22; }
 .tlamp { position: absolute; top: 4px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: #1d1710; box-shadow: inset 0 0 2px #000, 0 0 0 1px rgba(0,0,0,.5); }
 .tlamp.fire { background: #ffb62b; box-shadow: 0 0 7px #ffb62b, 0 0 0 1px rgba(0,0,0,.5); }
 .tlamp.hit { background: #ff3b25; box-shadow: 0 0 8px #ff3b25; animation: blink .4s steps(2, jump-none) infinite; }
