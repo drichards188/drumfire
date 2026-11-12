@@ -47,6 +47,7 @@ export function ww1Ui(th) {
     metric: true,
     mannable: MANNABLE, // the guns the player can serve in person (ww2/gunner.js): MAN on the guns card
     mppMax: 120,
+    unitName: (u) => u.callsign || u.name, // "Richard" on a report, not "15 cm Ringkanone C/92" (ui/theatre.js)
     salient: battle, // the Ypres map: the lines, places and roads (our front is the German line of 1917)
     sectors: th.sectors ?? [],
     // the Paris Gun's mission: a map wide enough for its targets 120 km off, drawn by ui/consoles/parisMap.js

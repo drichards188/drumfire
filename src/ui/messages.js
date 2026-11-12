@@ -90,7 +90,7 @@ export class Mail {
           round: tracker ? tracker.numbers.get(rp.shellId) : null, ok: !!rp.ok,
           corr: hasErr && !rp.ok ? { add: -rp.over, right: -rp.right } : null, tag: `M${m.id}`,
           // battery and gun that fired the round, plus the lay it went with
-          battery: u?.name || '', gun: piece != null && (u?.pieces?.length || 1) > 1 ? piece + 1 : null,
+          battery: (u && (TH.unitName?.(u) ?? u.name)) || '', gun: piece != null && (u?.pieces?.length || 1) > 1 ? piece + 1 : null,
           adj0: f?.adj || null, tgt0: f?.target || null,
           task: m.id, title: m.title || MISSION_NAME[m.kind] || '',
         };

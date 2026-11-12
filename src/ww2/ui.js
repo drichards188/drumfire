@@ -18,6 +18,7 @@ export function ww2Ui(th) {
   setUiTheatre({
     metric: true,
     mppMax: 120,
+    unitName: (u) => u.callsign || u.name, // a battery by its callsign on the reports and the list (ui/theatre.js)
     salient: battle,
     sectors: th.sectors,
     ref: ww2Ref,

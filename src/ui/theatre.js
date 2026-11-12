@@ -16,6 +16,9 @@ export const TH = {
   orderStamp: 'F.O.',
   hq: 'Group H.Q.',
   fit: null, // (sim, unit) => { cx, cz, w, h } for the board's FIT, or null for the British fit
+  // (unit) => how the reports and the missions list name a battery, or null for the British words (its full name on
+  // a report, its type on the list); the German pages give its callsign, as the board and the tabs do
+  unitName: null,
 };
 
 export function setUiTheatre(t) {

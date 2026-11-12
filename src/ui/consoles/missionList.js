@@ -2,7 +2,10 @@
 // cannot reach), observer, priority and the time left. Tab moves the cursor, Enter takes the mission, a click does both.
 import { el, setText, setCls, card, snd } from '../widgets.js';
 import { MISSION_NAME, OBSERVER, KIND_SHORT, mmss, liveMissions, taskNo, yd } from './common.js';
-import { lenShort } from '../theatre.js';
+import { lenShort, TH } from '../theatre.js';
+
+// a mission another battery has taken: "unit 3" (the British words), or its callsign on the German pages
+const unitWord = (sim, id) => { const u = TH.unitName && (sim.units || []).find((q) => q.id === id); return u ? TH.unitName(u) : `unit ${id}`; };
 
 // priority 1 to 10 (director PRIORITY, targets' own) as one to three stars: 9+ urgent (SOS, barrage, the biggest
 // targets), 6 to 8 important (counter-battery, harassing, tanks), the rest routine
@@ -69,9 +72,9 @@ export class MissionList {
       setCls(r.where, 'out', !!out);
       setText(r.obs, OBSERVER[m.observer] || '');
       const guns = (sim.units || []).filter((u) => u.missionId === m.id);
-      setText(r.assigned, guns.length ? `GUNS: ${guns.map((u) => KIND_SHORT[u.kind] || u.name || u.id).join(', ')}` : 'GUNS: unassigned');
+      setText(r.assigned, guns.length ? `GUNS: ${guns.map((u) => TH.unitName?.(u) ?? (KIND_SHORT[u.kind] || u.name || u.id)).join(', ')}` : 'GUNS: unassigned');
       const mine = unit.missionId === m.id;
-      setText(r.st, mine ? 'YOURS' : m.state === 'open' ? (m.unitId && m.unitId !== unit.id ? `unit ${m.unitId}` : 'open') : m.state === 'ranging' ? 'ranging' : m.state === 'ffe' ? 'FFE' : m.state);
+      setText(r.st, mine ? 'YOURS' : m.state === 'open' ? (m.unitId && m.unitId !== unit.id ? unitWord(sim, m.unitId) : 'open') : m.state === 'ranging' ? 'ranging' : m.state === 'ffe' ? 'FFE' : m.state);
       const ns = starsOf(m.priority);
       setText(r.stars, '★'.repeat(ns));
       r.stars.title = STAR_TIP[ns];
