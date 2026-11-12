@@ -106,13 +106,36 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border: 1px s
 #score-box span, #clock span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }
 #score-box b { font: 700 24px var(--mono); }
 #clock b { font: 700 18px var(--mono); letter-spacing: 0.08em; color: var(--paper); }
-/* a threat level's orders (ww1/director.js goal): the fire missions done of those needed, the failures allowed */
-#goal { position: absolute; top: 18px; left: 50%; translate: -50% 0; text-align: center; text-shadow: var(--shadow); white-space: nowrap; }
-#goal span { display: block; font: 700 10px var(--mono); letter-spacing: 0.3em; text-transform: uppercase; color: var(--ui-dim); }
-#goal b { display: block; font: 700 20px var(--mono); letter-spacing: 0.06em; color: var(--paper); }
-#goal small { display: block; font: 10px var(--mono); letter-spacing: 0.04em; color: var(--ui-dim); }
-#goal.warn small { color: var(--amber); }
-body.tutorial #goal { display: none; }
+/* a threat level's mission (ww1/director.js goal, hud.setObjectives): its name, the main objectives (squares) and the
+   secondaries (diamonds), each with its progress, the failures allowed, and once the mains are done the finale's button;
+   under the unit's name, the radio pushed down beneath it (--ob-h) */
+#objectives { position: absolute; top: 70px; left: 22px; width: min(330px, 44%); padding: 7px 10px 8px; background: var(--plate); border-left: 3px solid var(--khaki); font: 11px/1.35 var(--mono); text-shadow: var(--shadow); }
+#objectives.done { border-left-color: var(--brass); }
+#objectives .ob-head small { display: block; font: 700 9px var(--mono); letter-spacing: 0.24em; text-transform: uppercase; color: var(--ui-dim); }
+#objectives .ob-head b { display: block; font: 700 13px var(--serif); letter-spacing: 0.02em; color: var(--paper); margin: 1px 0 4px; }
+#ob-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+#ob-list li { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: baseline; color: var(--ui); }
+#ob-list li i { font-style: normal; color: var(--paper); }
+#ob-list li em { font-style: normal; color: var(--ui-dim); }
+#ob-list li.side { color: var(--ui-dim); }
+#ob-list li.side i { color: var(--khaki); }
+#ob-list li.done { color: var(--ui-dim); }
+#ob-list li.done span { text-decoration: line-through; text-decoration-color: rgba(233, 223, 196, 0.45); }
+#ob-list li.done i { color: var(--brass); }
+#ob-list li.failed, #ob-list li.failed i { color: #d98b6f; }
+#ob-list li.failed span { text-decoration: line-through; }
+#ob-list li.timed em { color: var(--amber); }
+/* an objective of the moment (the duel, counter-preparation): its own glyph, its timer; a duel whose fix is closing in red */
+#ob-list li.bonus.open { color: var(--paper); }
+#ob-list li.bonus.open i { color: var(--amber); }
+#ob-list li.danger em, #ob-list li.danger i { color: #e8735a; }
+#ob-list li.more { display: block; padding-left: 20px; font-style: italic; color: var(--ui-dim); }
+#ob-foot { margin-top: 5px; font-size: 10px; color: var(--ui-dim); }
+#ob-foot.warn { color: var(--amber); }
+#ob-finale { pointer-events: auto; margin-top: 7px; width: 100%; padding: 6px 8px; font: 700 12px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: var(--brass); border: 0; cursor: pointer; }
+#ob-finale:hover, #ob-finale:focus-visible { background: #e2bf62; outline: none; }
+#ob-finale kbd { margin: 0 0 0 6px; color: var(--ink); border-color: rgba(29, 25, 18, 0.5); }
+body.tutorial #objectives { display: none; }
 #timescale { position: absolute; top: 114px; right: 22px; display: flex; align-items: center; gap: 8px; font: 700 12px var(--mono); color: var(--ui-dim); text-shadow: var(--shadow); }
 #timescale.fast { color: var(--amber); }
 #timescale.slow { color: var(--friend); }
@@ -124,7 +147,7 @@ body.tutorial #goal { display: none; }
 #timescale button:active { background: rgba(207, 169, 75, 0.25); }
 
 /* the message log reads like slips of a field message pad */
-#radio { position: absolute; top: 92px; left: 22px; width: min(350px, 44%); display: flex; flex-direction: column; gap: 3px; font: 11px/1.35 var(--mono); pointer-events: none; }
+#radio { position: absolute; top: calc(92px + var(--ob-h, 0px)); left: 22px; width: min(350px, 44%); display: flex; flex-direction: column; gap: 3px; font: 11px/1.35 var(--mono); pointer-events: none; }
 #radio .line {
   padding: 4px 9px;
   background: var(--plate);

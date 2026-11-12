@@ -26,15 +26,75 @@ const SOFT_ONLY = new Set(['k17', 'k18', 'lefh18', 'fk16', 'wespe']); // too lig
 const FIELD = new Set(['sfh13', 'lefh18', 'sfh18', 'fk16', 'wespe', 'hummel', 'sfh93']); // the Sperrfeuer and the Feuerwalze
 
 export class CrewsWW1 extends Crews {
+  // the red flares: every crew on auto turns to the Sperrfeuer in its own time, but on a level's mission a long gun or
+  // a heavy working a main objective stays on it while another battery answers (a deep strike's 20 km shoot, broken
+  // off for every attack, never finished: the battle dragged for hours)
+  sosCalled(m) {
+    const sim = this.sim;
+    if (!sim.objectives) return super.sosCalled(m);
+    const keep = (u) => {
+      const w = this.state(u).m;
+      return !!w?.objMain && w.state !== 'done' && w.state !== 'failed' && (LONG.has(u.kind) || HEAVY.has(u.kind) || !!w.role);
+    };
+    const kept = sim.units.filter((u) => u.alive && u.mode === 'auto' && keep(u));
+    if (!kept.length || !sim.units.some((u) => u.alive && !kept.includes(u) && this.canServe(u, m))) return super.sosCalled(m);
+    const held = kept.map((u) => [u, this.state(u).sosM]);
+    super.sosCalled(m);
+    for (const [u, prev] of held) this.state(u).sosM = prev ?? null;
+  }
+
+  // an objective of the moment calls a battery (a level's mission, ww1/director.js): counter-preparation the field
+  // batteries and rockets (massing), the railway-gun hunt the long guns and the heavies when the gun fires (huntUpdate).
+  // The battery best placed, on auto and not on a main objective's shoot or the Sperrfeuer, leaves what it is doing for
+  // it after a moment's telephoning (a crew takes a new mission only when idle, and one battery serves a mission: the
+  // men massed and went over, and the railway gun came and went, before any battery came free)
+  prepCalled(m) { this.callTo(m, (u) => FIELD.has(u.kind) || ROCKETS.has(u.kind)); }
+  huntCalled(m) { this.callTo(m, (u) => LONG.has(u.kind) || HEAVY.has(u.kind) || RAIL.has(u.kind)); }
+  callTo(m, fits) {
+    const sim = this.sim;
+    let best = null, bs = -1e9;
+    for (const u of sim.units) {
+      if (!u.alive || u.mode !== 'auto' || !fits(u) || !this.canServe(u, m)) continue;
+      const ai = this.state(u);
+      if (ai.m === m || (ai.m?.objMain && ai.m !== m) || ai.st === 'sos' || ai.st === 'barrage' || ai.sosM || ai.prepM) continue;
+      const s = this.score(u, m) + (ai.st === 'idle' ? 20 : 0);
+      if (s > bs) { bs = s; best = u; }
+    }
+    if (best) Object.assign(this.state(best), { prepM: m, prepAt: sim.time + 8 + sim.rng() * 15 });
+  }
+
+  update(dt) {
+    const sim = this.sim;
+    // (the railway-gun hunt: a crew on auto stops firing while the gun is withdrawn, and takes the hunt again when it
+    // comes up: rounds on an empty firing point are wasted)
+    if (sim.director.hunt) for (const u of sim.units) {
+      const ai = u.ai;
+      if (u.mode === 'auto' && ai?.m?.hunt && sim.targetById(ai.m.targetId)?.present === false) this.toIdle(u, ai, 5);
+    }
+    if (sim.objectives) for (const u of sim.units) {
+      const ai = u.ai;
+      if (!ai?.prepM || sim.time < ai.prepAt) continue;
+      const m = ai.prepM;
+      ai.prepM = null;
+      if (!u.alive || u.mode !== 'auto' || m.state === 'done' || m.state === 'failed' || m.units.length) continue;
+      if (ai.m?.objMain || ai.st === 'sos' || ai.st === 'barrage') continue;
+      if (ai.m) this.toIdle(u, ai, 0);
+      if (!sim.director.assign(u, m)) continue;
+      Object.assign(ai, { m, seen: 0, ranged: 0, series: 0, wait: sim.time + 3, st: m.state === 'ffe' ? 'ffe' : 'ranging' });
+    }
+    super.update(dt);
+  }
+
   suits(u, m) {
     const t = m.targetId ? this.sim.targetById(m.targetId) : null;
+    if (m.hunt && t?.present === false) return false; // (the railway gun withdrawn: nothing there to shoot at)
     // (the Karl's gate passes: it drives, turns and lowers onto the target)
     if (u.kind === 'paris' || (u.gate && u.kind !== 'karl')) return false; // (a self-propelled battery on the move too)
     // a threat level's Feuerwalze: the field guns and howitzers (any gun but the super-heavies when the lineup has none)
     if (m.kind === 'barrage' && this.sim.level && !FEUERWALZE.has(u.kind) && this.sim.units.some((q) => q.alive && FEUERWALZE.has(q.kind))) return false;
     if (m.kind === 'sos' || m.kind === 'barrage') return !SUPER.has(u.kind);
     if (SUPER.has(u.kind)) return !!t && BIG.has(t.kind);
-    if (t?.kind === 'bballoon' || m.alt > 0) return u.kind === 'k17' || u.kind === 'rk92'; // (the long guns with shrapnel)
+    if (m.alt > 0) return u.kind === 'k17' || u.kind === 'rk92'; // (a mission laid in the air: the long guns with shrapnel; the balloon's is on its winch)
     if (ROCKETS.has(u.kind)) return !t || t.battery || t.kind === 'btanks' || t.kind === 'bconvoy' || t.kind === 'mebu' || t.kind === 'bpost';
     if (t?.kind === 'bconvoy') return TRAFFIC.has(u.kind);
     if (t && TARGETS[t.kind]?.hardness === 'hard') return !SOFT_ONLY.has(u.kind);
@@ -132,6 +192,8 @@ export class CrewsWW1 extends Crews {
     if (m.kind === 'barrage') s += FIELD.has(u.kind) ? 8 : 4;
     if (m.role) s += 10; // a deep or heavy target (sim/specialists.js): only the guns made for it can serve it
     if (m.role === 'fort') s += 30; // (a strongpoint in the X-Zeit lanes: our assault pays for each left standing, so before their heavies)
+    if (m.prep) s += FIELD.has(u.kind) || ROCKETS.has(u.kind) ? 10 : 0; // (counter-preparation: men massing in a trench, the field guns' work)
+    if (m.column) s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' || u.kind === 'wespe' || u.kind === 'rk92' ? 10 : 0; // (a column in the open: shrapnel)
     return s;
   }
 

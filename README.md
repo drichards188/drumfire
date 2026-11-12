@@ -10,9 +10,10 @@
 
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
 - **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
+- **Missions.** Each battle deals main objectives and optional secondaries on named targets. Finish the mains, then end the battle or call X-Zeit when you are ready.
 - **One German career.** 32 batteries in one research tree, seven lines that each run from 1914 to 1918 to the Second World War: field guns to the Hummel, the Mörser 99 to the Karl-Gerät, the Langer Max to the Gustav, the Nebelwerfer 41 to the 42, and Gotha bombers, the V-1, the V-2 and the Paris Gun off the map.
 - **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
-- **Tutorials.** A basic training offered on first launch (the console and serving a gun, with a borrowed battery), and guided lessons for the WW2 special weapons.
+- **Tutorials.** A basic training offered on first launch, and guided lessons for the special weapons.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or the 1918 guns of the career.
 
 ## Play it
@@ -37,16 +38,18 @@ You need a browser with WebGL2 and graphics acceleration on. To share it, run `n
 | `.` | apply the correction from the newest observer report |
 | S | SOS: every gun that can reach lays on the threatened sector |
 | F | ride the newest shell to its burst; F again returns to the gun |
+| K | main objectives done: end the battle, or call X-Zeit |
 | `[` and `]` | slow down or speed up time (x0.25 to x8) |
 
 Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#controls).
 
 ## Status
 
-**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels), five special missions and the basic training; the British 1917 game is hidden from the menu for now. The Gustav and the Paris Gun are work in progress (marked WIP).
+**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels, each battle a generated mission of objectives), five special missions and the basic training; the British 1917 game is hidden from the menu for now. The Gustav and the Paris Gun are work in progress (marked WIP).
 
 **Not done yet:**
 
+- More mission objectives (blinding their observers, hunting their railway gun, wire cutting, a box barrage) and generated target positions.
 - Threat levels 6 to 10 on the WW2 map, and tanks moving with the British attacks.
 - Playtesting the research pace, the pay, the upgrades and the ten levels.
 - Britain's return, with its own tree.

@@ -13,13 +13,15 @@ const PART = {
   hq: 'a building', aop: 'an aeroplane', bunker: 'a shelter', fort: 'a casemate', citadel: 'a casemate', eastfort: 'a casemate',
   turret: 'a turret', balloon: 'the winch', bballoon: 'the winch',
 };
-export const ACT = { kill: 'Destroyed', part: 'Knocked out', men: 'Casualties', mission: 'Mission done', hit: 'Hit' };
+export const ACT = { kill: 'Destroyed', part: 'Knocked out', men: 'Casualties', mission: 'Mission done', hit: 'Hit', objective: 'Objective', secondary: 'Secondary', medal: 'Medal' };
 // one reward in words: { act, what }
 export function rewardWords(why) {
   if (why?.act === 'part') return { act: ACT.part, what: `${PART[why.kind] ?? 'a part'} (${why.name ?? 'the target'})` };
   if (why?.act === 'kill') return { act: ACT.kill, what: why.name ?? 'the target' };
   if (why?.act === 'men') return { act: ACT.men, what: `${why.n} of the enemy's men` };
   if (why?.act === 'mission') return { act: ACT.mission, what: why.title ?? 'a mission' };
+  // (a level's mission: an objective, a secondary or a medal done, src/sim/objectives.js)
+  if (why?.act === 'objective') return { act: why.medal ? ACT.medal : why.main ? ACT.objective : ACT.secondary, what: why.title ?? 'an objective' };
   return { act: ACT.hit, what: why?.name ?? 'the target' };
 }
 
@@ -45,7 +47,7 @@ export function createRewardFeed(root) {
       let it = items.get(key);
       if (!it) {
         const node = el('div', `rw-item rw-${why?.act ?? 'hit'}`);
-        node.append(el('b', 'rw-act', act), el('span', 'rw-what', what), el('i', 'rw-who', why?.act === 'mission' ? 'the Gruppe' : who ?? ''), el('em', 'rw-pts', ''));
+        node.append(el('b', 'rw-act', act), el('span', 'rw-what', what), el('i', 'rw-who', why?.act === 'mission' || why?.act === 'objective' ? 'the Gruppe' : who ?? ''), el('em', 'rw-pts', ''));
         box.prepend(node);
         it = { node, pts: 0 };
         items.set(key, it);

@@ -18,6 +18,7 @@ import { battleReward, gunEraOf, PAY } from './research.js';
 import { createRewardFeed, rewardWords } from './ui/rewards.js';
 import { showSummary, saveSummary } from './ui/summary.js';
 import { threatOf, parseModifiers, modifierOf } from './threat.js';
+import { OBJECTIVE_PAY } from './operation.js';
 import { missionById } from './campaign-data.js';
 import { setUiTheatre } from './ui/theatre.js';
 import { campaignTheatre, sandboxTheatre } from './campaign.js';
@@ -105,6 +106,9 @@ const RESEARCH_ERA = CAMPAIGN_MISSION || OPERATION || SANDBOX || RANGE || query.
 // the career's battle is played at a threat level with its modifiers (src/threat.js; the menu chose them: ?level=&mods=)
 const LEVEL = RESEARCH_ERA ? threatOf(+query.get('level') || 1) : null;
 const MODS = RESEARCH_ERA ? parseModifiers(query.get('mods')) : [];
+// the level's mission's seed (src/operation.js): the menu's, so the briefing and the battle deal the same mission; a page
+// opened without one rolls its own (a fresh mission for each Fight again: start() rolls it again)
+let OP_SEED = RESEARCH_ERA && /^\d+$/.test(query.get('seed') ?? '') ? +query.get('seed') : null;
 // the units that take the field, in order: in the career battle only the lineup's (the theatre holds every pit), so the
 // number keys, the tabs' numbers and the first unit shown follow the lineup; elsewhere every unit (set below with UNITS)
 let FIELDED = null;
@@ -655,6 +659,13 @@ async function init() {
     if (state === 'tutorial') hud.hint(tutorial?.run?.def.gunnerFrom ? 'Not yet: the lesson comes to serving the gun later.' : 'This lesson keeps you at the console.', 2600);
     return false;
   }
+  // a level's mission accomplished: the player ends the battle, or calls X-Zeit (K, the HUD's button; ww1/director.js)
+  const callFinale = () => {
+    if (state !== 'playing' || !sim?.objectives) return;
+    if (sim.director.callFinale?.()) { audio?.ui?.('whistle'); return; }
+    if (!sim.objectives.accomplished) hud.hint('The main objectives first: then end the battle, or call X-Zeit', 2400);
+  };
+  hud.onFinale = callFinale;
   const toggleMan = () => {
     if (!(WW2 || WW1) || !sim?.gunner) return;
     const st = sim.gunner.st;
@@ -767,7 +778,8 @@ async function init() {
     chase.cine(false);
     following = false;
     newBattle({ difficulty: LEVEL ? 'Normal' : params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
-      ...(RESEARCH_ERA ? { ...career.battle(RESEARCH_ERA), level: LEVEL.n, modifiers: MODS } : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
+      ...(RESEARCH_ERA ? { ...career.battle(RESEARCH_ERA), level: LEVEL.n, modifiers: MODS, opSeed: OP_SEED ?? ((Math.random() * 1e9) | 0) } : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
+    OP_SEED = null; // (the briefing's mission once; Fight again deals a new one)
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
@@ -1140,6 +1152,17 @@ async function init() {
     },
     // the battle's pay as it is earned (sim.credit): the reward feed and the career (onReward, above)
     reward(id, pts, why) { onReward(id, pts, why); },
+    // a level's mission (src/sim/objectives.js): an objective done, failed or reported, the mains all done, the full clear
+    objective(o, change) {
+      if (sim?.attract) return;
+      if (change === 'accomplished') {
+        hud.toast('Mission accomplished', sim.objectives?.has('xzeit') ? 'Finish what you will, then call X-Zeit (K)' : 'Finish what you will, then end the battle (K)', 6000);
+        audio?.ui?.('bell');
+      } else if (change === 'clear') hud.toast('Full clear', 'Every secondary objective done', 4000);
+      else if (change === 'done') { hud.toast(o.main ? 'Objective done' : 'Secondary objective done', o.title, 4200); audio?.ui?.('bell'); }
+      else if (change === 'failed') hud.toast(o.main ? 'Objective failed' : 'Secondary objective failed', o.title, 4200);
+      else if (change === 'reveal') { hud.toast('New secondary objective', o.title, 4200); audio?.ui?.('phone'); }
+    },
     // the WW2 gunner (src/ww2/gunner.js): a new fire command rings at the gun, a wheel comes onto its mark, a pull refused
     gunner(what, a) {
       if (what === 'order') {
@@ -1200,7 +1223,7 @@ async function init() {
     paidBp = {};
     liveDue = false;
     left = false;
-    log = { kill: 0, part: 0, men: 0, mission: 0, hit: 0, top: new Map() };
+    log = { kill: 0, part: 0, men: 0, mission: 0, hit: 0, objective: 0, top: new Map() };
     const t = RESEARCH_ERA ? career.targetOf(RESEARCH_ERA) : null;
     before = { researched: new Set(career.researched), target: t, share: t ? career.researchShare(t) : 0 };
   };
@@ -1238,7 +1261,7 @@ async function init() {
     const r = battleReward(sim, { won }), rest = {};
     let sum = 0;
     for (const [k, v] of Object.entries(r.batteries)) { const x = v - (paidBp[k] ?? 0); if (x > 0) { rest[k] = x; sum += x; } }
-    career.gain(RESEARCH_ERA, { rp: sum + r.time + r.win, batteries: rest }, false);
+    career.gain(RESEARCH_ERA, { rp: sum + r.time + r.win + (r.objectives ?? 0), batteries: rest }, false);
     career.countBattle(RESEARCH_ERA);
     return r;
   };
@@ -1252,7 +1275,13 @@ async function init() {
       v: 1, at: Date.now(), seen: false, outcome,
       title: TH?.op?.title ?? 'Open battle', sub: outcome === 'left' ? 'You left the battle before it was decided.' : sim.over?.sub ?? '',
       level: LEVEL ? { n: LEVEL.n, name: LEVEL.name, en: LEVEL.en } : null, mods: MODS.map((id) => modifierOf(id)?.name).filter(Boolean),
-      minutes: sim.time / 60, rp: { fought: r.fought, time: r.time, win: r.win, total: r.rp },
+      minutes: sim.time / 60, rp: { fought: r.fought, time: r.time, win: r.win, objectives: r.objectives ?? 0, total: r.rp },
+      // a level's mission (src/operation.js): its name and each objective's and medal's outcome and pay
+      mission: sim.operation ? { name: sim.operation.name, title: sim.operation.title, en: sim.operation.en } : null,
+      objectives: (sim.objectives?.list ?? []).map((o) => ({ title: o.title, main: o.main, bonus: !!o.bonus, state: o.state === 'hidden' ? 'open' : o.state,
+        pts: o.state === 'done' ? Math.round((o.main ? OBJECTIVE_PAY.main : OBJECTIVE_PAY.side) * (o.value ?? 1) * payK()) : 0 })),
+      medals: (sim.objectives?.medals ?? []).map((m) => ({ title: m.title, state: m.state, pts: m.state === 'done' ? Math.round(OBJECTIVE_PAY.medal * payK()) : 0 })),
+      clear: !!sim.objectives?.sides.length && sim.objectives.sides.every((o) => o.state === 'done'),
       research: { target: tgt ? kindNameOf(tgt) : null, from: tgt && tgt === before?.target ? before.share : 0, to: tgt ? career.researchShare(tgt) : 1,
         researched: [...career.researched].filter((k) => !before?.researched.has(k)).map(kindNameOf) },
       opened: opened ? { n: opened, name: threatOf(opened).name } : null,
@@ -1357,6 +1386,7 @@ async function init() {
       } else selectUnit(selected);
     } else if (e.code === 'BracketRight') stepTime(1);
     else if (e.code === 'BracketLeft') stepTime(-1);
+    else if (e.code === 'KeyK' && !SANDBOX && sim?.objectives && !e.ctrlKey && !e.metaKey) callFinale();
     else if (e.code === 'KeyH') document.body.classList.toggle('ui-hidden');
     else if (e.code === 'KeyM') hud.hint(audio?.toggleMute?.() ? 'Sound off' : 'Sound on', 1500);
     else if (e.code === 'KeyV' && voices) hud.hint(voices.toggle() ? 'Crew voices on' : 'Crew voices off', 1500); // (ww2/voices.js)
@@ -1599,10 +1629,10 @@ async function init() {
 
     // HUD, console, audio
     hud.setClock(hour);
-    // a threat level's orders (ww1/director.js goal), four times a second
+    // a threat level's mission (ww1/director.js goal: the objectives), four times a second
     if ((goalTimer -= rawDt) <= 0) {
       goalTimer = 0.25;
-      hud.setGoal(sim && !sim.attract ? sim.director?.goal?.() ?? null : null);
+      hud.setObjectives(sim && !sim.attract && state === 'playing' ? sim.director?.goal?.() ?? null : null);
     }
     if (panel && sim) {
       const view2 = { sim, selectedId: UNITS[selected].id, dt: rawDt, time: sim.time };

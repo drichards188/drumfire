@@ -20,7 +20,22 @@ export function showLoading(q, root = document.getElementById('loading')) {
   $('.ld-sub').textContent = item.sub;
   $('.ld-blurb').textContent = item.blurb;
   const lines = lv ? [...item.lines, ...lv.lines, ...mods.map((m) => `Modifier: ${m.name}. ${m.line}`)] : item.lines;
-  $('.ld-lines').replaceChildren(...lines.map((t) => { const li = document.createElement('li'); li.textContent = t; return li; }));
+  const li = (t, cls = '') => { const e = document.createElement('li'); e.textContent = t; if (cls) e.className = cls; return e; };
+  $('.ld-lines').replaceChildren(...lines.map((t) => li(t)));
+  // a level's battle: the mission it deals (src/operation.js, from the menu's seed and the career's lineup), its
+  // objectives first; imported after the order is up, so the loading screen shows at once
+  if (lv && /^\d+$/.test(q.get('seed') ?? '')) {
+    Promise.all([import('../operation.js'), import('../capability.js')]).then(([{ generateOperation }, { batteriesOf }]) => {
+      const op = generateOperation(lv.n, +q.get('seed'), batteriesOf(new Progression(storage).lineupLevels('de')));
+      const obj = op.objectives.filter((o) => !o.reveal || o.main);
+      const more = op.objectives.filter((o) => o.reveal && !o.main).length;
+      $('.ld-lines').replaceChildren(li(`${op.name}: ${op.title} (${op.en}). ${op.line}`, 'ld-op'),
+        ...obj.map((o) => li(`${o.main ? 'Main objective' : 'Secondary'}: ${o.title}${o.main && o.reveal ? ' (to be reported in battle)' : ''}.`, o.main ? 'ld-main' : 'ld-side')),
+        ...(more ? [li(`${more} more secondar${more > 1 ? 'ies' : 'y'} to be reported in battle.`, 'ld-side')] : []),
+        li(`The main objectives done, end the battle when ready${op.xzeit ? ', or call X-Zeit, the finale' : ''} (K).`),
+        ...lines.slice(item.lines.length + 1).map((t) => li(t)));
+    }).catch(() => { /* the plain order stays */ });
+  }
   $('.ld-back').href = menuHref(q, item.key);
   document.title = `Drumfire: ${item.title}`;
   root.hidden = false;

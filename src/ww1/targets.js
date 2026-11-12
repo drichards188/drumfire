@@ -37,6 +37,10 @@ export function expectedLayout(kind, { alt = 800 } = {}) {
   return [];
 }
 
+// the kite balloon's crew hauls it down when our shells fall within `r` m of its winch or under the balloon, keeps it
+// down `t` s after the last of them, and reels it in over `down` s, out again over `up` s
+export const HAUL = { r: 160, t: 150, down: 80, up: 140 };
+
 export class TargetsWW1 extends TargetsWW2 {
   make(s) {
     const sim = this.sim, def = TARGETS[s.kind];
@@ -90,7 +94,28 @@ export class TargetsWW1 extends TargetsWW2 {
       const near = Math.hypot(p.x - t.pos.x, p.z - t.pos.z);
       if (near < 55 + sc.calibre * 3) t.suppressed = Math.max(t.suppressed, sim.time + 18 + sc.calibre * 2.5);
     }
+    // the kite balloon: our shells falling near its winch, or under the balloon, have its crew haul it down (HAUL)
+    if (shell.own) for (const t of sim.targets) {
+      if (t.kind !== 'bballoon' || !t.alive || !t.parts[1]) continue;
+      const w = t.parts[1], e = t.parts[0];
+      if (Math.min(Math.hypot(p.x - w.x, p.z - w.z), Math.hypot(p.x - e.x, p.z - e.z)) > HAUL.r) continue;
+      if (!(sim.time < (t.downUntil ?? 0))) sim.radio(`${t.name}: shells round its winch, they are hauling it down.`, 'kill');
+      t.downUntil = sim.time + HAUL.t;
+    }
     return hit;
+  }
+
+  // the kite balloon on its cable: `haulK` 0 up to 1 hauled down, reeled in while shells keep falling near it, let up
+  // again after (the render lowers it and shortens its cable; their counter-battery fire has its eyes only while it is
+  // up, ww1/enemy.js)
+  update(dt) {
+    super.update(dt);
+    const sim = this.sim;
+    for (const t of sim.targets) {
+      if (t.kind !== 'bballoon' || !t.alive) continue;
+      const down = sim.time < (t.downUntil ?? 0);
+      t.haulK = Math.min(1, Math.max(0, (t.haulK ?? 0) + (down ? dt / HAUL.down : -dt / HAUL.up)));
+    }
   }
 
   damagePart(t, i, dmg, by) {
@@ -115,7 +140,14 @@ export class TargetsWW1 extends TargetsWW2 {
   checkDead(t, by) {
     const sim = this.sim;
     if (!t.alive) return;
-    if (t.kind === 'bballoon' ? t.parts[0].alive : this.alivePartCount(t) > 0) return;
+    // (the kite balloon: down for good when its envelope burns, or when its winch is wrecked: it breaks away and comes
+    // down)
+    if (t.kind === 'bballoon' ? t.parts[0].alive && t.parts[1]?.alive !== false : this.alivePartCount(t) > 0) return;
+    if (t.kind === 'bballoon' && t.parts[0].alive) {
+      t.parts[0].alive = false;
+      t.parts[0].hp = 0;
+      sim.radio(`${t.name}: its winch is wrecked, the balloon breaks away and comes down.`, 'kill');
+    }
     t.alive = false;
     t.active = false;
     t.hp = 0;
@@ -135,6 +167,11 @@ export class TargetsWW1 extends TargetsWW2 {
   revive(t) {
     super.revive(t);
     if (t.kind === 'bconvoy') t.present = false;
-    if (t.kind === 'bballoon') this.sim.radio('A new British kite balloon is going up.', 'warn');
+    if (t.kind === 'bballoon') {
+      // (it goes up from the ground)
+      t.haulK = 1;
+      t.downUntil = 0;
+      this.sim.radio('A new British kite balloon is going up.', 'warn');
+    }
   }
 }

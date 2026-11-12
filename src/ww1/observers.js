@@ -5,8 +5,12 @@
 import { ObserversWW2 } from '../ww2/observers.js';
 
 export class ObserversWW1 extends ObserversWW2 {
-  // a threat level's tank laager: the observer reads the burst against the tank the guns are laid on (director.js)
+  // a threat level's tank laager: the observer reads the burst against the tank the guns are laid on (director.js); the
+  // kite balloon's against its winch on the ground, the mission's target (the balloon itself rides 250 m downwind)
   refPoint(m) {
-    return m.aimPart ? { x: m.aimPart.x, z: m.aimPart.z } : super.refPoint(m);
+    if (m.aimPart) return { x: m.aimPart.x, z: m.aimPart.z };
+    const t = m.targetId ? this.sim.targetById(m.targetId) : null;
+    if (t?.kind === 'bballoon' && t.parts[1]) return { x: t.parts[1].x, z: t.parts[1].z };
+    return super.refPoint(m);
   }
 }

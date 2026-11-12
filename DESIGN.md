@@ -670,25 +670,27 @@ bit-identical); with it the lineup's `opposition` is not used.
   before the modifiers) and the level's for the enemy's: `cb`, `dmg`, `assault`, `sig` (times 1.5 under the modifier
   `sound`), `zero`, and `time` from the level's `deadline`. `difficultyName` is 'Normal'. `sim.modifiers` is a Set of
   MODIFIERS ids; `sim.supplyK` the ammunition columns' pace (shells 0.6, rain 0.6; guns.js resupply).
-- **The day** (`ww1/director.js` `levelScript`): the open battle's sites and traffic (entries marked `order`), the
-  first `attacks` of `ATTACKS` (B 925 s, D 1230, C 1090, A 1530, B 1700; marked `attack`), all inside the day's span
-  (`DAY_END`: morning 900 s, day 1300, night and full 1850). With `tanks`, four minutes before an attack its side's
-  laager (A, B: T1; C, D: T2) gets a mission, and if it still has half its tanks at the attack they go in with it
-  (`TANK_K` 1.3 its size). The day's clock never ends a level (below): it runs on through a lull as the career's day
-  does (`pace`, 15 s with nothing in hand) and stops just short of the span's end until the orders are over.
-- **Ending on the orders** (2026-11-10, the user's rule: a level ends on its missions, never on the clock;
-  `levelUpdate`). The orders: until `need` fire missions are done (destroy, cb, harass), the script's orders, the
-  counter-battery calls, the lineup's work and the specialists come as before. More than `fails` failed (destroy and
-  cb; traffic that gets away is not counted) loses at once, "Too many fire missions failed". When nothing more can
-  come (`nothingLeft`: nothing in hand, no attack under way, no queue, no scripted order left, no site in reach for the
-  lineup's work, no role site the specialists could open) the orders close short. The close (`close`, `noOrders`): no
-  new orders (the script's `order` entries do nothing, `lineup.js` stops, `watchBatteries` stops, the specialists keep
-  only 'fort'); the attacks still owed come one after another, the day lapsing to the next whenever none is under way;
-  then a shorter day is won ("The front is held"; lost if it closed short) and a full day lapses to 1850 and runs
-  `zeroHour`, won with `zero` of our men in. Two sectors lost or every gun lost end any day at once, as always;
-  `sim.over` gives the end card's title and line. `goal()` is the HUD's box (main `hud.setGoal`, `#goal` at the top of
-  the 3D view): missions done of `need` with the failures, then the attacks still to hold, then X-Zeit. On a level the
-  lineup's work and the specialists come after 15 s instead of 80 and 90 when nothing at all is in hand.
+- **The mission** (2026-11-12, "Missions" below): every battle at a level is one generated mission (`src/operation.js`
+  `generateOperation(level, seed, batteries)`, tracked by `src/sim/objectives.js`), dealt by `DirectorWW1.reset` from
+  `sim.opSeed` (the menu's seed, `?seed=`, so the level card, the loading screen and the battle agree; the game's seed
+  without one) and the lineup's batteries (`this.bats`). `sim.operation`, `sim.objectives`, `sim.objectivePay`.
+- **The day** (`levelScript`): only the attacks (`op.attacks`: the level's count, times from 480 to 620 s then 230 to
+  340 s apart, each in a rolled sector; marked `attack`; with `tanks`, `tanksMoving` four minutes before) and the
+  traffic (`TRAFFIC`: convoys and trains, marked `order`). The objectives' fire missions are not on the clock
+  (`objectiveMissions`, per step from `missionsUpdate`). The day's clock runs on through a lull to the next thing
+  (`pace`, 15 s with nothing in hand) and waits at 1849 s, short of X-Zeit, until it is called.
+- **Ending on the mission** (the user's rules: 2026-11-10 a level ends on its missions, never on the clock; 2026-11-12
+  the player calls the end; `levelUpdate`). More than `fails` of the main objectives' fire missions failed lose ("Too
+  many of the main objectives' fire missions failed"); a main whose target stands with no battery left able to serve
+  it (in reach, heavy enough, shells at the guns or coming: the Gamma's sixteen) loses ("Nothing left in reach"). Every
+  main target done: `accomplish()` (`lv.closing`), their counter-battery fire grows (`sim.difficulty.cb` from `lv.cb0`,
+  `PRESSURE` 20% a minute to ×3), and the player calls `callFinale()` (main: K, the HUD's button): without X-Zeit the
+  battle is won at once ("Mission accomplished", `summary()`); with it the attacks and orders still to come are called
+  off, the day runs on to 1850 and `zeroHour` runs, `zeroEnd` deciding the battle with `zero` of our men in. A lineup
+  all on auto (no gunner) calls it `QUIET_END` (120 s) after the last objective moved (`ob.lastProgress`) with no
+  attack under way. Two sectors lost or every gun lost end any battle at once, as always; `levelEnd` settles the
+  objectives (`settle`: X-Zeit, the medals) and sets `sim.over`. `goal()` is the HUD's objectives (main
+  `hud.setObjectives`, `#objectives` under the unit's name).
 - **The sites** (`offers`): only the level's `sites` (capability.js `tierOf`: soft, armour, heavy, deep, hard, fort; the
   role sites by their role, specialists.js `allow`). A site no battery of the lineup can finish (`siteVerdict` 'no') goes to
   the neighbouring Gruppe: a radio line once, no mission, no pay, no penalty (the traffic is never handed on).
@@ -707,11 +709,11 @@ bit-identical); with it the lineup's `opposition` is not used.
   across the lane by its place in the mission, not its unit number; a crew lifting late stops firing until it lifts.
   Our assault keeps pace with the lifts (2.6 m/s), every British battery not silenced (half its guns standing) fires on
   it at the level's `cb` rate, and the garrison is kept down by `cover` bursts on each lane in 20 s (6 without a level).
-- **Strongpoints** (levels 6 to 10, `forts` of them: 2, 2, 3, 3, 4): `ww1/ops.js` `RIDGE_FORTS` K1 to K4, target kind
+- **Strongpoints** (levels 6 to 10 when the mission has X-Zeit, `forts` of them: 2, 2, 3, 3, 4; a secondary objective): `ww1/ops.js` `RIDGE_FORTS` K1 to K4, target kind
   `bunker` (the WW2 bunker's model and layout, three shelters) with the site fields `role: 'fort'`, `minHard`
   (`FORT_HARD` 70: a shell whose `SHELLS[kind].hard.D` is lower does nothing to it, `sim/targets.js` `applyBurst`, so the
   28 cm guns and up), `partHp` 50 (the bunker's 100) and `lane` (B or C). K1 and K2 stand one in each X-Zeit lane, K3
-  and K4 behind them; the director removes those past the level's `forts` (and all of them without a level) from
+  and K4 behind them; the director removes those past the mission's `forts` (and all of them without X-Zeit) from
   `sim.targets` at `reset`. Their missions are `sim/specialists.js` role 'fort': by day and by night (a map shoot), no
   deadline, opened after the registration, as many at once as there are batteries that can take one (`canTake`: in
   reach and heavy enough, Bertha's and the Gamma's beds relaid first, `CrewsWW1.pick`); the auto crews put them first
@@ -731,16 +733,99 @@ bit-identical); with it the lineup's `opposition` is not used.
   (each level's bar the lowest reference firepower of it and the levels above: from level 6 a super-heavy takes a field
   battery's slot). `REFERENCE` is each level's reference lineup (at most five batteries and one off-map, `SLOTS`).
 - **Balance** (`node tools/leveltest.mjs [seeds] [--levels] [--lineup ref|below] [--mods roll] [--jobs] [--games]`, all
-  auto, 72 seeds, each level's reference lineup; it prints how each game ended): 96, 94, 90, 74, 61, 56, 38, 33, 18, 8
-  % won for levels 1 to 10 (2026-11-10, ending on the orders: `need` 1, 2, 4, 6, 7, 8, 8, 9, 9, 10, `fails` 3, 3, 4, 5,
-  then 6, and `zero` for 5 to 10 re-tuned to 0.675, 0.63, 0.69, 0.61, 0.62, 0.58, since X-Zeit comes sooner with fewer
-  British batteries silenced; the mean battle 6.9, 12.9, 23.3, 21.6, 30.8, 29.9, 31.3, 29.1, 29.5, 24.9 min, before
-  15, 21.7, 30, 30.8, then about 40). With `--mods roll` (36 seeds) 100, 97, 86, 81, 33, 19, 6, 14, 3, 3 (before 92,
-  94, 92, 69, 42, 36, 11, 11, 8, 6): a modifier that slows the work now costs failures. Before that: 92, 89, 92, 71,
-  60, 53, 36, 31, 19, 10 % (2026-11-02, with the strongpoints and the new tree's references: level 3 the C/92 and an FK 16 battery, 8 to 10 each
-  with a super-heavy; `zero` re-tuned for 6 to 10). Before the strongpoints: 97, 97, 86, 71, 60, 51, 35, 28, 19, 11. The
-  old level 10 lineup at its best but with no super-heavy (K 18, sFH 18, sFH 13, leFH 18, Mörser 18, V-2) now wins
-  26, 19, 1, 0, 1 % at levels 6 to 10, the new one (K 38, sFH 18, Hummel, leFH 18, Gamma, V-2) 74, 50, 35, 10, 14.
+  auto, each level's reference lineup; it prints the mission's mains and secondaries done, the failures, how each game
+  ended): with the missions' phase 2 (the objectives of the moment, the balloon, the hunt; 2026-11-12, 72 seeds) 97,
+  97, 92, 96, 79, 74, 56, 42, 35, 26 % won, the mean battle 13.1, 13.0, 22.7, 25.7, 32.9, 32.4, 33.8, 33.7, 31.7, 31.1
+  min. With phase 1 (72 seeds) 99, 97, 93, 92, 82, 61, 57, 56, 36, 26 % won for levels 1 to 10,
+  the mean battle 12.3, 12.8, 17.0, 22.3, 25.5, 29.1, 29.2, 26.0, 25.0, 25.3 min (the mains done at 9 to 17 min); with
+  `--mods roll` (36 seeds, how levels 5 to 10 are played) 100, 94, 94, 83, 39, 22, 28, 11, 14, 8 (before, on `need`:
+  100, 97, 86, 81, 33, 19, 6, 14, 3, 3). Levels 4 and 5 without modifiers are easier for the auto crews than before
+  (74 and 61 % then); the tuning against a scripted player is the missions' phase 4. Before the missions, ending on
+  the orders (2026-11-10, 72 seeds, `need` 1, 2, 4, 6, 7, 8, 8, 9, 9, 10): 96, 94, 90, 74, 61, 56, 38, 33, 18, 8 %,
+  the mean battle 6.9, 12.9, 23.3, 21.6, 30.8, 29.9, 31.3, 29.1, 29.5, 24.9 min. Before that: 92, 89, 92, 71, 60, 53,
+  36, 31, 19, 10 % (2026-11-02, with the strongpoints and the new tree's references: level 3 the C/92 and an FK 16
+  battery, 8 to 10 each with a super-heavy; `zero` re-tuned for 6 to 10). Before the strongpoints: 97, 97, 86, 71, 60,
+  51, 35, 28, 19, 11.
+
+### Missions (`src/operation.js`, `src/sim/objectives.js`)
+
+Each battle at a threat level is one generated mission, Helldivers 2's way. The rules come from a game-design research
+pass (2026-11-12: Helldivers 2, Deep Rock Galactic, Into the Breach, XCOM 2, Kate Compton's "10,000 bowls of
+oatmeal", Sid Meier's interesting decisions) and the user's decisions:
+
+- **A shape, not a random mix.** `ARCHETYPES`: Gegenbatterie (named British batteries), Nachschub (dumps, depots),
+  Tankabwehr (laagers), Führung (the HQs, concrete shelters), each with its main kinds and secondary kinds; one whose
+  mains the lineup is ready for is rolled. The mission's name is a codeword (`NAMES`, "Unternehmen Lerche").
+- **Objectives are named targets** (`OBJECTIVES`: battery, dump, hq, laager, deep, concrete; secondaries also traffic,
+  tanks (a laager before its attack, `before` on the day's clock), forts (with X-Zeit); main xzeit). Each says what it
+  does to the battle (`why`) and most do it (`effect`): a dump or depot gone slows their counter-battery fire (the
+  dumps' own rule, `EnemyWW1.supply`), the HQ, the corps HQ or a shelter gone thins every attack after it (`THIN` 0.85
+  each, 0.6 at least, `levelAssault`), a laager broken up keeps its tanks out (`TANK_K`), a battery silenced stops
+  firing, a train or convoy wrecked holds their supply up (`TRAFFIC_CUT`: ×0.85 for 300 s).
+- **How many** (`threat.js`): `mains` 1, 1, 2, 2, 2, 2, 3, 3, 3, 3; a main's targets fill `work` (in fire missions:
+  1 to 9.5, each target weighed `w`, up to three of a kind: "Blow up both ammunition dumps"); `later` (1 from level 4)
+  of the mains reported during the battle near the first attack, so the work runs into the attacks; `sides` 1, 2, 2,
+  3, 3, 3, 3, 4, 4, 4, two known before battle, the rest reported from 260 s on (`reveal`, state 'hidden' until then,
+  and all at once when the mains are done); X-Zeit as the finale with chance `xzeit` (0.5 at level 5 to 0.8 at 10).
+- **Only what the lineup can do** (`capability.js siteVerdict` on the lineup's batteries, with the level's deadline):
+  a main only where the lineup is 'ready', a secondary where it is not 'no'. The verdict now counts a ramp gun's
+  re-lay error (`GUNS.runback`, the C/92's: a lone C/92 was dealt the brigade HQ and failed it four times).
+- **Mains never fail on a clock.** Their fire missions open two at a time (`MAIN_LIVE`), one opening every 40 s
+  (`SPACING`), the secondaries' after the first 90 s; a mission whose window closes comes again after `REOPEN` (45 s)
+  and, a main's, counts against `fails` (3 or 4). A battery objective's mission has an observer who reports (an
+  aeroplane or the balloon by day, the VB by night), never the sound rangers' blind fix. Deep and concrete ones as the
+  specialists' (`role`, `minHard`) with a 900 s window (`ROLE_WINDOW`). Marked `m.obj`, `m.objMain`, priority +5 for a
+  main and +2 for a secondary (`tag`), so the crews put them before the routine counter-battery calls; on a mission the
+  crews keep a long gun or a heavy on a main's shoot when the red flares go up and another battery can answer
+  (`CrewsWW1.sosCalled`).
+- **Attacks are pressure, never an objective**: the enemy's timetable must not decide when the player is done.
+- **The player calls the end** (above). Medals (`MEDALS`, the end card, not objectives: failed early, they would nag):
+  no gun lost, not one of theirs in our trenches.
+- **Pay** (`OBJECTIVE_PAY` ×the level's pay, `sim.objectivePay`, research.js `battleReward` `objectives`): a main 100,
+  a secondary 40, the full clear 80, a medal 25 (Helldivers 2's main to secondary ratio); the victory pays
+  `WIN_MISSION` 250 instead of 400. Paid at the end (or on leaving) with the time in action.
+- **What the player sees**: the menu's level card (the mission's shape, its mains and known secondaries, the rest "to
+  be reported"), the loading screen's briefing (`ui/loading.js`), the HUD's panel (`hud.setObjectives`: squares the
+  mains, diamonds the secondaries, progress, the failures, then "Mission accomplished", their fire's growth, the
+  all-auto countdown and the finale's button), toasts and radio lines on each objective done, failed or reported, the
+  reward feed's OBJECTIVE lines, the board's ochre rings on the objectives' targets (`board.js drawTargets`), the
+  missions list's ■ and ◇ (`missionList.js`), and the summary's Mission section (`ui/summary.js`).
+- **Objectives of the moment** (phase 2, 2026-11-12; `Objectives.add`, `bonus`: a secondary that pays but has no part
+  in the full clear, a △ on the HUD with its timer). One at a time besides the attacks, never during an attack or its
+  massing (the research's middle of a battle: an attack with its counter-preparation, a pop-up target, a duel):
+  - *The duel* (`duelUpdate`, `DUEL`, from a counter-battery rate of 0.5, level 3): a British battery firing on one of
+    ours with its fix firm enough to tell (`f.lock` 0.45, about 200 m off) is to be silenced within 300 s. Its fix is
+    our battery's loudness (`ww1/enemy.js`: the lock follows the signature), so falling quiet is the other answer; the
+    HUD shows how far off their rounds fall (`fixOf`), red under 120 m. 300 s between duels; never the hunted gun.
+  - *Counter-preparation* (`massing`, `prepUpdate`, `callOff`, `goOver`): every attack's men mass in their front line
+    `MASS_T` (180 s) before they go over (`as.massing`, `rocketsAt` and each group's `go` held), with a fire mission
+    on the trench (`m.prep`); a quarter of them down (`PREP_BREAK`) calls the attack off (its groups go back, held, no
+    Sperrfeuer), else they go over with what is left (the laager's tanks as a fresh group, the Trommelfeuer, the red
+    flares). One battery's work done well: the auto crews' field battery best placed turns to it (`CrewsWW1.prepCalled`).
+  - *Targets of opportunity* (`popUpdate`, `popColumn`, `columnsMove`, `POP`): by day every few minutes a relief
+    column halts on a road behind their line (the painted roads, `trenchlines.js tracks`, x -2600 to 1900), British
+    infantry in file in the open (state 'halt', then 'march'; an `attacker` group outside any assault, so its men pay
+    and never count as ours), for 180 s; a third of it down and it scatters. Shrapnel for the guns that have it.
+- **The kite balloon** (`balloon`, a planned secondary from level 3 to a lineup that reaches its winch): `ops.js
+  RIDGE_BALLOON` L1 over Ypres at 500 m (`r` 220 takes in its winch, 250 m downwind), removed from every battle that
+  does not deal it; while it is up (`haulK` under 0.5) their lock on our loudest battery is as if it were 1.3 times
+  louder (`ww1/enemy.js BALLOON_K`). Its mission is laid on the winch lorry on the ground (HE, the observer reading
+  the bursts against it, `ObserversWW1.refPoint`): our shells within 160 m of the winch or under the balloon have its
+  crew haul it down (`ww1/targets.js HAUL`: kept down 150 s after the last, reeled in over 80 s and out over 140 s,
+  drawn lowered with its cable shortened, the HUD's "hauled down"), and the winch wrecked brings it down for good
+  (`checkDead`). A shrapnel burst near the envelope still burns it (the base's balloon rule now covers `bballoon`).
+  (It was first laid on the balloon itself with shrapnel: two C/92s firing at nothing else brought it down in 5
+  battles of 12, 55 rounds each, the median burst 102 m off; on the winch, in 12 of 12, about 23 rounds, 2026-11-12.)
+- **The railway-gun hunt** (`railgun`, a secondary from level 5 that pays double, `value` 2; counter-battery and supply
+  missions; `huntUpdate`, `HUNT`): the British 18-inch railway howitzer (G5) comes up to its firing point after 2.5
+  to 4.5 min, fires up to three rounds (its own cadence) or stays 240 s, then withdraws out of sight (`present`
+  false: not drawn, not hit) for 4 to 6 min; each round firms the sound rangers' fix (320 m at first, ×0.62 a round,
+  35 m at best), and the hunt's fire mission (`m.hunt`, observer 'sound', no clock) moves with the fix, the batteries on
+  it on auto re-laid. 40% of its strength gone knocks it out (`spent`). The auto crews' long guns and heavies turn to
+  it when it fires (`huntCalled`) and leave it when it withdraws. Tried as a main from level 7: the auto crews never
+  caught it and it decided whole battles, so a secondary.
+- **Still to come** (the plan's phases 3 and 4): neutralization, wire cutting, the box barrage, generated target
+  positions, `tools/optest.mjs` and tuning against a scripted player.
 
 ## Test range
 
@@ -2514,3 +2599,6 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (ui: the message slips, 2026-11-06) At the user's request each slip in MESSAGES AND SIGNALS reads in the Smart Brevity order: a title row (the round, battery and gun of a report; an order's task name, `head` and `body` from `messages.js`; else the text before its first ': ' or '! ', `messagePad.js` `splitTitle`) with the time, the one line that matters at the card's full width (the pencilled correction with APPLY, ON TARGET, or the message), the observer's own words small under it (the English in brackets dropped when the note already says it), and the source and task in one line at the foot (all of it on hover). The tutorial tags `report` and `apply` are kept. The kind is the class `s-<kind>` (a bare `kill` took style.css's kill-feed rule: the slip laid out as a row, its message one letter wide, and faded out after 4 s).
 - (threat levels: they end on their orders, 2026-11-10) At the user's request ("I don't want users stuck sitting around for x minutes per mission") no threat level ends on the clock. Each has `need` fire missions and `fails` allowed (`threat.js`); the orders done close the day, the attacks still owed come one after another, then a shorter day is won and a full one goes to X-Zeit; more than `fails` failed loses; running out of anything in reach closes the orders short (`ww1/director.js` `levelUpdate`, `close`, `nothingLeft`, `pace`, `goal`; DESIGN.md "Threat levels", Ending on the orders). Found on the way: on a level a silenced British battery's last guns kept firing and each Gegenbatterie on it was done at once, unfired (about fourteen free missions a game on level 3, most of what the old `need` 10 and 17 were met with); such sites are now `spent`, and the lineup's work asks `canOffer` so it no longer idles a battery on a site the level refuses (`sim/lineup.js` `pool`, also `noOrders` and a 15 s wait on a level with nothing in hand; `sim/specialists.js` the same 15 s and `pending()`; script entries keep their marks through `LineupDay.wrap`). A clock kept abreast of the orders done was tried and dropped: it brought the attacks and the counter-battery calls on faster than the crews work. `need`, `fails` and `zero` (5 to 10) tuned on 72 seeds to the old curve (Balance). The HUD's `#goal` box (`hud.setGoal`) and the menu's facts (Goal, Fails allowed, Attacks, Pay; Length is gone) show the orders; the levels' `sub` and `lines` say them. `tools/leveltest.mjs` prints the failures and how each game ended, and stops a game at two hours as unfinished. The British, WW2 and WW1 (no level) tests, `researchtest` and `supporttest` are bit-identical.
 - (ui, sim: manual keeps the player's settings, 2026-11-10) At the user's request nothing changes the fuze or the guns selector behind the player's back on manual or hold: `Director.assign` picks the fuze (`defaultFuze`) only for a crew on auto, the `lay` command no longer resets it to instant, and the console's guns selector follows the mission only on auto (`console.js`, the mode in its key so a switch to auto snaps it back). Batteries start on instant, the concrete-breakers (Gustav, Karl, Bertha, Gamma, Beta-Gerät) on delay (`guns.js` `DELAY_START`), so the Gustav and Karl lessons' "the delay fuze is set" stays true. The British SOS lesson's shrapnel now stays set through the SOS (the SOS used to reset it to instant). `tools/simtest.mjs`'s scripted player sets each mission's fuze itself (`pickFuze`: the crew's choice), so its results are bit-identical; so are the British, WW2, WW1, level, research, support, gunner and range tests.
+- (threat levels: missions, 2026-11-12) At the user's request ("continue on this epic", the objectives plan of 2026-10-29, after a game-design research pass) each battle at a threat level is one generated mission: `src/operation.js` `generateOperation(level, seed, batteries)` (archetypes, named main objectives and secondaries, the attacks' sectors, X-Zeit or not), `src/sim/objectives.js` `Objectives` (states judged from the game, pay, medals), `ww1/director.js` (`missionScript`, `objectiveMissions`, `levelUpdate`, `accomplish`, `callFinale`, `goal`), `threat.js` `mains`, `work`, `later`, `sides`, `xzeit` in place of `need`, `fails` 3 or 4. The user chose that the player calls the end once the mains are done (K or the HUD's button; X-Zeit as the finale), over the instant win of 2026-10-29. `sim.newGame({ opSeed })`, the game URL's `seed` (`menuItems.js hrefOf`). `capability.js` counts a ramp gun's re-lay error. `CrewsWW1.sosCalled` keeps a long gun or a heavy on a main's shoot. `EnemyWW1.supply` reads `director.trafficCut`. `research.js battleReward` returns `objectives` and pays `WIN_MISSION` on a mission. HUD `#objectives` (`hud.setObjectives`, `onFinale`) replaces `#goal` (`setGoal`). Every battle without a level is bit-identical (simtest, ww1test, ww2test, researchtest compared with the commit before).
+- (threat levels: missions, phase 2, 2026-11-12) At the user's request ("focus on user played germany alone", no change to the British game) the missions get their moments and two new kinds, from the research pass: the duel, counter-preparation (an attack's men mass in their front line 180 s first; a quarter down calls it off) and targets of opportunity (a relief column halted on a road), as objectives of the moment (`Objectives.add`, `bonus`); the kite balloon over Ypres (`ops.js RIDGE_BALLOON`, `ww1/enemy.js BALLOON_K`) and the railway-gun hunt (G5 comes and goes, `present`; the sound rangers' fix firms with each round) as secondaries. `CrewsWW1` `prepCalled`, `huntCalled`, `callTo` (a battery on auto turns to a moment), `update` (the hunt left while the gun is away), `suits` (nothing to shoot at a withdrawn gun). `Director.release(u)` is the base's: the attack's going over is `goOver`. `ww1/enemy.js` skips a battery not `present`. HUD: △ for a moment with its timer, the duel's fix, counter-preparation's and the column's share down, the hunt's FIRING/away and fix. Every battle without a level is bit-identical (simtest, ww1test, ww2test, researchtest compared with the commit before).
+- (threat levels: the kite balloon's winch, 2026-11-12) At the user's request ("does the balloon hunt target the balloon or the ground it's fixed to? ... almost always missed"; "fix it"): the balloon's mission is laid on its winch on the ground (`ww1/director.js siteMission`, HE, `ObserversWW1.refPoint`), near misses haul it down (`ww1/targets.js HAUL`, `haulK`, `downUntil`; the render lowers the envelope and shortens the cable about its foot, `models/t/ww1/british.js cableFoot`/`cableTop`), the winch wrecked brings it down (`checkDead`), its eyes only while it is up (`ww1/enemy.js`). `RIDGE_BALLOON` `r` 220: the bursts are matched to targets within r + 80 m of the site, so the winch was never hit. `CrewsWW1.suits`: any battery for the winch (the K 17 and C/92 rule only for a mission laid in the air). Shared code, the British game unchanged (simtest, ww1test, ww2test, researchtest identical): `sim/targets.js` applies its balloon envelope rule to `bballoon` too; `render/targets.js` draws a balloon's fall from its hauled-down height (0 for the 1917 balloon).

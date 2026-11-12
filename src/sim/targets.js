@@ -147,7 +147,7 @@ export class Targets {
         let dmg = this.partDamage(sc, f, hard, d, shr, sim.rng);
         if (!dmg) return;
         if (shell.dmgK) dmg *= shell.dmgK; // the battery's shells upgrade (research.js)
-        if (i === 0 && t.kind === 'balloon' && shr) dmg = 12 * Math.max(0, 1 - d / 55);
+        if (i === 0 && (t.kind === 'balloon' || t.kind === 'bballoon') && shr) dmg = 12 * Math.max(0, 1 - d / 55); // (the envelope: shrapnel balls through the gas bag)
         if (dmg <= 0) return;
         total += dmg;
         worst = Math.max(worst, dmg);

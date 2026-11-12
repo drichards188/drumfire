@@ -8,7 +8,8 @@ import { rangeTable } from '../sim/shells.js';
 import { createHangar } from './hangar.js';
 import { OPS as OPS_WW1, RIDGE_MORE } from '../ww1/ops.js';
 import { THREAT, MAX_LEVEL, threatOf, rollModifiers, modifierOf, SLOTS } from '../threat.js';
-import { capabilities, recommendedLevel } from '../capability.js';
+import { capabilities, recommendedLevel, batteriesOf } from '../capability.js';
+import { generateOperation } from '../operation.js';
 import { showSummary, loadSummary, markSeen } from './summary.js';
 import { shouldInvite, showInvite } from './invite.js';
 import './menu.css';
@@ -537,6 +538,14 @@ export function mountMenu(root = document.getElementById('menu')) {
   memo.modSeed ??= (Math.random() * 1e9) | 0;
   const levelNow = () => (career.levelUnlocked(era, level) ? level : Math.max(1, ...THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n)));
   const modsNow = () => rollModifiers(levelNow(), memo.modSeed);
+  // the mission the level deals the lineup (src/operation.js: the same seed as the modifiers, passed to the game page,
+  // so the briefing and the battle agree)
+  let opKey = '', opMemo = null;
+  const missionNow = () => {
+    const lv = career.lineupLevels(era), key = `${levelNow()}|${memo.modSeed}|${JSON.stringify(lv)}`;
+    if (key !== opKey) { opKey = key; opMemo = generateOperation(levelNow(), memo.modSeed, batteriesOf(lv)); }
+    return opMemo;
+  };
   let sel = null, open = query.has('lessons');
   // a special mission played as its guided first run (its lesson, menuItems.js GUIDE) or straight: the player's last
   // choice for it, else guided until its lesson is done
@@ -787,11 +796,27 @@ export function mountMenu(root = document.getElementById('menu')) {
     const head = el('div', 'lv-head');
     head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name), el('p', null, t.sub));
     head.title = t.lines.join('\n');
-    const fact = (k, v) => { const f = el('div', 'lv-fact'); f.append(el('small', null, k), el('b', null, v)); return f; };
+    const fact = (k, v, title = '') => { const f = el('div', 'lv-fact'); f.append(el('small', null, k), el('b', null, v)); if (title) f.title = title; return f; };
     const facts = el('div', 'lv-facts');
-    // (a level ends on its orders, never on the clock: ww1/director.js)
-    facts.append(fact('Goal', t.day === 'full' ? `${t.need} missions, X-Zeit` : `${t.need} fire mission${t.need > 1 ? 's' : ''}`),
-      fact('Fails allowed', String(t.fails)), fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
+    // the mission dealt (src/operation.js): its shape, its objectives (the mains, the secondaries known now, the
+    // rest reported in battle); a level ends on it, never on the clock
+    const op = missionNow(), mains = op.objectives.filter((o) => o.main), known = op.objectives.filter((o) => !o.main && !o.reveal);
+    const mf = fact('Mission', op.title, `${op.name}: ${op.line}`);
+    mf.append(el('em', 'lv-en', op.en));
+    facts.append(mf,
+      fact('Fails allowed', String(t.fails), 'How many of the main objectives\' fire missions may fail; one more loses the battle'),
+      fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
+    const obj = el('ul', 'lv-obj');
+    obj.setAttribute('aria-label', 'Objectives');
+    for (const o of [...mains, ...known]) {
+      const li = el('li', o.main ? 'main' : 'side');
+      li.append(el('i', null, o.main ? '□' : '◇'), el('span', null, o.main && o.reveal ? `${o.short} (reported in battle)` : o.short));
+      li.title = `${o.main ? 'Main objective' : 'Secondary objective'}: ${o.title}. ${o.why}`;
+      obj.append(li);
+    }
+    const hidden = op.objectives.filter((o) => !o.main && o.reveal).length;
+    if (hidden) obj.append(el('li', 'more', `+${hidden} secondar${hidden > 1 ? 'ies' : 'y'} reported in battle`));
+    obj.title = `${op.name}. ${op.line} The main objectives done, you end the battle when ready${op.xzeit ? ', calling X-Zeit as the finale' : ''}.`;
     const threats = el('div', 'lv-chips');
     if (t.cb >= 0.5) threats.append(chip(t.cb >= 0.7 ? 'Counter-battery' : 'Some counter-battery'));
     if (t.spotters || t.raids) threats.append(chip(t.raids ? 'Air raids' : 'Spotter aircraft'));
@@ -802,7 +827,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (!threats.children.length) threats.append(chip('Little to fear', 'calm'));
     const fit = el('p', `lv-fit${rec < n ? ' over' : ''}`, rec >= n ? '✓ Your lineup is ready for this level' : `Above your lineup: it suits level ${rec}`);
     fit.title = `Your lineup against this level's targets: ${t.sites.map((k) => `${CAP_NAME[k] ?? k} ${CAP_SAY[caps[k] ?? 'no']}`).join('; ')}. Fits: ${t.fits}.${rec < n ? ' What it cannot do goes to the neighbouring Gruppe, unpaid.' : ''}`;
-    body.replaceChildren(meter, head, facts, threats, fit);
+    body.replaceChildren(meter, head, facts, obj, threats, fit);
   }
 
   // keep the focus on the control that was pressed when a screen is built again
@@ -893,7 +918,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   const go = () => {
     if (!playable(sel)) return;
     const lesson = guided() ? lessonOf(sel) : null;
-    const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : lesson ? hrefOf(lesson, difficulty, query) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow() });
+    const href = sel.key.startsWith('range:') ? rangeHref(era, onMap()) : lesson ? hrefOf(lesson, difficulty, query) : hrefOf(sel, difficulty, query, { level: levelNow(), mods: modsNow(), seed: memo.modSeed });
     // the next battle at a level rolls its modifiers afresh
     if (sel.level) { memo.modSeed = (Math.random() * 1e9) | 0; save(); }
     location.href = href;

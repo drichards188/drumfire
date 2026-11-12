@@ -26,6 +26,10 @@
 .rw-kill .rw-what { font-weight: 700; color: #fff0cc; }
 .rw-part .rw-act, .rw-mission .rw-act { color: #e8b55a; }
 .rw-men .rw-act { color: #d98b6f; }
+/* a level's mission: an objective done (src/sim/objectives.js), the biggest line in the feed */
+.rw-objective { border-color: rgba(214, 196, 120, 0.9); background: rgba(40, 38, 16, 0.9); }
+.rw-objective .rw-act { color: #e9d98a; }
+.rw-objective .rw-what { font-weight: 700; color: #fff6d2; }
 .rw-hit { opacity: 0.85; }
 .rw-hit .rw-pts { color: var(--ui-dim); font-size: 11px; }
 @keyframes rw-in { from { opacity: 0; transform: translateX(18px); } }

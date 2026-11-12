@@ -173,9 +173,11 @@ export class TargetViews {
         if (BALLOONS.has(v.kind) && i === 0 && !sp.alive) {
           // the envelope falls, burning
           const f = Math.min(1, (this.time - v.deadAt) / FALL);
-          // (the WW1 mode's sim keeps a bballoon's pos.y on the ground: its height is the site's alt)
+          // (the WW1 mode's sim keeps a bballoon's pos.y on the ground: its height is the site's alt; it falls from
+          // where it was, hauled down or not)
           const alt = v.kind === 'bballoon' ? (t.site?.alt ?? t.pos.y) : t.pos.y;
-          v.wraps[0].position.y = -(alt * 0.55) * f * f;
+          if (f === 0 || v.drop0 == null) v.drop0 = v.drop ?? 0;
+          v.wraps[0].position.y = -Math.min(alt - 12, v.drop0 + (alt * 0.55) * f * f);
           if (f < 1 && fx && model.anchors?.burn?.[0]) {
             model.anchors.burn[0].getWorldPosition(_v);
             fx.fire?.(_v, 3, 1);
@@ -185,7 +187,17 @@ export class TargetViews {
             fx?.burnSite?.(_v, 2.5, 70);
           }
         } else if (BALLOONS.has(v.kind) && i === 0) {
-          v.wraps[0].position.y = 0;
+          // (the WW1 British balloon hauled down on its winch, haulK 0 up to 1 down: the envelope lowered to 40 m and its
+          // cable shortened about its foot)
+          const alt = v.kind === 'bballoon' ? (t.site?.alt ?? t.pos.y) : t.pos.y;
+          v.drop = v.kind === 'bballoon' ? (alt - 40) * (t.haulK ?? 0) : 0;
+          v.drop0 = null;
+          v.wraps[0].position.y = -v.drop;
+          if (model.cable && model.cableTop > model.cableFoot) {
+            const sc = Math.max(0.02, 1 - v.drop / (model.cableTop - model.cableFoot));
+            model.cable.scale.y = sc;
+            model.cable.position.y = model.cableFoot * (1 - sc);
+          }
           v.landed = false;
         }
       }

@@ -1,8 +1,10 @@
 // The battle's summary page (War Thunder's battle results): shown when a career battle ends, when it is left early, and
 // by the menu for a battle left without seeing it (the tab closed). Built from a plain record (main.js battleRecord):
 //   { v, at, seen, title, sub, outcome ('victory' | 'defeat' | 'left'), level: { n, name, en } | null, mods: [names],
-//     minutes, rp: { fought, time, win, total }, research: { target, from, to, researched: [names] }, opened: { n, name } | null,
-//     batteries: [{ name, callsign, points, rounds, kills }], tally: { kill, part, men, mission, hit }, top: [{ act, what, who, pts }] }
+//     minutes, rp: { fought, time, win, objectives, total }, research: { target, from, to, researched: [names] }, opened: { n, name } | null,
+//     batteries: [{ name, callsign, points, rounds, kills }], tally: { kill, part, men, mission, hit }, top: [{ act, what, who, pts }],
+//     mission: { name, title, en } | null, objectives: [{ title, main, bonus, state, pts }], medals: [{ title, state, pts }], clear }
+//   (a level's mission, src/operation.js: each objective's outcome and pay, the medals, the full clear)
 // The record is kept in localStorage (SUMMARY_KEY) until seen. Plain DOM, no three.js.
 import './summary.css';
 
@@ -40,8 +42,8 @@ export function showSummary(rec, { root = document.body, actions = [] } = {}) {
   const big = el('p', 'sm-big');
   big.append(el('b', null, `+${num(rec.rp.total)}`), ' research points');
   const rows = el('dl', 'sm-rows');
-  for (const [k, v] of [['Kills, damage and missions', rec.rp.fought], ['Time in action', rec.rp.time], ['Victory', rec.rp.win]]) {
-    if (!v && k === 'Victory') continue;
+  for (const [k, v] of [['Kills, damage and missions', rec.rp.fought], ['Objectives', rec.rp.objectives ?? 0], ['Time in action', rec.rp.time], ['Victory', rec.rp.win]]) {
+    if (!v && (k === 'Victory' || k === 'Objectives')) continue;
     rows.append(el('dt', null, k), el('dd', null, `+${num(v)}`));
   }
   left.append(big, rows);
@@ -75,8 +77,22 @@ export function showSummary(rec, { root = document.body, actions = [] } = {}) {
     }
     left.append(t);
   }
-  // the actions: the counts, then the biggest of them
+  // the mission: each objective done, failed or left open, with its pay; the medals; the full clear
   const right = el('section', 'sm-col');
+  if (rec.mission && rec.objectives?.length) {
+    right.append(el('h2', null, 'Mission'));
+    right.append(el('p', 'sm-mission', `${rec.mission.name} · ${rec.mission.title} (${rec.mission.en})`));
+    const list = el('ul', 'sm-obj');
+    const row = (cls, glyph, text, note) => { const li = el('li', cls); li.append(el('i', null, glyph), el('span', null, text), el('em', null, note)); list.append(li); };
+    for (const o of rec.objectives) {
+      const g = o.main ? (o.state === 'done' ? '■' : o.state === 'failed' ? '✕' : '□') : o.bonus ? (o.state === 'done' ? '▲' : o.state === 'failed' ? '✕' : '△') : (o.state === 'done' ? '◆' : o.state === 'failed' ? '✕' : '◇');
+      row(`${o.main ? 'main' : 'side'} ${o.state}`, g, o.title, o.state === 'done' ? `+${num(o.pts)}` : o.state === 'failed' ? 'failed' : 'not done');
+    }
+    for (const m of rec.medals ?? []) row(`medal ${m.state}`, m.state === 'done' ? '★' : '☆', m.title, m.state === 'done' ? `+${num(m.pts)}` : '');
+    right.append(list);
+    if (rec.clear) right.append(el('p', 'sm-clear', 'Full clear: every secondary objective done'));
+  }
+  // the actions: the counts, then the biggest of them
   right.append(el('h2', null, 'Actions'));
   const tally = el('div', 'sm-tally');
   for (const [k, label] of [['kill', 'Destroyed'], ['part', 'Knocked out'], ['men', 'Enemy casualties'], ['mission', 'Missions done']]) {

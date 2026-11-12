@@ -11,6 +11,7 @@
 // Aircraft are plain objects in sim.aircraft { id, kind: 're8' | 'camel', pos, prev, vel, alive, t, ... }.
 import { PLACES, LINES, lineX, DEG } from '../sector.js';
 import { EnemyWW2 } from '../ww2/enemy.js';
+import { TRAFFIC_CUT } from './director.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -29,6 +30,8 @@ export const BRIT_FIRE = {
 // is big and its place known, so until it is camouflaged they bomb it closer than a field battery (the site's `spoil`
 // below 0 tightens the raid's scatter, 70 m at 0). src/ww1/paris.js sets flak, spoil and hide.
 export const HUNT = { first: 150, every: 240, spread: 180, flak: 0.3, spoil: -0.4 };
+// their kite balloon's observer (a level's mission): the lock on our loudest battery as if it were this much louder
+export const BALLOON_K = 1.3;
 
 export class EnemyWW1 extends EnemyWW2 {
   reset() {
@@ -38,12 +41,14 @@ export class EnemyWW1 extends EnemyWW2 {
     this.huntT = HUNT.first;
   }
 
-  // the British supply: the dumps behind their guns, and the Paris Gun's rounds on the railway junction
+  // the British supply: the dumps behind their guns, the Paris Gun's rounds on the railway junction, and on a level's
+  // mission a train or a convoy wrecked a while ago (ww1/director.js TRAFFIC_CUT)
   supply() {
     const sim = this.sim;
     let n = 0;
     for (const t of sim.targets) if (t.kind === 'bdump' && t.alive) n++;
-    return (0.6 + 0.2 * n) * (sim.special?.supplyK?.() ?? 1);
+    const cut = sim.director.trafficCut > sim.time ? TRAFFIC_CUT.k : 1;
+    return (0.6 + 0.2 * n) * (sim.special?.supplyK?.() ?? 1) * cut;
   }
 
   update(dt) {
@@ -62,14 +67,16 @@ export class EnemyWW1 extends EnemyWW2 {
     const sup = this.supply();
     const spot = this.spotter && this.spotter.plane.alive && this.spotter.circling ? this.spotter.unitId : null;
     const heavies = !sim.level || sim.level.heavies;
+    const eyes = sim.objectives && sim.targets.some((t) => t.kind === 'bballoon' && t.alive && (t.haulK ?? 0) < 0.5) ? BALLOON_K : 1;
     for (const t of cbOn ? sim.targets : []) {
-      if (!t.battery || !t.alive) continue;
+      if (!t.battery || !t.alive || t.present === false) continue; // (the railway gun withdrawn, a level's hunt: ww1/director.js)
       if (!heavies && t.kind !== 'bfield') continue; // (a threat level without them: only the 18-pounders answer)
       const f = t.fire, B = BRIT_FIRE[t.kind];
       f.cool -= dt;
-      // the RE8 over the focus unit firms the locating up three times faster
+      // the RE8 over the focus unit firms the locating up three times faster; their kite balloon up (a level's mission
+      // that deals it, ops.js RIDGE_BALLOON) firms the fix itself
       const kl = focus && focus.id === spot ? 0.45 : 0.15;
-      f.lock += ((focus && fs >= 0.2 ? fs : 0) - f.lock) * Math.min(1, dt * kl);
+      f.lock += ((focus && fs >= 0.2 ? Math.min(1, fs * eyes) : 0) - f.lock) * Math.min(1, dt * kl);
       if (f.cool > 0 || now < t.suppressed) continue;
       const alive = t.parts.filter((p) => p.alive);
       if (sim.targetAI.silenced(t) || f.ammo <= 0) continue;

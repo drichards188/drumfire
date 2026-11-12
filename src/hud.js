@@ -70,18 +70,63 @@ export class HUD {
     }
   }
 
-  /** A threat level's orders (the director's goal(): { label, value, sub, warn }); null hides the box. */
-  setGoal(g) {
-    const key = g ? `${g.label}|${g.value}|${g.sub}|${g.warn ? 1 : 0}` : '';
-    if (key === this.goalKey) return;
-    this.goalKey = key;
-    const el = $('goal');
+  /** A threat level's mission (the director's goal(): { name, title, items, hidden, fails, maxFails, accomplished,
+   * finale, xzeit, barrage, auto, pressure }); null hides the panel. The finale's button calls `onFinale`. */
+  setObjectives(g) {
+    const el = $('objectives');
+    // (under the unit's name, however many lines it takes; the radio under the panel)
+    if (g && !el.hidden) this.placeObjectives(el);
+    const key = g ? JSON.stringify(g) : '';
+    if (key === this.obKey) return;
+    this.obKey = key;
     el.hidden = !g;
-    if (!g) return;
-    $('goal-label').textContent = g.label;
-    $('goal-val').textContent = g.value;
-    $('goal-sub').textContent = g.sub;
-    el.classList.toggle('warn', !!g.warn);
+    if (!g) { document.documentElement.style.removeProperty('--ob-h'); this.obH = null; return; }
+    $('ob-name').textContent = g.name;
+    $('ob-title').textContent = g.barrage ? 'X-Zeit: the Feuerwalze' : g.accomplished ? 'Mission accomplished' : `${g.title} (${g.en})`;
+    el.classList.toggle('done', g.accomplished);
+    const rows = g.items.map((o) => {
+      const li = document.createElement('li');
+      li.className = `${o.main ? 'main' : 'side'} ${o.state}${o.timed && o.state === 'open' ? ' timed' : ''}${o.bonus ? ' bonus' : ''}${(o.kind === 'duel' && o.state === 'open' && o.fix < 120) || (o.kind === 'railgun' && o.up && o.state === 'open') ? ' danger' : ''}`;
+      li.title = `${o.main ? 'Main objective' : 'Secondary objective'}: ${o.title}. ${o.why}`;
+      const glyph = document.createElement('i');
+      glyph.textContent = o.main ? (o.state === 'done' ? '■' : o.state === 'failed' ? '✕' : '□') : o.bonus ? (o.state === 'done' ? '▲' : o.state === 'failed' ? '✕' : '△') : (o.state === 'done' ? '◆' : o.state === 'failed' ? '✕' : '◇');
+      const name = document.createElement('span');
+      name.textContent = o.short;
+      const note = document.createElement('em');
+      const mmss = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+      note.textContent = o.state === 'done' ? '✓' : o.state === 'failed' ? 'failed' : o.kind === 'xzeit' ? (g.accomplished ? 'call it' : 'finale')
+        : o.kind === 'duel' ? `±${o.fix} m · ${mmss(o.left)}` : o.kind === 'railgun' && o.fix != null ? `${o.up ? 'FIRING' : 'away'} · ±${o.fix} m`
+          : o.kind === 'balloon' && o.haul ? (o.haul.left > 0 ? `hauled down ${mmss(o.haul.left)}` : o.haul.k > 0.05 ? 'going up' : 'up') : o.kind === 'prep' ? `${o.pct}/25% · ${mmss(o.left)}` : o.kind === 'column' ? `${o.pct}/30% · ${mmss(o.left)}`
+          : o.n > 1 ? `${o.done}/${o.n}` : o.kind === 'tanks' ? 'before attack' : '';
+      li.append(glyph, name, note);
+      return li;
+    });
+    if (g.hidden) {
+      const li = document.createElement('li');
+      li.className = 'more';
+      li.textContent = `+${g.hidden} more to be reported`;
+      rows.push(li);
+    }
+    $('ob-list').replaceChildren(...rows);
+    const foot = $('ob-foot');
+    foot.textContent = g.accomplished && !g.finale
+      ? `Their fire ×${(g.pressure / 100).toFixed(1)}${g.auto != null ? ` · every battery on auto: ends in ${Math.floor(g.auto / 60)}:${String(g.auto % 60).padStart(2, '0')}` : ''}`
+      : `Failures ${g.fails} of ${g.maxFails} allowed`;
+    foot.classList.toggle('warn', g.accomplished ? g.pressure > 150 : g.fails >= g.maxFails);
+    const btn = $('ob-finale');
+    btn.hidden = !g.accomplished || g.finale;
+    if (!btn.hidden) {
+      btn.replaceChildren(g.xzeit ? 'Call X-Zeit' : 'End the battle', Object.assign(document.createElement('kbd'), { textContent: 'K' }));
+      btn.onclick = () => this.onFinale?.();
+    }
+    this.placeObjectives(el);
+  }
+  placeObjectives(el) {
+    const u = $('unit'), top = Math.max(70, u.offsetTop + u.offsetHeight + 10);
+    if (this.obTop !== top) { this.obTop = top; el.style.top = `${top}px`; }
+    // (the radio below it: its own top is 92 px)
+    const h = Math.max(0, top + el.offsetHeight + 8 - 92);
+    if (this.obH !== h) { this.obH = h; document.documentElement.style.setProperty('--ob-h', `${h}px`); }
   }
 
   /** Time compression indicator (1 = real time). */

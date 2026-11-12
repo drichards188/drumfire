@@ -170,6 +170,14 @@ body.menu #view, body.menu #panel { display: none; }
 .lv-fact { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid #a49b6933; background: #c2bc930a; }
 .lv-fact small { font: 8px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #aaa88b; }
 .lv-fact b { font: normal 15px var(--serif); color: #ece2c6; }
+.lv-fact .lv-en { font: italic 11px var(--serif); color: #aaa88b; margin-top: -3px; }
+/* the mission dealt (src/operation.js): its main objectives (squares) and the secondaries known before battle (diamonds) */
+.lv-obj { list-style: none; display: grid; gap: 2px; padding: 8px 10px; border-left: 2px solid #a49b6966; font: 12px/1.45 var(--mono); color: #ddd8c5; }
+.lv-obj li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; }
+.lv-obj i { font-style: normal; color: #cfa94b; }
+.lv-obj .side { color: #b3ae98; }
+.lv-obj .side i { color: #9a9262; }
+.lv-obj .more { display: block; padding-left: 22px; font-style: italic; color: #8f8d7d; }
 .lv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .mn-chip { padding: 3px 8px; font: 10px var(--mono); letter-spacing: .06em; color: #f0c9a0; border: 1px solid #c8705a88; background: #c8705a1a; }
 .mn-chip.mod { color: #f0d999; border-color: #c2a46499; background: #c2a46418; }
@@ -504,6 +512,10 @@ body.loaded #loading { opacity: 0; pointer-events: none; }
 .ld-lines { list-style: none; margin-top: 12px; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.5; color: #3c3628; }
 .ld-lines:empty { display: none; }
 .ld-lines li::before { content: '\00b7'; color: #8a2f22; margin-right: 8px; }
+/* a level's mission (ui/loading.js): its name and shape, the main objectives (squares) and the secondaries (diamonds) */
+.ld-lines li.ld-op { font-weight: 700; }
+.ld-lines li.ld-main::before { content: '\25a1'; }
+.ld-lines li.ld-side::before { content: '\25c7'; color: #6e6a4a; }
 #load-bar { margin-top: 26px; height: 4px; background: #1d19121f; overflow: hidden; }
 #load-bar-fill { height: 100%; width: 0; background: var(--ink); transition: width .3s ease; }
 #status { margin-top: 9px; min-height: 1.3em; font: 11px var(--mono); letter-spacing: .1em; color: #5b5440; }

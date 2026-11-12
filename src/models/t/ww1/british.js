@@ -260,13 +260,15 @@ function kiteBalloon({ alt = 800 } = {}) {
   // the cable, from the winch drum up to the basket's bridle; it goes when the envelope burns
   root.updateMatrixWorld(true);
   const C = new FParts('khaki');
-  C.add('dark', rod(V(lay[1].x, 2.3, 0), bridle.getWorldPosition(new THREE.Vector3()), 0.05, 4));
+  const top = bridle.getWorldPosition(new THREE.Vector3());
+  C.add('dark', rod(V(lay[1].x, 2.3, 0), top, 0.05, 4));
   const cable = new THREE.Group();
   C.build(cable, { shadow: false });
   root.add(cable);
   const home = outer.userData.setDamage;
   outer.userData.setDamage = (k) => { home(k); cable.visible = k < 0.15; };
-  return finishTarget(root, [outer, lg], { cable, bridle });
+  // (the render hauls the balloon down: it lowers the envelope and shortens the cable about its foot, cableFoot to cableTop)
+  return finishTarget(root, [outer, lg], { cable, bridle, cableFoot: 2.3, cableTop: top.y });
 }
 
 // -------------------------------------------------------------------------------------------- dump

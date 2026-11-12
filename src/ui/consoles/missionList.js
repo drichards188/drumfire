@@ -54,7 +54,9 @@ export class MissionList {
       const left = m.deadline != null ? m.deadline - now : null;
       const target = m.targetId && (sim.targetById?.(m.targetId) || sim.targets?.find((t) => t.id === m.targetId));
       const targetName = target ? `${target.name}${target.name === 'Ammunition dump' ? ` (${target.id})` : ''}` : m.title;
-      setText(r.kind, MISSION_NAME[m.kind] || m.kind.toUpperCase());
+      // (a level's mission: an objective's fire mission is marked, a main's square, a secondary's diamond)
+      setText(r.kind, `${m.objMain ? '■ ' : m.obj ? '◇ ' : ''}${MISSION_NAME[m.kind] || m.kind.toUpperCase()}`);
+      r.kind.title = m.objMain ? 'A main objective\'s fire mission' : m.obj ? 'A secondary objective\'s fire mission' : '';
       setText(r.title, targetName || MISSION_NAME[m.kind] || m.kind);
       r.e.title = m.title || '';
       setText(r.dl, left == null ? '' : left < 0 ? 'overdue' : mmss(left));
@@ -76,6 +78,8 @@ export class MissionList {
       setCls(r.e, 'cursor', m.id === this.shared.cursor);
       setCls(r.e, 'mine', mine);
       setCls(r.e, 'sos', m.kind === 'sos');
+      setCls(r.e, 'obj', !!m.objMain);
+      setCls(r.e, 'objside', !!m.obj && !m.objMain);
     }
   }
   // the unit kind's reach from its range tables (lowest charge's minimum, top charge's maximum), cached per kind

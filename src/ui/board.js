@@ -693,6 +693,10 @@ export class Board {
     const reach = KINDS[unit.kind] && KINDS[unit.kind].deep ? Infinity : Math.max(span.max, maxReach(sim, unit));
     g.textBaseline = 'top'; g.textAlign = 'center';
     const lbl = [];
+    // a level's mission (src/sim/objectives.js): each objective's targets ringed in ochre, a main's solid, a
+    // secondary's dashed, struck through when done
+    const obj = new Map();
+    for (const o of sim.objectives?.list ?? []) if (o.state !== 'hidden' && o.kind !== 'traffic') for (const id of o.targets) obj.set(id, o);
     for (const t of sim.targets || []) {
       if (!t.known) continue;
       const X = this.sx(t.pos.x), Z = this.sz(t.pos.z);
@@ -711,8 +715,19 @@ export class Board {
           g.fillStyle = '#b8321f'; g.fillRect(X - 8, Z + s + 3, 16 * Math.max(0, t.hp / t.maxHp), 3);
         }
       }
+      const o = obj.get(t.id);
+      if (o && o.state !== 'failed') {
+        const done = o.state === 'done';
+        g.globalAlpha = done ? 0.45 : 0.95;
+        g.strokeStyle = '#9a6a10'; g.lineWidth = o.main ? 2.2 : 1.6;
+        g.setLineDash(o.main ? [] : [5, 3]);
+        g.beginPath(); g.arc(X, Z, s + 7, 0, TAU); g.stroke();
+        if (o.main && !done) { g.beginPath(); g.arc(X, Z, s + 10, 0, TAU); g.lineWidth = 1; g.stroke(); }
+        g.setLineDash([]);
+        if (done) { g.beginPath(); g.moveTo(X - s - 8, Z + s + 8); g.lineTo(X + s + 8, Z - s - 8); g.lineWidth = 1.6; g.stroke(); }
+      }
       g.globalAlpha = 1;
-      if (!dead) lbl.push([t.name, X, Z, s, s + (t.maxHp && t.hp < t.maxHp ? 8 : 3), far]);
+      if (!dead) lbl.push([o && o.state === 'open' ? `${o.main ? '■' : '◇'} ${t.name}` : t.name, X, Z, s, s + (t.maxHp && t.hp < t.maxHp ? 8 : 3) + (o ? 6 : 0), far]);
     }
     // each label below its symbol, else above, right or left, kept inside the board; one that finds no room is drawn
     // below anyway, or left out if it is out of reach (the cursor names it), and a place name already on the map is not

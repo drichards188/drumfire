@@ -3,7 +3,8 @@
 // Each level's open battle on the 1918 ridge with every crew on auto and the level's reference lineup (capability.js
 // REFERENCE, what its `fits` describes); `--lineup below` fields the level below's reference instead (a lineup one level
 // over its recommended level), `--mods roll` the modifiers rolled for each seed (threat.js rollModifiers). Prints per
-// level the games won, the minutes, the fire missions done and failed (a level ends on them), how each game ended, the Sperrfeuer held, X-Zeit's men in and lost to our own
+// level the games won, the minutes (and when the main objectives were done), the mission's main objectives and secondaries
+// done (src/operation.js), the main objectives' failed fire missions, how each game ended, the Sperrfeuer held, X-Zeit's men in and lost to our own
 // short rounds, and the lineup's recommended level; `--games` each game.
 import { Worker, isMainThread, parentPort } from 'node:worker_threads';
 import os from 'node:os';
@@ -29,17 +30,18 @@ function run({ seed, level, lineup, mods }) {
   for (const u of sim.units) u.mode = 'auto';
   // (a level ends on its orders, never on the clock: a game still going at two hours is reported as unfinished)
   while (sim.state === 'playing' && sim.time < 7200) sim.update(0.05);
-  const st = sim.stats.missions;
-  const done = ['destroy', 'cb', 'harass'].reduce((a, k) => a + (st[k]?.done ?? 0), 0);
-  const failed = ['destroy', 'cb'].reduce((a, k) => a + (st[k]?.failed ?? 0), 0);
-  const why = sim.over?.sub ?? '', last = sim.state === 'playing' ? 'unfinished' : sim.state === 'victory' ? 'won' : /^Too many/.test(why) ? 'too many failed' : /^Nothing/.test(why) ? 'nothing in reach' : sim.zero?.survivors != null ? 'assault failed' : sim.stats.sectorsLost >= 2 ? 'two sectors' : 'every gun';
-  const offered = ['destroy', 'cb', 'harass'].reduce((a, k) => a + (st[k]?.new ?? 0), 0);
+  const ob = sim.objectives, why = sim.over?.sub ?? '';
+  const mains = ob.mains.filter((o) => o.kind !== 'xzeit'), sides = ob.sides;
+  const last = sim.state === 'playing' ? 'unfinished' : /^Too many/.test(why) ? 'too many failed' : /^Nothing/.test(why) ? 'nothing in reach'
+    : sim.zero?.survivors != null ? (sim.state === 'victory' ? 'X-Zeit won' : 'assault failed') : sim.state === 'victory' ? 'ended' : sim.stats.sectorsLost >= 2 ? 'two sectors' : 'every gun';
   return {
-    seed, level, won: sim.state === 'victory', min: sim.time / 60, done, failed, offered, modifiers, end: last,
+    seed, level, won: sim.state === 'victory', min: sim.time / 60, modifiers, end: last, op: `${sim.operation.archetype}${sim.operation.xzeit ? '+X' : ''}`,
+    mains: [mains.filter((o) => o.state === 'done').length, mains.length], sides: [sides.filter((o) => o.state === 'done').length, sides.length],
+    acc: ob.accomplished != null ? ob.accomplished / 60 : null, fails: ob.fails, pay: ob.paid,
     sos: [sim.stats.sos.filter((q) => q.held).length, sim.stats.sos.length], sectors: sim.stats.sectorsLost,
     zero: sim.zero ? [sim.zero.survivors ?? 0, sim.zero.n0] : null, short: Math.round(sim.stats.lossBy.short),
     by: Object.fromEntries(Object.entries(sim.stats.lossBy).map(([k, v]) => [k, Math.round(v)])),
-    lost: sim.stats.piecesLost, handed: sim.director.handedOff?.size ?? 0, why: sim.over?.sub ?? '',
+    lost: sim.stats.piecesLost, handed: sim.director.handedOff?.size ?? 0, why,
   };
 }
 
@@ -80,9 +82,10 @@ if (!isMainThread) {
     const sos = rs.reduce((a, r) => [a[0] + r.sos[0], a[1] + r.sos[1]], [0, 0]);
     const ends = {};
     for (const r of rs) ends[r.end] = (ends[r.end] ?? 0) + 1;
-    console.log(`L${String(level).padEnd(2)} ${L.name.padEnd(16)} won ${String(rs.filter((r) => r.won).length).padStart(2)}/${rs.length} (${Math.round((100 * rs.filter((r) => r.won).length) / rs.length)}%), ${mean(rs.map((r) => r.min)).toFixed(1)} min, missions ${mean(rs.map((r) => r.done)).toFixed(1)}/${mean(rs.map((r) => r.offered)).toFixed(1)} (need ${L.need}), failed ${mean(rs.map((r) => r.failed)).toFixed(1)} (${L.fails} allowed), ended: ${Object.entries(ends).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}, SOS held ${sos[0]}/${sos[1]}, sectors lost ${mean(rs.map((r) => r.sectors)).toFixed(2)}, guns lost ${mean(rs.map((r) => r.lost)).toFixed(1)}` +
-      (zs.length ? `, X-Zeit ${mean(zs.map((r) => r.zero[0])).toFixed(0)}/${zs[0].zero[1]} in (lost to the garrison ${mean(zs.map((r) => r.by.mebu)).toFixed(0)}, to the strongpoints ${mean(zs.map((r) => r.by.fort ?? 0)).toFixed(0)}, in the open ${mean(zs.map((r) => r.by.open)).toFixed(0)}, short ${mean(zs.map((r) => r.short)).toFixed(0)}, other ${mean(zs.map((r) => r.zero[1] - r.zero[0] - r.by.mebu - (r.by.fort ?? 0) - r.by.open - r.short)).toFixed(0)})` : '') +
-      `, handed on ${mean(rs.map((r) => r.handed)).toFixed(1)} | lineup recommended ${recommendedLevel(ref)} ${JSON.stringify(capabilities(ref))}`);
-    if (games) for (const r of rs) console.log(`   seed ${r.seed}: ${r.won ? 'won ' : 'lost'} ${r.min.toFixed(1)} min, missions ${r.done}/${r.offered}, failed ${r.failed}, SOS ${r.sos.join('/')}, sectors ${r.sectors}${r.zero ? `, X-Zeit ${r.zero.join('/')} short ${r.short}` : ''}${r.modifiers.length ? ` [${r.modifiers.join(',')}]` : ''} ${r.why}`);
+    const accs = rs.filter((r) => r.acc != null);
+    console.log(`L${String(level).padEnd(2)} ${L.name.padEnd(16)} won ${String(rs.filter((r) => r.won).length).padStart(2)}/${rs.length} (${Math.round((100 * rs.filter((r) => r.won).length) / rs.length)}%), ${mean(rs.map((r) => r.min)).toFixed(1)} min (mains done at ${accs.length ? mean(accs.map((r) => r.acc)).toFixed(1) : '-'}), mains ${mean(rs.map((r) => r.mains[0])).toFixed(1)}/${mean(rs.map((r) => r.mains[1])).toFixed(1)}, secondaries ${mean(rs.map((r) => r.sides[0])).toFixed(1)}/${mean(rs.map((r) => r.sides[1])).toFixed(1)} (full clear ${rs.filter((r) => r.sides[0] === r.sides[1]).length}), fails ${mean(rs.map((r) => r.fails)).toFixed(1)} (${L.fails} allowed), ended: ${Object.entries(ends).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}, SOS held ${sos[0]}/${sos[1]}, sectors lost ${mean(rs.map((r) => r.sectors)).toFixed(2)}, guns lost ${mean(rs.map((r) => r.lost)).toFixed(1)}` +
+      (zs.length ? `, X-Zeit ${zs.length} games, ${mean(zs.map((r) => r.zero[0])).toFixed(0)}/${zs[0].zero[1]} in (lost to the garrison ${mean(zs.map((r) => r.by.mebu)).toFixed(0)}, to the strongpoints ${mean(zs.map((r) => r.by.fort ?? 0)).toFixed(0)}, in the open ${mean(zs.map((r) => r.by.open)).toFixed(0)}, short ${mean(zs.map((r) => r.short)).toFixed(0)})` : '') +
+      `, handed on ${mean(rs.map((r) => r.handed)).toFixed(1)} | lineup recommended ${recommendedLevel(ref)}`);
+    if (games) for (const r of rs) console.log(`   seed ${r.seed}: ${r.won ? 'won ' : 'lost'} ${r.min.toFixed(1)} min ${r.op}, mains ${r.mains.join('/')}${r.acc != null ? ` at ${r.acc.toFixed(1)}` : ''}, secondaries ${r.sides.join('/')}, fails ${r.fails}, SOS ${r.sos.join('/')}, sectors ${r.sectors}${r.zero ? `, X-Zeit ${r.zero.join('/')} short ${r.short}` : ''}${r.modifiers.length ? ` [${r.modifiers.join(',')}]` : ''} ${r.why}`);
   }
 }

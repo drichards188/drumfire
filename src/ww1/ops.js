@@ -294,6 +294,15 @@ export const RIDGE_ROLE_SITES = [
 // and more break (`minHard`, the shell's hard.D: sim/targets.js), a task for the super-heavies (sim/specialists.js
 // role 'fort'). One still standing at X-Zeit fires on our assault in its lane whatever the Feuerwalze does
 // (ww1/infantry.js). The lanes are ww1/director.js laneOf: B at z -1200, C at z 2400; our groups walk 110 m either side.
+// the British kite balloon over their lines (a level's mission that deals it, the secondary 'balloon': src/operation.js;
+// the director removes it from every other battle): its observer firms their counter-battery fix (ww1/enemy.js
+// BALLOON_K); the long guns' shrapnel brings it down (ww1/crews.js suits: the K 17 and the C/92), and a new one goes up
+// some minutes later (targets.js respawn). Not among capability.js's sites: the levels' verdicts stay as they were
+export const RIDGE_BALLOON = [
+  // (`r` takes in its winch, 250 m downwind: the bursts are matched to a target within r + 80 m of its site, sim/targets.js)
+  { id: 'L1', kind: 'bballoon', name: 'Kite balloon, Ypres', pos: P(-600, 600), bearing: 0, r: 220, alt: 500 },
+];
+
 export const FORT_HARD = 70;
 const FORT_HP = 50; // each of its three shelters (the WW2 bunker's are 100)
 export const RIDGE_FORTS = [

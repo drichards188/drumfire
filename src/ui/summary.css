@@ -65,3 +65,15 @@
   .sm-top li { grid-template-columns: minmax(0, 1fr) auto; }
   .sm-top small, .sm-top i { grid-column: 1; }
 }
+/* a level's mission (ui/summary.js): each objective's outcome and pay, the medals, the full clear */
+.sm-mission { font: 11px var(--mono); color: #c9c5ae; }
+.sm-obj { list-style: none; display: grid; gap: 3px; }
+.sm-obj li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 4px 8px; background: #c2bc930d; font: 11px var(--mono); }
+.sm-obj i { font-style: normal; color: #aaa88b; }
+.sm-obj em { font-style: normal; font-weight: 700; color: #f0d999; }
+.sm-obj .side { color: #c9c5ae; }
+.sm-obj .done i { color: #e8c96a; }
+.sm-obj .failed, .sm-obj .failed i, .sm-obj .failed em { color: #e09a85; font-weight: normal; }
+.sm-obj .open em, .sm-obj .medal.failed em { color: #8f8d7d; font-weight: normal; }
+.sm-obj .medal.failed { opacity: 0.6; }
+.sm-clear { justify-self: start; padding: 3px 10px; border: 1px solid #e8c96a; color: #f0d999; font: 700 10px var(--mono); letter-spacing: 0.16em; text-transform: uppercase; transform: rotate(-1.5deg); }

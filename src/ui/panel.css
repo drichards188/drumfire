@@ -323,6 +323,9 @@
 .mrow.cursor.mine { background: rgba(120,150,230,.18); }
 .mrow.done { opacity: .5; text-decoration: line-through; } .mrow.failed { opacity: .6; background: rgba(168,36,27,.18); }
 .mrow.sos { border-color: var(--red); background: rgba(220,60,40,.18); }
+/* a level's mission (src/sim/objectives.js): an objective's fire mission, a main's and a secondary's */
+.mrow.obj { border-left: 4px solid #a8781a; }
+.mrow.objside { border-left: 4px dashed #8a7a4a; }
 .mrow .mid { flex: none; font: 700 13px/1 var(--type); align-self: center; width: 22px; text-align: center; } /* the slip's number (scoped: a Bar's level class is also 'mid') */
 .mcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .mt1, .mt2 { display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; }

@@ -44,7 +44,10 @@ function perRound(kind, mods, tKind, D, aimPart = null) {
   const fz = (g.fuzes ?? ['instant']).filter((f) => f !== 'shrapnel');
   const fk = Math.max(...fz.map((f) => (hard ? FUZE[f]?.hard : FUZE[f]?.soft) ?? 0), 0);
   const Dm = hit.D * fk * (mods.dmg ?? 1), R = hit.R;
-  const sr = Math.hypot((g.disp.r * D * mods.disp), RESID), sl = Math.hypot(g.disp.l * D * mods.disp, RESID);
+  // (a gun without a recoil system, the ramp guns: laid afresh after every roll back, a new error each round, guns.js
+  // `runback`; its velocity's error doubled in range)
+  const rb = g.runback, bk = mods.bias ?? 1;
+  const sr = Math.hypot(g.disp.r * D * mods.disp, rb ? 2 * rb.r * D * bk : 0, RESID), sl = Math.hypot(g.disp.l * D * mods.disp, rb ? rb.l * D * bk : 0, RESID);
   const parts = partLayout(tKind).map((p) => ({ x: p.x, z: p.z }));
   const ax = aimPart ? parts[0].x : 0, az = aimPart ? parts[0].z : 0;
   // the expected damage on each part: the burst's density (a Gaussian about the aim) over the part's lethal disc

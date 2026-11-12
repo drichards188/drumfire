@@ -202,6 +202,9 @@ export function opposition(era, levelsByKind) {
 // minute in action and a bonus for the day won (a lost battle still pays). The threat level (or the difficulty) scales it all.
 export const PAY = { Easy: 0.8, Normal: 1, Hard: 1.35 };
 const PER_MINUTE = 4, WIN = 400;
+// a level's mission (src/operation.js): its objectives pay as they are done (OBJECTIVE_PAY, sim.objectivePay), so the
+// win itself pays less; a mission won with its mains and half its secondaries pays about what a battle won used to
+const WIN_MISSION = 250;
 export function battleReward(sim, { won = false } = {}) {
   const k = sim.level?.pay ?? PAY[sim.difficultyName] ?? 1; // (a threat level's pay, threat.js; else the difficulty's)
   const batteries = {};
@@ -210,8 +213,9 @@ export function battleReward(sim, { won = false } = {}) {
   for (const a of sim.support?.assets ?? []) batteries[a.kind] = (batteries[a.kind] ?? 0) + Math.round((sim.earned?.[`support:${a.kind}`] ?? 0) * k);
   const fought = Object.values(batteries).reduce((a, b) => a + b, 0);
   const time = Math.round((Math.min(sim.time, 2700) / 60) * PER_MINUTE * k);
-  const win = won ? Math.round(WIN * k) : 0;
-  return { rp: fought + time + win, fought, time, win, batteries };
+  const win = won ? Math.round((sim.objectives ? WIN_MISSION : WIN) * k) : 0;
+  const objectives = Math.round((sim.objectivePay ?? 0) * k);
+  return { rp: fought + time + win + objectives, fought, time, win, objectives, batteries };
 }
 
 // a campaign mission's first win: half the research cost of the battery it features (the V-weapons' missions a flat sum)

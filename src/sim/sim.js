@@ -55,10 +55,11 @@ export class Sim {
   // manning: a lesson that teaches serving a gun in person (src/ww1/tutorial.js): another scripted game that allows it.
   // build: a lesson that teaches a special weapon's setting up (the Paris Gun's guided first run): its controller
   // starts the gun in pieces, as in its mission, where a scripted game otherwise has it standing.
-  // level (1 to 10, threat.js: the career's open battle) and modifiers (threat.js MODIFIERS ids): the level sets the
+  // level (1 to 10, threat.js: the career's open battle), modifiers (threat.js MODIFIERS ids) and opSeed (the mission's
+  // seed, src/operation.js; the ww1 director deals the level's mission from it): the level sets the
   // enemy's side of the difficulty (Normal's for the player's own guns) and the day (the director, the enemy), in
   // place of `opposition`; without a level everything is as before
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, manning = false, build = false, level = null, modifiers = null } = {}) {
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, manning = false, build = false, level = null, modifiers = null, opSeed = null } = {}) {
     this.loadout = loadout;
     this.lessonBuild = scripted && build;
     this.range = scripted && range;
@@ -74,6 +75,7 @@ export class Sim {
     this.attract = attract;
     this.level = level != null && !attract && !scripted ? threatOf(level) : null;
     this.modifiers = new Set(this.level ? modifiers ?? [] : []);
+    this.opSeed = opSeed; // the level's mission's seed (src/operation.js: the menu's, so the briefing and the battle agree); the game's seed without one
     this.supplyK = 1; // the ammunition columns' pace (the modifiers' shells and rain)
     this.drillK = 1; // the crews' drill (the modifier rain: mud at the guns)
     if (attract) Object.assign(this.difficulty, { err: 0.5, dmg: 0, ammo: 3 });

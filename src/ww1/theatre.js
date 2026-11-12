@@ -6,7 +6,7 @@
 // th: { id: 'ww1', op, opId, units, sites, sectors, modules, bounds, ref(x, z), sosCommand(sim, sector), metric: true,
 //       side: 'german', era: 'ww1' }
 import { PAD_EXTRA, SECTORS, LINES, lineX } from '../sector.js';
-import { OPS, OP_IDS, ww1Pads, SUPER_WW1, RIDGE_WW2, RIDGE_MORE, RIDGE_POSITIONS, RIDGE_ROLE_SITES, RIDGE_FORTS, RIDGE_FORWARD, FORWARD_KINDS, ridgeWW2Pads } from './ops.js';
+import { OPS, OP_IDS, ww1Pads, SUPER_WW1, RIDGE_WW2, RIDGE_MORE, RIDGE_POSITIONS, RIDGE_ROLE_SITES, RIDGE_FORTS, RIDGE_FORWARD, RIDGE_BALLOON, FORWARD_KINDS, ridgeWW2Pads } from './ops.js';
 import { ww1Ref } from './grid.js';
 import { TargetsWW1 } from './targets.js';
 import { ObserversWW1 } from './observers.js';
@@ -34,7 +34,7 @@ export function ww1Theatre(opId = 'ridge', { kinds = null } = {}) {
     PAD_EXTRA.push(...ridgeWW2Pads(fresh));
     for (const u of fresh) paddedWW2.add(u.kind);
     const forward = kinds.some((k) => FORWARD_KINDS.has(k)) ? RIDGE_FORWARD : [];
-    op = { ...op, units: [...op.units, ...extra], sites: [...op.sites, ...RIDGE_ROLE_SITES, ...RIDGE_FORTS, ...forward], positions: RIDGE_POSITIONS, career: true };
+    op = { ...op, units: [...op.units, ...extra], sites: [...op.sites, ...RIDGE_ROLE_SITES, ...RIDGE_FORTS, ...forward, ...RIDGE_BALLOON], positions: RIDGE_POSITIONS, career: true };
   }
   return {
     id: 'ww1', op, opId: op.id, metric: true, side: 'german', era: 'ww1',

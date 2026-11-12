@@ -154,11 +154,12 @@ export function menuItems(career = null, lessons = {}) {
 
 // the URL that plays an entry; `from` is the menu's own query (its settings pass on); `level` and `mods`: the threat
 // level and its modifiers (threat.js) for an entry played at a level
-export function hrefOf(item, difficulty, from, { level = 1, mods = [] } = {}) {
+export function hrefOf(item, difficulty, from, { level = 1, mods = [], seed = null } = {}) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(item.query)) p.set(k, v);
   if (item.difficulty && DIFFICULTIES.includes(difficulty)) p.set('difficulty', difficulty);
-  if (item.level) { p.set('level', level); if (mods.length) p.set('mods', mods.join(',')); }
+  // (a level's battle: its modifiers and its mission's seed, src/operation.js, so the battle deals what the menu showed)
+  if (item.level) { p.set('level', level); if (mods.length) p.set('mods', mods.join(',')); if (seed != null) p.set('seed', seed >>> 0); }
   for (const k of item.pass ?? PASS) if (from?.get(k)) p.set(k, from.get(k));
   return `${item.page ?? 'index.html'}?${p}`;
 }
