@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, rivets, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, slotCaps } from './common.js';
+import { panoramicSight, slidingBlock, slotCaps, grip } from './common.js';
 
 /**
  * 21 cm Mörser 99 (Krupp, about 1900), the old heavy mortar of the Fußartillerie, in its firing position as a 1916
@@ -211,6 +211,9 @@ export function buildM99({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 2.2, 1.2);
+  // the crew's grips (common.js grip; the places carriage() recorded): the layer's elevating handwheel, at knee
+  // height, worked kneeling with both hands on the rim (the sight 1.2 m above it is out of reach from there)
+  grip(rig, cf, 'layer', ...HW.layer, { axis: [-1, 0, 0], r: 0.16, pose: 'crouch' });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   rig.anchors.tray = node(el, 'tray', 0, 0, BR + sh.length / 2 + 0.06);
@@ -247,7 +250,7 @@ export function buildM99({ scheme = 'bunt' } = {}) {
   crew(rig, 'officer', -2.8, -1.4, L90, 'point', y);
   crew(rig, 'layer', -1.25, 0.9, L90, 'lay', y); // at the sight and the elevating handwheel
   crew(rig, 'lanyard', 2.0, 2.7, R90, 'lanyard', y); // works the wedge and fires
-  crew(rig, 'elevator', 2.3, 4.2, R90, 'operate', y); // levers the tail round for line
+  crew(rig, 'elevator', 2.3, 4.2, R90, 'stand', y); // levers the tail round for line (no handwheel of his own)
   crew(rig, 'loader1', 2.6, 2.4, 0, 'carry', y);
   crew(rig, 'loader2', 2.6, 3.2, 0, 'carry', y);
   crew(rig, 'rammer1', -0.55, 5.0, 0, 'ram', y);
@@ -303,6 +306,8 @@ function ramp(P, x) {
 }
 
 // ---------------------------------------------------------------- the carriage
+// the crew's grips, recorded as carriage() builds them (the hubs depend on the trunnion and the arc)
+const HW = {};
 function carriage(P) {
   for (const s of [-1, 1]) {
     const xo = s * (CX + CT / 2);
@@ -374,6 +379,7 @@ function carriage(P) {
   P.add('dark', zTube(pz + 0.07, 0.7, 0.02, 0.02, 8, -(CX + CT + 0.06), py));
   P.add('camo', box(0.1, 0.12, 0.12, -(CX + CT + 0.06), py, 0.74));
   P.add('dark', handwheelX(0.16).translate(-(CX + CT + 0.17), py, 0.74));
+  HW.layer = [-(CX + CT + 0.17), py, 0.74]; HW.sight = [-(CX + CT + 0.208), topY(0.72) + 0.56, 0.72];
   P.add('camo', box(0.06, 0.34, 0.08, -(CX + CT + 0.05), topY(0.72) + 0.1, 0.72));
   P.add('camo', box(0.16, 0.04, 0.1, -(CX + CT + 0.12), topY(0.72) + 0.27, 0.72));
   panoramicSight(P, -(CX + CT + 0.17), topY(0.72) + 0.29, 0.72, -1);

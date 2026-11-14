@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, rivetRow, rivets, handwheel, gearArc, zLathe, Parts, vehicleMats, shellGeometry, DEG } from '../../kit.js';
 import { mulberry32 } from '../../../noise.js';
 import { clamp01 } from './heavy_common.js';
+import { grip } from './common.js';
 
 // The 42 cm Gamma-Mörser (Krupp, "Gamma-Gerät"), the fixed siege howitzer of 1911, as a gun rig for the main
 // game's render layer (DESIGN.md "Models", refs/gamma). Not a carriage on wheels like the M-Gerät (v/de/bertha.js)
@@ -527,6 +528,11 @@ export function buildGamma() {
   };
   anchors.muzzles.push(anchors.muzzle);
   const footP = new THREE.Vector3(LIFT.x, LIFT.foot.y, LIFT.foot.z), topP = new THREE.Vector3(LIFT.x, LIFT.top.y, LIFT.top.z);
+  // the crew's grips (common.js grip; on `anchors`, which the rig takes up below): the layer's line handwheel with the
+  // sight's column above it, the elevation layer's handwheel on the right cheek
+  grip({ anchors }, trav, 'layer', -1.2, 3.08, -0.35, { axis: [-1, 0, 0], r: 0.28 });
+  grip({ anchors }, trav, 'layer2', -1.21, 3.8, 0.0);
+  grip({ anchors }, trav, 'elevator', 1.16, 3.18, -0.35, { axis: [1, 0, 0], r: 0.34, clear: 0 });
   const rig = {
     kind: 'gamma', root, anchors, boxes: [], props: {},
     pivots: { traverse: trav, elevation: elev, recoil: rec, breech: brk, tray: trayP, lift },

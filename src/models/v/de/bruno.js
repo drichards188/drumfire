@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb, node } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { RH, GA, sagitta, trackX, trackYaw, curveBogie, ammoWagonParts, WAGON, arcPoints, straightBack, layTrack, siteMats, drapeNet, loadingGear, readyRack } from './railway_kit.js';
-import { keyholePlate, slotCaps } from './common.js';
+import { keyholePlate, slotCaps, grip } from './common.js';
 
 // 28 cm Kurze Bruno K (E) (Krupp, 1937): the first of the 1930s railway guns, a 28 cm naval gun (L/42, 11.9 m) in a
 // cradle on a box-girder car carried by two five-axle bogies, 22.8 m over buffers, 129 t in action (Hogg, German
@@ -310,6 +310,9 @@ export function buildBruno() {
   PB.add('camo', rbox(0.3, 0.3, 0.3, 0.04, -1.3, DECK + 1.05, LZ - 0.25));
   PB.add('steel', xTube(-1.3, -GX - 0.22, 0.03, 0.03, 8, DECK + 1.0, LZ - 0.22));
   PB.add('iron', handwheel(0.24, 6, 0.022, 0.05).rotateY(Math.PI / 2).translate(-1.3, DECK + 1.05, LZ));
+  // (the crew's grips, common.js: the layer's elevating handwheel facing back along the car, the sight's body above it)
+  grip(rig, body, 'layer', -1.3, DECK + 1.05, LZ, { axis: [0, 0, 1], r: 0.24 });
+  grip(rig, body, 'layer2', -1.37, DECK + 1.42, LZ - 0.3);
   PB.add('camo', box(0.12, 0.3, 0.16, -1.3, DECK + 1.42, LZ - 0.3));
   PB.add('brass', yTube(DECK + 1.55, DECK + 1.62, 0.05, 0.05, 10, -1.3, LZ - 0.3));
   PB.add('dark', zTube(LZ - 0.32, LZ + 0.05, 0.03, 0.026, 8, -1.3, DECK + 1.58));
@@ -317,6 +320,7 @@ export function buildBruno() {
   // controller column on the right walkway, the cable along the girder
   PB.add('camo', rbox(0.4, 0.95, 0.4, 0.04, 1.3, DECK + 0.48, -4.2));
   PB.add('iron', handwheel(0.16, 5, 0.018, 0.04).rotateZ(Math.PI / 2).translate(1.3, DECK + 1.0, -4.2));
+  grip(rig, body, 'traverser', 1.3, DECK + 1.0, -4.2, { axis: [0, 1, 0], r: 0.16, post: [0.95, -3.75], clear: 0 }); // (the crew's grip: the traverse controller's wheel)
   PB.add('brass', box(0.2, 0.12, 0.04, 1.3, DECK + 0.7, -3.98));
   PB.add('dark', box(0.05, 0.05, 6.5, GX + 0.09, GT - 0.6, -6.4));
   PB.build(body, { dirt: 0.22, y0: 0 });

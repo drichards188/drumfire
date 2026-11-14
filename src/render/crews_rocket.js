@@ -35,6 +35,10 @@ export function coverPhase(c, out) {
 
 const _path = [{ x: 0, z: 0 }, { x: 0, z: 0 }, { x: 0, z: 0 }], _P = { x: 0, z: 0, h: 0, d: 0, len: 0 }, _F = {};
 
+// seconds after the ripple's end (coverPhase's tBack 0) that a man with len metres to run is back at his place
+// (inCover's run back: up and turned, then the run)
+export const backAfter = (len) => 0.95 + len / RUN;
+
 // Going to, staying in or coming back from cover; true when it has placed the man. cv: his place in the trench
 // ({ x, z }, root space); dest, destH: his place and heading at work; via: a waypoint ({ x, z }, root space) or null;
 // early: he walks off when the priming begins instead of running when the cover step does.

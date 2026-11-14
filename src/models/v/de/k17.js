@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivets, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, addHandwheel, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, panoramicSight, keyholePlate, ringBand } from './common.js';
+import { slidingBlock, barrel, panoramicSight, keyholePlate, ringBand, grip } from './common.js';
 
 /**
  * 10 cm Kanone 17 (Krupp, 1917): the long L/45 barrel of the K 17 on the carriage of the K 14 (refs/k17: the
@@ -259,6 +259,10 @@ export function buildK17({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 1.9, 0.9);
+  // the crew's grips (common.js grip): the layer's elevating and traversing handwheels (the sight is beyond his reach
+  // from them); he stands behind the road wheel
+  grip(rig, trav, 'layer', -0.52, 1.1, 0.42, { axis: [-1, 0, 0], r: 0.13, post: [-0.95, 0.75], clear: 0 });
+  grip(rig, trav, 'layer2', -0.58, 0.83, 1.08, { axis: [-1, 0, 0], r: 0.09 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // No loading tray: the round went into the open breech by hand and the rammer seated it, then the cased charge

@@ -114,6 +114,31 @@ function fixWinding(g) {
   return g;
 }
 
+// A place on the gun the crew's hands work (render/crews.js reads rig.anchors.grips[role]): a node on the part that
+// carries it, so it traverses, elevates and recoils with it. At a handwheel's hub: local +X along the axle (`axis`, in
+// the part's frame) pointing to the man who turns it, userData.r the rim's radius; he stands userData.d (0.45 m) off the
+// hub along the axle, centred between his two grips (a single wheel userData.side, 0.18 m, to his right), or at `post`
+// ([x, z] in the parent's frame: behind a road wheel, where the axle's line runs into it); he faces between his grips.
+// With r 0 it is a point where a hand rests. `${role}2` is where that man's other hand goes (a sight's drum, a second
+// wheel), each hand taking the grip on its side; without one both hands go round the same rim. clear: the room he needs from the steel there (crews.js's 0.3 m by default; a body is about
+// 0.22 m round, for a gap in a carriage; 0 puts him at the post as given, for a gap narrower than the crew field's 0.2 m
+// cells resolve: tools/crewaudit.mjs then shows whether he stands in the steel).
+export function grip(rig, parent, role, x, y, z, { axis = [0, 0, 1], r = 0, d, side, clear, post, pose } = {}) {
+  const n = new THREE.Object3D();
+  n.name = 'grip-' + role;
+  n.position.set(x, y, z);
+  n.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), new THREE.Vector3(...axis).normalize());
+  n.userData.r = r;
+  if (d != null) n.userData.d = d;
+  if (side != null) n.userData.side = side;
+  if (clear != null) n.userData.clear = clear;
+  if (post) n.userData.post = post;
+  if (pose) n.userData.pose = pose;
+  parent.add(n);
+  (rig.anchors.grips ??= {})[role] = n;
+  return n;
+}
+
 // The panoramic sight (Rundblickfernrohr 16/32): a vertical body with the rotating head and the angled
 // eyepiece toward the layer, on a short stalk. Built at (x, y, z), the eyepiece facing `side` (-1 left).
 export function panoramicSight(P, x, y, z, side = -1) {

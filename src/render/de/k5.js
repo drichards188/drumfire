@@ -316,10 +316,15 @@ function ramMan(crew, m, c) {
     hold = k < go ? smooth(st.line, 0.85, 0.98) : 1 - smooth(k, go - 0.02, go);
   }
   // hands on the staff at his hold point: on the cross handle's end once it is in line, on the staff itself on the hooks
+  // (the hold points are in the staff's own frame and rolled with it: props stands the cross handles upright on the
+  // hooks and rolls them flat into line, so a point slid out along a handle at the staff's height was in the air beside
+  // the handle through the swing)
   if (hold > 0.01) {
-    const hz2 = st.z + off, hx2 = st.x + side * 0.68 * st.line;
-    hand(crew, m, 'R', hx2, st.y, hz2 - 0.05, hold);
-    hand(crew, m, 'L', hx2 + side * 0.12 * st.line, st.y, hz2 + 0.05, hold);
+    const th = (1 - st.line) * Math.PI / 2, ct = Math.cos(th), sn = Math.sin(th);
+    for (const [sd, ox, oz] of [['R', 0.68, -0.05], ['L', 0.8, 0.05]]) {
+      const x = side * ox * st.line;
+      hand(crew, m, sd, st.x + x * ct, st.y + x * sn, st.z + off + oz, hold);
+    }
   }
 }
 

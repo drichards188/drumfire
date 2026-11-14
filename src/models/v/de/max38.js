@@ -3,7 +3,7 @@ import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, zLathe, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { createHeavyScrimTexture } from './heavy_gustav_site.js';
-import { keyholePlate, slotCaps } from './common.js';
+import { keyholePlate, slotCaps, grip } from './common.js';
 
 // 38 cm SK L/45 "Langer Max" on the Krupp Eisenbahn- und Bettungsschiessgeruest (E.u.B.), the railway carriage that
 // could fire from the track (to 18.5 degrees) or be set down on a prepared Bettung and fire to 55 (refs/max38). The
@@ -265,6 +265,8 @@ export function buildMax38() {
   PT.add('camo', rbox(0.3, 0.32, 0.36, 0.04, -GX - 0.25, 4.05, pz));
   PT.add('steel', xTube(-1.75, -GX - 0.25, 0.04, 0.04, 8, 4.12, pz));
   PT.add('iron', handwheel(0.3, 6, 0.024, 0.06).translate(-1.78, 4.12, pz));
+  // (the crew's grip, common.js: the layer's handwheel; his sight is on the bearing 1.5 m ahead, beyond his reach)
+  grip(rig, trav, 'layer', -1.78, 4.12, pz, { axis: [-1, 0, 0], r: 0.3 });
   // the layer's sight on the left bearing (a dial sight on its bracket)
   PT.add('camo', box(0.12, 0.5, 0.25, -GX - 0.26, TY + 0.4, -0.3));
   PT.add('brass', yTube(TY + 0.65, TY + 0.9, 0.05, 0.05, 10, -GX - 0.26, -0.3));
@@ -277,6 +279,7 @@ export function buildMax38() {
   PT.add('camo', box(0.2, 0.25, 0.2, tx, GB + 0.1, tz)); // the shaft's bearing off the girder
   PT.add('steel', xTube(tx, 1.78, 0.04, 0.04, 8, 4.12, tz));
   PT.add('iron', handwheel(0.28, 6, 0.022, 0.05).translate(1.8, 4.12, tz));
+  grip(rig, trav, 'traverser', 1.8, 4.12, tz, { axis: [1, 0, 0], r: 0.28, clear: 0 }); // (the crew's grip, common.js)
   // front deck furniture: the barrel's travelling crutch folded flat, a brake column, a tool chest
   for (const s of [-1, 1]) PT.add('camo', rod(V(s * 0.9, WALK + 0.08, -13.8), V(s * 0.25, WALK + 0.08, -11.2), 0.06, 6));
   PT.add('camo', box(0.7, 0.1, 0.4, 0, WALK + 0.08, -11.15));

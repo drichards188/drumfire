@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb, node } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { RH, GA, sagitta, trackX, trackYaw, curveBogie, spanBolsterParts, ammoWagonParts, WAGON, arcPoints, straightBack, layTrack, siteMats, drapeNet, loadingGear, readyRack } from './railway_kit.js';
-import { keyholePlate, slotCaps } from './common.js';
+import { keyholePlate, slotCaps, grip } from './common.js';
 
 // 21 cm K 12 (E) (Krupp, 1939): the longest-ranged gun of the war, 115 km with the 107.5 kg shell. A 33.3 m barrel (L/158)
 // braced straight by a truss over it, in a ring cradle with hydropneumatic recoil, on a box-girder carriage carried by
@@ -306,11 +306,15 @@ export function buildK12() {
   PB.add('camo', rbox(0.3, 0.3, 0.3, 0.04, -1.3, DECK + 1.05, LZ - 0.25));
   PB.add('steel', xTube(-1.3, -GX - 0.22, 0.03, 0.03, 8, DECK + 1.0, LZ - 0.22));
   PB.add('iron', handwheel(0.26, 6, 0.022, 0.05).rotateY(Math.PI / 2).translate(-1.3, DECK + 1.05, LZ));
+  // (the crew's grips, common.js: the layer's elevating handwheel facing back along the car, the sight's body above it)
+  grip(rig, car, 'layer', -1.3, DECK + 1.05, LZ, { axis: [0, 0, 1], r: 0.26 });
+  grip(rig, car, 'layer2', -1.37, DECK + 1.42, LZ - 0.3);
   PB.add('camo', box(0.12, 0.3, 0.16, -1.3, DECK + 1.42, LZ - 0.3));
   PB.add('brass', yTube(DECK + 1.55, DECK + 1.62, 0.05, 0.05, 10, -1.3, LZ - 0.3));
   PB.add('dark', zTube(LZ - 0.32, LZ + 0.05, 0.03, 0.026, 8, -1.3, DECK + 1.58));
   PB.add('camo', rbox(0.4, 0.95, 0.4, 0.04, 1.35, DECK + 0.48, -4.4)); // the traverse motor's controller
   PB.add('iron', handwheel(0.16, 5, 0.018, 0.04).rotateZ(Math.PI / 2).translate(1.35, DECK + 1.0, -4.4));
+  grip(rig, car, 'traverser', 1.35, DECK + 1.0, -4.4, { axis: [0, 1, 0], r: 0.16, post: [1.0, -3.95], clear: 0 }); // (the crew's grip: the traverse controller's wheel)
   PB.add('brass', box(0.2, 0.12, 0.04, 1.35, DECK + 0.7, -4.18));
   PB.add('dark', box(0.05, 0.05, 9.0, GX + 0.09, GT - 0.6, -9.0));
   // the equilibrators' anchors on the girders ahead of the pedestals

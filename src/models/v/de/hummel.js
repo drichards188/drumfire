@@ -3,7 +3,7 @@ import { V, DEG, box, xTube, yTube, zTube, rod, sideProfile, rivets, rivetRow } 
 import { makeRig, finishRig, node, pivotAt, hb, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight } from './common.js';
+import { panoramicSight, grip } from './common.js';
 import { buildSFH18 } from './sfh18.js';
 import { trackGear, trackDrive, doubleRoadWheel, sprocketParts, idlerParts, rollerParts, shoeParts, handwheelZ, jerrycan, tool, notek, silencer, roundBin } from './sp_kit.js';
 
@@ -245,6 +245,9 @@ export function buildHummel({ scheme = 'dgelb' } = {}) {
   H.build(trav, { dirt: 0.6 });
   C.build(trav, { dirt: 0.45 });
   M.build(trav, { dirt: 0.3 });
+  // the crew's grips (common.js grip): the layer's two handwheels on the left cheek, facing the rear
+  grip(rig, trav, 'layer', -0.48, TRY - 0.45, TRZ - 0.32, { axis: [0, 0, 1], r: 0.13 });
+  grip(rig, trav, 'layer2', -0.44, TRY - 0.82, TRZ - 0.3, { axis: [0, 0, 1], r: 0.11 });
 
   // ---------------------------------------------------------------- the gun: the sFH 18's cradle, barrel and block
   const L = buildSFH18({ scheme });

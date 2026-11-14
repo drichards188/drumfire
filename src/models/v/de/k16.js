@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, addHandwheel, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, panoramicSight, slotCaps } from './common.js';
+import { slidingBlock, barrel, panoramicSight, slotCaps, grip } from './common.js';
 
 /**
  * 15 cm Kanone 16 (Krupp, 1917): the long gun that outranged every British field piece, 22 km with the 51.4 kg shell
@@ -257,6 +257,9 @@ export function buildK16({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 2.55, 1.3);
+  // the crew's grips (common.js grip): the elevating handwheels either side (the sight is over the layer's head)
+  grip(rig, trav, 'layer', -0.68, 1.48, 0.75, { axis: [-1, 0, 0], r: 0.16 });
+  grip(rig, trav, 'elevator', 0.66, 1.52, 0.75, { axis: [1, 0, 0], r: 0.14 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // No loading tray: the shell went into the open breech by hand and the rammer seated it with the staff, then the

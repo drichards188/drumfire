@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, slotCaps } from './common.js';
+import { panoramicSight, slidingBlock, slotCaps, grip } from './common.js';
 
 /**
  * 15 cm Ringkanone C/92 (Krupp, 1892), the fortress and siege gun of the Fußartillerie pulled out of the fortresses for
@@ -174,6 +174,9 @@ export function buildRK92({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 2.5, 1.6);
+  // the crew's grips (common.js grip; the places carriage() recorded): the two layers' elevating handwheels
+  grip(rig, cf, 'layer', ...HW.layer, { axis: [-1, 0, 0], r: 0.15 });
+  grip(rig, cf, 'elevator', ...HW.elevator, { axis: [1, 0, 0], r: 0.15 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // no loading tray: `tray` (where crews.js lays the round) is on the bore just inside the breech face (the K 17's)
@@ -364,6 +367,8 @@ function ramp(P, x) {
 }
 
 // ---------------------------------------------------------------- the carriage
+// the crew's grips, recorded as carriage() builds them (the hubs depend on the trunnion and the arc)
+const HW = {};
 function carriage(P) {
   for (const s of [-1, 1]) {
     const xo = s * (CX + CT / 2), xs = s * (CX + CT);
@@ -403,6 +408,7 @@ function carriage(P) {
     P.add('camo', box(0.12, 0.12, 0.12, xs + s * 0.08, py, hz - 0.03));
     P.add('dark', xTube(xs + s * 0.08, hx, 0.02, 0.02, 8, py, hz - 0.03));
     P.add('dark', handwheelX(0.15, s).translate(hx, py, hz - 0.03));
+    HW[s < 0 ? 'layer' : 'elevator'] = [hx, py, hz - 0.03];
     // a stay from the cheek to carry the handwheel's shaft
     P.add('camo', rod(V(xs, botY(hz) + 0.1, hz + 0.1), V(xs + s * 0.08, py - 0.05, hz - 0.03), 0.018, 6));
     // the handspike eyes along the trail's end and its lifting handles

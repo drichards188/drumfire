@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivets, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, discWheel, keyholePlate } from './common.js';
+import { slidingBlock, barrel, discWheel, keyholePlate, grip } from './common.js';
 
 /**
  * 10.5 cm leichte Feldhaubitze 18 (M): the leFH 18 with the double-baffle muzzle brake of 1941, the version most
@@ -299,6 +299,10 @@ export function buildLeFH18({ scheme = 'dgelb', brake = true, wheels = 'wood' } 
 
   // ---- anchors
   rig.anchors.eye = node(trav, 'eye', 0, 1.6, 0.7);
+  // the layer's traversing handwheel (handwheelZ above; the sight is a stride ahead of it on this carriage, out of his
+  // reach from the wheel, so both his hands go round it;
+  // he stands in the half-metre gap between the left trail and the cradle's foot, behind the wheel)
+  grip(rig, trav, 'layer', -0.37, 0.95, 0.44, { axis: [0, 0, 1], r: 0.105, side: 0, d: 0.42, clear: 0 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, muzzle);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // No loading tray on the leFH 18 (none on the surviving guns, refs/lefh18): the round went into the open breech by

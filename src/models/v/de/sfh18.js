@@ -3,7 +3,7 @@ import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, front
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock, grip } from './common.js';
 
 /**
  * 15 cm schwere Feldhaubitze 18 as the motorised divisional batteries had it in 1944 (refs/sfh18: the surviving
@@ -265,6 +265,13 @@ export function buildSFH18({ scheme = 'dgelb' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 1.8, 0.6);
+  // the crew's grips (common.js grip): the layer's traversing handwheel with the panoramic sight over it, the second
+  // layer's elevating handwheel with its range drum
+  // (both stand behind the road wheels beside the trail legs, the only room within reach of the cheeks' wheels)
+  grip(rig, trav, 'layer', -0.44, 0.98, 0.56, { axis: [-1, 0, 0], r: 0.17, post: [-1.15, 0.82], clear: 0 });
+  grip(rig, trav, 'layer2', -0.508, 1.74, 0.56);
+  grip(rig, trav, 'sight', 0.42, 0.98, 0.56, { axis: [1, 0, 0], r: 0.15, post: [1.15, 0.82], clear: 0 });
+  grip(rig, trav, 'sight2', 0.415, 1.2, 0.5);
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // No loading tray on the gun itself (none on the surviving guns, refs/sfh18): the drill (crews.js) brings the round

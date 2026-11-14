@@ -3,7 +3,7 @@ import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, gearArc, z
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { FParts } from '../../t/mats.js';
 import { buildShell, buildCartridge } from '../../shells.js';
-import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock, grip } from './common.js';
 import { mulberry32 } from '../../../noise.js';
 
 /**
@@ -272,6 +272,10 @@ export function buildHM1({ scheme = 'feldgrau' } = {}) {
   C.add('dark', box(0.11, 0.11, 0.11, -(CX + 0.4), sy - 0.01, 0.45));
   panoramicSight(C, -(CX + 0.41), sy, 0.45, -1);
   C.build(car, { dirt: 0.35 });
+  // the crew's grips (common.js grip): the layer's handwheel and the sight above it, the traverser's handwheel
+  grip(rig, car, 'layer', -(CX + 0.28), FOOT + 1.12, 0.65, { axis: [-1, 0, 0], r: 0.21 });
+  grip(rig, car, 'layer2', -(CX + 0.448), sy + 0.27, 0.45);
+  grip(rig, car, 'traverser', CX + 0.28, FOOT + 1.12, 0.65, { axis: [1, 0, 0], r: 0.21 });
 
   // ---- the ring cradle: a riveted steel sleeve with flanges, the two recoil cylinders over the barrel on saddles and
   // the recuperator under it, the trunnions, the equilibrator arms, the elevating arc on the left

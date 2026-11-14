@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivetRow,
 import { makeRig, finishRig, node, pivotAt, hb, crew, ring, addHandwheel, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, panoramicSight, keyholePlate, ringBand } from './common.js';
+import { slidingBlock, barrel, panoramicSight, keyholePlate, ringBand, grip } from './common.js';
 
 /**
  * 7.7 cm Feldkanone 16 (Krupp, 1916): the German division's field gun from 1916, the L/35 barrel (2.695 m) on the
@@ -291,6 +291,9 @@ export function buildFK16({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 1.55, 0.8);
+  // the crew's grips (common.js grip): the layer's two handwheels on the left plate, traversing and elevating
+  grip(rig, trav, 'layer', -0.36, 0.82, 0.55, { axis: [-1, 0, 0], r: 0.085, post: [-0.75, 0.85], clear: 0 }); // behind the road wheel
+  grip(rig, trav, 'layer2', -0.38, 0.98, 0.38, { axis: [-1, 0, 0], r: 0.12 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR);
   // No loading tray: the fixed round went into the open breech in one movement. `tray` (where crews.js lays the round)

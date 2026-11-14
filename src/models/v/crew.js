@@ -886,7 +886,7 @@ export function buildCrew(n, opts = {}) {
 // ---------------------------------------------------------------- poses
 
 export const CREW_POSES = ['stand', 'walk', 'carry', 'carryWalk', 'carryShoulder', 'crouch', 'reachUp', 'push', 'climb', 'signal', 'operate', 'sidestep', 'stoopWalk',
-  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'crouch', 'ears', 'point', 'phone', 'dead', 'run'].filter((p, i, a) => a.indexOf(p) === i);
+  'haul', 'ram', 'ramLow', 'ramLoad', 'lift', 'lay', 'lanyard', 'lanyardBR', 'crouch', 'ears', 'point', 'phone', 'dead', 'run'].filter((p, i, a) => a.indexOf(p) === i);
 export const CREW_GAITS = {
   walk: { stride: 1.25, period: 0.98 }, // metres the root moves per cycle, seconds per cycle at a natural pace
   carryWalk: { stride: 0.9, period: 1.1 },
@@ -1227,6 +1227,24 @@ const POSES = {
   },
   // lanyard: standing side-on, the cord in the right hand drawn back, the left arm across the chest; t = 0.6 to 0.72 is the pull
   lanyard(S, t) {
+    const g = sstep(0.55, 0.72, fract(t)) * (1 - sstep(0.8, 0.95, fract(t)));
+    S.hips.set(0.0, 0.95 - 0.02 * g, 0.03);
+    S.hipsRot.set(0.04, -0.5, 0);
+    S.spine.set(0.0, -0.25, 0); S.chest.set(0.0, -0.2, 0); S.neck.set(0.0, 0.4, 0); S.head.set(-0.05, 0.45, 0);
+    // the feet and knees turn with the hips (a foot turned 50 degrees off its knee reads as a broken ankle)
+    S.feet[0].ankle.set(-0.2, ANKLE_Y, -0.2); S.feet[0].rot.set(0, 0.1, 0); S.feet[0].pole.set(-0.45, 0, -1);
+    S.feet[1].ankle.set(0.2, ANKLE_Y, 0.25); S.feet[1].rot.set(0, -0.35, 0); S.feet[1].pole.set(0.2, 0, -1);
+    S.carry.set(0.32, 1.1, 0.3 + 0.35 * g);
+    // The poles are root space, and the chest is turned 0.95 rad to his right: an "out and down" pole in root space
+    // pointed the right elbow forward while the hand was beside and behind him, the forearm turned round backwards.
+    // Given in the chest's frame they stay behind and out: the cord hand hangs by the hip and swings back on the pull.
+    const cy = -0.95, cc = Math.cos(cy), cs = Math.sin(cy), cx = (x, z) => x * cc + z * cs, cz = (x, z) => -x * cs + z * cc;
+    setIK(S.arms[1], 0.32, 1.1 + 0.08 * g, 0.2 + 0.4 * g, 0, -0.2, 1, -1, 0, 0, cx(0.35, 0.5), -1, cz(0.35, 0.5));
+    setIK(S.arms[0], -0.14, 1.22, -0.3, 0.2, -0.4, -1, 1, 0, 0, -0.5, -0.9, 0.2);
+  },
+  // the lanyard pose as it was, for the British crews (the British game is parked as it stands): its right elbow's pole
+  // is in root space and turns the forearm round backwards (the German crews' lanyard above is the corrected one)
+  lanyardBR(S, t) {
     const g = sstep(0.55, 0.72, fract(t)) * (1 - sstep(0.8, 0.95, fract(t)));
     S.hips.set(0.0, 0.95 - 0.02 * g, 0.03);
     S.hipsRot.set(0.04, -0.5, 0);

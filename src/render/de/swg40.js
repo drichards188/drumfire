@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { smooth, lerp, headingOf } from '../anim.js';
 import { CREW_GAITS } from '../../models/v/crew.js';
 import { trap, turn } from '../drill_pace.js';
-import { inCover } from '../crews_rocket.js';
+import { inCover, coverPhase, backAfter } from '../crews_rocket.js';
 
 // The schweres Wurfgerät 40's crew (models/v/de/swg40.js): the crates are the launcher, so loading is carrying.
 //   open    (2 s) the men are coming back from the slit trench after the ripple
@@ -22,8 +22,10 @@ export const WORLD = new Set(['firer', 'layer', 'crate0', 'crate1', 'crate2', 'c
 export const STAFF = 1.2;
 
 const N = 4; // crates on the frame
-const OFF = 0.12, TRIP = (1 - OFF) / N; // trip i of the 'shell' step starts at OFF + i TRIP (OFF: the party back from cover)
-const U_LIFT = 0.1, U_CARRY = 0.45, U_LAID = 0.62, U_BACK = 0.95; // a trip's phases (share of the trip)
+// trip i of the 'shell' step starts at S.off + i S.tl (S.tl = (1 - S.off) / N): OFF at the earliest, else once the last
+// of the party is back from the slit trench after a ripple (timing below)
+const OFF = 0.12, TL0 = (1 - OFF) / N;
+const U_LIFT = 0.1, U_CARRY = 0.42, U_LAID = 0.57, U_BACK = 0.97; // a trip's phases (share of the trip; the walk back the longest, as the trips shorten when the first waits)
 const CARRY_Y = 0.72; // the crate's middle while carried (rope handles at the men's hands)
 const BEHIND = 1.0; // where the party stands the crate before sliding it on: this far behind its place on the ramp
 // The party round the crate (r right, f forward of its middle; the crate's nose forward): the front pair beside it
@@ -31,10 +33,14 @@ const BEHIND = 1.0; // where the party stands the crate before sliding it on: th
 // marks the same way round the crate at the stack).
 const FORM = [[-0.45, 0.12], [0.45, 0.12], [-0.16, -0.82], [0.16, -0.82]];
 // the layer's windows in the 'shell' step: trip i's spent crate is off the frame and on the pile by TIP_END(i), just
-// before the party comes in with the new one; the first starts when he is back from cover
-const TIP_END = (i) => OFF + (i + U_CARRY) * TRIP - 0.01, TIP_LEN = 0.16, TIP0 = 0.08;
-const tipStart = (i) => (i === 0 ? TIP0 : TIP_END(i) - TIP_LEN);
-const HOMEWALK = 0.06; // after a window the layer walks home in this share of the step
+// before the party comes in with the new one; the first starts when he is back from cover (S.tip0, TIP0 at the
+// earliest) and lasts at least FIRST
+// (the window and the walk home after it scale with the trips, which are shorter when the first waits for the party:
+// at full length the walk home ran into the next window and he jumped)
+const TIP_END = (S, i) => S.off + (i + U_CARRY) * S.tl - 0.01, TIP_LEN = 0.16, TIP0 = 0.08, FIRST = 0.129;
+const tipStart = (S, i) => (i === 0 ? S.tip0 : TIP_END(S, i) - TIP_LEN * S.tl / TL0);
+const HOMEWALK = 0.06; // after a window the layer walks home in this share of the step (at the full trip length TL0)
+const homeWalk = (S) => HOMEWALK * S.tl / TL0;
 const WSTRIDE = CREW_GAITS.walk.stride;
 
 const _M = new THREE.Matrix4(), _M2 = new THREE.Matrix4(), _p = new THREE.Vector3(), _p2 = new THREE.Vector3();
@@ -72,6 +78,7 @@ function plan(crew, c) {
   S.fwd.x = -Math.sin(crew.az); S.fwd.z = -Math.cos(crew.az);
   const pk = rig.anchors.pickup;
   Object.assign(S.pick, { x: pk.x, y: pk.y, z: pk.z, h: pk.h, pitch: 0 });
+  timing(crew, c, S);
   // the frame: n full crates (the last n of the firing order), the spent ones (the first of it), the pile
   S.trip = -1; S.tipI = -1; S.after = -1;
   const j = p.job, k = c.k;
@@ -80,13 +87,13 @@ function plan(crew, c) {
   else if (j && j.step === 'shell') {
     let laid = 0, off = 0;
     for (let i = 0; i < N; i++) {
-      const u = (k - OFF - i * TRIP) / TRIP;
+      const u = (k - S.off - i * S.tl) / S.tl;
       if (u >= U_LAID) laid++;
       if (u >= 0 && u < 1) { S.trip = i; S.u = u; }
       if (!fired) continue;
       // the spent crate leaves the ramp when he starts pulling it, lies on the pile once he has put it down
-      const e = (k - tipStart(i)) / (TIP_END(i) - tipStart(i));
-      if (e >= 1) { S.litter[i] = 1; off++; if (k < TIP_END(i) + HOMEWALK) S.after = i; }
+      const e = (k - tipStart(S, i)) / (TIP_END(S, i) - tipStart(S, i));
+      if (e >= 1) { S.litter[i] = 1; off++; if (k < TIP_END(S, i) + homeWalk(S)) S.after = i; }
       else if (e >= 0) { S.tipI = i; S.tipE = e; if (e >= T_WALK) { off++; S.litter[i] = e >= T_DOWN1 ? 1 : 2; } }
     }
     S.full = Math.min(cap, laid); S.spent = fired ? N - off : 0;
@@ -115,6 +122,37 @@ function plan(crew, c) {
   }
   if (S.tipI >= 0) layerTip(crew, S);
   return S;
+}
+
+// When the trips and the layer's first window start: after a ripple the men come back from the slit trench at a run
+// (crews_rocket.js inCover), the farthest about 15 m: the first crate set off and was laid on the frame before he was
+// in, and he joined it with a jump. So the party's first lift waits for the last man in, the layer's first window for
+// him. Constant through the step (the ripple's end is fixed), a pure function of the job like the rest.
+const _F = {}, _w = { x: 0, z: 0 };
+function waitMark(S, r, out) {
+  const P = S.pick, [fr, ff] = FORM[r];
+  out.x = P.x + fr * Math.cos(P.h) - ff * Math.sin(P.h); out.z = P.z - fr * Math.sin(P.h) - ff * Math.cos(P.h);
+  return out;
+}
+function timing(crew, c, S) {
+  S.off = OFF; S.tip0 = TIP0;
+  const p = c.p, j = p.job, cov = crew.rig.anchors.cover;
+  if (j && j.step === 'shell' && cov && p.firedAt > 0) {
+    const F = coverPhase(c, _F);
+    if (!F.inside && F.tBack < Infinity) {
+      const t0 = c.k * j.dur - F.tBack, H = layerHome(crew, _home); // (t0: the ripple's end, seconds into the step)
+      let last = 0;
+      for (let r = 0; r < 4; r++) {
+        const cv = cov[2 + r];
+        if (cv) { waitMark(S, r, _w); last = Math.max(last, t0 + backAfter(Math.hypot(cv.x - _w.x, cv.z - _w.z))); }
+      }
+      if (cov[0]) S.tip0 = Math.max(TIP0, (t0 + backAfter(Math.hypot(cov[0].x - H.x, cov[0].z - H.z)) + 0.3) / j.dur);
+      // (and late enough that the layer's first window keeps its length: TIP_END(0) - tip0 >= FIRST)
+      const q = U_CARRY / N;
+      S.off = Math.min(0.5, Math.max(OFF, (last + 0.5) / j.dur, (S.tip0 + FIRST + 0.01 - q) / (1 - q)));
+    }
+  }
+  S.tl = (1 - S.off) / N;
 }
 
 // The layer's window for trip i's spent crate (e 0..1): to the lane's rear, the crate pulled off backwards, carried to
@@ -276,7 +314,7 @@ function layerMan(crew, m, c) {
   if (s === 'shell' && S.after >= 0) {
     // home from the pile
     pileStand(crew, S.after, _ps);
-    const e = trap((k - TIP_END(S.after)) / HOMEWALK, 0.2), d = Math.hypot(H.x - _ps.x, H.z - _ps.z), hw = headingOf(H.x - _ps.x, H.z - _ps.z);
+    const e = trap((k - TIP_END(S, S.after)) / homeWalk(S), 0.2), d = Math.hypot(H.x - _ps.x, H.z - _ps.z), hw = headingOf(H.x - _ps.x, H.z - _ps.z);
     const h = e < 0.15 ? turn(_ps.h, hw, e / 0.15) : e > 0.85 ? turn(hw, H.h, (e - 0.85) / 0.15) : hw, moving = e > 0 && e < 1;
     m.put(lerp(_ps.x, H.x, e), 0, lerp(_ps.z, H.z, e), h, moving ? 'walk' : 'stand', moving ? (d * e) / WSTRIDE : crew.idleT + m.seed);
     return;

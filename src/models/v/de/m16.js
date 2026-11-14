@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sideProfile, frontProfile, gearArc, zLathe, loft, rivets, rivetRow, rivetPoly, mirrorX, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, keyholePlate, ringBand } from './common.js';
+import { panoramicSight, slidingBlock, keyholePlate, ringBand, grip } from './common.js';
 
 /**
  * 21 cm Mörser 16, the heavy howitzer of the Fußartillerie on its box carriage, as it stood in Flanders in 1917 and
@@ -252,6 +252,10 @@ export function buildM16({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 2.4, 1.0);
+  // the crew's grips (common.js grip): the elevating handwheel on the left (the sight is above his reach from it),
+  // the traversing handwheel on the right
+  grip(rig, trav, 'layer', -(CHX + 0.2), 1.12, 0.95, { axis: [-1, 0, 0], r: 0.21, post: [-1.0, 1.2], clear: 0 }); // behind the road wheel
+  grip(rig, trav, 'elevator', CHX + 0.17, 1.05, 0.95, { axis: [1, 0, 0], r: 0.17 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   rig.anchors.tray = node(el, 'tray', 0, 0, BR + sh.length / 2 + 0.06);

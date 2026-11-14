@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, rivets, rivetRow, rivetPoly, handwheel, DEG } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock, grip } from './common.js';
 
 /**
  * The Mörserlafette (Krupp, 1939) in firing order, carrying either barrel (refs/k18_mrs18/README.md):
@@ -404,6 +404,11 @@ function build(G, { scheme = 'dgelb' } = {}) {
 
   // ---- anchors
   rig.anchors.eye = node(trav, 'eye', 0, 3.0, 2.9);
+  // the crew's grips (common.js grip): the layer's elevating handwheel and the sight above it on the left, the
+  // traversing handwheel on the right
+  grip(rig, car, 'layer', -0.78, FOOT + 1.12, 0.55, { axis: [-1, 0, 0], r: 0.17 });
+  grip(rig, car, 'layer2', -0.958, FOOT + 1.73, 0.39);
+  grip(rig, car, 'elevator', 0.78, FOOT + 1.12, 0.55, { axis: [1, 0, 0], r: 0.17 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   rig.anchors.tray = node(el, 'tray', 0, 0, BR + sh.length / 2 + 0.06);

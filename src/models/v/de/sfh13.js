@@ -3,7 +3,7 @@ import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, front
 import { makeRig, finishRig, node, pivotAt, hb, addWheel, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock, keyholePlate, ringBand } from './common.js';
+import { panoramicSight, slidingBlock, keyholePlate, ringBand, grip } from './common.js';
 
 /**
  * 15 cm schwere Feldhaubitze 13 (the short L/14 barrel the British called the "5.9"), as the divisional heavy
@@ -220,6 +220,11 @@ export function buildSFH13({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 1.75, 0.5);
+  // the crew's grips (common.js grip): the layer's elevating handwheel and the range drum, the second layer's
+  // traversing handwheel
+  grip(rig, trav, 'layer', -0.47, 1.05, 0.5, { axis: [-1, 0, 0], r: 0.15 });
+  grip(rig, trav, 'layer2', -0.515, 1.22, 0.16);
+  grip(rig, trav, 'sight', 0.47, 0.86, 0.5, { axis: [1, 0, 0], r: 0.13 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // no loading tray: the round is handed to the breech and laid in the scoop, its nose in the chamber, then rammed

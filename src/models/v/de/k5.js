@@ -4,6 +4,7 @@ import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb } from '../../rig.j
 import { mulberry32 } from '../../../noise.js';
 import { createHeavyScrimTexture } from './heavy_gustav_site.js';
 import './common.js'; // registers the Dunkelgelb scheme ('dgelb') in kit.js CAMO
+import { grip } from './common.js';
 
 // 28 cm K5 (E) (Krupp, 1937) on a Vögele turntable, as the Anzio guns "Robert" and "Leopold" stood in 1944. Sources:
 // Wikipedia (Krupp K5: barrel 21.54 m, L/76, twelve 7 mm grooves, 0 to 50 degrees, 1 to 2 degrees of traverse on the
@@ -410,6 +411,9 @@ export function buildK5() {
   PT.add('camo', rbox(0.3, 0.32, 0.36, 0.04, -GX - 0.25, PY + 0.95, pz));
   PT.add('steel', xTube(-1.45, -GX - 0.25, 0.04, 0.04, 8, PY + 1.0, pz));
   PT.add('iron', handwheel(0.28, 6, 0.022, 0.055).translate(-1.48, PY + 1.0, pz));
+  // (the crew's grips, common.js: the layer's elevating handwheel and the sight's box beside it)
+  grip(rig, trav, 'layer', -1.48, PY + 1.0, pz, { axis: [-1, 0, 0], r: 0.28 });
+  grip(rig, trav, 'layer2', -GX - 0.35, PY + 1.3, pz - 0.75);
   PT.add('camo', box(0.12, 0.45, 0.25, -GX - 0.28, PY + 1.2, pz - 0.75));
   PT.add('brass', yTube(PY + 1.42, PY + 1.62, 0.05, 0.05, 10, -GX - 0.28, pz - 0.75));
   PT.add('dark', zTube(pz - 1.0, pz - 0.6, 0.03, 0.026, 8, -GX - 0.28, PY + 1.58));

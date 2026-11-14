@@ -6,7 +6,7 @@ import { rampDrill } from '../ramp_drill.js';
 // did (en.wikipedia "21 cm Mörser 99": the wheels ran up two wooden ramps and were returned to position by gravity;
 // the gun had to be re-aimed after every shot, levered into position since it had no traversing gear): the run up
 // the ramps and the roll back down, and in the 'relay' step the layer and the elevating number at the handspikes.
-export const ROLES = { officer: 'cmd', layer: 'lay', elevator: 'wheel', lanyard: 'lan', loader1: 'pair0', loader2: 'pair1', rammer1: 'ram', rammer2: 'ram', ammo1: 'idle', ammo2: 'bag' };
+export const ROLES = { officer: 'cmd', layer: 'lay', elevator: 'idle', lanyard: 'lan', loader1: 'pair0', loader2: 'pair1', rammer1: 'ram', rammer2: 'ram', ammo1: 'idle', ammo2: 'bag' };
 export const STAFF = 3.5; // the rammers wait clear of the tail's run back, 3.7 m behind the breech
 export const TIMED = true;
 export const BLOCK_MAN = 'lanyard';

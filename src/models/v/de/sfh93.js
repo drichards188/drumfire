@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, zLathe, loft, rivets, rivetRow, rivetPoly, chain, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, ring, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, grip } from './common.js';
 
 /**
  * 15 cm schwere Feldhaubitze 1893 (sFH 93: the Krupp barrel on the Spandau carriage), the heavy field howitzer the
@@ -173,6 +173,11 @@ export function buildSFH93({ scheme = 'bunt' } = {}) {
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 2.0, 1.1);
+  // the crew's grips (common.js grip; the places carriage() recorded): the layer at the dial sight (no handwheel on
+  // the left: a hand on its head, the other on its column), the second layer's elevating handwheel
+  grip(rig, cf, 'layer', HW.sight[0] - 0.038, HW.sight[1] + 0.27, HW.sight[2], { post: [HW.sight[0] - 0.5, HW.sight[2] + 0.35], clear: 0 });
+  grip(rig, cf, 'layer2', HW.sight[0] - 0.02, HW.sight[1] - 0.12, HW.sight[2]);
+  grip(rig, cf, 'elevator', ...HW.elevator, { axis: [1, 0, 0], r: 0.13 });
   rig.anchors.muzzle = node(el, 'muzzle', 0, 0, MZ);
   rig.anchors.breech = node(el, 'breech', 0, 0, BR + 0.02);
   // no loading tray: the round is handed to the breech and pushed into the chamber's mouth, then rammed
@@ -254,6 +259,8 @@ function ramp(P, x) {
 }
 
 // ---------------------------------------------------------------- the carriage
+// the crew's grips, recorded as carriage() builds them (the hubs depend on the trunnion and the arc)
+const HW = {};
 function carriage(P) {
   const xo = CX + CT / 2, xs = CX + CT; // the cheek's mid plane, its outer face
   for (const s of [-1, 1]) {
@@ -340,6 +347,7 @@ function carriage(P) {
   P.add('camo', box(0.03, 0.1, 0.12, xs + 0.015, sy, 0.3)); // the shaft's bearing on the flask
   P.add('camo', box(0.09, 0.11, 0.1, xs + 0.06, sy, 0.76));
   P.add('dark', handwheelX(0.13).translate(xs + 0.16, sy, 0.76));
+  HW.elevator = [xs + 0.16, sy, 0.76]; HW.sight = [-(xs + 0.14), 1.36, 0.48];
   // the sight: a bracket off the left flask behind the trunnion, the dial sight on it, eyepiece to the left
   P.add('camo', box(0.05, 0.42, 0.07, -(xs + 0.03), 1.12, 0.48));
   P.add('camo', box(0.14, 0.04, 0.09, -(xs + 0.09), 1.34, 0.48));
