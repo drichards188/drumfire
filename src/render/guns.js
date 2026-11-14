@@ -177,8 +177,9 @@ export class GunViews {
       rig.setTraverse(p.az);
       // the light guns have no depressing gear of their own in the sim: loaded at the laid elevation, which
       // at 40 degrees would run the round into the trail. The quick-loading gear (6-inch) and the loading
-      // rest bring the barrel to its loading elevation for the steps and back for the laying.
-      rig.setElevation(p.job && g.load[0].step !== 'depress' ? p.el + (rig.loadEl - p.el) * quickLoad(p.job, alpha) : p.el);
+      // rest bring the barrel to its loading elevation for the steps and back for the laying. Not a re-lay on a
+      // correction ('laying'): its job is a 'lay' step too, but the gun is loaded and laid, so it slews from its aim.
+      rig.setElevation(p.job && p.state !== 'laying' && g.load[0].step !== 'depress' ? p.el + (rig.loadEl - p.el) * quickLoad(p.job, alpha) : p.el);
       // recoil: out in ~0.14 s, held a moment, then the run out
       const tf = now - p.firedAt;
       let r = 0;

@@ -70,7 +70,7 @@ export function rampDrill({ spike = { layer: -1, elevator: 1 }, t = { up: 0.35, 
     const o = fired ? offOf(p.firedAt) : 0;
     let k = 0;
     if (c.s === 'relay') k = levered(c.k);
-    else if (p.job && p.job.i > S.ri) k = 1;
+    else if (p.state === 'laying' || (p.job && p.job.i > S.ri)) k = 1; // (a re-lay on a correction: it is on its line)
     else if (!p.job && (p.loaded || p.state === 'ready')) k = 1;
     S.off = o * smooth(c.tf, t.top, t.down) * (1 - k);
     rig.holdLay?.(S.off);
