@@ -12,6 +12,11 @@
 // Contact sheet: &shots=shell@0.2,shell@0.6,ram@0.5,... (step@k of the first loading cycle, or a time in s)
 // &cams=az,el,dist[,ty];... (degrees, metres; one row per camera, aimed at the breech) &tile=360x300 draws
 // the gun and its men at those moments into a grid on the page for tools/shot.mjs.
+// Contact audit (crewcontact.js): props nothing bears and hands meant to hold something that touch nothing, in
+// results.<gun>.<scn>.contact and brief.<gun/scn>.contact, with the worst instants (`moments`); a shot given as
+// t<seconds>:<x>:<y>:<z>[:<dist>] is taken at that time looking at that point (from dist metres instead of the
+// cameras' own), marked with a red ring. Body audit (crewbody.js): joints past their range, limbs through the man's
+// own body, men (arms and hands too) into each other, the steel or the pit, in the same results.
 import * as THREE from 'three';
 import { UNITS, piecePlacements } from '../sector.js';
 import { GUNS } from '../sim/tables.js';
@@ -21,6 +26,8 @@ import { loadPose, carPose } from './guns.js';
 import { h2 } from '../world/mesher.js';
 import { pitSolids } from '../world/battery.js';
 import { CrewField } from './crewfield.js';
+import { Contacts } from './crewcontact.js';
+import { Body } from './crewbody.js';
 
 const q = new URLSearchParams(location.search);
 const DT = 1 / 30, SAMPLE = 2; // frame step, test every SAMPLE frames
@@ -68,15 +75,29 @@ function triGrid(mesh) {
   return { T, cells, bb };
 }
 
+// an item's world matrix this frame (an instance's: the mesh's times its instance matrix), into it.M
+const _im = new THREE.Matrix4();
+function matrixOf(it) {
+  if (it.inst < 0) return it.M.copy(it.mesh.matrixWorld);
+  it.mesh.getMatrixAt(it.inst, _im);
+  return it.M.multiplyMatrices(it.mesh.matrixWorld, _im);
+}
+
 class Steel {
   constructor(rig) {
     this.items = [];
     rig.root.updateMatrixWorld(true);
     rig.root.traverse((o) => {
       if (!o.isMesh || o.isSkinnedMesh || o.name === 'soil') return; // ground mounds are not steel
-      // the model viewer's shells and anything else the gun keeps hidden (the leFH and sFH 18's `trayShell`) are not steel
-      for (let p = o; p; p = p.parent) if (!p.visible || (p.name && p.name.startsWith('shell-'))) return;
-      this.items.push({ mesh: o, local: sampleMesh(o), world: null, m: new Float32Array(16), tg: triGrid(o), inv: new THREE.Matrix4() });
+      // the model viewer's shells are not steel; what the gun hides is steel only while it is shown (update: the ramp
+      // guns' handspikes come out for the relay, the leFH and sFH 18's `trayShell` never does)
+      for (let p = o; p; p = p.parent) if (p.name && p.name.startsWith('shell-')) return;
+      // (an instanced mesh is one item per instance, each at its own matrix: the rocket batteries' crates and rockets,
+      // the self-propelled guns' running gear; sampled once at the mesh's own matrix they were steel where none is)
+      const local = sampleMesh(o), tg = triGrid(o);
+      for (let i = 0; i < (o.isInstancedMesh ? o.count : 1); i++) {
+        this.items.push({ mesh: o, inst: o.isInstancedMesh ? i : -1, M: new THREE.Matrix4(), local, world: null, m: new Float32Array(16), tg, inv: new THREE.Matrix4() });
+      }
     });
     let total = 0;
     for (const it of this.items) total += it.local.length / 3;
@@ -94,7 +115,11 @@ class Steel {
     const W = this.world;
     let o = 0;
     for (const it of this.items) {
-      const e = it.mesh.matrixWorld.elements;
+      it.shown = true;
+      for (let p = it.mesh; p; p = p.parent) if (!p.visible) { it.shown = false; break; }
+      const e = matrixOf(it).elements;
+      // (an instance put away by a zero scale, the models' way of hiding one, is hidden)
+      if (it.inst >= 0 && Math.abs(it.M.determinant()) < 1e-12) it.shown = false;
       let same = it.ready;
       if (same) for (let i = 0; i < 16; i++) if (Math.abs(e[i] - it.m[i]) > 1e-6) { same = false; break; }
       const L = it.local, n = L.length / 3;
@@ -128,7 +153,12 @@ class Steel {
     }
     const [dx, dy, dz] = this.dim, [ox, oy, oz] = this.org, S = this.start;
     S.fill(0);
+    // (a hidden item's points are left out of the cells)
+    const off = this.hiddenAt ??= new Uint8Array(n);
+    off.fill(0);
+    for (const it of this.items) if (it.shown === false) off.fill(1, it.off, it.off + it.local.length / 3);
     for (let i = 0; i < n; i++) {
+      if (off[i]) { this.cellOf[i] = -1; continue; }
       const ix = Math.min(dx - 1, Math.max(0, ((W[i * 3] - ox) / c) | 0)), iy = Math.min(dy - 1, Math.max(0, ((W[i * 3 + 1] - oy) / c) | 0)), iz = Math.min(dz - 1, Math.max(0, ((W[i * 3 + 2] - oz) / c) | 0));
       const k = (iz * dy + iy) * dx + ix;
       this.cellOf[i] = k;
@@ -137,7 +167,7 @@ class Steel {
     for (let k = 0; k < S.length - 1; k++) S[k + 1] += S[k];
     const fill = this.fill ??= new Int32Array(S.length);
     fill.set(S);
-    for (let i = 0; i < n; i++) this.sorted[fill[this.cellOf[i]]++] = i;
+    for (let i = 0; i < n; i++) if (this.cellOf[i] >= 0) this.sorted[fill[this.cellOf[i]]++] = i;
   }
 
   ownerOf(i) {
@@ -151,7 +181,8 @@ class Steel {
   // winding number of the meshes around world point (x, y, z): > 0 means inside a closed solid
   inside(x, y, z) {
     for (const it of this.items) {
-      const e = it.mesh.matrixWorld;
+      if (it.shown === false) continue;
+      const e = it.M;
       if (!it.invOk || it.invAt !== this.stamp) { it.inv.copy(e).invert(); it.invOk = true; it.invAt = this.stamp; }
       _v.set(x, y, z).applyMatrix4(it.inv);
       const bb = it.tg.bb;
@@ -340,6 +371,7 @@ function auditMotion(crew, res, c, T) {
       if (el > 0.05 && (ex * rx + ez * rz) * sg < -0.75 * el) { R.elbowIn++; ev('elbow ' + side + ' inward', (ex * rx + ez * rz) * sg / el); }
       void fx; void fz;
     }
+    A.grip = A.hands; // (the hands sent to a grip this frame, for the contact audit)
     A.hands = {};
     if (A.drop) { R.drop = (R.drop ?? 0) + A.drop; A.drop = 0; }
   }
@@ -374,18 +406,24 @@ function sheet(kind, rig, crew) {
     S = { scene, camera: new THREE.PerspectiveCamera(42, tw / th, 0.1, 200), n: 0 };
     R3.scenes.set(kind, S);
   }
-  return (label) => {
+  return (label, focus = null, near = null) => {
     const { renderer, grid, ctx, tw: W, th: H, cams: C } = R3, col = S.n++;
     const need = Math.max(grid.width, (col + 1) * W), rows = R3.rowBase ?? 0, needH = (rows + C.length) * H;
     if (grid.width < need || grid.height < needH) {
       const old = document.createElement('canvas'); old.width = grid.width; old.height = grid.height; old.getContext('2d').drawImage(grid, 0, 0);
       grid.width = Math.max(need, grid.width); grid.height = Math.max(needH, grid.height); ctx.drawImage(old, 0, 0);
     }
-    const B = crew.B.clone().applyMatrix4(rig.root.matrixWorld);
+    const B = focus ? new THREE.Vector3(...focus) : crew.B.clone().applyMatrix4(rig.root.matrixWorld);
+    // the point a contact moment is about, ringed in red
+    const mark = S.mark ??= new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.012, 6, 24), new THREE.MeshBasicMaterial({ color: 0xff2020, depthTest: false }));
+    mark.renderOrder = 9; mark.visible = !!focus;
+    if (focus) { mark.position.copy(B); S.scene.add(mark); }
     C.forEach(([az, el, dist, ty], r) => {
-      const a = az * Math.PI / 180, e = el * Math.PI / 180;
-      S.camera.position.set(B.x + Math.sin(a) * Math.cos(e) * dist, (ty ?? 0.9) + Math.sin(e) * dist, B.z + Math.cos(a) * Math.cos(e) * dist);
-      S.camera.lookAt(B.x, ty ?? 0.9, B.z);
+      dist = near ?? dist;
+      const a = az * Math.PI / 180, e = el * Math.PI / 180, y0 = focus ? B.y : ty ?? 0.9;
+      S.camera.position.set(B.x + Math.sin(a) * Math.cos(e) * dist, y0 + Math.sin(e) * dist, B.z + Math.cos(a) * Math.cos(e) * dist);
+      S.camera.lookAt(B.x, y0, B.z);
+      mark.lookAt(S.camera.position);
       renderer.render(S.scene, S.camera);
       ctx.drawImage(renderer.domElement, col * W, (rows + r) * H);
       ctx.fillStyle = '#000a'; ctx.fillRect(col * W, (rows + r) * H, W, 16);
@@ -406,6 +444,8 @@ function runGun(kind, scn, speed, scns0 = scn) {
   rig.root.rotation.order = 'YXZ';
   rig.root.userData.crewAt = placement(kind);
   const steel = new Steel(rig);
+  const pre = new Set();
+  rig.root.traverse((o) => pre.add(o));
   const crew = new GunCrew(rig, kind);
   window.__lastCrew = crew;
   const pl0 = placement(kind), walls = pitSolids(kind, pl0.x, pl0.z).map((b) => ({ name: b.name, min: [b.x0, 0, b.z0], max: [b.x1, b.h, b.z1] }));
@@ -416,7 +456,13 @@ function runGun(kind, scn, speed, scns0 = scn) {
   const sim = { time: 0, alpha: 0 };
   const res = { max: 0, byRole: {}, byStep: {}, byTarget: {}, worst: [], frames: 0, motion: {} };
   patchMen(crew);
-  const shots = scn === scns0 && q.get('shots') ? q.get('shots').split(',').map((t) => (t.includes('@') ? { step: t.split('@')[0], k: Number(t.split('@')[1]) } : { t: Number(t) })) : [];
+  const contacts = new Contacts(rig, crew, steel, walls, pre, DT), body = new Body(crew, steel, walls, contacts);
+  const shot = (t) => {
+    const f = /^t(-?[\d.]+):(-?[\d.]+):(-?[\d.]+):(-?[\d.]+)(?::([\d.]+))?$/.exec(t);
+    if (f) return { t: Number(f[1]), focus: [f[2], f[3], f[4]].map(Number), dist: f[5] ? Number(f[5]) : null };
+    return t.includes('@') ? { step: t.split('@')[0], k: Number(t.split('@')[1]) } : { t: Number(t) };
+  };
+  const shots = scn === scns0 && q.get('shots') ? q.get('shots').split(',').map(shot) : [];
   const snap = shots.length ? sheet(kind, rig, crew) : null;
   let cycle = 0;
   res.homes = crew.men.map((m) => `${m.role} ${m.spot.x.toFixed(2)},${m.spot.z.toFixed(2)} -> ${m.sx.toFixed(2)},${m.sz.toFixed(2)}`);
@@ -505,7 +551,7 @@ function runGun(kind, scn, speed, scns0 = scn) {
     if (snap) for (const sh of shots) {
       if (sh.done) continue;
       const jk = p.job ? p.job.t / Math.max(0.01, p.job.dur) : -1;
-      if (sh.t != null ? T >= sh.t : cycle === 1 && p.job?.step === sh.step && jk >= sh.k) { sh.done = true; snap(sh.t != null ? `t=${sh.t}` : `${sh.step}@${sh.k}`); }
+      if (sh.t != null ? T >= sh.t : cycle === 1 && p.job?.step === sh.step && jk >= sh.k) { sh.done = true; snap(sh.t != null ? `t=${sh.t} ${p.job?.step ?? p.state}@${jk < 0 ? '-' : jk.toFixed(2)}` : `${sh.step}@${sh.k}`, sh.focus, sh.dist); }
     }
     if (frame % SAMPLE) continue;
     if (T < -0.5 || tf < 0 && T < 0) { if (!firedOnce) { /* the run-up to the first shot is also tested */ } }
@@ -513,6 +559,8 @@ function runGun(kind, scn, speed, scns0 = scn) {
     res.frames++;
     const c = crew.c;
     const bodies = crew.men.map((m, i) => (m.root.visible ? bodyOf(m, caps[i]) : null));
+    contacts.check(c, T, bodies, SAMPLE);
+    const propHits = []; // the carried shells into the steel, for the body audit's `hit`
     // clone capsule data needed twice (the P() scratch vectors are reused by bodyOf for each man)
     for (let i = 0; i < crew.men.length; i++) {
       const m = crew.men[i], cs = bodies[i];
@@ -561,6 +609,7 @@ function runGun(kind, scn, speed, scns0 = scn) {
       if (!nearTray && !nearStack) {
         const h = steel.hit(_a.x, _a.y, _a.z, _b.x, _b.y, _b.z, rad, -1e9);
         if (h.d > 0) log(h.d, prop === crew.shellA ? 'shell' : 'shellB', { role: 'shell', x: _a.x, y: _a.y, z: _a.z }, 'steel', c, { own: steel.ownerOf(h.i), pt: [steel.world[h.i * 3], steel.world[h.i * 3 + 1], steel.world[h.i * 3 + 2]].map((v) => +v.toFixed(2)) });
+        if (h.d > 0) propHits.push({ name: prop === crew.shellA ? 'shellA' : 'shellB', d: h.d, own: steel.ownerOf(h.i), pt: [steel.world[h.i * 3], steel.world[h.i * 3 + 1], steel.world[h.i * 3 + 2]] });
       }
       for (let i = 0; i < crew.men.length; i++) {
         const cs = bodies[i];
@@ -573,7 +622,10 @@ function runGun(kind, scn, speed, scns0 = scn) {
         }
       }
     }
+    body.check(c, T, SAMPLE, propHits);
   }
+  res.contact = contacts.res;
+  res.moments = contacts.moments(Number(q.get('moments') ?? 6));
   res.plans = crew.men.filter((m) => Object.keys(m.plans).length).map((m) => m.role + ' ' + Object.entries(m.plans).map(([t, P]) => t + '[' + Array.from({ length: P.poly.n }, (_, i) => P.poly.x[i].toFixed(1) + ',' + P.poly.z[i].toFixed(1)).join(' ') + '] step' + (P.poly.step ?? 0).toFixed(1)).join(' '));
   return res;
 }
@@ -661,6 +713,13 @@ async function main() {
   for (const [k, v] of Object.entries(out.results)) for (const [s, r] of Object.entries(v)) {
     const f = (o) => Object.fromEntries(Object.entries(o).map(([a, b]) => [a, +b.toFixed(3)]));
     out.brief[`${k}/${s}`] = { max: +r.max.toFixed(3), byRole: f(r.byRole), byTarget: f(r.byTarget), homes: r.homes, plans: r.plans, motion: Object.fromEntries(Object.entries(r.motion).map(([role, M]) => [role, `v${M.maxV.toFixed(1)} run${M.run.toFixed(1)}s jump${M.jumps} tp${M.teleports} snap${M.snaps} flick${M.flicker} slide${M.slide.toFixed(2)}m hand${M.handMax.toFixed(2)}/${M.handMiss}${M.handWorst && M.handMax > 0.15 ? ` [${M.handWorst}]` : ''} body${M.inBody} elbow${M.elbowIn} drop${M.drop ?? 0}`])),
+      contact: {
+        grip: Object.fromEntries(Object.entries(r.contact.grip).sort((a, b) => b[1].big - a[1].big || b[1].t - a[1].t).map(([w, R]) => [w, `${R.t.toFixed(1)}s (${R.big.toFixed(1)}s > 15 cm) worst ${R.worst.toFixed(2)} ${R.at}`])),
+        props: Object.fromEntries(Object.entries(r.contact.props).map(([w, R]) => [w, `shown ${R.shown.toFixed(1)}s float ${(R.t ?? 0).toFixed(1)}s${R.t ? ` (${R.big.toFixed(1)}s > 15 cm) worst ${R.worst.toFixed(2)} ${R.at}` : ''} held by ${Object.keys(R.by).join(',') || '-'}`])),
+        ...Object.fromEntries([['hit', 'm', 0.08, 2], ['self', 'm', 0.08, 2], ['joint', '°', 20, 0]].map(([cls, u, big, dp]) => [cls,
+          Object.fromEntries(Object.entries(r.contact[cls] ?? {}).sort((a, b) => b[1].big - a[1].big || b[1].t - a[1].t).map(([w, R]) => [w, `${R.t.toFixed(1)}s (${R.big.toFixed(1)}s > ${big}${u === 'm' ? ' m' : u}) worst ${R.worst.toFixed(dp)}${u} ${R.at} | ${R.what}`]))])),
+        moments: r.moments.map((m) => `t${m.t}:${m.pt.join(':')}${m.cls === 'joint' || m.cls === 'self' ? ':1.5' : ''} ${m.gap.toFixed(m.cls === 'joint' ? 0 : 2)}${m.cls === 'joint' ? '°' : ''} ${m.what} @${m.step} k=${m.k}`),
+      },
       motionEvents: Object.fromEntries(Object.entries(r.motion).filter(([, M]) => M.worst.length).map(([role, M]) => [role, M.worst.slice(0, Number(q.get('ev') ?? 8))])),
       slides: Object.fromEntries(Object.entries(r.motion).map(([role, M]) => [role, Object.entries(M.slideBy ?? {}).filter(([, v]) => v > 0.15).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(', ')]).filter(([, v]) => v)),
       top: r.worst.sort((a, b) => b.pen - a.pen).slice(0, Number(q.get('top') ?? 10)).map((w) => `${w.pen} ${w.role} ${w.part} vs ${w.vs} @${w.step} t=${w.t} k=${w.k} at ${w.at}${w.with ? ' with ' + w.with : ''}${w.pt ? ' pt ' + w.pt : ''}${w.own ? ' own ' + w.own : ''}`) };

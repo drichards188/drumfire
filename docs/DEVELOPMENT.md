@@ -87,6 +87,16 @@ Page-local viewers (dev server only):
 - **The 1918 British targets and aircraft** in `src/models/t/ww1/`: `preview.html`, `aircraft_preview.html`.
 - **Clearance checks:** `/src/render/clipcheck.html`, `/src/render/crewcheck.html`, `gamma_clip.html` and `paris_clip.html` (in `src/models/v/de/`), and `/src/models/v/crew_motion.html`.
 - **Crew drills:** `node tools/crewaudit.mjs lefh18,k18 --scn 0,1` runs `crewcheck.html` headless (any kind with a crew): clearance plus a motion audit per man (top speed, pace jumps, teleports, heading snaps, pose flicker, sliding feet, hands short of their grips); `--shots shell@0.5,ram@0.4 --cams "30,24,6" --out shots/x.png` saves a contact sheet.
+- **Crew contacts:** the same run also checks what each hand and prop touches (`src/render/crewcontact.js`), which the motion audit cannot see because it measures a hand against the point the drill sent it to, never against the gun.
+  - **Hands on nothing:** a hand meant to hold something (an IK grip, or a pose that holds a load, a staff, a rope or a handwheel) with no steel, prop or other man within a fist of it.
+  - **Floating props:** a shell, cartridge, staff, rope, cart or sling that no hand, steel, ground, body or borne prop bears. A prop is what the crew code adds to the rig, plus what a model names `shell-` (its own drill props, which are not steel); an instanced mesh is measured instance by instance, in the props and in the steel.
+  - **Bodies** (`src/render/crewbody.js`): a man must move as if he had bones and a body.
+    - **Joints past their range:** an elbow or knee bent backwards or folded flat, a shoulder reaching behind the back, across it or twisted round (the forearm pointing where no forearm can), a wrist, hip, ankle, spine or neck beyond its range, in degrees past the limit. The limits are the clinical ranges, a little generous; every library pose passes them except the lanyard pose's right arm.
+    - **Limbs through his own body:** a forearm or hand through his chest or head, the arms or the legs through each other.
+    - **Into other men, the steel or the pit:** every part, the arms and hands too (the older clearance lines leave them out); a hand counts in the steel only when the whole fist is inside it. The carried shell into the steel counts here too.
+  - **Reading it:** seconds and worst per thing, with the part anyone sees at a glance counted apart: a gap over 15 cm, an overlap over 8 cm, a joint 20 degrees past its limit; `--brief` leaves out the older lines.
+  - **Pictures:** `--auto 10` draws each gun's ten worst moments, taken in turn from each kind of fault, from two sides, each ringed in red, into `shots/crewaudit-<kind>.png` (joints and limbs through the man's own body from 1.5 m, the rest from 2.6 m); a shot `t<seconds>:<x>:<y>:<z>[:<dist>]` looks at a given point.
+  - **Baseline:** `node tools/crewaudit.mjs <every German kind> --scn 0 --json` takes about two minutes for all 27 drills.
 
 ## Reference method
 
