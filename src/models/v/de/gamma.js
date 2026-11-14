@@ -345,6 +345,10 @@ export function buildGamma() {
     W.add('steel', box(1.14, 0.86, 0.3, -0.6, 0, 0));
     W.add('camo', box(0.06, 0.86, 0.3, 0.0, 0, 0));
     W.add('iron', box(0.1, 0.12, 0.2, 0.06, 0.32, 0));
+    // the firing lock on the bore (the wedge's middle is 0.6 m left of the pivot): it fills the loading hole while the
+    // breech is shut, so the shut breech does not read as an open one from the side
+    W.add('dark', zTube(0.15, 0.21, 0.11, 0.1, 18, -0.6, 0));
+    W.add('steel', zTube(0.21, 0.235, 0.06, 0.05, 14, -0.6, 0));
     W.build(brk, { y0: TRY });
     brk.position.set(0.6, 0, 1.34);
   }

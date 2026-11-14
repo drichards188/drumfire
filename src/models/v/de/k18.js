@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, rivets, rivetRow, rivetPoly, handwheel, DEG } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
 
 /**
  * The Mörserlafette (Krupp, 1939) in firing order, carrying either barrel (refs/k18_mrs18/README.md):
@@ -37,14 +37,14 @@ const K18 = {
   // [distance from the muzzle, radius]: thin plain muzzle (172.5 mm bore, about 0.28 m over the face), a long tapered
   // chase, the jacket's shoulder with a raised lip 3.6 m back, the jacket to the breech ring
   prof: [[0, 0.124], [0.025, 0.139], [3.55, 0.165], [3.55, 0.198], [3.62, 0.198], [3.66, 0.19], [8.01, 0.222]],
-  ring: { len: 0.52, w: 0.5, h: 0.5 }, recoil: 1.1,
+  ring: { len: 0.52, w: 0.5, h: 0.5, cr: 0.045, rw: 0.12 }, ro: 0.118, recoil: 1.1, // ro: the loading opening's radius
 };
 const MRS18 = {
   kind: 'mrs18', L: 6.51, bore: 0.1055,
   // thick plain muzzle (211 mm bore, about 0.36 m over the face), the collar at the step 2.4 m back (the barrel on its
   // wagon, Moscow 1942: 0.35 m over the chase, 0.47 m over the jacket), a fat jacket
   prof: [[0, 0.158], [0.035, 0.177], [2.35, 0.185], [2.35, 0.228], [2.48, 0.228], [2.52, 0.216], [5.91, 0.24]],
-  ring: { len: 0.6, w: 0.64, h: 0.62 }, recoil: 1.0,
+  ring: { len: 0.6, w: 0.64, h: 0.62, cr: 0.055, rw: 0.14 }, ro: 0.142, recoil: 1.0,
 };
 const TRY = 2.2, TRZ = 0.05; // trunnion axis (the bore at zero elevation), above the platform's centre
 const BR = 1.75; // the breech face behind the trunnions (the same for both barrels: the ring clears the platform at 70)
@@ -299,23 +299,15 @@ function build(G, { scheme = 'dgelb' } = {}) {
   B.add('camo', zLathe(pts, 40));
   B.add('dark', zLathe([[MZ + 0.6, G.bore], [MZ, G.bore]], 20)); // the bore seen from the muzzle (listed backwards: faces in)
   B.add('char', new THREE.CircleGeometry(G.bore, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.6));
-  B.add('dark', zLathe([[ring0 + 0.01, ch], [ring0 - 0.9, ch]], 20)); // the chamber, open behind the block
-  B.add('char', new THREE.CircleGeometry(ch, 20).translate(0, 0, ring0 - 0.9));
   const rj = G.prof[G.prof.length - 1][1];
   B.add('camo', zRing(rj - 0.01, rj + 0.022, ring0 - 0.18, ring0 - 0.02, 32)); // the band the barrel's guides are fixed to
-  const { len: rl, w: rw, h: rh } = G.ring, rz = ring0 + rl / 2, fw = 0.14;
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, rh * 0.39, rz));
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, -rh * 0.39, rz));
-  B.add('camo', box(rw * 0.22, rh * 0.56, rl, -rw * 0.39, 0, rz));
-  { // the ring's front wall in the block's slot, pierced for the chamber
-    const x0 = -rw * 0.28, x1 = rw * 0.5, y0 = rh * 0.28, f = new THREE.Shape();
-    f.moveTo(x0, -y0); f.lineTo(x1, -y0); f.lineTo(x1, y0); f.lineTo(x0, y0); f.lineTo(x0, -y0);
-    const hole = new THREE.Path();
-    hole.absarc(0, 0, ch, 0, TAU, true);
-    f.holes.push(hole);
-    B.add('camo', new THREE.ExtrudeGeometry(f, { depth: fw, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, ring0));
-    B.add('dark', zLathe([[ring0 + fw, ch], [ring0, ch]], 20));
-  }
+  // the breech ring, square with well rounded edges (castRing): the front part round the chamber, the block's slot,
+  // the rear wall with the loading opening open to the left; the opening takes the cartridge case's rim
+  const { len: rl, w: rw, h: rh, cr, rw: RW } = G.ring, rz = ring0 + rl / 2, fw = 0.14;
+  const SL = { sx0: -rw * 0.28, x1: rw / 2, sy: rh * 0.28, zf: ring0 + fw, zs: BR - RW }, ro = G.ro;
+  castRing(B, { top: [[-rw / 2, rh / 2, cr], [rw / 2, rh / 2, cr]], bot: [[rw / 2, -rh / 2, cr], [-rw / 2, -rh / 2, cr]], ...SL, ro, ch, z0: ring0, z1: BR, b: cr, deep: 0.9 });
+  // the ledge under the opening the loading tray hooks onto, level with the opening's floor (Obsluga, Fort Sill)
+  B.add('camo', rbox(ro * 2.4, 0.07, 0.07, 0.015, 0, -ro - 0.035, BR + 0.02));
   B.add('camo', box(0.16, CYL.y + 0.07 - rh * 0.5, 0.22, 0, (CYL.y + 0.07 + rh * 0.5) / 2, ring0 + 0.11));
   B.add('steel', zTube(CYL.z1 - G.recoil - 0.15, ring0, 0.045, 0.045, 10, 0, CYL.y));
   B.add('dark', zTube(ring0 - 0.05, ring0, 0.07, 0.07, 6, 0, CYL.y));
@@ -325,11 +317,14 @@ function build(G, { scheme = 'dgelb' } = {}) {
 
   const brk = pivotAt(rig, rc, 'breech', rw * 0.11, 0, ring0 + fw + (rl - fw) / 2);
   const K = rig.part();
-  K.add('camo', box(rw * 0.78 - 0.004, rh * 0.56 - 0.004, rl - fw - 0.004, 0, 0, 0));
-  K.add('dark', zTube((rl - fw) / 2 - 0.01, (rl - fw) / 2 + 0.03, 0.05, 0.045, 12, -rw * 0.11, 0)); // firing lock
-  K.add('dark', box(0.08, 0.1, 0.06, rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.02));
-  K.add('steel', rod(V(rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.05), V(rw * 0.42, rh * 0.06, (rl - fw) / 2 + 0.3), 0.018, 6)); // operating crank
-  K.add('dark', xTube(rw * 0.4, rw * 0.46, 0.03, 0.03, 8, rh * 0.06, (rl - fw) / 2 + 0.3));
+  // the block between the front part and the rear wall, its face and firing lock in the opening; the operating crank
+  // on its right end, the arm reaching back past the breech face to the handle
+  const px = rw * 0.11, pz = ring0 + fw + (rl - fw) / 2, kf = slotBlock(K, { ...SL, px, pz, lock: ro * 0.42 });
+  const xr = SL.x1 - px, ky = -SL.sy * 0.35, kz = kf - (SL.zs - SL.zf) / 2, hz = kf + RW + 0.13;
+  K.add('dark', xTube(xr - 0.005, xr + 0.03, 0.045, 0.045, 12, ky, kz));
+  K.add('steel', rod(V(xr + 0.02, ky, kz), V(xr + 0.025, SL.sy * 0.55, hz), 0.018, 6));
+  K.add('dark', zTube(hz - 0.02, hz + 0.09, 0.022, 0.022, 8, xr + 0.025, SL.sy * 0.55));
+  rig.anchors.blockGrip = node(brk, 'blockGrip', xr + 0.025, SL.sy * 0.55, hz + 0.035); // the handle (crews.js: the hands that work the block)
   K.build(brk, { dirt: 0 });
   slidingBlock(rig, brk, rw * 0.78);
   const block = rig.setBreech;
@@ -339,20 +334,21 @@ function build(G, { scheme = 'dgelb' } = {}) {
 
   // ---- the loading tray (Ladeschale): a loose steel trough the loaders hook onto the breech ring for the shell and
   // the cartridge and lift off again before the block shuts (Bundesarchiv 101I-118-0379-20: the round comes up on a
-  // carrier and is rammed from behind). Its lip lies on the floor of the open block's slot just inside the ring's rear
-  // face, a riser comes up the face to the trough, and the floor is at the shell's underside, so the round crews.js
+  // carrier and is rammed from behind). Its lip lies in the floor of the rear wall's loading opening and on the ledge
+  // under it, a riser comes up off the ledge to the trough, and the floor is at the shell's underside (the lip stays
+  // below it, the opening wider than the case's rim), so the round crews.js
   // lays on the bore's axis rests on it and slides straight in. It belongs to the barrel (pivot on the recoil pivot)
   // and hinges at the lip's front edge: hooked on it lies in line with the bore, coming on or off it tips rear end up
   // about the lip. It is on only while the gun stands at its loading elevation; off the gun it is not drawn (nobody is
   // drawn carrying it) and shrinks to a point at its lip, inside the ring, because the crew's clearance field and
   // crewcheck sample hidden meshes too.
   rig.loadEl = 0;
-  const sh = buildShell(G.kind), sr = sh.radius, yb = -rh * 0.28; // yb: the slot's floor (the ring's lower wall)
+  const sh = buildShell(G.kind), sr = sh.radius, yb = -ro; // yb: the opening's floor and the ledge's top
   const tp = pivotAt(rig, rc, 'loadTray', 0, yb, BR - 0.05);
   const R = rig.part(), tw = sr + 0.03, tl = sh.length * 0.8 + 0.1, fy = -sr - yb, z0 = 0.05, z1 = z0 + tl;
   R.add('camo', box(tw * 2, 0.014, tl, 0, fy - 0.007, z0 + tl / 2)); // the floor, its top at the shell's underside
-  R.add('dark', box(tw * 2 - 0.04, 0.012, z0 + 0.012, 0, 0.006, (z0 + 0.012) / 2)); // the lip on the slot's floor
-  R.add('dark', box(tw * 2 - 0.04, fy, 0.014, 0, fy / 2, z0 + 0.007)); // the riser up the ring's face
+  R.add('dark', box(tw * 2 - 0.04, 0.012, z0 + 0.012, 0, 0.006, (z0 + 0.012) / 2)); // the lip in the opening's floor
+  R.add('dark', box(tw * 2 - 0.04, fy, 0.014, 0, fy / 2, z0 + 0.007)); // the riser off the ledge
   for (const z of [z0 + tl * 0.35, z1 - 0.06]) R.add('dark', box(tw * 2 - 0.02, 0.03, 0.04, 0, fy - 0.029, z)); // ribs
   for (const s of [-1, 1]) {
     R.add('camo', box(0.014, 0.07, tl, s * tw, fy + 0.025, z0 + tl / 2, 0, 0, s * -0.35));
@@ -547,3 +543,4 @@ function aimStrut(q, outerLen) {
   q.outer.scale.set(1, Math.min(len * 0.95, outerLen), 1);
   q.inner.scale.set(1, len, 1);
 }
+

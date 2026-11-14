@@ -149,6 +149,85 @@ export function slidingBlock(rig, pivot, travel) {
   rig.setBreech(0);
 }
 
+// The rear wall of a German horizontal sliding breech ring, the part that makes the breech read as German from behind
+// (refs/fk16, sfh13, sfh18, k18_mrs18, k5 photos): a cast plate with the loading opening, round on the bore, through which
+// the block's face (its firing lock on the bore) shows when shut and the chamber when open; the block slides in the
+// ring's slot ahead of the plate and leaves it on the right. The opening runs out to the plate's left edge on the field
+// and medium guns (chan 'edge': a U lying on its side), as a short tongue on the K5 ('tongue', length `tl`, half
+// height `th`), or is a plain round hole ('hole'). The outline is a rounded rectangle [x0, x1] x [y0, y1] with corner
+// radius `cr`, or a disc of radius `R` when R > 0; the bore at (0, 0). The plate stands between z1 - t and z1 (z1 the
+// breech face), its edges rounded by `bevel` without growing past the outline.
+export function keyholePlate({ x0 = 0, x1 = 0, y0 = 0, y1 = 0, cr = 0, R = 0, r, chan = 'edge', tl = 0, th = 0, t, z1, bevel = 0.01 }) {
+  const s = new THREE.Shape();
+  if (R > 0 && chan === 'edge') {
+    // the round ring's rear part as a C (the 38 cm's, refs/max38/photos/17_Leugenboom_breech_ring.jpg): clockwise
+    // round the rim from the channel's top edge, in along its bottom edge, round the opening's end and out again
+    const a = Math.asin(Math.min(0.999, r / R)), xr = -R * Math.cos(a);
+    s.moveTo(xr, r);
+    s.absarc(0, 0, R, Math.PI - a, -Math.PI + a, true);
+    s.lineTo(0, -r);
+    s.absarc(0, 0, r, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(xr, r);
+    return extrudeBack(s, t, z1, bevel, 40);
+  }
+  if (R > 0) s.absarc(0, 0, R, 0, Math.PI * 2, false);
+  else if (chan === 'edge') {
+    // clockwise from the opening's top edge at the plate's left side, round the outline, in along the opening's bottom
+    // edge, round its end on the bore and out again
+    s.moveTo(x0, r);
+    s.lineTo(x0, y1 - cr); s.absarc(x0 + cr, y1 - cr, cr, Math.PI, Math.PI / 2, true);
+    s.lineTo(x1 - cr, y1); s.absarc(x1 - cr, y1 - cr, cr, Math.PI / 2, 0, true);
+    s.lineTo(x1, y0 + cr); s.absarc(x1 - cr, y0 + cr, cr, 0, -Math.PI / 2, true);
+    s.lineTo(x0 + cr, y0); s.absarc(x0 + cr, y0 + cr, cr, -Math.PI / 2, -Math.PI, true);
+    s.lineTo(x0, -r); s.lineTo(0, -r);
+    s.absarc(0, 0, r, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(x0, r);
+    return extrudeBack(s, t, z1, bevel);
+  } else {
+    s.moveTo(x0 + cr, y0);
+    s.lineTo(x1 - cr, y0); s.absarc(x1 - cr, y0 + cr, cr, -Math.PI / 2, 0, false);
+    s.lineTo(x1, y1 - cr); s.absarc(x1 - cr, y1 - cr, cr, 0, Math.PI / 2, false);
+    s.lineTo(x0 + cr, y1); s.absarc(x0 + cr, y1 - cr, cr, Math.PI / 2, Math.PI, false);
+    s.lineTo(x0, y0 + cr); s.absarc(x0 + cr, y0 + cr, cr, Math.PI, Math.PI * 1.5, false);
+  }
+  // the round opening, with its tongue to the left for 'tongue'
+  const h = new THREE.Path();
+  if (chan === 'tongue') {
+    const a = Math.asin(Math.min(0.999, th / r)), xe = -r * Math.cos(a), xt = xe - tl + th;
+    h.moveTo(xe, th);
+    h.lineTo(xt, th);
+    h.absarc(xt, 0, th, Math.PI / 2, Math.PI * 1.5, false);
+    h.lineTo(xe, -th);
+    h.absarc(0, 0, r, Math.PI + a, Math.PI * 3 - a, false);
+  } else h.absarc(0, 0, r, 0, Math.PI * 2, false);
+  s.holes.push(h);
+  return extrudeBack(s, t, z1, bevel, R > 0 ? 40 : 12);
+}
+
+// a shape extruded along z between z1 - t and z1, its edges rounded by `bevel` inside the outline (`seg` points per
+// curve: the big round rings of the railway guns want more than the field guns' corners)
+function extrudeBack(s, t, z1, bevel, seg = 12) {
+  const b = Math.min(bevel, t * 0.3);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 2, curveSegments: seg });
+  return g.translate(0, 0, z1 - t + b);
+}
+
+// The naval guns' round breech ring over the wedge's slot (refs/max38/photos/17_Leugenboom_breech_ring.jpg: the 38 cm
+// SK L/45's ring, one smooth round mass with the slot cut right through it, guide rails along the slot's edges): the
+// ring's top and bottom left standing above and below a slot of half height `h`, as two circular segments of radius
+// `R` from z0 to z1; the slot open on both sides, so the wedge shows through it.
+export function slotCaps(R, h, z0, z1, seg = 28) {
+  const out = [];
+  for (const sy of [1, -1]) {
+    const a = Math.asin(Math.min(0.999, h / R)), s = new THREE.Shape();
+    s.moveTo(R * Math.cos(a), sy * h);
+    s.absarc(0, 0, R, sy > 0 ? a : -a, sy > 0 ? Math.PI - a : -Math.PI + a, sy < 0);
+    s.lineTo(R * Math.cos(a), sy * h);
+    out.push(new THREE.ExtrudeGeometry(s, { depth: Math.abs(z1 - z0), bevelEnabled: false, curveSegments: seg }).translate(0, 0, Math.min(z0, z1)));
+  }
+  return out;
+}
+
 // A lathe-turned barrel from [z, r] stations (muzzle first) along the bore at y = 0.
 export const barrel = (pts, seg = 24) => zLathe(pts, seg);
 
@@ -173,4 +252,95 @@ export function setStrut(st, a, b, share = 0.62, outerLen = 0) {
   st.inner.position.copy(a);
   st.inner.quaternion.copy(st.outer.quaternion);
   st.inner.scale.set(1, len, 1);
+}
+
+// The top or bottom wall of a breech ring over the block's slot (shared by the K 17, sFH 13 and Mörser 16): the part
+// of the ring's cast outline o = { x0, x1, y0, y1, cr } (a rounded rectangle about the bore) between heights ya and
+// yb, from z0 to z1 with square ends; run into the bevelled front and rear walls by their bevel, it fills their
+// rounded edges there, so the casting shows no seam round the slot.
+export function ringBand(o, ya, yb, z0, z1) {
+  const pts = [], n = 6;
+  const cs = [[o.x1 - o.cr, o.y1 - o.cr], [o.x0 + o.cr, o.y1 - o.cr], [o.x0 + o.cr, o.y0 + o.cr], [o.x1 - o.cr, o.y0 + o.cr]];
+  cs.forEach(([cx, cy], q) => { for (let i = 0; i <= n; i++) { const a = (q + i / n) * Math.PI / 2; pts.push([cx + o.cr * Math.cos(a), cy + o.cr * Math.sin(a)]); } });
+  // clipped to ya <= y <= yb (Sutherland-Hodgman against the two lines)
+  const clip = (p, inside, yc) => {
+    const out = [];
+    p.forEach((a, i) => {
+      const b = p[(i + 1) % p.length], ia = inside(a[1]), ib = inside(b[1]);
+      if (ia) out.push(a);
+      if (ia !== ib) out.push([a[0] + (yc - a[1]) / (b[1] - a[1]) * (b[0] - a[0]), yc]);
+    });
+    return out;
+  };
+  const q = clip(clip(pts, (y) => y >= ya, ya), (y) => y <= yb, yb);
+  const g = new THREE.ExtrudeGeometry(new THREE.Shape(q.map(([x, y]) => new THREE.Vector2(x, y))), { depth: z1 - z0, bevelEnabled: false });
+  return g.translate(0, 0, z0);
+}
+
+// The cast breech ring of the Krupp horizontal sliding-block guns (the K 18, the Mörser 18, the K 38, the 35.5 cm
+// H M1 and the sFH 18 build theirs with it). One casting with generously rounded edges, the block's slot running across it and
+// open on the right, where the block leaves (refs/k18_mrs18 21cmM_rser18FortSillRear2005, Obsluga_uchenia_K18_breech
+// _drill; refs/sfh18 15_cm_sFH_18_howitzer_1, Borden_2): the front part is pierced for the chamber, the rear wall
+// carries the loading opening, round on the bore and running out through the ring's left side (a C seen from behind),
+// so the block's machined face shows through it while it is shut and the dark chamber once it is open.
+// The outline seen from behind (x right, y up, the bore at the origin): `top` its corners [x, y, fillet] from the
+// left side's top end to the right side's top end, `bot` from the right side's bottom end back to the left side's;
+// both sides upright and straight where the slot (half height `sy`, from `sx0` out through the right side) and the
+// opening (radius `ro`) cut them. Along the bore: `z0` the ring's front, `zf` and `zs` the slot's front and rear,
+// `z1` the breech face; `b` rounds the front and rear edges; `ch` the chamber's radius, `deep` how far it runs forward.
+export function castRing(P, { top, bot, sx0, sy, ro, ch, z0, zf, zs, z1, b = 0.02, deep = 0.5, mat = 'camo', opt }) {
+  // (an edge rounded deeper than a convex corner's fillet turns the inset outline inside out: keep it inside them)
+  const x0 = top[0][0], x1 = top[top.length - 1][0], bv = Math.min(b, 0.6 * Math.min(...[...top, ...bot].map((p) => p[2]))), fo = Math.max(0.012, bv * 1.8);
+  const disc = (r, n = 28) => Array.from({ length: n }, (_, i) => [r * Math.cos(i / n * TAU), r * Math.sin(i / n * TAU), 0]);
+  const half = Array.from({ length: 17 }, (_, i) => { const a = -Math.PI / 2 + Math.PI * i / 16; return [ro * Math.cos(a), ro * Math.sin(a), 0]; });
+  P.add(mat, castPlate([...top, ...bot], [disc(ch)], z0, zf, bv), opt); // the front part round the chamber mouth
+  // the top, left and bottom walls round the slot, run into the plates' rounded edges so no seam opens between them
+  P.add(mat, castPlate([...top, [x1, sy, 0.008], [sx0, sy, 0.006], [sx0, -sy, 0.006], [x1, -sy, 0.008], ...bot], [], zf - bv, zs + bv, 0), opt);
+  // the rear wall: clockwise round the outline from the opening's top edge at the left side, in along its bottom
+  // edge, round its end on the bore and out again
+  P.add(mat, castPlate([[x0, ro, fo], ...top, ...bot, [x0, -ro, fo], ...half], [], zs, z1, bv), opt);
+  // the dark chamber, seen from inside: just within the front part's hole, on the same corners, so none of the hole's
+  // lit wall shows between them
+  P.add('char', zTube(z0 - deep, zf, ch - 0.002, ch - 0.002, 28, 0, 0, true).scale(-1, 1, 1));
+  P.add('char', new THREE.CircleGeometry(ch, 28).translate(0, 0, z0 - deep));
+}
+
+// The sliding block in its slot (castRing's), on the breech pivot at (px, 0, pz): its machined rear face, bright
+// through the loading opening while it is shut, with the firing lock on the bore. Returns the face's z in the pivot.
+export function slotBlock(K, { sx0, x1, sy, zf, zs, px, pz, lock }) {
+  const w = x1 - sx0 - 0.004, d = zs - zf - 0.006, cx = (sx0 + x1) / 2 - px, cz = (zf + zs) / 2 - pz - 0.001, kf = cz + d / 2;
+  K.add('camo', box(w, sy * 2 - 0.004, d, cx, 0, cz));
+  K.add('steel', box(w - 0.012, sy * 2 - 0.016, 0.003, cx, 0, kf + 0.0015));
+  K.add('dark', zTube(kf - 0.004, kf + 0.016, lock, lock * 0.88, 14, -px, 0)); // the firing lock's housing
+  K.add('steel', zTube(kf + 0.016, kf + 0.02, lock * 0.45, lock * 0.4, 10, -px, 0));
+  K.add('char', new THREE.CircleGeometry(lock * 0.16, 8).translate(-px, 0, kf + 0.0205)); // the firing pin's hole
+  return kf;
+}
+
+// A flat outline [x, y, fillet] (its corners rounded by quadratic fillets) with polygon holes, extruded along z from
+// za to zb, the front and rear edges rounded by `bev` without growing past the outline.
+function castPlate(pts, holes, za, zb, bev) {
+  const s = filletShape(pts);
+  for (const h of holes) s.holes.push(filletShape(h, new THREE.Path()));
+  const t = zb - za, bb = Math.min(bev, t * 0.3);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * bb, bevelEnabled: bb > 0, bevelThickness: bb, bevelSize: bb, bevelOffset: -bb, bevelSegments: 2, curveSegments: 5 });
+  return g.translate(0, 0, za + bb);
+}
+function filletShape(pts, s = new THREE.Shape()) {
+  const n = pts.length, T = pts.map(([x, y, r], i) => {
+    const [ax, ay] = pts[(i + n - 1) % n], [bx, by] = pts[(i + 1) % n];
+    let ux = ax - x, uy = ay - y, vx = bx - x, vy = by - y;
+    const lu = Math.hypot(ux, uy), lv = Math.hypot(vx, vy);
+    ux /= lu; uy /= lu; vx /= lv; vy /= lv;
+    const h = Math.acos(Math.max(-1, Math.min(1, ux * vx + uy * vy))) / 2;
+    const d = r > 0 && h > 1e-3 ? Math.min(r / Math.tan(h), lu * 0.45, lv * 0.45) : 0;
+    return [x + ux * d, y + uy * d, x, y, x + vx * d, y + vy * d, d];
+  });
+  s.moveTo(T[0][4], T[0][5]);
+  for (let i = 1; i <= n; i++) {
+    const t = T[i % n];
+    s.lineTo(t[0], t[1]);
+    if (t[6] > 0) s.quadraticCurveTo(t[2], t[3], t[4], t[5]);
+  }
+  return s;
 }

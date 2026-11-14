@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
+import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, rivets, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, slotCaps } from './common.js';
 
 /**
  * 21 cm Mörser 99 (Krupp, about 1900), the old heavy mortar of the Fußartillerie, in its firing position as a 1916
@@ -39,7 +39,7 @@ const WR = 0.36, WX = 0.64; // the small iron wheels: radius, centre plane
 const AXY = PLAT + WR; // their axis at rest (z = 0)
 const TR = { y: 1.3, z: 0.22 }; // trunnion axis in root space
 const MZ = -1.02, BR = 1.09, RING0 = 0.66; // muzzle, breech face, front of the ring (along the bore from the trunnions)
-const RG = { w: 0.29, top: 0.29, bot: -0.29, slot: 0.15 }; // breech ring half width, top, bottom, the wedge's slot
+const RG = { R: 0.27, sh: 0.14, s0: 0.7, s1: 0.9, r: 0.125 }; // the breech end's radius, the wedge's slot (half height, z), the loading opening
 const CX = 0.4, CT = 0.035; // the cheeks' inner face, their thickness
 const TAILZ = 3.25; // where the tail stands on the planks
 const RL = 1.4, RISE = 0.3; // the run back and the rise up the ramps at full run back
@@ -95,24 +95,31 @@ export function buildM99({ scheme = 'bunt' } = {}) {
   barrelParts(B);
   B.build(el, { dirt: 0.15, y0: TR.y });
 
-  // ---- the wedge
-  const fz = RING0 + 0.13, bl = BR - fz, bz = (BR + fz) / 2, bw = RG.w * 2 - 0.12;
+  // ---- the wedge, in its slot ahead of the rear wall: its right end turned to the barrel's round, so it closes flush
+  // with the side; its machined face (the firing lock on the bore) shows through the loading opening while it is shut
+  const fz = RING0 + 0.13, bz = (BR + fz) / 2; // (the block's pivot where the old square ring had it)
   const br = pivotAt(rig, el, 'breech', 0, 0, bz);
   const K = rig.part();
-  K.add('camo', box(bw, RG.slot * 2 - 0.006, bl - 0.004, 0.06, 0, 0));
-  K.add('steel', zTube(bl / 2 - 0.002, bl / 2 + 0.025, 0.035, 0.035, 12, 0, 0)); // firing lock
-  K.add('dark', box(0.08, 0.08, 0.05, -0.1, 0.03, bl / 2 + 0.02));
-  K.add('steel', rod(V(-0.1, 0.05, bl / 2 + 0.04), V(-0.12, 0.28, bl / 2 + 0.08), 0.02, 6)); // the crank handle
-  K.add('steel', rod(V(-0.12, 0.28, bl / 2 + 0.08), V(-0.21, 0.31, bl / 2 + 0.14), 0.02, 6));
-  K.add('dark', sphere(0.03, -0.21, 0.31, bl / 2 + 0.14, 1.3, 1, 1, 8));
+  const kz0 = RG.s0 + 0.003 - bz, kz1 = RG.s1 - 0.003 - bz, kh = RG.sh - 0.004, kx0 = -0.23, ka = Math.asin(kh / RG.R), kx1 = RG.R * Math.cos(ka);
+  const ks = new THREE.Shape();
+  ks.moveTo(kx0, -kh); ks.lineTo(kx1, -kh); ks.absarc(0, 0, RG.R, -ka, ka, false); ks.lineTo(kx0, kh); ks.lineTo(kx0, -kh);
+  K.add('camo', cast(new THREE.ExtrudeGeometry(ks, { depth: kz1 - kz0, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, kz0)), { uv: true });
+  K.add('steel', box(0.32, kh * 2 - 0.02, 0.004, 0, 0, kz1 + 0.001), { tint: 0x9a9c94 });
+  K.add('dark', zTube(kz1 - 0.004, kz1 + 0.02, 0.04, 0.04, 12, 0, 0)); // the firing lock
+  K.add('char', new THREE.CircleGeometry(0.011, 8).translate(0, 0, kz1 + 0.0205));
+  // the crank's boss on the wedge's right end, its handle hanging down outside the barrel
+  const km = (kz0 + kz1) / 2;
+  K.add('dark', xTube(kx1 - 0.01, RG.R + 0.04, 0.05, 0.05, 12, 0, km));
+  K.add('steel', rod(V(RG.R + 0.03, 0, km), V(RG.R + 0.05, -0.2, km + 0.06), 0.02, 6));
+  K.add('dark', sphere(0.032, RG.R + 0.05, -0.21, km + 0.063, 1, 1.4, 1, 8));
   K.build(br, { dirt: 0 });
-  slidingBlock(rig, br, bw - 0.04);
+  slidingBlock(rig, br, 0.42); // (the old wedge's travel)
   const block = rig.setBreech;
   rig.setBreech = (k) => { block(k); rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25))); };
 
   // ---- the loading tray (Ladeschale) hooked onto the ring's slot while the round goes in (the Mörser 16's)
   rig.loadEl = 5 * DEG;
-  const sr = sh.radius, yb = -RG.slot;
+  const sr = sh.radius, yb = -0.15; // the tray's hook on the opening's lower edge
   const tp = pivotAt(rig, el, 'loadTray', 0, yb, BR - 0.05);
   const R = rig.part(), tw = sr + 0.03, tlen = sh.length * 0.85 + 0.12, fy = -sr - yb, z0 = 0.05;
   R.add('camo', box(tw * 2, 0.014, tlen, 0, fy - 0.007, z0 + tlen / 2));
@@ -399,13 +406,46 @@ function ironWheel(P, side) {
   P.add('steel', rod(V(side * 0.135, 0.07, 0), V(side * 0.135, -0.07, 0), 0.008, 5)); // the linch pin
 }
 
+// cast steel has no panel seams: the paint's metric box-projected UVs (as kit.js projectUV, but each triangle by its
+// own face, so a fillet's two halves of a quad agree) moved two thirds of a metre up, so the camouflage texture's plate
+// seams (one runs along the bore's line) fall off the breech
+function cast(g) {
+  g = g.index ? g.toNonIndexed() : g;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1).sub(a); c.fromBufferAttribute(p, i + 2).sub(a);
+    b.cross(c);
+    const nx = Math.abs(b.x), ny = Math.abs(b.y), nz = Math.abs(b.z), ax = nx >= ny && nx >= nz ? 0 : ny >= nz ? 1 : 2;
+    for (let k = 0; k < 3; k++) {
+      const x = p.getX(i + k), y = p.getY(i + k), z = p.getZ(i + k);
+      uv[(i + k) * 2] = (ax === 0 ? z : x) / 4;
+      uv[(i + k) * 2 + 1] = (ax === 1 ? z : y) / 4 + 1 / 6;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+// The breech end's rear wall: a disc of radius R between z1 - t and z1 with the round loading opening of radius r on the
+// bore, its edges rounded by `bevel` (common.js keyholePlate's 'hole' with R > 0, its round in finer steps so it meets
+// the barrel's round without a seam)
+function roundWall(R, r, t, z1, bevel, seg = 48) {
+  const s = new THREE.Shape().absarc(0, 0, R, Math.PI / 2, Math.PI * 2.5, false);
+  s.holes.push(new THREE.Path().absarc(0, 0, r, Math.PI / 2, Math.PI * 2.5, false));
+  const b = Math.min(bevel, t * 0.3);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 3, curveSegments: seg });
+  return g.translate(0, 0, z1 - t + b);
+}
+
 // ---------------------------------------------------------------- the barrel
 // One forging: the plain chase with a band at the muzzle, a short step to the jacket, the trunnion band with square
-// bolted plates either side (the photograph's), a lifting lug on top; the square breech ring with the wedge's slot
-// open to the right; the two toothed elevating arcs hung under it behind the trunnions on webs.
+// bolted plates either side (the photograph's), a lifting lug on top; the breech end with the wedge's slot cut across
+// it; the two toothed elevating arcs hung under it behind the trunnions on webs.
 function barrelParts(B) {
   const st = -0.36;
-  B.add('camo', zLathe([[MZ + 0.32, 0.1055], [MZ, 0.1055], [MZ, 0.185], [MZ + 0.015, 0.2], [MZ + 0.11, 0.2], [MZ + 0.13, 0.188], [st, 0.205], [st, 0.235], [st + 0.05, 0.25], [RING0 - 0.03, 0.262], [RING0, 0.27], [RING0, 0.116], [RING0 - 0.42, 0.116], [RING0 - 0.42, 0.0001]], 32));
+  B.add('camo', zLathe([[MZ + 0.32, 0.1055], [MZ, 0.1055], [MZ, 0.185], [MZ + 0.015, 0.2], [MZ + 0.11, 0.2], [MZ + 0.13, 0.188], [st, 0.205], [st, 0.235], [st + 0.05, 0.25], [RING0 - 0.03, 0.262], [RING0, RG.R], [RING0, 0.116], [RING0 - 0.42, 0.116], [RING0 - 0.42, 0.0001]], 40));
+  B.add('camo', cast(zLathe([[RING0, RG.R], [RG.s0, RG.R], [RG.s0, 0.116], [RING0, 0.116]], 40)), { uv: true }); // the breech end ahead of the slot
   B.add('char', new THREE.CircleGeometry(0.1055, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.32));
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TAU;
@@ -421,20 +461,35 @@ function barrelParts(B) {
   }
   B.add('camo', box(0.1, 0.08, 0.16, 0, 0.29, 0.05)); // the lifting lug
   B.add('dark', new THREE.TorusGeometry(0.05, 0.016, 5, 10).rotateY(Math.PI / 2).translate(0, 0.37, 0.05));
-  // the ring: front plate round the chamber's mouth, top and bottom, the left wall; the wedge's slot open right
-  const fz = RING0 + 0.13, ch = 0.122;
-  B.add('camo', rbox(RG.w * 2, RG.top - ch, 0.13, 0.04, 0, (RG.top + ch) / 2, RING0 + 0.065));
-  B.add('camo', rbox(RG.w * 2, -ch - RG.bot, 0.13, 0.04, 0, (RG.bot - ch) / 2, RING0 + 0.065));
-  for (const s of [-1, 1]) B.add('camo', box(RG.w - ch, ch * 2, 0.13, s * (RG.w + ch) / 2, 0, RING0 + 0.065));
-  B.add('camo', rbox(RG.w * 2, RG.top - RG.slot, BR - fz, 0.035, 0, (RG.top + RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', rbox(RG.w * 2, -RG.slot - RG.bot, BR - fz, 0.035, 0, (RG.bot - RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', box(0.12, RG.slot * 2, BR - fz, -RG.w + 0.06, 0, (BR + fz) / 2));
+  // the breech end: no separate ring ("ohne separates Bodenstück", de.wikipedia), the barrel's own round running on to a
+  // flat rear face with a rounded rim (refs/m99: 21cm_Mrs_M1898, 21-ger_Moerser, the Brussels barrel); the wedge's
+  // slot cut across it ahead of the rear wall, its left end under a plate with four bolts and the wedge's stop, its
+  // right end open; the rear wall with the large round loading opening ringed by a raised lip, a clamp either side
+  const { R, sh: SH, s0, s1, r: LO } = RG;
+  for (const g of slotCaps(R, SH, s0, s1 + 0.034, 40)) B.add('camo', cast(g), { uv: true }); // (into the rear wall's rounded front edge)
+  B.add('camo', cast(roundWall(R, LO, BR - s1, BR, 0.035)), { uv: true });
+  B.add('camo', cast(new THREE.TorusGeometry(LO + 0.016, 0.017, 8, 48).translate(0, 0, BR - 0.003)), { uv: true });
+  B.add('ash', zTube(s1, BR - 0.03, LO - 0.001, LO - 0.001, 40, 0, 0, true).scale(-1, 1, 1)); // the opening's bore, in shadow
+  B.add('char', zTube(RING0 - 0.42, s0, 0.114, 0.114, 20, 0, 0, true).scale(-1, 1, 1));
+  for (const s of [-1, 1]) B.add('ash', box(2 * Math.sqrt(R * R - SH * SH) - 0.01, 0.002, s1 - s0, 0, s * (SH - 0.002), (s0 + s1) / 2)); // the slot's floor and roof, in shadow
   B.add('char', new THREE.CircleGeometry(0.116, 20).translate(0, 0, RING0 - 0.419));
-  for (const yy of [-RG.slot, RG.slot]) B.add('dark', box(RG.w + 0.18, 0.01, 0.004, (RG.w - 0.18) / 2, yy, BR + 0.001));
-  B.add('dark', box(0.01, RG.slot * 2, 0.004, -0.18, 0, BR + 0.001));
-  // the lanyard's lever on the ring's top right
-  B.add('dark', box(0.06, 0.06, 0.06, 0.2, RG.top + 0.03, BR - 0.08));
-  B.add('steel', rod(V(0.2, RG.top + 0.05, BR - 0.08), V(0.24, RG.top + 0.2, BR - 0.02), 0.016, 6));
+  for (const s of [-1, 1]) {
+    B.add('dark', box(0.05, 0.075, 0.03, s * 0.2, 0.01, BR + 0.01));
+    B.add('steel', zTube(BR + 0.02, BR + 0.04, 0.014, 0.014, 6, s * 0.2, 0.01));
+  }
+  const pa = Math.asin(0.16 / R), pz0 = s0 - 0.03, pz1 = s1 + 0.02;
+  const ps = new THREE.Shape().absarc(0, 0, R + 0.03, Math.PI - pa, Math.PI + pa, false);
+  ps.absarc(0, 0, R - 0.02, Math.PI + pa, Math.PI - pa, true);
+  B.add('camo', new THREE.ExtrudeGeometry(ps, { depth: pz1 - pz0 - 0.016, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelOffset: -0.008, bevelSegments: 2, curveSegments: 8 }).translate(0, 0, pz0 + 0.008), { tint: 0xc4c2b8 });
+  const pb = [];
+  for (const a of [-0.7, 0.7]) for (const z of [pz0 + 0.04, pz1 - 0.04]) pb.push(V(-(R + 0.03) * Math.cos(a * pa), (R + 0.03) * Math.sin(a * pa), z));
+  pb.push(V(-(R + 0.03), 0, (pz0 + pz1) / 2 + 0.03));
+  B.add('dark', rivets(pb, V(-1, 0, 0), 0.022, 0.8));
+  B.add('dark', box(0.05, 0.04, 0.05, -(R + 0.04), 0.0, (pz0 + pz1) / 2 - 0.06)); // the wedge's stop
+  B.add('dark', box(0.03, 0.06, 0.03, -(R - 0.02) * Math.cos(pa), (R - 0.02) * Math.sin(pa) + 0.03, pz0 + 0.12)); // its lug on top
+  // the lanyard's lever on the top right
+  B.add('dark', box(0.06, 0.06, 0.06, 0.13, 0.24, BR - 0.08));
+  B.add('steel', rod(V(0.13, 0.26, BR - 0.08), V(0.17, 0.4, BR - 0.02), 0.016, 6));
   // the elevating arcs on their webs
   const web = [[ARC.r0 * Math.cos(ARC.a0), -ARC.r0 * Math.sin(ARC.a0) + 0.02], [ARC.r0 * Math.cos(80 * DEG), -ARC.r0 * Math.sin(80 * DEG) + 0.02],
     [ARC.r0 * Math.cos(ARC.a1), -ARC.r0 * Math.sin(ARC.a1) + 0.02], [-0.21, -0.2], [0.42, -0.2]];

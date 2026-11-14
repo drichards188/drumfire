@@ -3,6 +3,7 @@ import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, zLathe, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { createHeavyScrimTexture } from './heavy_gustav_site.js';
+import { keyholePlate, slotCaps } from './common.js';
 
 // 38 cm SK L/45 "Langer Max" on the Krupp Eisenbahn- und Bettungsschiessgeruest (E.u.B.), the railway carriage that
 // could fire from the track (to 18.5 degrees) or be set down on a prepared Bettung and fire to 55 (refs/max38). The
@@ -396,8 +397,10 @@ export function buildMax38() {
   const ra = (z) => 0.36 + 0.11 * Math.min(1, Math.max(0, (z - (MUZ + 0.6)) / (-2.8 - (MUZ + 0.6))));
   const bp = [[MUZ, 0.19], [MUZ, 0.37], [MUZ + 0.05, 0.395], [MUZ + 0.55, 0.395], [MUZ + 0.6, 0.36]];
   for (let i = 1; i <= 8; i++) { const z = MUZ + 0.6 + ((-2.8 - MUZ - 0.6) * i) / 8; bp.push([z, ra(z)]); }
-  // the breech ring: round ahead of the wedge's slot, a square housing round the slot, round again behind it
-  const S0 = BRE - 0.55, S1 = BRE - 0.06;
+  // the breech ring, one smooth round mass (refs/max38/photos/17_Leugenboom_breech_ring.jpg): the wedge's slot cut
+  // right through it, and behind the slot a thick rear part with the loading opening, round on the bore and running
+  // out through the rim to the left (a C seen from behind), its rear edge well rounded
+  const S0 = BRE - 0.75, S1 = BRE - 0.25, SH = 0.31; // the slot (z), its half height
   bp.push([-2.75, 0.52], [3.9, 0.56], [3.95, 0.6], [S0, 0.6], [S0, 0.19], [MUZ + 0.01, 0.19], [MUZ, 0.19]); // a hollow bore: the rounds go in
   // the barrel in plain dark grey, as in the 1918 photographs (the carriage carries the disruptive paint)
   const GT = { tint: 0x7d8276 };
@@ -415,15 +418,11 @@ export function buildMax38() {
     PR.add('camo', box(Math.max(0.16, Math.abs(x) + 0.16), 0.14, 0.16, x / 2, y * 0.75, CLIP));
     PR.add('steel', zTube(CLIP, -4.4, r * 0.32, r * 0.32, 8, x, y));
   }
-  // the housing round the wedge's slot (open on the right, where the wedge comes out), the ring's rear and its face
-  PR.add('iron', box(1.2, 0.18, S1 - S0, 0, 0.51, (S0 + S1) / 2), GT);
-  PR.add('iron', box(1.2, 0.18, S1 - S0, 0, -0.51, (S0 + S1) / 2), GT);
-  PR.add('iron', box(0.16, 0.84, S1 - S0, -0.52, 0, (S0 + S1) / 2), GT);
-  for (const y of [-0.42, 0.42]) PR.add('dark', box(0.02, 0.02, S1 - S0, 0.6, y, (S0 + S1) / 2));
-  PR.add('iron', zLathe([[S1, 0.19], [S1, 0.6], [BRE - 0.03, 0.6], [BRE, 0.57], [BRE, 0.19]], 36), GT);
-  PR.add('steel', zLathe([[BRE - 0.01, 0.21], [BRE - 0.01, 0.56], [BRE + 0.012, 0.56], [BRE + 0.012, 0.21], [BRE - 0.01, 0.21]], 36), { tint: 0xb0b0a8 }); // the bright face ring
-  PR.add('dark', zTube(S1, BRE + 0.002, 0.19, 0.19, 24, 0, 0, true));
-  PR.add('dark', rivets(Array.from({ length: 16 }, (_, i) => V(Math.cos(i / 16 * 6.283) * 0.5, Math.sin(i / 16 * 6.283) * 0.5, BRE + 0.012)), V(0, 0, 1), 0.026));
+  // the ring round over the slot, the slot's guide rails along its edges on both sides, the rear part
+  for (const g of slotCaps(0.6, SH, S0, S1, 36)) PR.add('iron', g, GT);
+  const RX = Math.sqrt(0.36 - SH * SH);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) PR.add('steel', box(0.05, 0.06, S1 - S0 - 0.06, sx * (RX + 0.01), sy * (SH + 0.02), (S0 + S1) / 2), { tint: 0x9a9c94 });
+  PR.add('iron', keyholePlate({ R: 0.6, r: 0.25, chan: 'edge', t: BRE - S1, z1: BRE, bevel: 0.07 }), GT);
   const CK = MAX38.CRANK;
   // the wedge's handwheel on top of the ring (a crank shaft to the rack in the housing); kept inside the ring's width
   // so the dipping breech stays clear of the rear wing's decks
@@ -431,11 +430,14 @@ export function buildMax38() {
   PR.add('steel', zTube(BRE - 0.1, CK.z, 0.035, 0.035, 8, CK.x, CK.y));
   PR.add('iron', handwheel(0.2, 5, 0.02, 0.045).rotateY(Math.PI / 2).translate(CK.x, CK.y, CK.z));
   PR.add('brass', box(0.12, 0.08, 0.06, -0.3, 0.42, BRE + 0.03)); // the firing lock's housing
-  // the wedge: a block sliding across the ring, its back face bright
-  PB.add('camo', box(0.86, 0.8, 0.42, 0, 0, 0));
-  PB.add('steel', box(0.84, 0.78, 0.02, 0, 0, 0.215));
-  PB.add('steel', box(0.08, 0.3, 0.1, 0.4, 0, 0.12));
-  PB.add('dark', rivets(Array.from({ length: 6 }, (_, i) => V(-0.3 + i * 0.12, 0.3, 0.226)), V(0, 0, 1), 0.02));
+  // the wedge: a block sliding across the ring in the slot ahead of the rear part, its back face bright (it shows
+  // through the loading opening while it is shut) with the latch on it
+  const WZ = (S0 + S1) / 2 - (BRE - 0.3), WD = S1 - S0 - 0.06; // its middle in the pivot's frame, its depth
+  PB.add('camo', box(0.86, SH * 2 - 0.02, WD, 0, 0, WZ));
+  PB.add('steel', box(0.84, SH * 2 - 0.04, 0.02, 0, 0, WZ + WD / 2 + 0.005));
+  PB.add('steel', box(0.08, 0.3, 0.1, 0.4, 0, WZ + WD / 2 - 0.09));
+  PB.add('dark', box(0.05, 0.09, 0.03, -0.12, 0, WZ + WD / 2 + 0.02)); // the latch
+  PB.add('dark', rivets(Array.from({ length: 6 }, (_, i) => V(-0.3 + i * 0.12, SH - 0.07, WZ + WD / 2 + 0.016)), V(0, 0, 1), 0.02));
 
   // ================================================================ the projectile car (trolley)
   {

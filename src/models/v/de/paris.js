@@ -3,6 +3,7 @@ import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, topProfile
 import { mulberry32 } from '../../../noise.js';
 import { newGunRig, anchor, crewSpot, addShellProp, finishGun, pivotAt, hb, trayMount } from '../../rig.js';
 import { clamp01 } from './heavy_common.js';
+import { keyholePlate, slotCaps } from './common.js';
 
 // Paris-Geschütz (Kaiser-Wilhelm-Geschütz, Krupp 1918), the "Paris Gun" (refs/paris: the side photograph IWM
 // Q 65801A, the model in the Wehrtechnische Studiensammlung Koblenz, the assembly photograph, Miller's shell drawing).
@@ -40,7 +41,7 @@ const BRE = 6.5, LEN = 34.0, MUZ = BRE - LEN; // breech face and muzzle along th
 const JF = BRE - 17.13; // the jacket's muzzle (the 38 cm SK L/45 tube)
 const TF = MUZ + 6.0; // the smoothbore extension's joint
 const CR0 = -3.6, CR1 = 3.0; // the cradle sleeve
-const RING = { w: 1.3, z0: 5.0 }; // the breech ring: square, from z0 to the face
+const RING = { w: 1.3, z0: 5.0 }; // the breech ring: round (w its diameter, for the recoil's clearance), from z0 to the face
 const PZ = -5.8, PH = 5.6; // the truss: the king post's station and its head above the bore
 const SZ = MUZ + 11.7, SH = 2.5, FCZ = MUZ + 6.9; // the strut and its head, the front clamp
 const AZ = 5.1, AY = 1.32; // where the rear stays end on the anchor block over the breech
@@ -280,15 +281,23 @@ export function buildParis() {
     PR.add('steel', zTube(CR0 - 0.6, CR0 + 0.02, 0.605, 0.605, 36), { tint: 0xa2a6aa }); // the slide ahead of the cradle
     PR.add('dark', zTube(MUZ - 0.002, MUZ + 1.2, 0.105, 0.105, 20, 0, 0, true)); // the bore, open head on
     PR.add('dark', new THREE.CircleGeometry(0.105, 20).rotateY(Math.PI).translate(0, 0, MUZ + 1.2));
-    // the breech ring: a square block with the sliding block's slot, the anchor block for the rear stays on top
-    const W = RING.w, L = BRE - RING.z0;
-    for (const y of [-0.45, 0.45]) PR.add('camo', rbox(W, 0.4, L, 0.05, 0, y, (BRE + RING.z0) / 2));
-    for (const x of [-0.5, 0.5]) PR.add('camo', box(0.3, 0.52, L - 0.65, x, 0, (BRE - 0.65 + RING.z0) / 2));
-    PR.add('camo', box(0.2, 0.52, 0.65, -0.55, 0, BRE - 0.325)); // the slot's closed end (left)
-    PR.add('dark', new THREE.CircleGeometry(0.24, 20).translate(0, 0, RING.z0 + 0.005)); // the chamber, seen with the block open
+    // the breech ring, the 38 cm SK L/45's own (the Paris Gun kept the jacket's breech; its ring survives at Leugenboom,
+    // refs/max38/photos/17_Leugenboom_breech_ring.jpg, built as the Langer Max's in max38.js): one smooth round mass, the
+    // sliding block's slot cut right through it with guide rails along its edges, behind the slot a thick rear part with
+    // the loading opening, round on the bore and running out through the rim to the left (a C seen from behind), its
+    // rear edge well rounded; ahead of the slot the chamber, dark. The anchor block for the rear stays on a saddle on top
+    const RGR = 0.66, SL0 = BRE - 0.82, SL1 = BRE - 0.3, SLH = 0.34; // the ring's radius, the slot (z), its half height
+    PR.add('camo', zLathe([[RING.z0, 0.24], [RING.z0, 0.62], [RING.z0 + 0.06, RGR], [SL0, RGR], [SL0, 0.24], [RING.z0, 0.24]], 40));
+    for (const g of slotCaps(RGR, SLH, SL0, SL1, 40)) PR.add('camo', g);
+    const RGX = Math.sqrt(RGR * RGR - SLH * SLH);
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) PR.add('steel', box(0.05, 0.06, SL1 - SL0 - 0.06, sx * (RGX + 0.01), sy * (SLH + 0.02), (SL0 + SL1) / 2), { tint: 0x9a9c94 });
+    PR.add('camo', keyholePlate({ R: RGR, r: 0.25, chan: 'edge', t: BRE - SL1, z1: BRE, bevel: 0.075 }));
+    PR.add('dark', zTube(RING.z0, SL0 + 0.002, 0.238, 0.238, 24, 0, 0, true).scale(-1, 1, 1)); // the chamber (inside out: its faces look in)
+    PR.add('dark', new THREE.CircleGeometry(0.24, 24).translate(0, 0, RING.z0 + 0.005));
+    PR.add('camo', box(0.7, 0.22, 1.4, 0, 0.6, AZ + 0.55)); // the saddle
     PR.add('camo', rbox(0.8, 0.62, 1.5, 0.05, 0, 0.95, AZ + 0.55));
     for (const x of [-0.16, 0.16]) PR.add('dark', box(0.05, 0.24, 0.3, x, AY + 0.03, AZ + 0.05)); // eye plates
-    PR.add('white', box(0.02, 0.3, 0.6, -W / 2 - 0.01, 0.15, RING.z0 + 0.6), { tint: 0xc8c4b4 }); // the data plate
+    PR.add('white', box(0.02, 0.3, 0.5, -0.645, 0.15, RING.z0 + 0.38), { tint: 0xc8c4b4 }); // the data plate, on the ring's front part
     // clamp collars on the barrel for the truss: at the post, the strut and the front stays
     const collar = (z, r, l) => { PR.add('camo', zTube(z - l / 2, z + l / 2, r, r, 24)); for (const e of [-1, 1]) PR.add('dark', box(0.1, 0.12, l * 0.8, e * (r + 0.04), 0, z)); };
     const rAt = (z) => { for (let i = 0; i < p.length - 1; i++) { const [z0, r0] = p[i], [z1, r1] = p[i + 1]; if (z >= z0 && z <= z1 && z1 > z0) return r0 + ((r1 - r0) * (z - z0)) / (z1 - z0); } return 0.5; };
@@ -322,14 +331,21 @@ export function buildParis() {
       }
     }
   }
-  // the sliding block: a slab through the slot (its right end at the pivot), its operating screw and crank
+  // the sliding block: a slab through the ring's slot ahead of the rear part (its right end at the pivot), its back
+  // face machined bright with the firing lock on the bore (it shows through the loading opening while the block is
+  // shut), its operating screw and crank on the right end (pivot frame: the face WF 3.5 cm ahead of the rear part)
   const PBR = mk();
-  PBR.add('steel', rbox(0.96, 0.46, 0.56, 0.04, -0.5, 0, 0), { tint: 0xc8c8c0 });
-  PBR.add('camo', box(0.12, 0.4, 0.46, 0.04, 0, 0));
-  PBR.add('steel', xTube(0.1, 0.24, 0.04, 0.04, 8, 0.1, 0.05));
-  PBR.add('iron', handwheel(0.14, 5, 0.016, 0.03, 0).translate(0.24, 0.1, 0.05)); // (kept inside the girders' faces)
-  PBR.add('brass', zTube(0.28, 0.34, 0.045, 0.045, 10, -0.5, 0)); // the firing lock
-  PBR.add('dark', new THREE.TorusGeometry(0.045, 0.01, 6, 12).translate(-0.5, -0.1, 0.36));
+  {
+    const BZ = BRE - 0.32, WF = BRE - 0.335 - BZ, WD = WF - (BRE - 0.8 - BZ), WZ = WF - WD / 2;
+    PBR.add('camo', rbox(0.96, 0.64, WD, 0.03, -0.5, 0, WZ));
+    PBR.add('steel', box(0.92, 0.6, 0.012, -0.5, 0, WF + 0.006), { tint: 0xc8c8c0 });
+    PBR.add('camo', box(0.12, 0.56, WD - 0.06, 0.04, 0, WZ));
+    PBR.add('steel', xTube(0.1, 0.24, 0.04, 0.04, 8, 0.1, WZ));
+    PBR.add('iron', handwheel(0.14, 5, 0.016, 0.03, 0).translate(0.24, 0.1, WZ)); // (kept inside the girders' faces)
+    PBR.add('brass', zTube(WF + 0.012, WF + 0.03, 0.045, 0.045, 10, -BX, 0)); // the firing lock
+    PBR.add('dark', new THREE.TorusGeometry(0.03, 0.008, 6, 12).translate(-BX, -0.08, WF + 0.022));
+    PBR.add('dark', box(0.05, 0.1, 0.016, -BX - 0.15, 0, WF + 0.02)); // the latch
+  }
   // the loading tray: a trough on two runners, legs that stand on the platform
   const PTR = mk();
   {

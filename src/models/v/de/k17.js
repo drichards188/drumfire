@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivets, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, addHandwheel, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, panoramicSight } from './common.js';
+import { slidingBlock, barrel, panoramicSight, keyholePlate, ringBand } from './common.js';
 
 /**
  * 10 cm Kanone 17 (Krupp, 1917): the long L/45 barrel of the K 17 on the carriage of the K 14 (refs/k17: the
@@ -32,7 +32,7 @@ const TR = { y: 1.48, z: 0.35 }; // trunnion axis in root space (the bore at 0 d
 const BR = 0.62, RING0 = 0.24; // breech face and front of the breech ring along the bore from the trunnion
 const MZ = BR - 4.725; // muzzle face: L/45
 const STEP = -2.15; // where the slim chase meets the jacket, at the cradle's nose
-const RG = { w: 0.38, top: 0.18, bot: -0.24 }; // the breech ring: deeper below the bore than above
+const RG = { w: 0.38, top: 0.2, bot: -0.22 }; // the breech ring, its bore a little above the middle (Niagara Falls 4, 5)
 const CR = { top: -0.155, bot: -0.46, w: 0.32, z0: -2.45, z1: 0.2 }; // the cradle box under the barrel
 const SZ = -0.25; // front face of the shield (root z)
 const TOP = 3 * DEG; // the top carriage's own traverse each way (de.wikipedia: 3 degrees right and left)
@@ -192,42 +192,61 @@ export function buildK17({ scheme = 'bunt' } = {}) {
   B.add('char', new THREE.CircleGeometry(0.053, 16).rotateY(Math.PI).translate(0, 0, MZ + 0.3));
   // the slides under the jacket that ride the cradle's ways
   for (const z of [STEP + 0.2, RING0 - 0.3]) B.add('dark', box(0.2, 0.03, 0.16, 0, -0.138, z));
-  // breech ring: the front round the chamber, top, bottom and left walls round the block's slot (open right)
-  const sl = BR - RING0 - 0.12, rz = (RING0 + 0.12 + BR) / 2, hw = RG.w / 2;
-  const disc = [];
-  for (let i = 0; i < 16; i++) disc.push([0.0575 * Math.cos(-i / 16 * TAU), 0.0575 * Math.sin(-i / 16 * TAU)]);
-  B.add('camo', plate([[-hw, RG.bot], [hw, RG.bot], [hw, RG.top], [-hw, RG.top]], [disc], RING0, RING0 + 0.12));
-  B.add('camo', rbox(RG.w, 0.08, sl, 0.012, 0, RG.top - 0.04, rz));
-  B.add('camo', rbox(RG.w, 0.08, sl, 0.012, 0, RG.bot + 0.04, rz));
-  B.add('camo', box(0.07, RG.top - RG.bot - 0.16, sl, -hw + 0.035, (RG.top + RG.bot) / 2, rz));
-  B.add('char', zTube(RING0 - 0.5, RING0 + 0.12, 0.0525, 0.0575, 16, 0, 0, true).scale(-1, 1, 1));
+  // the breech ring, a tall casting with well rounded corners and edges (refs/k17 Niagara Falls 4 to 6, Canon de 105
+  // mm): the front round the chamber, top and bottom walls over the block's slot, which runs right through the ring
+  // (on the left face it shows as the deep recess at the bore's height where the block's left end sits, Niagara Falls
+  // 6; on the right the block's end is flush), and the thick rear wall with the loading opening, round on the bore
+  // and open to the ring's left edge (a C seen from behind)
+  const rz = (RING0 + 0.12 + BR) / 2, RF = 0.1, RW = 0.1, LR = 0.068; // the breech pivot; front and rear wall; opening
+  const S0 = RING0 + RF, S1 = BR - RW, SY = 0.09; // the slot (z), its half height
+  const OL = { x0: -RG.w / 2, x1: RG.w / 2, y0: RG.bot, y1: RG.top, cr: 0.05 }, rb = 0.03;
+  B.add('camo', keyholePlate({ ...OL, r: 0.0575, chan: 'hole', t: RF, z1: S0, bevel: rb }));
+  B.add('camo', ringBand(OL, SY, RG.top, S0 - rb, S1 + rb));
+  B.add('camo', ringBand(OL, RG.bot, -SY, S0 - rb, S1 + rb));
+  B.add('camo', keyholePlate({ ...OL, r: LR, t: RW, z1: BR, bevel: rb }));
+  B.add('char', zTube(RING0 - 0.5, S0 + 0.001, 0.0515, 0.0515, 16, 0, 0, true).scale(-1, 1, 1)); // the dark chamber, seen from inside
   B.add('char', new THREE.CircleGeometry(0.0525, 16).translate(0, 0, RING0 - 0.5));
-  // the U recess for the block handle on the left face (Niagara Falls, Koblenz rear views)
-  B.add('dark', box(0.004, 0.09, 0.2, -hw - 0.002, 0.0, rz + 0.02));
-  B.add('camo', rivets([V(-hw - 0.001, RG.top - 0.04, RING0 + 0.05), V(-hw - 0.001, RG.bot + 0.04, RING0 + 0.05), V(-hw - 0.001, RG.top - 0.04, BR - 0.05), V(-hw - 0.001, RG.bot + 0.04, BR - 0.05)], V(-1, 0, 0), 0.012));
   // the lug for the recoil rod under the ring, the rod into the cradle (long enough to stay in at full recoil)
   B.add('camo', box(0.1, 0.12, 0.1, 0, -0.28, 0.27));
   B.add('steel', zTube(-1.4, 0.22, 0.03, 0.03, 8, 0, -0.3));
-  // the firing gear on the top right of the ring, the carrier's handle loop on the left
-  B.add('dark', box(0.06, 0.05, 0.12, 0.11, RG.top + 0.025, BR - 0.1));
-  B.add('steel', rod(V(0.12, RG.top + 0.045, BR - 0.06), V(0.16, RG.top + 0.1, BR + 0.03), 0.01, 5));
-  for (const y of [-0.03, 0.04]) {
-    B.add('dark', rod(V(-hw, y, rz - 0.08), V(-hw - 0.055, y, rz - 0.08), 0.01, 6));
-    B.add('dark', rod(V(-hw - 0.055, y, rz - 0.08), V(-hw - 0.055, y, rz + 0.12), 0.01, 6));
-    B.add('dark', rod(V(-hw - 0.055, y, rz + 0.12), V(-hw, y, rz + 0.12), 0.01, 6));
-  }
+  // on top: the maker's plate on the left, the firing gear's stud and its trip lever behind the middle (Canon de 105 mm)
+  B.add('dark', box(0.09, 0.004, 0.07, -0.09, RG.top + 0.002, (S0 + S1) / 2));
+  B.add('dark', yTube(RG.top, RG.top + 0.03, 0.018, 0.018, 10, 0.03, BR - 0.12));
+  B.add('steel', yTube(RG.top + 0.03, RG.top + 0.04, 0.026, 0.026, 10, 0.03, BR - 0.12));
+  B.add('dark', box(0.05, 0.03, 0.08, -0.04, RG.top + 0.012, BR - 0.07));
+  B.add('steel', rod(V(-0.04, RG.top + 0.025, BR - 0.04), V(-0.02, RG.top + 0.08, BR + 0.02), 0.009, 5));
   B.build(rc, { dirt: 0.15, y0: TR.y });
 
+  // the block between the ring's front and its rear wall, its machined face (the firing lock on the bore) bright in the
+  // loading opening while it is shut; its left end is cut with the half round loading groove that the open block
+  // brings onto the bore
+  const TRV = 0.2, kz = (S0 + S1) / 2 - rz, kd = S1 - S0 - 0.004, kf = kz + kd / 2; // travel; the block in the pivot's frame
   const br = pivotAt(rig, rc, 'breech', 0, 0, rz);
-  const K = rig.part();
-  const bw = RG.w - 0.07 - 0.004, bh = RG.top - RG.bot - 0.164;
-  K.add('camo', rbox(bw, bh, sl - 0.004, 0.008, 0.035, (RG.top + RG.bot) / 2, 0));
-  K.add('dark', zTube(sl / 2 - 0.004, sl / 2 + 0.014, 0.03, 0.03, 10, 0, 0)); // firing pin housing
-  K.add('char', new THREE.CircleGeometry(0.008, 8).translate(0, 0, sl / 2 + 0.0145));
-  K.add('dark', box(0.05, 0.05, 0.03, 0.14, -0.02, sl / 2 + 0.01)); // the crank's stud
-  K.add('steel', rod(V(0.14, -0.02, sl / 2 + 0.025), V(0.14, -0.13, sl / 2 + 0.06), 0.012, 6)); // the crank handle
+  const K = rig.part(), KO = { x0: -0.002, x1: RG.w / 2 + TRV, y0: -SY + 0.002, y1: SY - 0.002, cr: 0.01, r: LR };
+  K.add('camo', keyholePlate({ ...KO, t: kd, z1: kf, bevel: 0.006 }).translate(-TRV, 0, 0));
+  K.add('steel', keyholePlate({ ...KO, x1: KO.x1 - 0.005, t: 0.003, z1: kf + 0.002, bevel: 0 }).translate(-TRV, 0, 0));
+  // the firing lock: a round cap with a cross bar, sunk in a dark ring on the bore
+  K.add('dark', zTube(kf, kf + 0.004, 0.034, 0.034, 18, 0, 0));
+  K.add('steel', zTube(kf + 0.003, kf + 0.01, 0.028, 0.028, 18, 0, 0));
+  K.add('dark', box(0.038, 0.008, 0.004, 0, 0, kf + 0.011));
+  K.add('char', new THREE.CircleGeometry(0.006, 8).translate(0, 0, kf + 0.0135));
   K.build(br, { dirt: 0 });
-  slidingBlock(rig, br, 0.2);
+  slidingBlock(rig, br, TRV);
+
+  // the push crank (Schubkurbel) on top of the ring at the right: a flat arm turning on a boss at the rear corner, the
+  // handle standing up at its end; shut it lies forward along the ring's right edge (Niagara Falls 5), open it has swung
+  // out to the right over the block; it turns with the block
+  const lv = node(rc, 'blockCrank', 0.13, RG.top, BR - 0.06);
+  const LV = rig.part();
+  LV.add('dark', yTube(0, 0.03, 0.028, 0.028, 12, 0, 0));
+  LV.add('steel', box(0.22, 0.014, 0.034, 0.11, 0.024, 0));
+  LV.add('steel', box(0.024, 0.014, 0.024, 0.215, 0.024, 0));
+  LV.add('steel', yTube(0.024, 0.13, 0.012, 0.012, 8, 0.218, 0));
+  LV.add('dark', yTube(0.13, 0.148, 0.016, 0.013, 8, 0.218, 0));
+  LV.build(lv, { dirt: 0 });
+  const slide = rig.setBreech;
+  rig.setBreech = (k) => { slide(k); lv.rotation.y = (Math.PI / 2) * (1 - Math.min(1, Math.max(0, k))); };
+  rig.setBreech(0);
 
   // the top carriage turns on the axle within TOP; a bigger switch is made by shifting the trail with the handspike,
   // which brings the top carriage back to the middle of its arc (fully by 3 TOP), so the detachment's places by the

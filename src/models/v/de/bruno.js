@@ -3,6 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb, node } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { RH, GA, sagitta, trackX, trackYaw, curveBogie, ammoWagonParts, WAGON, arcPoints, straightBack, layTrack, siteMats, drapeNet, loadingGear, readyRack } from './railway_kit.js';
+import { keyholePlate, slotCaps } from './common.js';
 
 // 28 cm Kurze Bruno K (E) (Krupp, 1937): the first of the 1930s railway guns, a 28 cm naval gun (L/42, 11.9 m) in a
 // cradle on a box-girder car carried by two five-axle bogies, 22.8 m over buffers, 129 t in action (Hogg, German
@@ -363,7 +364,11 @@ export function buildBruno() {
   const ra = (z) => 0.29 + 0.13 * Math.min(1, Math.max(0, (z - (MUZ + 0.7)) / (CR0 - 0.4 - (MUZ + 0.7))));
   const bp = [[MUZ, 0.142], [MUZ, 0.29], [MUZ + 0.06, 0.31], [MUZ + 0.5, 0.31], [MUZ + 0.7, 0.29]];
   for (let i = 1; i <= 8; i++) { const z = MUZ + 0.7 + ((CR0 - 0.4 - MUZ - 0.7) * i) / 8; bp.push([z, ra(z)]); }
-  const S0 = BRE - 0.62, S1 = BRE - 0.06; // the wedge's slot
+  // the breech ring, the naval gun's (the 28 cm SK L/40 is of the 38 cm SK L/45's Krupp family, whose ring survives:
+  // refs/max38/photos/17_Leugenboom_breech_ring.jpg): one smooth round mass, the wedge's slot cut right through it with
+  // guide rails along its edges, and behind the slot a thick rear part with the loading opening, round on the bore and
+  // running out through the rim to the left (a C seen from behind), its rear edge well rounded; no bolts
+  const S0 = BRE - 0.62, S1 = BRE - 0.22, SH = 0.28, RB = 0.54; // the slot (z), its half height, the ring's radius
   bp.push([CR0 - 0.35, 0.47], [CR0 - 0.3, 0.5], [S0 - 0.3, 0.5], [S0 - 0.25, 0.54], [S0, 0.54], [S0, 0.142], [MUZ + 0.01, 0.142], [MUZ, 0.142]);
   PR.add('iron', zLathe(bp, 40));
   for (const z of [MUZ + 2.6, MUZ + 5.0]) PR.add('iron', zTube(z - 0.03, z + 0.03, ra(z) + 0.012, ra(z) + 0.012, 32));
@@ -371,14 +376,17 @@ export function buildBruno() {
   PR.add('dark', zTube(MUZ + 0.002, MUZ + 0.9, 0.14, 0.14, 24, 0, 0, true));
   PR.add('dark', zTube(MUZ + 0.9, MUZ + 0.92, 0.14, 0.14, 24));
   PR.add('steel', zTube(MUZ - 0.003, MUZ + 0.004, 0.18, 0.29, 32, 0, 0, false));
-  // the breech ring: a square block round the wedge's slot, open on the right where the wedge comes out
-  PR.add('iron', box(1.06, 0.18, S1 - S0, 0, 0.45, (S0 + S1) / 2));
-  PR.add('iron', box(1.06, 0.18, S1 - S0, 0, -0.45, (S0 + S1) / 2));
-  PR.add('iron', box(0.16, 0.72, S1 - S0, -0.45, 0, (S0 + S1) / 2));
-  PR.add('iron', zLathe([[S1, 0.142], [S1, 0.54], [BRE - 0.03, 0.54], [BRE, 0.51], [BRE, 0.142]], 36));
-  PR.add('steel', zLathe([[BRE - 0.01, 0.16], [BRE - 0.01, 0.5], [BRE + 0.012, 0.5], [BRE + 0.012, 0.16], [BRE - 0.01, 0.16]], 36), { tint: 0xb0b0a8 });
-  PR.add('dark', zTube(S1, BRE + 0.002, 0.142, 0.142, 24, 0, 0, true));
-  PR.add('dark', rivets(Array.from({ length: 14 }, (_, i) => V(Math.cos((i / 14) * 6.283) * 0.44, Math.sin((i / 14) * 6.283) * 0.44, BRE + 0.012)), V(0, 0, 1), 0.024));
+  for (const g of slotCaps(RB, SH, S0, S1, 36)) PR.add('iron', g);
+  const RX = Math.sqrt(RB * RB - SH * SH);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) PR.add('steel', box(0.045, 0.05, S1 - S0 - 0.05, sx * (RX + 0.01), sy * (SH + 0.018), (S0 + S1) / 2), { tint: 0x9a9c94 });
+  PR.add('iron', keyholePlate({ R: RB, r: 0.19, chan: 'edge', t: BRE - S1, z1: BRE, bevel: 0.065 }));
+  // the chamber, dark, seen through the opening with the wedge out (inside out: its faces look in)
+  PR.add('dark', zTube(S0 - 0.9, S0 + 0.002, 0.14, 0.14, 20, 0, 0, true).scale(-1, 1, 1));
+  // the bore ahead of it lined dark, just inside the bore's own face, to a dark end past the rammed shell's nose (the
+  // shell's base sits 1.25 m inside the breech face: a disc at the chamber's front stood across its path at the ram)
+  const BD = BRE - 1.25 - SHELL.len - 0.25;
+  PR.add('dark', zTube(BD, S0 - 0.9, 0.138, 0.138, 20, 0, 0, true).scale(-1, 1, 1));
+  PR.add('dark', new THREE.CircleGeometry(0.14, 20).translate(0, 0, BD));
   // the recoil rods' crosshead on the ring, into the cylinders
   for (const [x, y, r] of cyl) {
     PR.add('camo', box(Math.max(0.16, Math.abs(x) + 0.2), 0.16, 0.2, x / 2, y * 0.82, S0 - 0.45));
@@ -390,10 +398,18 @@ export function buildBruno() {
   PR.add('iron', handwheel(0.17, 5, 0.018, 0.04).rotateY(Math.PI / 2).translate(CK.x, CK.y, CK.z));
   PR.add('brass', box(0.12, 0.08, 0.06, BRUNO.LOCK.x, BRUNO.LOCK.y, BRE + 0.03));
   PR.build(rec, { dirt: 0.03, y0: TY });
+  // the wedge: a block sliding across the ring in the slot ahead of the rear part, its back face machined bright (it
+  // shows through the loading opening while it is shut) with the firing pin's boss on the bore and the latch beside it
   const PW = mk();
-  PW.add('camo', box(0.86, 0.72, 0.5, 0, 0, 0));
-  PW.add('steel', box(0.84, 0.7, 0.02, 0, 0, 0.255));
-  PW.add('steel', box(0.08, 0.26, 0.1, 0.4, 0, 0.12));
+  // (pivot frame: its face WF 3.5 cm ahead of the rear part, room for the fittings on it as it slides)
+  const BZ = BRE - 0.32, WF = S1 - 0.035 - BZ, WD = WF - (S0 + 0.02 - BZ);
+  PW.add('camo', box(0.86, SH * 2 - 0.02, WD, 0, 0, WF - WD / 2));
+  PW.add('steel', box(0.84, SH * 2 - 0.04, 0.012, 0, 0, WF + 0.006));
+  PW.add('dark', zTube(WF + 0.012, WF + 0.024, 0.05, 0.05, 14, 0, 0));
+  PW.add('steel', zTube(WF + 0.024, WF + 0.028, 0.018, 0.018, 8, 0, 0));
+  PW.add('dark', box(0.05, 0.09, 0.016, -0.13, 0, WF + 0.02)); // the latch
+  PW.add('steel', box(0.08, 0.26, 0.1, 0.4, 0, WF - 0.06)); // the rack's end, at the wedge's right end
+  PW.add('dark', rivets(Array.from({ length: 6 }, (_, i) => V(-0.3 + i * 0.12, SH - 0.07, WF + 0.012)), V(0, 0, 1), 0.016));
   PW.build(brc, { dirt: 0.03, y0: TY });
 
   // ================================================================ the loading trolley, the bridge, the crab and hook

@@ -390,6 +390,10 @@ function lanyardMan(crew, m, c, h) {
       _w.set(MAX38.LOCK.x, MAX38.LOCK.y, MAX38.LOCK.z);
       rig.pivots.recoil.localToWorld(_v.copy(_w)).applyMatrix4(_inv);
       m.hand('R', _v.x, _v.y, _v.z, work);
+      // the other hand steadies him on the ring's rear face, beside the lock and above the loading opening
+      _w.set(MAX38.LOCK.x - 0.13, MAX38.LOCK.y - 0.08, MAX38.BRE + 0.02);
+      rig.pivots.recoil.localToWorld(_v.copy(_w)).applyMatrix4(_inv);
+      m.hand('L', _v.x, _v.y, _v.z, work * 0.9);
     }
   }
   return true;

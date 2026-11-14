@@ -3,7 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivets, r
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, discWheel } from './common.js';
+import { slidingBlock, barrel, discWheel, keyholePlate } from './common.js';
 
 /**
  * 10.5 cm leichte Feldhaubitze 18 (M): the leFH 18 with the double-baffle muzzle brake of 1941, the version most
@@ -236,15 +236,17 @@ export function buildLeFH18({ scheme = 'dgelb', brake = true, wheels = 'wood' } 
     B.add('char', new THREE.CircleGeometry(0.056, 16).rotateY(Math.PI).translate(0, 0, b0 - 0.401));
     muzzle = b0 - 0.4;
   } else B.add('char', new THREE.CircleGeometry(0.052, 14).rotateY(Math.PI).translate(0, 0, MZ + 0.3));
-  // breech ring: top, bottom and left walls round the block's slot, the front round the chamber
-  const rl = BR - RING0, rz = (RING0 + 0.12 + BR) / 2, sl = BR - RING0 - 0.12;
-  const disc = [];
-  for (let i = 0; i < 16; i++) disc.push([0.064 * Math.cos(-i / 16 * TAU), 0.064 * Math.sin(-i / 16 * TAU)]);
-  B.add('camo', plate([[-0.14, -0.145], [0.14, -0.145], [0.14, 0.145], [-0.14, 0.145]], [disc], RING0, RING0 + 0.12)); // ring front round the chamber mouth
-  B.add('camo', rbox(0.28, 0.075, sl, 0.01, 0, 0.1075, rz));
-  B.add('camo', rbox(0.28, 0.075, sl, 0.01, 0, -0.1075, rz));
-  B.add('camo', box(0.07, 0.14, sl, -0.105, 0, rz));
-  B.add('char', zTube(RING0 - 0.5, RING0 + 0.12, 0.0525, 0.064, 16, 0, 0, true).scale(-1, 1, 1)); // the dark chamber, seen from inside
+  // breech ring, a casting with rounded edges: the front round the chamber mouth, top, bottom and left walls round the
+  // block's slot, and the rear wall with the loading opening, round on the bore and open to the left (the C seen from
+  // behind on every surviving gun, refs/lefh18 hameenlinna_1, mwp_02); the block slides in the slot ahead of it
+  const rz = (RING0 + 0.12 + BR) / 2, sl = BR - RING0 - 0.12, RW = 0.085, sl2 = sl - RW, rz2 = rz - RW / 2;
+  const ringXY = { x0: -0.14, x1: 0.14, y0: -0.145, y1: 0.145, cr: 0.04 };
+  B.add('camo', keyholePlate({ ...ringXY, r: 0.064, chan: 'hole', t: 0.12, z1: RING0 + 0.12, bevel: 0.012 })); // ring front round the chamber mouth
+  B.add('camo', rbox(0.28, 0.075, sl2, 0.024, 0, 0.1075, rz2));
+  B.add('camo', rbox(0.28, 0.075, sl2, 0.024, 0, -0.1075, rz2));
+  B.add('camo', box(0.07, 0.14, sl2, -0.105, 0, rz2));
+  B.add('camo', keyholePlate({ ...ringXY, r: 0.066, t: RW, z1: BR, bevel: 0.014 }));
+  B.add('char', zTube(RING0 - 0.5, RING0 + 0.12, 0.0505, 0.0615, 16, 0, 0, true).scale(-1, 1, 1)); // the dark chamber, seen from inside (just inside the bore and the ring's opening, or they hide it)
   B.add('char', new THREE.CircleGeometry(0.0525, 16).translate(0, 0, RING0 - 0.5));
   // lugs for the recuperator and buffer rods, the rods (long enough to stay in their cylinders at full recoil)
   for (const y of [-0.185, 0.185]) {
@@ -264,10 +266,14 @@ export function buildLeFH18({ scheme = 'dgelb', brake = true, wheels = 'wood' } 
 
   const br = pivotAt(rig, rc, 'breech', 0, 0, rz);
   const K = rig.part();
-  K.add('camo', rbox(0.208, 0.138, sl - 0.004, 0.008, 0.034, 0, 0));
-  K.add('dark', zTube(sl / 2 - 0.004, sl / 2 + 0.012, 0.03, 0.03, 10, 0, 0)); // firing pin housing
-  K.add('char', new THREE.CircleGeometry(0.008, 8).translate(0, 0, sl / 2 + 0.0125));
-  K.add('dark', box(0.04, 0.05, 0.03, 0.12, 0.0, sl / 2 + 0.01)); // the block's crank stud
+  // the block, between the ring's front and its rear wall (its face, with the firing lock on the bore, shows through
+  // the loading opening while it is shut)
+  const kf = sl2 / 2 - RW / 2; // the block's rear face in the pivot's frame
+  K.add('camo', rbox(0.208, 0.138, sl2 - 0.004, 0.008, 0.034, 0, -RW / 2));
+  K.add('steel', box(0.2, 0.128, 0.004, 0.034, 0, kf + 0.001)); // the block's machined face, bright in the opening
+  K.add('dark', zTube(kf - 0.004, kf + 0.012, 0.03, 0.03, 10, 0, 0)); // firing lock
+  K.add('char', new THREE.CircleGeometry(0.008, 8).translate(0, 0, kf + 0.0125));
+  K.add('dark', box(0.04, 0.05, 0.03, 0.12, 0.0, kf + 0.01)); // the block's crank stud
   K.build(br, { dirt: 0 });
   slidingBlock(rig, br, 0.24);
 

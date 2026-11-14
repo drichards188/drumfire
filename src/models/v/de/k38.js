@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, rivets, rivetRow, rivetPoly, handwheel, DEG } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { buildShell, buildCartridge } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
 
 /**
  * The 21 cm Kanone 38 (Krupp, 1939/40) in firing order: buildK38({ scheme }).
@@ -30,7 +30,7 @@ const G = {
   // [distance from the muzzle, radius]: a plain muzzle with a slight swell, the long chase, the jacket's shoulder
   // 4.7 m back with a collar, the jacket swelling to the breech ring
   prof: [[0, 0.152], [0.04, 0.168], [0.3, 0.162], [4.65, 0.196], [4.65, 0.238], [4.8, 0.238], [4.85, 0.226], [8.5, 0.25], [10.9, 0.272]],
-  ring: { len: 0.72, w: 0.7, h: 0.68 }, recoil: 1.3,
+  ring: { len: 0.72, w: 0.7, h: 0.68, cr: 0.06, rw: 0.15 }, ro: 0.15, recoil: 1.3, // ro: the loading opening's radius
 };
 // the shell and charge models: the K 38's own when shells.js has them, else the Mörser 18's (the same 21 cm)
 const SHELL = (() => { try { buildShell('k38'); buildCartridge('k38'); return 'k38'; } catch { return 'mrs18'; } })();
@@ -275,24 +275,16 @@ export function buildK38({ scheme = 'dgelb' } = {}) {
   B.add('camo', zLathe(pts, 40));
   B.add('dark', zLathe([[MZ + 0.7, G.bore], [MZ, G.bore]], 20));
   B.add('char', new THREE.CircleGeometry(G.bore, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.7));
-  B.add('dark', zLathe([[ring0 + 0.01, ch], [ring0 - 1.0, ch]], 20));
-  B.add('char', new THREE.CircleGeometry(ch, 20).translate(0, 0, ring0 - 1.0));
   const rj = G.prof[G.prof.length - 1][1];
   B.add('camo', zRing(rj - 0.01, rj + 0.024, ring0 - 0.2, ring0 - 0.02, 32));
   B.add('camo', zRing(rAt(6.2) - 0.005, rAt(6.2) + 0.02, MZ + 6.15, MZ + 6.25, 32)); // the clamp band of the barrel's guides
-  const { len: rl, w: rw, h: rh } = G.ring, rz = ring0 + rl / 2, fw = 0.15;
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, rh * 0.39, rz));
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.025, 0, -rh * 0.39, rz));
-  B.add('camo', box(rw * 0.22, rh * 0.56, rl, -rw * 0.39, 0, rz));
-  {
-    const x0 = -rw * 0.28, x1 = rw * 0.5, y0 = rh * 0.28, f = new THREE.Shape();
-    f.moveTo(x0, -y0); f.lineTo(x1, -y0); f.lineTo(x1, y0); f.lineTo(x0, y0); f.lineTo(x0, -y0);
-    const hole = new THREE.Path();
-    hole.absarc(0, 0, ch, 0, TAU, true);
-    f.holes.push(hole);
-    B.add('camo', new THREE.ExtrudeGeometry(f, { depth: fw, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, ring0));
-    B.add('dark', zLathe([[ring0 + fw, ch], [ring0, ch]], 20));
-  }
+  // the breech ring, the K 18's family casting (k18.js castRing): square with well rounded edges, the front part round
+  // the chamber, the block's slot, the rear wall with the loading opening open to the left (no photograph of the
+  // K 38's breech was found; Krupp built it in 1939 beside the K 18 and the Mörser 18, sized here to its ring)
+  const { len: rl, w: rw, h: rh, cr, rw: RW } = G.ring, rz = ring0 + rl / 2, fw = 0.15;
+  const SL = { sx0: -rw * 0.28, x1: rw / 2, sy: rh * 0.28, zf: ring0 + fw, zs: BR - RW }, ro = G.ro;
+  castRing(B, { top: [[-rw / 2, rh / 2, cr], [rw / 2, rh / 2, cr]], bot: [[rw / 2, -rh / 2, cr], [-rw / 2, -rh / 2, cr]], ...SL, ro, ch, z0: ring0, z1: BR, b: cr, deep: 1.0 });
+  B.add('camo', rbox(ro * 2.4, 0.075, 0.075, 0.016, 0, -ro - 0.0375, BR + 0.022)); // the ledge the loading tray hooks onto
   B.add('camo', box(0.18, CYL.y + 0.08 - rh * 0.5, 0.24, 0, (CYL.y + 0.08 + rh * 0.5) / 2, ring0 + 0.12));
   B.add('steel', zTube(CYL.z1 - G.recoil - 0.15, ring0, 0.05, 0.05, 10, 0, CYL.y));
   B.add('dark', zTube(ring0 - 0.05, ring0, 0.075, 0.075, 6, 0, CYL.y));
@@ -304,11 +296,15 @@ export function buildK38({ scheme = 'dgelb' } = {}) {
 
   const brk = pivotAt(rig, rc, 'breech', rw * 0.11, 0, ring0 + fw + (rl - fw) / 2);
   const K = rig.part();
-  K.add('camo', box(rw * 0.78 - 0.004, rh * 0.56 - 0.004, rl - fw - 0.004, 0, 0, 0));
-  K.add('dark', zTube((rl - fw) / 2 - 0.01, (rl - fw) / 2 + 0.03, 0.055, 0.05, 12, -rw * 0.11, 0));
-  K.add('dark', box(0.08, 0.1, 0.06, rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.02));
-  K.add('steel', rod(V(rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.05), V(rw * 0.42, rh * 0.06, (rl - fw) / 2 + 0.32), 0.019, 6));
-  K.add('dark', xTube(rw * 0.4, rw * 0.46, 0.03, 0.03, 8, rh * 0.06, (rl - fw) / 2 + 0.32));
+  // the block, its face and firing lock in the opening, the operating crank on its right end (as the K 18's)
+  const px = rw * 0.11, pz = ring0 + fw + (rl - fw) / 2, kf = slotBlock(K, { ...SL, px, pz, lock: ro * 0.42 });
+  // (kept compact, its handle at bore height just behind the rear face: standing up and back it struck the lanyard
+  // man beside the opening block)
+  const xr = SL.x1 - px, ky = -SL.sy * 0.35, kz = kf - (SL.zs - SL.zf) / 2, hz = kf + RW + 0.04;
+  K.add('dark', xTube(xr - 0.005, xr + 0.03, 0.05, 0.05, 12, ky, kz));
+  K.add('steel', rod(V(xr + 0.02, ky, kz), V(xr + 0.025, 0, hz), 0.019, 6));
+  K.add('dark', xTube(xr + 0.005, xr + 0.07, 0.024, 0.024, 8, 0, hz));
+  rig.anchors.blockGrip = node(brk, 'blockGrip', xr + 0.045, 0, hz); // the handle (crews.js: the hands that work the block)
   K.build(brk, { dirt: 0 });
   slidingBlock(rig, brk, rw * 0.78);
   const block = rig.setBreech;
@@ -317,7 +313,7 @@ export function buildK38({ scheme = 'dgelb' } = {}) {
   // ---- the loading tray (Ladeschale), as the K 18's: hooked on the ring for the shell and the charge, lifted off
   // before the block shuts; on only at the loading elevation
   rig.loadEl = 0;
-  const sh = buildShell(SHELL), sr = sh.radius, yb = -rh * 0.28;
+  const sh = buildShell(SHELL), sr = sh.radius, yb = -ro; // the lip in the opening's floor, on the ledge
   const tp = pivotAt(rig, rc, 'loadTray', 0, yb, BR - 0.05);
   const R = rig.part(), tw = sr + 0.03, tl = sh.length * 0.8 + 0.12, fy = -sr - yb, z0 = 0.05, z1 = z0 + tl;
   R.add('camo', box(tw * 2, 0.014, tl, 0, fy - 0.007, z0 + tl / 2));

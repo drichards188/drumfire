@@ -3,7 +3,7 @@ import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, gearArc, z
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, L90, R90, ring, TAU } from '../../t/fieldkit.js';
 import { FParts } from '../../t/mats.js';
 import { buildShell, buildCartridge } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
 import { mulberry32 } from '../../../noise.js';
 
 /**
@@ -41,7 +41,7 @@ const G = {
   // [distance from the muzzle, radius]: a plain thick muzzle with a lip, the chase, the collar 3.7 m back, the
   // jacket swelling to the breech ring
   prof: [[0, 0.272], [0.05, 0.3], [0.16, 0.3], [0.2, 0.288], [3.65, 0.318], [3.65, 0.37], [3.82, 0.37], [3.87, 0.355], [7.4, 0.395], [9.3, 0.425]],
-  ring: { len: 0.97, w: 1.06, h: 1.0 }, recoil: 1.4,
+  ring: { len: 0.97, w: 1.06, h: 1.0, cr: 0.09, rw: 0.2 }, ro: 0.215, recoil: 1.4, // ro: the loading opening's radius
 };
 const SHELL = (() => { try { buildShell('hm1'); buildCartridge('hm1'); return 'hm1'; } catch { return 'bertha'; } })();
 const TRY = 3.55, TRZ = 0; // trunnion axis above the platform's centre
@@ -277,8 +277,10 @@ export function buildHM1({ scheme = 'feldgrau' } = {}) {
   // the recuperator under it, the trunnions, the equilibrator arms, the elevating arc on the left
   const el = pivotAt(rig, car, 'elevation', 0, TRY, TRZ);
   const E = rig.part();
-  E.add('camo', zTube(CR.z0, CR.z1, CR.r, CR.r, 36));
-  for (const z of [CR.z0, CR.z1 - 0.1, -0.35]) E.add('camo', zTube(z, z + 0.1, CR.r + 0.06, CR.r + 0.06, 36));
+  // (an open sleeve and annular flanges: closed tubes' end caps stood across the breech ring and the chamber, a grey
+  // face where the open breech should show the chamber)
+  E.add('camo', zTube(CR.z0, CR.z1, CR.r, CR.r, 36, 0, 0, true));
+  for (const z of [CR.z0, CR.z1 - 0.1, -0.35]) E.add('camo', zRing(CR.r - 0.01, CR.r + 0.06, z, z + 0.1, 36));
   for (const z of [CR.z0 + 0.05, CR.z1 - 0.05]) E.add('camo', rivets(Array.from({ length: 20 }, (_, i) => V(Math.cos(i * TAU / 20) * (CR.r + 0.061), Math.sin(i * TAU / 20) * (CR.r + 0.061), z)), V(0, 0, z < 0 ? -1 : 1), 0.02));
   E.add('camo', zRing(rAt(-MZ + CR.z0) + 0.006, CR.r, CR.z0 - 0.04, CR.z0 + 0.02, 36));
   E.add('camo', zRing(rAt(-MZ + CR.z1) + 0.006, CR.r, CR.z1 - 0.02, CR.z1 + 0.04, 36));
@@ -313,23 +315,16 @@ export function buildHM1({ scheme = 'feldgrau' } = {}) {
   B.add('camo', zLathe(pts, 44));
   B.add('dark', zLathe([[MZ + 0.9, G.bore], [MZ, G.bore]], 24));
   B.add('char', new THREE.CircleGeometry(G.bore, 24).rotateY(Math.PI).translate(0, 0, MZ + 0.9));
-  B.add('dark', zLathe([[ring0 + 0.01, ch], [ring0 - 1.2, ch]], 24));
-  B.add('char', new THREE.CircleGeometry(ch, 24).translate(0, 0, ring0 - 1.2));
   const rj = G.prof[G.prof.length - 1][1];
   B.add('camo', zRing(rj - 0.01, rj + 0.03, ring0 - 0.22, ring0 - 0.02, 36));
-  const { len: rl, w: rw, h: rh } = G.ring, rz = ring0 + rl / 2, fw = 0.2;
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.03, 0, rh * 0.39, rz));
-  B.add('camo', rbox(rw, rh * 0.22, rl, 0.03, 0, -rh * 0.39, rz));
-  B.add('camo', box(rw * 0.22, rh * 0.56, rl, -rw * 0.39, 0, rz));
-  {
-    const x0 = -rw * 0.28, x1 = rw * 0.5, y0 = rh * 0.28, f = new THREE.Shape();
-    f.moveTo(x0, -y0); f.lineTo(x1, -y0); f.lineTo(x1, y0); f.lineTo(x0, y0); f.lineTo(x0, -y0);
-    const hole = new THREE.Path();
-    hole.absarc(0, 0, ch, 0, TAU, true);
-    f.holes.push(hole);
-    B.add('camo', new THREE.ExtrudeGeometry(f, { depth: fw, bevelEnabled: false, curveSegments: 12 }).translate(0, 0, ring0));
-    B.add('dark', zLathe([[ring0 + fw, ch], [ring0, ch]], 24));
-  }
+  // the breech ring, the Krupp family casting of 1939 (k18.js castRing; no photograph of the H M1's breech was found):
+  // square with well rounded edges, the front part round the chamber, the block's slot, the rear wall with the
+  // loading opening open to the left. The front part runs back past the ring cradle's rear end (CR.z1), so the
+  // cradle's rim never shows in the slot
+  const { len: rl, w: rw, h: rh, cr, rw: RW } = G.ring, rz = ring0 + rl / 2, fw = 0.2, FW = CR.z1 + 0.06 - ring0;
+  const SL = { sx0: -rw * 0.28, x1: rw / 2, sy: rh * 0.28, zf: ring0 + FW, zs: BR - RW }, ro = G.ro;
+  castRing(B, { top: [[-rw / 2, rh / 2, cr], [rw / 2, rh / 2, cr]], bot: [[rw / 2, -rh / 2, cr], [-rw / 2, -rh / 2, cr]], ...SL, ro, ch, z0: ring0, z1: BR, b: cr, deep: 1.2 });
+  B.add('camo', rbox(ro * 2.3, 0.1, 0.1, 0.022, 0, -ro - 0.05, BR + 0.03)); // the ledge the loading tray hooks onto
   for (const s of [-1, 1]) {
     B.add('camo', box(0.16, CYL.y + 0.06 - rh * 0.5, 0.26, s * CYL.x, (CYL.y + 0.06 + rh * 0.5) / 2, ring0 + 0.14));
     B.add('steel', zTube(CYL.z1 - G.recoil - 0.1, ring0, 0.06, 0.06, 10, s * CYL.x, CYL.y));
@@ -342,20 +337,34 @@ export function buildHM1({ scheme = 'feldgrau' } = {}) {
 
   const brk = pivotAt(rig, rc, 'breech', rw * 0.11, 0, ring0 + fw + (rl - fw) / 2);
   const K = rig.part();
-  K.add('camo', box(rw * 0.78 - 0.005, rh * 0.56 - 0.005, rl - fw - 0.005, 0, 0, 0));
-  K.add('dark', zTube((rl - fw) / 2 - 0.01, (rl - fw) / 2 + 0.04, 0.07, 0.065, 14, -rw * 0.11, 0)); // firing lock
-  K.add('dark', box(0.1, 0.12, 0.07, rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.03));
-  K.add('steel', rod(V(rw * 0.3, -rh * 0.12, (rl - fw) / 2 + 0.06), V(rw * 0.42, rh * 0.08, (rl - fw) / 2 + 0.36), 0.022, 6)); // crank
-  K.add('dark', xTube(rw * 0.4, rw * 0.47, 0.035, 0.035, 8, rh * 0.08, (rl - fw) / 2 + 0.36));
+  // the block, its face and firing lock in the opening
+  const px = rw * 0.11, pz = ring0 + fw + (rl - fw) / 2;
+  slotBlock(K, { ...SL, px, pz, lock: ro * 0.4 });
   K.build(brk, { dirt: 0 });
   slidingBlock(rig, brk, rw * 0.78);
+  // the operating crank on the ring's rear face, right of and below the opening, turning as the block runs across (on
+  // the ring, not on the block: on the block's end it went out with the block over the traverser's place, and the
+  // crews keep clear of every place the steel sweeps)
+  const ck = node(rc, 'blockCrank', 0.36, -0.27, BR);
+  const CK = rig.part();
+  CK.add('dark', zTube(0, 0.05, 0.07, 0.07, 14, 0, 0));
+  CK.add('steel', box(0.05, 0.2, 0.035, 0, -0.09, 0.065));
+  CK.add('steel', zTube(0.05, 0.19, 0.022, 0.022, 8, 0, -0.18));
+  CK.add('dark', zTube(0.19, 0.21, 0.028, 0.024, 8, 0, -0.18));
+  CK.build(ck, { dirt: 0 });
+  rig.anchors.blockGrip = node(ck, 'blockGrip', 0, -0.18, 0.15); // the handle, turning with the crank (crews.js: the hands that work the block)
   const block = rig.setBreech;
-  rig.setBreech = (k) => { block(k); rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25))); };
+  rig.setBreech = (k) => {
+    block(k);
+    ck.rotation.z = 0.5 + 3 * Math.PI * Math.min(1, Math.max(0, k));
+    rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25)));
+  };
+  rig.setBreech(0);
 
   // ---- the loading tray: hooked on the breech ring for the shell and the charges, lifted off before the block
   // shuts; on only at the loading elevation (as the K 18's)
   rig.loadEl = 0;
-  const sh = buildShell(SHELL), sr = sh.radius, yb = -rh * 0.28;
+  const sh = buildShell(SHELL), sr = sh.radius, yb = -ro; // the lip in the opening's floor, on the ledge
   const tp = pivotAt(rig, rc, 'loadTray', 0, yb, BR - 0.05);
   const R = rig.part(), tw = sr + 0.04, tl = sh.length * 0.8 + 0.14, fy = -sr - yb, z0 = 0.06, z1 = z0 + tl;
   R.add('camo', box(tw * 2, 0.018, tl, 0, fy - 0.009, z0 + tl / 2));

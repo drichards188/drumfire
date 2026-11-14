@@ -13,9 +13,10 @@ import './common.js'; // registers the Dunkelgelb scheme ('dgelb') in kit.js CAM
 // cradle), and the photographs of Leopold (Aberdeen, Fort Lee) and of the Batterie Todt gun: the deep box girder
 // ("gondola") humped round the trunnions and bellied down between the bogies so the breech can drop between its sides
 // at high angles, each end on a span bolster over two three-axle trucks, the long slender barrel stepping down from its
-// jacket, the square Krupp breech ring with its horizontal sliding wedge, the loading platform at the rear with its
-// railings. Game estimates [E]: the girder's heights, the platform's layout, the shell crane over it (a gantry whose
-// runway reaches back over the ammunition wagon coupled behind), the turntable's size (a ring of 34.4 m) and its trucks.
+// jacket, the Krupp breech ring (a plain cylinder) with its horizontal sliding wedge, the loading platform at the rear
+// with its railings. Game estimates [E]: the girder's heights, the platform's layout, the shell crane over it (a gantry
+// whose runway reaches back over the ammunition wagon coupled behind), the turntable's size (a ring of 34.4 m) and its
+// trucks.
 //
 // Frames (rig root: ground y = 0, the turntable's pivot at x = z = 0, -Z the line of fire at zero traverse):
 //   root       nothing of its own: the ring track, the centre pivot's foundation, the spur and the stores are the
@@ -107,13 +108,47 @@ export const K5 = {
   WAGON_DECK,
 };
 
-// a square ring round the bore along z (the breech ring's rear behind the wedge, open for the rounds to go in)
-const sqRing = (P, key, h, hole, z0, z1, o) => {
-  const d = z1 - z0, zc = (z0 + z1) / 2, w = h - hole;
-  P.add(key, box(2 * h, w, d, 0, hole + w / 2, zc), o);
-  P.add(key, box(2 * h, w, d, 0, -hole - w / 2, zc), o);
-  P.add(key, box(w, 2 * hole, d, hole + w / 2, 0, zc), o);
-  P.add(key, box(w, 2 * hole, d, -hole - w / 2, 0, zc), o);
+// The breech ring's pieces (refs/k5: the Batterie Todt gun): cross-sections in x, y (the bore at the origin) extruded
+// along z between z0 and z1, their edges rounded by `bevel` inside the outline.
+const extrudeZ = (shape, z0, z1, bevel = 0) => {
+  const b = Math.min(bevel, (z1 - z0) * 0.3);
+  const g = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0 - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 3, curveSegments: 40 });
+  return g.translate(0, 0, z0 + b);
+};
+// the same with only one end rounded (+1 the z1 end, -1 the z0 end): a square-ended piece and a short rounded one
+// whose other end's bevel lies hidden inside it, so the ring's pieces join without a groove
+const extrudeEnd = (shape, z0, z1, bevel, end) => end > 0
+  ? [extrudeZ(shape, z0, z1 - bevel), extrudeZ(shape, z1 - 2 * bevel, z1, bevel)]
+  : [extrudeZ(shape, z0 + bevel, z1), extrudeZ(shape, z0, z0 + 2 * bevel, bevel)];
+// a disc of radius R about (0, yc), with the given holes
+const ringDisc = (R, yc, holes = []) => {
+  const s = new THREE.Shape();
+  s.absarc(0, yc, R, 0, Math.PI * 2, false);
+  s.holes.push(...holes);
+  return s;
+};
+// the loading opening: round on the bore (radius r) with a tongue of half height th running tl out to the gun's left
+// (a keyhole lying on its side, as keyholePlate's 'tongue' in common.js)
+const keyhole = (r, th, tl) => {
+  const h = new THREE.Path(), a = Math.asin(th / r), xe = -r * Math.cos(a), xt = xe - tl + th;
+  h.moveTo(xe, th);
+  h.lineTo(xt, th);
+  h.absarc(xt, 0, th, Math.PI / 2, Math.PI * 1.5, false);
+  h.lineTo(xe, -th);
+  h.absarc(0, 0, r, Math.PI + a, Math.PI * 3 - a, false);
+  return h;
+};
+// the ring over the wedge's slot: the disc less the slot (half height sh about the bore) from x = xl out through the
+// rim on the right, where the wedge leaves the ring; closed on the left
+const slotSection = (R, yc, sh, xl) => {
+  const s = new THREE.Shape(), xt = Math.sqrt(R * R - (sh - yc) ** 2), xb = Math.sqrt(R * R - (sh + yc) ** 2);
+  const at = Math.atan2(sh - yc, xt), ab = Math.atan2(-sh - yc, xb) + Math.PI * 2;
+  s.moveTo(xt, sh);
+  s.absarc(0, yc, R, at, ab, false);
+  s.lineTo(xl, -sh);
+  s.lineTo(xl, sh);
+  s.lineTo(xt, sh);
+  return s;
 };
 
 let CONC = null;
@@ -497,13 +532,20 @@ export function buildK5() {
   }
 
   // ================================================================ barrel (recoil) and wedge (breech)
-  // the long chase tapering to the muzzle, a step at the jacket's front, the jacket, the square breech ring
+  // the long chase tapering to the muzzle, a step at the jacket's front, the jacket, the breech ring
   const J0 = -7.6, J1 = -2.0; // the jacket's front step and the second step
   const ra = (z) => 0.27 + (0.375 - 0.27) * Math.min(1, Math.max(0, (z - (MUZC + 0.5)) / (J0 - (MUZC + 0.5))));
   const bp = [[MUZC, SHELL.rad], [MUZC, 0.29], [MUZC + 0.04, 0.305], [MUZC + 0.32, 0.305], [MUZC + 0.38, 0.275], [MUZC + 0.5, 0.27]];
   for (let i = 1; i <= 8; i++) { const z = MUZC + 0.5 + ((J0 - MUZC - 0.5) * i) / 8; bp.push([z, ra(z)]); }
-  const S0 = BREC - 0.5, S1 = BREC - 0.06; // the wedge's slot
-  bp.push([J0 + 0.08, 0.43], [J1, 0.445], [J1 + 0.06, 0.49], [S0 - 0.3, 0.5], [S0 - 0.3, 0.55], [S0, 0.55], [S0, SHELL.rad], [MUZC + 0.01, SHELL.rad], [MUZC, SHELL.rad]);
+  // the breech ring (refs/k5/photos: 280_mm_Eisenbahngeschuetz_K5_E_Audinghen_01_09.jpg, Batterie_Todt_..._K5.jpg): a
+  // huge plain cylinder much fatter than the jacket, its axis a little above the bore's; a flat rear face with a faint
+  // turned ring and a well rounded rear edge, and in it the loading opening, round on the bore with a short tongue to
+  // the gun's left (a keyhole lying on its side), two latches over it. The wedge slides in a slot ahead of the rear
+  // wall and leaves the ring on the right (closed on the left); the block drive's handwheel on the right side
+  const RB = 0.6, YC = 0.12, RF = BREC - 1.45; // the ring's radius, its axis over the bore's, its front
+  const S0 = BREC - 0.55, S1 = BREC - 0.22, SH = 0.3, SL = -0.31; // the wedge's slot (z), its half height, its left end
+  const OR = 0.24, OT = 0.1, OL = 0.17, RC = 0.17; // the opening: radius, the tongue's half height and length; the chamber
+  bp.push([J0 + 0.08, 0.43], [J1, 0.445], [J1 + 0.06, 0.49], [RF, 0.5], [RF, SHELL.rad], [MUZC + 0.01, SHELL.rad], [MUZC, SHELL.rad]);
   PR.add('camo', zLathe(bp, 40));
   for (const z of [J0 + 0.4, -4.4]) PR.add('camo', zTube(z - 0.035, z + 0.035, 0.455, 0.455, 32)); // shrink bands
   // the bore: dark, with the twelve deep grooves cut into it near the muzzle (lands between them)
@@ -521,25 +563,51 @@ export function buildK5() {
     PR.add('camo', box(Math.max(0.16, Math.abs(x) + 0.16), 0.14, 0.16, x / 2, y * 0.72, CLIP));
     PR.add('steel', zTube(CLIP, CR0 + 0.1, r * 0.32, r * 0.32, 8, x, y));
   }
-  // the breech ring: a square housing round the wedge's slot (open on the right), its rear face
-  PR.add('camo', box(1.12, 0.18, S1 - S0 + 0.3, 0, 0.47, (S0 + S1) / 2 - 0.15));
-  PR.add('camo', box(1.12, 0.18, S1 - S0 + 0.3, 0, -0.47, (S0 + S1) / 2 - 0.15));
-  PR.add('camo', box(0.16, 0.78, S1 - S0 + 0.3, -0.48, 0, (S0 + S1) / 2 - 0.15));
-  for (const y of [-0.38, 0.38]) PR.add('dark', box(0.02, 0.02, S1 - S0, 0.56, y, (S0 + S1) / 2));
-  sqRing(PR, 'camo', 0.56, 0.15, S1, BREC - 0.03);
-  sqRing(PR, 'steel', 0.53, 0.15, BREC - 0.03, BREC, { tint: 0xb0b0a8 });
-  PR.add('dark', zTube(S1, BREC + 0.002, SHELL.rad + 0.01, SHELL.rad + 0.01, 24, 0, 0, true));
-  PR.add('dark', rivets(Array.from({ length: 12 }, (_, i) => V(Math.cos(i / 12 * 6.283) * 0.42, Math.sin(i / 12 * 6.283) * 0.42, BREC + 0.002)), V(0, 0, 1), 0.024));
+  // the ring: ahead of the slot round the chamber, over the slot, the rear wall with the opening; the chamber dark
+  const oc = new THREE.Path();
+  oc.absarc(0, 0, RC, 0, Math.PI * 2, true);
+  for (const g of extrudeEnd(ringDisc(RB, YC, [oc]), RF, S0, 0.03, -1)) PR.add('camo', g);
+  PR.add('camo', extrudeZ(slotSection(RB, YC, SH, SL), S0, S1));
+  for (const g of extrudeEnd(ringDisc(RB, YC, [keyhole(OR, OT, OL)]), S1, BREC, 0.065, 1)) PR.add('camo', g);
+  PR.add('dark', zTube(RF, S0 + 0.002, RC - 0.002, RC - 0.002, 24, 0, 0, true).scale(-1, 1, 1)); // (inside out: its faces look in)
+  // the bore ahead of the chamber lined dark, just inside the bore's own face, to its dark end past the rammed shell's
+  // nose (a disc at the chamber's front stood across the shell's path at the ram)
+  const BD = BREC - 1.45 - SHELL.len - 0.25;
+  PR.add('dark', zTube(BD, RF, SHELL.rad - 0.002, SHELL.rad - 0.002, 24, 0, 0, true).scale(-1, 1, 1));
+  PR.add('dark', new THREE.CircleGeometry(SHELL.rad, 24).translate(0, 0, BD));
+  // the tongue a blind recess: its floor at the rear wall's front
+  { const xe = -Math.sqrt(OR * OR - OT * OT); PR.add('camo', box(OL + 0.005, OT * 2 + 0.01, 0.02, xe - (OL + 0.005) / 2, 0, S1 + 0.01)); }
+  // the guide rails along the slot's edges where the wedge leaves the ring
+  const rx = (y) => Math.sqrt(RB * RB - (y - YC) ** 2) - 0.005;
+  for (const sy of [-1, 1]) PR.add('steel', box(0.04, 0.045, S1 - S0 - 0.04, rx(sy * SH), sy * (SH + 0.022), (S0 + S1) / 2), { tint: 0x9a9c94 });
+  // on the rear face: the faint turned ring, the raised arc over the opening and its two latches
+  PR.add('iron', new THREE.TorusGeometry(RB - 0.08, 0.003, 4, 72).translate(0, YC, BREC + 0.001));
+  {
+    const arc = new THREE.Shape();
+    arc.absarc(0, 0, OR + 0.075, 25 * DEG, 155 * DEG, false);
+    arc.absarc(0, 0, OR + 0.004, 155 * DEG, 25 * DEG, true);
+    PR.add('camo', extrudeZ(arc, BREC - 0.01, BREC + 0.022, 0.006));
+    for (const a of [62 * DEG, 118 * DEG]) PR.add('dark', box(0.06, 0.045, 0.045, Math.cos(a) * (OR + 0.035), Math.sin(a) * (OR + 0.035), BREC + 0.04, 0, 0, a - Math.PI / 2));
+  }
   const CK = K5.CRANK;
-  PR.add('camo', box(0.1, 0.3, 0.3, 0.6, CK.y, CK.z)); // its bracket, the shaft into the housing's rack
-  PR.add('steel', xTube(0.56, CK.x + 0.02, 0.032, 0.032, 8, CK.y, CK.z));
+  PR.add('camo', rbox(0.12, 0.34, 0.4, 0.025, 0.575, CK.y + 0.02, CK.z)); // its bolted housing, the shaft into the rack
+  for (const dy of [-0.13, 0.17]) for (const dz of [-0.16, 0.16]) PR.add('dark', xTube(0.63, 0.645, 0.016, 0.016, 6, CK.y + dy, CK.z + dz));
+  PR.add('steel', xTube(0.6, CK.x + 0.02, 0.032, 0.032, 8, CK.y, CK.z));
   PR.add('iron', handwheel(0.18, 5, 0.018, 0.04).translate(CK.x, CK.y, CK.z));
   PR.add('brass', box(0.12, 0.08, 0.06, K5.LOCK.x, K5.LOCK.y, BREC + 0.03)); // the firing lock's housing
-  // the wedge: a block sliding across the ring, its back face bright
-  PB.add('camo', box(0.8, 0.74, 0.38, 0, 0, 0));
-  PB.add('steel', box(0.78, 0.72, 0.02, 0, 0, 0.195));
-  PB.add('steel', box(0.08, 0.28, 0.1, 0.38, 0, 0.11));
-  PB.add('dark', rivets(Array.from({ length: 6 }, (_, i) => V(-0.28 + i * 0.11, 0.28, 0.206)), V(0, 0, 1), 0.018));
+  // the wedge: a block sliding across the ring in the slot ahead of the rear wall, its back face machined bright (it
+  // shows through the opening while it is shut) with the firing pin's boss on the bore; pivot frame, its face WF 3 cm
+  // ahead of the rear wall (room for the fittings on it as it slides). Narrower than the old box and set right of the
+  // bore, so the 0.5 m stroke clears the chamber
+  {
+    const BZ = BREC - 0.28, WF = S1 - 0.03 - BZ, WD = WF - (S0 + 0.02 - BZ), KX = 0.065, WW = 0.71;
+    PB.add('camo', box(WW, SH * 2 - 0.02, WD, KX, 0, WF - WD / 2));
+    PB.add('steel', box(WW - 0.02, SH * 2 - 0.04, 0.012, KX, 0, WF + 0.006));
+    PB.add('dark', zTube(WF + 0.012, WF + 0.022, 0.05, 0.05, 14, 0, 0));
+    PB.add('steel', zTube(WF + 0.022, WF + 0.026, 0.018, 0.018, 8, 0, 0));
+    PB.add('steel', box(0.08, 0.28, 0.1, KX + WW / 2 - 0.05, 0, WF - 0.06)); // the rack's end
+    PB.add('dark', rivets(Array.from({ length: 5 }, (_, i) => V(KX - 0.26 + i * 0.13, SH - 0.06, WF + 0.012)), V(0, 0, 1), 0.016));
+  }
 
   // ================================================================ the shell car (trolley)
   {

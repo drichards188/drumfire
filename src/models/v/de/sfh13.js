@@ -3,7 +3,7 @@ import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, front
 import { makeRig, finishRig, node, pivotAt, hb, addWheel, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, keyholePlate, ringBand } from './common.js';
 
 /**
  * 15 cm schwere Feldhaubitze 13 (the short L/14 barrel the British called the "5.9"), as the divisional heavy
@@ -162,41 +162,61 @@ export function buildSFH13({ scheme = 'bunt' } = {}) {
   }
   // the sheet guard over the jacket behind the shield (the photos show it on the breech end)
   B.add('camo', zTube(-0.36, -0.06, 0.152, 0.152, 24, 0, 0, true));
-  // the breech ring: a rounded block, wider than tall, the slot for the block open to the right; a loading
-  // scoop under the chamber mouth on the rear face
-  const rw = 0.19, rt = 0.17, rb = -0.2, ry = 0.11;
-  B.add('camo', rbox(rw * 2, rt - rb, 0.12, 0.035, 0, (rt + rb) / 2, RING0 + 0.06));
-  B.add('camo', rbox(rw * 2, rt - ry, BR - RING0 - 0.12, 0.03, 0, (rt + ry) / 2, (BR + RING0 + 0.12) / 2));
-  B.add('camo', rbox(rw * 2, -ry - rb, BR - RING0 - 0.12, 0.03, 0, (rb - ry) / 2, (BR + RING0 + 0.12) / 2));
-  B.add('camo', box(0.08, ry * 2, BR - RING0 - 0.12, -rw + 0.04, 0, (BR + RING0 + 0.12) / 2));
-  B.add('char', new THREE.CircleGeometry(0.08, 18).translate(0, 0, RING0 + 0.121));
-  // the loading scoop: a lip behind the lower part of the ring with a groove the round's base slides over
-  B.add('camo', rbox(0.26, 0.07, 0.07, 0.015, 0, -0.155, BR + 0.03));
-  B.add('dark', zTube(BR, BR + 0.066, 0.03, 0.03, 10, 0, -0.112));
-  for (const y of [-ry, ry]) B.add('dark', box(rw + 0.12, 0.008, 0.004, (rw - 0.12) / 2, y, BR + 0.001));
-  B.add('dark', box(0.008, ry * 2, 0.004, -0.12, 0, BR + 0.001));
-  // the firing lever on the ring's top right and its lug
-  B.add('dark', box(0.05, 0.05, 0.05, 0.13, rt + 0.02, BR - 0.06));
-  B.add('steel', rod(V(0.13, rt + 0.04, BR - 0.06), V(0.13, rt + 0.2, BR - 0.02), 0.016, 6));
-  B.add('dark', sphere(0.024, 0.13, rt + 0.21, BR - 0.02, 1, 1.3, 1, 8));
+  // the breech ring, a heavy casting wider than tall with well rounded corners and edges (refs/sfh13 Brantford 3, 6
+  // to 8): the front round the chamber, top and bottom walls over the block's slot, which runs right through the ring
+  // (the block's left end stands out of the left side, its right end is flush in the right side), and the thick rear
+  // wall with the loading opening, round on the bore and open to the ring's left edge (a C seen from behind); under
+  // the opening the loading scoop stands out behind the rear wall, its top a trough the round's base slides over
+  const RF = 0.1, RW = 0.1, LR = 0.085, ry = 0.11; // front and rear wall, the opening's radius, the slot's half height
+  const S0 = RING0 + RF, S1 = BR - RW;
+  const OL = { x0: -0.2, x1: 0.18, y0: -0.18, y1: 0.17, cr: 0.06 }, rb = 0.03, rt = OL.y1;
+  B.add('camo', keyholePlate({ ...OL, r: 0.08, chan: 'hole', t: RF, z1: S0, bevel: rb }));
+  B.add('camo', ringBand(OL, ry, OL.y1, S0 - rb, S1 + rb));
+  B.add('camo', ringBand(OL, OL.y0, -ry, S0 - rb, S1 + rb));
+  B.add('camo', keyholePlate({ ...OL, r: LR, t: RW, z1: BR, bevel: rb }));
+  B.add('camo', scoop(OL, LR, 0.08, -0.035, BR - 0.02, BR + 0.065));
+  // the dark chamber, seen from inside (the barrel's lathe is closed at the ring's front)
+  B.add('char', zTube(RING0, S0 + 0.001, 0.079, 0.079, 18, 0, 0, true).scale(-1, 1, 1));
+  B.add('char', new THREE.CircleGeometry(0.079, 18).translate(0, 0, RING0 + 0.002));
+  // the levers' housing on the ring's top right corner at the rear, the vertical firing lever on it (Brantford 3)
+  B.add('camo', rbox(0.11, 0.05, 0.13, 0.015, 0.11, rt + 0.02, BR - 0.075));
+  B.add('dark', yTube(rt + 0.04, rt + 0.06, 0.02, 0.02, 10, 0.075, BR - 0.04));
+  B.add('steel', yTube(rt + 0.06, rt + 0.17, 0.014, 0.014, 8, 0.075, BR - 0.04));
+  B.add('dark', sphere(0.019, 0.075, rt + 0.175, BR - 0.04, 1, 1.3, 1, 8));
   // the lug under the ring that takes the buffer and recuperator rods into the cradle box
-  B.add('camo', box(0.12, 0.19, 0.12, 0, -0.285, RING0 + 0.06));
+  B.add('camo', box(0.12, 0.21, 0.12, 0, -0.275, RING0 + 0.06));
   for (const y of RODS) B.add('steel', zTube(CR.z1 - 0.3, RING0 + 0.1, 0.022, 0.022, 8, 0, y));
   B.build(rc, { dirt: 0.15, y0: TR.y });
 
-  // ---- the sliding block (breech pivot in the ring's slot)
-  const bz = (BR + RING0 + 0.12) / 2, bl = BR - RING0 - 0.12;
+  // ---- the sliding block (breech pivot in the ring's slot), between the ring's front and its rear wall: its machined
+  // face (the firing lock on the bore) bright in the loading opening while it is shut; its left end is cut with the
+  // half round loading groove that the open block brings onto the bore
+  const bz = (BR + RING0 + 0.12) / 2, TRV = 0.25;
+  const kz = (S0 + S1) / 2 - bz, kd = S1 - S0 - 0.004, kf = kz + kd / 2; // the block in the pivot's frame
   const br = pivotAt(rig, rc, 'breech', 0, 0, bz);
-  const K = rig.part();
-  K.add('camo', box(rw * 2 - 0.08, ry * 2 - 0.006, bl - 0.004, 0.04, 0, 0));
-  K.add('steel', zTube(bl / 2 - 0.002, bl / 2 + 0.02, 0.026, 0.026, 10, -0.02, 0)); // firing pin housing
-  // the bent operating lever on the block's top left (it rides out with the block)
-  K.add('dark', box(0.06, 0.06, 0.04, -0.06, 0.03, bl / 2 + 0.02));
-  K.add('steel', rod(V(-0.06, 0.05, bl / 2 + 0.03), V(-0.08, 0.25, bl / 2 + 0.06), 0.018, 6));
-  K.add('steel', rod(V(-0.08, 0.25, bl / 2 + 0.06), V(-0.16, 0.3, bl / 2 + 0.12), 0.018, 6));
-  K.add('dark', sphere(0.026, -0.16, 0.3, bl / 2 + 0.12, 1.3, 1, 1, 8));
+  const K = rig.part(), KO = { x0: -0.002, x1: OL.x1 + TRV, y0: -ry + 0.002, y1: ry - 0.002, cr: 0.012, r: LR };
+  K.add('camo', keyholePlate({ ...KO, t: kd, z1: kf, bevel: 0.008 }).translate(-TRV, 0, 0));
+  K.add('steel', keyholePlate({ ...KO, x1: KO.x1 - 0.006, t: 0.003, z1: kf + 0.002, bevel: 0 }).translate(-TRV, 0, 0));
+  // the firing lock: a round cap with a slot across it, sunk in a dark ring on the bore (Brantford 3)
+  K.add('dark', zTube(kf, kf + 0.004, 0.04, 0.04, 20, 0, 0));
+  K.add('steel', zTube(kf + 0.003, kf + 0.012, 0.033, 0.033, 20, 0, 0));
+  K.add('dark', box(0.046, 0.01, 0.004, 0, 0, kf + 0.013));
   K.build(br, { dirt: 0 });
-  slidingBlock(rig, br, 0.25);
+  slidingBlock(rig, br, TRV);
+
+  // the bent operating lever on the housing: it rises from its boss and bends back to the handle; shut the handle
+  // points to the rear (Brantford 3, 6, 7), open it has swung out to the right; it turns with the block
+  const lv = node(rc, 'blockLever', 0.135, rt + 0.045, BR - 0.075);
+  const LV = rig.part();
+  LV.add('dark', yTube(0, 0.03, 0.026, 0.026, 12, 0, 0));
+  LV.add('steel', rod(V(0, 0.02, 0), V(0, 0.16, 0), 0.017, 8));
+  LV.add('steel', rod(V(0, 0.16, 0), V(0.035, 0.2, 0), 0.017, 8));
+  LV.add('steel', rod(V(0.035, 0.2, 0), V(0.13, 0.22, 0), 0.017, 8));
+  LV.add('dark', sphere(0.024, 0.135, 0.221, 0, 1.3, 1, 1, 8));
+  LV.build(lv, { dirt: 0 });
+  const slide = rig.setBreech;
+  rig.setBreech = (k) => { slide(k); lv.rotation.y = -(Math.PI / 2) * (1 - Math.min(1, Math.max(0, k))); };
+  rig.setBreech(0);
 
   // ---------------------------------------------------------------- anchors and crew
   rig.anchors.eye = node(trav, 'eye', 0, 1.75, 0.5);
@@ -342,4 +362,19 @@ function trail(P) {
   // the handspike socket: a tube standing up at the end, the long wooden handspike (Richtbaum) laid in it
   P.add('dark', rod(V(0, e.y + e.h / 2, ez - 0.25), V(0, e.y + e.h / 2 + 0.24, ez - 0.05), 0.04, 10));
   P.add('wood', rod(V(0, e.y + e.h / 2 + 0.2, ez - 0.09), V(0, e.y + e.h / 2 + 0.55, ez + 0.32), 0.03, 8));
+}
+
+// The sFH 13's loading scoop (refs/sfh13 Brantford 3, 7, 8): the lower part of the ring's rear face carried on behind
+// the rear wall, under the loading opening and out to the ring's left edge, its top a trough of the opening's radius
+// r round the bore (to x = xb on the right), level at yt beyond it; from z0 to z1 with rounded edges.
+function scoop(o, r, xb, yt, z0, z1) {
+  const a = Math.asin(Math.min(0.999, -yt / r)), xc = r * Math.cos(a), s = new THREE.Shape();
+  s.moveTo(o.x0 + o.cr, o.y0);
+  s.lineTo(xb - 0.03, o.y0); s.absarc(xb - 0.03, o.y0 + 0.03, 0.03, -Math.PI / 2, 0, false);
+  s.lineTo(xb, yt); s.lineTo(xc, yt);
+  s.absarc(0, 0, r, -a, -Math.PI + a, true);
+  s.lineTo(o.x0, yt); s.lineTo(o.x0, o.y0 + o.cr);
+  s.absarc(o.x0 + o.cr, o.y0 + o.cr, o.cr, Math.PI, Math.PI * 1.5, false);
+  const b = 0.016, g = new THREE.ExtrudeGeometry(s, { depth: z1 - z0 - 2 * b, bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 2, curveSegments: 12 });
+  return g.translate(0, 0, z0 + b);
 }

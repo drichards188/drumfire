@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
+import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, slotCaps } from './common.js';
 
 /**
  * 15 cm Ringkanone C/92 (Krupp, 1892), the fortress and siege gun of the Fußartillerie pulled out of the fortresses for
@@ -39,8 +39,9 @@ const WR = 0.78, WX = 0.8; // the wooden wheels: radius [E], centre plane
 const AXY = PLAT + WR; // their axis at rest (z = 0)
 const TR = { y: 1.66, z: 0.1 }; // trunnion axis in root space [E]
 const BR = 1.28, MZ = BR - 4.47; // the breech face, the muzzle (L/30) along the bore from the trunnions
-const RING0 = 0.5, FZ = BR - 0.3; // front of the breech ring, front of the wedge's slot
-const RR = 0.3, SL = 0.12, BORE = 0.0745; // the ring's radius, the slot's half height, the bore
+const RING0 = 0.5, FZ = BR - 0.3; // front of the breech ring, front of the old flat wedge (its pivot stays between it and the face)
+const RR = 0.3, SL = 0.14, BORE = 0.0745; // the ring's radius, the slot's half height, the bore
+const SZ0 = 0.84, SZC = 0.96, SZ1 = SZC + SL, LO = 0.095; // the slot: its flat front, where its round back starts, its deepest point (the rear wall); the rear wall's opening
 const WT = 0.17; // the wedge's travel: its loading hole comes onto the bore
 const CX = 0.34, CT = 0.04; // the cheeks' inner face, their thickness
 const TAILZ = 4.0; // where the trail stands on the planks
@@ -105,19 +106,28 @@ export function buildRK92({ scheme = 'bunt' } = {}) {
   barrelParts(B);
   B.build(el, { dirt: 0.15, y0: TR.y });
 
-  // ---- the wedge: a block across the ring's slot with the loading hole through it, offset left by its travel, so
-  // the open wedge (slid out to the right) brings the hole onto the bore
-  const bl = BR - FZ, bz = (BR + FZ) / 2, bw = 0.54;
+  // ---- the wedge, Krupp's round-backed wedge (Rundkeil): flat in front, its back a half round about the x axis that
+  // bears in the slot's round seat, the loading hole (Ladeloch) through it offset left by its travel, so the open wedge
+  // (slid out to the right) brings the hole onto the bore; shut, its bright back shows through the rear wall's opening
+  // with the firing lock on the bore. On its right end the tension screw (Spannschraube) with its long T handle and
+  // the safety lever (refs/rk92/photos/Rundkeil_c73.png).
+  const bz = (BR + FZ) / 2, kh = SL - 0.004, kx = Math.sqrt(RR * RR - SL * SL), km = (SZ0 + SZC) / 2 - bz;
   const br = pivotAt(rig, el, 'breech', 0, 0, bz);
   const K = rig.part();
-  const hole = [];
-  for (let i = 0; i < 18; i++) { const a = -(i / 18) * TAU; hole.push([-WT + (BORE + 0.006) * Math.cos(a), (BORE + 0.006) * Math.sin(a)]); }
-  K.add('camo', plate([[-bw / 2, -SL + 0.004], [bw / 2, -SL + 0.004], [bw / 2, SL - 0.004], [-bw / 2, SL - 0.004]], [hole], -bl / 2 + 0.002, bl / 2 - 0.002));
-  K.add('steel', zTube(bl / 2 - 0.002, bl / 2 + 0.03, 0.035, 0.035, 12, 0.06, 0)); // the firing lock
-  K.add('dark', box(0.07, 0.07, 0.05, bw / 2 - 0.06, 0.02, bl / 2 + 0.02)); // the crank's boss on the right
-  K.add('steel', rod(V(bw / 2 - 0.06, 0.04, bl / 2 + 0.04), V(bw / 2 + 0.02, 0.2, bl / 2 + 0.07), 0.018, 6)); // the crank handle
-  K.add('steel', rod(V(bw / 2 + 0.02, 0.2, bl / 2 + 0.07), V(bw / 2 + 0.1, 0.22, bl / 2 + 0.12), 0.018, 6));
-  K.add('dark', box(0.02, SL * 2 - 0.03, bl - 0.03, bw / 2 + 0.01, 0, 0)); // the stop plate on the wedge's right end
+  const W = roundWedge(-kx, kx, kh, SZ0 + 0.003, SZC, -WT, BORE + 0.006);
+  for (const g of W.body) K.add('camo', cast(g.translate(0, 0, -bz)), { uv: true });
+  K.add('steel', W.back.translate(0, 0, -bz), { tint: 0xa4a49c });
+  K.add('dark', W.hole.translate(0, 0, -bz));
+  K.add('dark', zTube(SZC + kh - bz - 0.01, SZC + kh - bz + 0.012, 0.024, 0.024, 10, 0, 0)); // the firing lock
+  K.add('char', new THREE.CircleGeometry(0.008, 8).translate(0, 0, SZC + kh - bz + 0.0125));
+  // (all inside the cheeks' 0.34 m, where the breech dips between them at high elevation)
+  K.add('steel', xTube(kx - 0.01, kx + 0.03, 0.026, 0.026, 10, 0, km)); // the screw
+  for (let i = 0; i < 3; i++) K.add('dark', xTube(kx + 0.004 + i * 0.008, kx + 0.007 + i * 0.008, 0.029, 0.029, 10, 0, km));
+  K.add('dark', xTube(kx + 0.026, kx + 0.048, 0.038, 0.038, 12, 0, km)); // its head
+  const ta = 0.6, tl = 0.22, tx = kx + 0.038;
+  K.add('steel', rod(V(tx, -tl * Math.cos(ta), km - tl * Math.sin(ta)), V(tx, tl * Math.cos(ta), km + tl * Math.sin(ta)), 0.014, 8)); // the T handle
+  for (const s of [-1, 1]) K.add('steel', sphere(0.02, tx, s * tl * Math.cos(ta), km + s * tl * Math.sin(ta), 1, 1, 1, 8));
+  K.add('dark', box(0.014, 0.1, 0.022, kx + 0.007, 0.075, km - 0.03, 0.25)); // the safety lever
   K.build(br, { dirt: 0 });
   slidingBlock(rig, br, WT);
   rig.loadEl = 3 * DEG; // GUNS.rk92.loadEl
@@ -219,12 +229,100 @@ function plate(outline, holes, z0, z1) {
   return g.translate(0, 0, Math.min(z0, z1));
 }
 
-// The part of a cylinder (axis Z, radius r) above the chord y = c, between z0 and z1; `down` the part below -c.
-function segment(r, c, z0, z1, down = false) {
-  const a0 = Math.asin(c / r), pts = [];
-  for (let i = 0; i <= 20; i++) { const a = a0 + (Math.PI - 2 * a0) * (i / 20); pts.push([r * Math.cos(a), r * Math.sin(a)]); }
-  const g = plate(pts, [], z0, z1);
-  return down ? g.rotateZ(Math.PI) : g;
+// cast steel has no panel seams: the paint's metric box-projected UVs (as kit.js projectUV, but each triangle by its
+// own face, so a fillet's two halves of a quad agree) moved two thirds of a metre up, so the camouflage texture's plate
+// seams (one runs along the bore's line) fall off the breech
+function cast(g) {
+  g = g.index ? g.toNonIndexed() : g;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1).sub(a); c.fromBufferAttribute(p, i + 2).sub(a);
+    b.cross(c);
+    const nx = Math.abs(b.x), ny = Math.abs(b.y), nz = Math.abs(b.z), ax = nx >= ny && nx >= nz ? 0 : ny >= nz ? 1 : 2;
+    for (let k = 0; k < 3; k++) {
+      const x = p.getX(i + k), y = p.getY(i + k), z = p.getZ(i + k);
+      uv[(i + k) * 2] = (ax === 0 ? z : x) / 4;
+      uv[(i + k) * 2 + 1] = (ax === 1 ? z : y) / 4 + 1 / 6;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+// one triangle into position and normal lists, turned to face the way its normals say
+function tri(P, N, A, B, C, nA, nB, nC) {
+  const e = new THREE.Vector3().subVectors(B, A).cross(new THREE.Vector3().subVectors(C, A));
+  if (e.dot(nA.clone().add(nB).add(nC)) < 0) { [B, C] = [C, B]; [nB, nC] = [nC, nB]; }
+  for (const v of [A, B, C]) P.push(v.x, v.y, v.z);
+  for (const v of [nA, nB, nC]) N.push(v.x, v.y, v.z);
+}
+const mesh = (P, N) => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  return g;
+};
+
+// A face bent round the x axis, z = zc + sqrt(h^2 - y^2) for |y| <= h: the wedge's round back (dir +1, facing back)
+// and the slot's round seat it bears on (dir -1, facing the slot); between x = xl(y) and xr(y), cut by a round hole of
+// radius rh at (hx, 0) whose wall runs from the face to the plane z = zw. With `skin` (the ring's radius) the seat's
+// sides on the ring's round, from the face back to zw. In bands of y; the bands across the hole stop at its edge, at
+// the angles of a 2m-sided polygon.
+function bentFace({ h, zc, xl, xr, hx, rh, dir, zw, skin = 0, m = 24, n = 6 }) {
+  const ys = [];
+  for (let i = 0; i < n; i++) ys.push(-h + (h - rh) * (i / n));
+  for (let j = 0; j <= m; j++) ys.push(-rh * Math.cos(Math.PI * j / m));
+  for (let i = 1; i <= n; i++) ys.push(rh + (h - rh) * (i / n));
+  const zf = (y) => zc + Math.sqrt(Math.max(0, h * h - y * y)), hw = (y) => Math.sqrt(Math.max(0, rh * rh - y * y));
+  const F = [], FN = [], W = [], WN = [];
+  const fp = (x, y) => V(x, y, zf(y)), fn = (y) => V(0, dir * y / h, dir * (zf(y) - zc) / h);
+  const quad = (xa, xb, ya, xc, xd, yb) => {
+    const A = fp(xa, ya), B = fp(xb, ya), C = fp(xd, yb), D = fp(xc, yb), na = fn(ya), nb = fn(yb);
+    tri(F, FN, A, B, C, na, na, nb); tri(F, FN, A, C, D, na, nb, nb);
+  };
+  for (let k = 0; k < ys.length - 1; k++) {
+    const ya = ys[k], yb = ys[k + 1];
+    if (Math.abs(ya) >= rh - 1e-6 && Math.abs(yb) >= rh - 1e-6) quad(xl(ya), xr(ya), ya, xl(yb), xr(yb), yb);
+    else {
+      const wa = hw(ya), wb = hw(yb);
+      quad(xl(ya), hx - wa, ya, xl(yb), hx - wb, yb);
+      quad(hx + wa, xr(ya), ya, hx + wb, xr(yb), yb);
+      for (const sx of [-1, 1]) {
+        const A = V(hx + sx * wa, ya, zw), B = V(hx + sx * wb, yb, zw), C = V(hx + sx * wb, yb, zf(yb)), D = V(hx + sx * wa, ya, zf(ya));
+        const na = V(-sx * wa, -ya, 0).normalize(), nb = V(-sx * wb, -yb, 0).normalize();
+        tri(W, WN, A, B, C, na, nb, nb); tri(W, WN, A, C, D, na, nb, na);
+      }
+    }
+    if (skin) for (const sx of [-1, 1]) {
+      const xa = sx * Math.sqrt(skin * skin - ya * ya), xb = sx * Math.sqrt(skin * skin - yb * yb);
+      const A = V(xa, ya, zf(ya)), B = V(xb, yb, zf(yb)), C = V(xb, yb, zw), D = V(xa, ya, zw);
+      const na = V(xa, ya, 0).normalize(), nb = V(xb, yb, 0).normalize();
+      tri(F, FN, A, B, C, na, nb, nb); tri(F, FN, A, C, D, na, nb, na);
+    }
+  }
+  return { face: mesh(F, FN), wall: mesh(W, WN) };
+}
+
+// The Krupp round-backed wedge (Rundkeil): across the slot from x0 to x1, half height h, flat in front from z0 to zc and
+// round behind (a half round of radius h about the x axis at zc), with the loading hole of radius rh through it at
+// x = hx. Returns { body: [the flat part, the round back's two ends], back: the round back, hole: the hole's wall
+// through the round back }.
+function roundWedge(x0, x1, h, z0, zc, hx, rh, m = 24) {
+  const hole = [];
+  for (let i = 0; i < m * 2; i++) { const a = -(i / (m * 2)) * TAU; hole.push([hx + rh * Math.cos(a), rh * Math.sin(a)]); }
+  const body = [plate([[x0, -h], [x1, -h], [x1, h], [x0, h]], [hole], z0, zc)];
+  const { face, wall } = bentFace({ h, zc, xl: () => x0, xr: () => x1, hx, rh, dir: 1, zw: zc, m });
+  // the round back's ends: half discs at x0 (facing -x) and x1 (+x)
+  for (const [x, sx] of [[x0, -1], [x1, 1]]) {
+    const P = [], N = [], nx = V(sx, 0, 0), c = V(x, 0, zc);
+    for (let i = 0; i < 16; i++) {
+      const a0 = -Math.PI / 2 + Math.PI * i / 16, a1 = -Math.PI / 2 + Math.PI * (i + 1) / 16;
+      tri(P, N, c, V(x, h * Math.sin(a0), zc + h * Math.cos(a0)), V(x, h * Math.sin(a1), zc + h * Math.cos(a1)), nx, nx, nx);
+    }
+    body.push(mesh(P, N));
+  }
+  return { body, back: face, hole: wall };
 }
 
 // ---------------------------------------------------------------- the platform
@@ -398,7 +496,7 @@ function taper(a, b, r0, r1, seg = 8) {
 // across it (the wedge's ends show on both sides); the elevating arc hung under the barrel on its webs, the sights.
 function barrelParts(B) {
   B.add('camo', zLathe([[MZ + 0.3, BORE], [MZ, BORE], [MZ, 0.128], [MZ + 0.015, 0.14], [MZ + 0.09, 0.14], [MZ + 0.12, 0.128], [-1.25, 0.158], [-1.25, 0.19], [-1.22, 0.2],
-    [-0.44, 0.214], [-0.44, 0.232], [-0.42, 0.244], [0.34, 0.244], [0.36, 0.232], [0.44, 0.236], [0.44, 0.28], [RING0, RR], [FZ, RR], [FZ, BORE], [FZ - 0.6, BORE], [FZ - 0.6, 0.0001]], 36));
+    [-0.44, 0.214], [-0.44, 0.232], [-0.42, 0.244], [0.34, 0.244], [0.36, 0.232], [0.44, 0.236], [0.44, 0.28], [RING0, RR], [SZ0, RR], [SZ0, BORE], [SZ0 - 0.6, BORE], [SZ0 - 0.6, 0.0001]], 40));
   B.add('char', new THREE.CircleGeometry(BORE, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.3));
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * TAU;
@@ -411,15 +509,22 @@ function barrelParts(B) {
     B.add('camo', xTube(s * 0.2, s * 0.27, 0.12, 0.11, 20));
     B.add('steel', xTube(s * 0.27, s * (CX + 0.004), 0.085, 0.085, 16));
   }
-  // the ring behind the slot: the parts above and below it
-  B.add('camo', segment(RR, SL, FZ, BR));
-  B.add('camo', segment(RR, SL, FZ, BR, true));
-  B.add('dark', zTube(BR - 0.004, BR + 0.002, RR - 0.015, RR - 0.015, 36, 0, 0, true)); // the chamfer's line round the face
-  // the slot's edges on the face and the sides
-  for (const yy of [-SL, SL]) B.add('dark', box(0.56, 0.008, 0.004, 0, yy, BR + 0.001));
+  // the ring over the wedge's slot (cut right through it, flat in front and round behind, the D of its opening showing
+  // on both sides: refs/rk92 Cambrai Q6339), the round seat behind the slot and the thick rear wall with the round
+  // loading opening (the Adrianople photograph), its rim well rounded; the chamber dark
+  for (const g of slotCaps(RR, SL, SZ0, SZ1, 48)) B.add('camo', cast(g), { uv: true });
+  const ring = (y) => Math.sqrt(RR * RR - y * y), seat = bentFace({ h: SL, zc: SZC, xl: (y) => -ring(y), xr: ring, hx: 0, rh: LO, dir: -1, zw: SZ1, skin: RR });
+  B.add('camo', cast(seat.face), { uv: true });
+  B.add('camo', cast(seat.wall), { uv: true });
+  const rim = [];
+  for (let i = 0; i <= 6; i++) { const a = (i / 6) * Math.PI / 2; rim.push([BR - 0.045 + 0.045 * Math.sin(a), RR - 0.045 + 0.045 * Math.cos(a)]); }
+  B.add('camo', cast(zLathe([[SZ1, RR], ...rim, [BR, LO + 0.02], [BR - 0.006, LO + 0.006], [BR - 0.02, LO], [SZ1, LO]], 96)), { uv: true });
+  for (const s of [-1, 1]) B.add('dark', box(0.024, 0.032, 0.006, s * (LO + 0.008), 0, BR - 0.001)); // the notches either side of the opening
+  B.add('char', zTube(SZ0 - 0.6, SZ0, BORE - 0.001, BORE - 0.001, 16, 0, 0, true).scale(-1, 1, 1));
+  B.add('char', new THREE.CircleGeometry(BORE, 16).translate(0, 0, SZ0 - 0.599));
   // the lanyard's lever on the ring's top right, the tangent sight's socket on the top left, the front sight's blade
-  B.add('dark', box(0.06, 0.06, 0.06, 0.16, RR - 0.01, BR - 0.1));
-  B.add('steel', rod(V(0.16, RR + 0.01, BR - 0.1), V(0.2, RR + 0.16, BR - 0.04), 0.016, 6));
+  B.add('dark', box(0.06, 0.06, 0.06, 0.16, 0.27, BR - 0.1));
+  B.add('steel', rod(V(0.16, 0.29, BR - 0.1), V(0.2, RR + 0.16, BR - 0.04), 0.016, 6));
   B.add('dark', box(0.06, 0.08, 0.08, -0.18, RR - 0.04, BR - 0.12));
   B.add('steel', box(0.02, 0.22, 0.02, -0.18, RR + 0.1, BR - 0.12));
   B.add('steel', box(0.06, 0.02, 0.02, -0.18, RR + 0.2, BR - 0.12));

@@ -3,6 +3,7 @@ import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, ri
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb, node } from '../../rig.js';
 import { mulberry32 } from '../../../noise.js';
 import { RH, GA, sagitta, trackX, trackYaw, curveBogie, spanBolsterParts, ammoWagonParts, WAGON, arcPoints, straightBack, layTrack, siteMats, drapeNet, loadingGear, readyRack } from './railway_kit.js';
+import { keyholePlate, slotCaps } from './common.js';
 
 // 21 cm K 12 (E) (Krupp, 1939): the longest-ranged gun of the war, 115 km with the 107.5 kg shell. A 33.3 m barrel (L/158)
 // braced straight by a truss over it, in a ring cradle with hydropneumatic recoil, on a box-girder carriage carried by
@@ -392,7 +393,11 @@ export function buildK12() {
   };
   const bp = [[MUZ, 0.1055], [MUZ, 0.215], [MUZ + 0.5, 0.215], [MUZ + 0.55, 0.2]];
   for (let i = 1; i <= 10; i++) { const z = MUZ + 0.55 + ((CR0 - 0.4 - MUZ - 0.55) * i) / 10; bp.push([z, rAt(z)]); }
-  const S0 = BRE - 0.6, S1 = BRE - 0.05;
+  // the breech ring, a Krupp naval gun's like the Bruno's (no photograph of the K 12's breech was found; the family's
+  // ring: refs/max38/photos/17_Leugenboom_breech_ring.jpg): one smooth round mass, the wedge's slot cut right through it
+  // with guide rails along its edges, behind the slot a thick rear part with the loading opening, round on the bore and
+  // running out through the rim to the left (a C seen from behind), its rear edge well rounded; no bolts
+  const S0 = BRE - 0.6, S1 = BRE - 0.2, SH = 0.24, RB = 0.45; // the slot (z), its half height, the ring's radius
   bp.push([CR0 - 0.35, 0.42], [S0 - 0.3, 0.42], [S0 - 0.25, 0.45], [S0, 0.45], [S0, 0.1055], [MUZ + 0.01, 0.1055], [MUZ, 0.1055]);
   PR.add('iron', zLathe(bp, 36));
   PR.add('steel', zTube(CR0 - 0.3, CR1 + 0.5, 0.425, 0.425, 32, 0, 0, true), { tint: 0xa8aca8 });
@@ -400,13 +405,15 @@ export function buildK12() {
   PR.add('dark', zTube(MUZ + 0.002, MUZ + 0.9, 0.105, 0.105, 20, 0, 0, true));
   PR.add('dark', zTube(MUZ + 0.9, MUZ + 0.92, 0.105, 0.105, 20));
   PR.add('steel', zTube(MUZ - 0.003, MUZ + 0.004, 0.13, 0.215, 28, 0, 0, false));
-  // the breech ring round the wedge's slot, open on the right
-  PR.add('iron', box(0.92, 0.16, S1 - S0, 0, 0.38, (S0 + S1) / 2));
-  PR.add('iron', box(0.92, 0.16, S1 - S0, 0, -0.38, (S0 + S1) / 2));
-  PR.add('iron', box(0.14, 0.6, S1 - S0, -0.39, 0, (S0 + S1) / 2));
-  PR.add('iron', zLathe([[S1, 0.1055], [S1, 0.46], [BRE - 0.03, 0.46], [BRE, 0.43], [BRE, 0.1055]], 32));
-  PR.add('steel', zLathe([[BRE - 0.01, 0.12], [BRE - 0.01, 0.42], [BRE + 0.012, 0.42], [BRE + 0.012, 0.12], [BRE - 0.01, 0.12]], 32), { tint: 0xb0b0a8 });
-  PR.add('dark', zTube(S1, BRE + 0.002, 0.1055, 0.1055, 20, 0, 0, true));
+  for (const g of slotCaps(RB, SH, S0, S1, 36)) PR.add('iron', g);
+  const RX = Math.sqrt(RB * RB - SH * SH);
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) PR.add('steel', box(0.04, 0.045, S1 - S0 - 0.05, sx * (RX + 0.01), sy * (SH + 0.016), (S0 + S1) / 2), { tint: 0x9a9c94 });
+  PR.add('iron', keyholePlate({ R: RB, r: 0.145, chan: 'edge', t: BRE - S1, z1: BRE, bevel: 0.055 }));
+  // the chamber, dark, seen through the opening with the wedge out (inside out: its faces look in)
+  PR.add('dark', zTube(S0 - 0.8, S0 + 0.002, 0.104, 0.104, 18, 0, 0, true).scale(-1, 1, 1));
+  PR.add('dark', new THREE.CircleGeometry(0.104, 18).translate(0, 0, S0 - 0.8));
+  // the truss's anchor block (below) stands on a saddle cast on the ring's top
+  PR.add('iron', box(0.42, 0.1, 0.76, 0, 0.39, TRUSS.anchor));
   for (const [x, y, r] of cyl) {
     PR.add('camo', box(Math.max(0.16, Math.abs(x) + 0.2), 0.16, 0.2, x / 2, y * 0.82, S0 - 0.45));
     PR.add('steel', zTube(CR1 - 0.15, S0 - 0.4, r * 0.34, r * 0.34, 8, x, y));
@@ -449,10 +456,18 @@ export function buildK12() {
     }
   }
   PR.build(rec, { dirt: 0.03, y0: TY });
+  // the wedge: a block sliding across the ring in the slot ahead of the rear part, its back face machined bright (it
+  // shows through the loading opening while it is shut) with the firing pin's boss on the bore and the latch beside it
+  // (pivot frame: its face WF 3.5 cm ahead of the rear part, room for the fittings on it as it slides)
   const PW = mk();
-  PW.add('camo', box(0.76, 0.6, 0.5, 0, 0, 0));
-  PW.add('steel', box(0.74, 0.58, 0.02, 0, 0, 0.255));
-  PW.add('steel', box(0.08, 0.24, 0.1, 0.36, 0, 0.12));
+  const BZ = BRE - 0.3, WF = S1 - 0.035 - BZ, WD = WF - (S0 + 0.02 - BZ);
+  PW.add('camo', box(0.76, SH * 2 - 0.02, WD, 0, 0, WF - WD / 2));
+  PW.add('steel', box(0.74, SH * 2 - 0.04, 0.012, 0, 0, WF + 0.006));
+  PW.add('dark', zTube(WF + 0.012, WF + 0.024, 0.04, 0.04, 14, 0, 0));
+  PW.add('steel', zTube(WF + 0.024, WF + 0.028, 0.015, 0.015, 8, 0, 0));
+  PW.add('dark', box(0.045, 0.08, 0.016, -0.11, 0, WF + 0.02)); // the latch
+  PW.add('steel', box(0.08, 0.24, 0.1, 0.36, 0, WF - 0.06)); // the rack's end, at the wedge's right end
+  PW.add('dark', rivets(Array.from({ length: 5 }, (_, i) => V(-0.26 + i * 0.13, SH - 0.06, WF + 0.012)), V(0, 0, 1), 0.015));
   PW.build(brc, { dirt: 0.03, y0: TY });
 
   // ================================================================ the loading gear

@@ -1,16 +1,16 @@
 import * as THREE from 'three';
-import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, gearArc, rivets, rivetRow, rivetPoly, loft, xf } from '../../kit.js';
+import { V, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, gearArc, rivets, rivetRow, rivetPoly, loft, xf } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, addHandwheel, TAU, L90, R90 } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { slidingBlock, barrel, panoramicSight } from './common.js';
+import { slidingBlock, barrel, panoramicSight, slotCaps } from './common.js';
 
 /**
  * 15 cm Kanone 16 (Krupp, 1917): the long gun that outranged every British field piece, 22 km with the 51.4 kg shell
  * (en and de Wikipedia, historyofwar.org "15cm Kanone 16 (Krupp)", the Australian War Memorial's record of RELAWM05044,
  * the gun taken near Morcourt on 8 August 1918). Told by the very long L/42.7 barrel (6.41 m) lying on a long cradle with
  * the buffer and the recuperator both below the barrel (two cylinders side by side under the cradle's trough, their
- * round heads in front), the big squared breech ring with the horizontal sliding block far behind the axle, the large
+ * round heads in front), the heavy round breech ring with its transverse sliding block far behind the axle, the large
  * curved splinter-proof shield whose wings wrap back round the gunners, the steel wheels with their solid rubber tyres
  * (for motor traction) on an axle hung from a transverse leaf spring, and the long box trail with its broad spade. The
  * top carriage is an A of two cheeks rising to the trunnions behind the axle and running back to their slide on the
@@ -31,7 +31,7 @@ const TR = { y: 1.8, z: 0.55 }; // trunnion axis in root space (the bore at 0 de
 const BR = 0.95, RING0 = 0.46; // breech face and front of the breech ring along the bore from the trunnion
 const MZ = BR - 6.41; // muzzle face: L/42.7
 const STEP = -3.25; // where the chase meets the jacket, a little ahead of the cradle's nose
-const RG = { w: 0.5, top: 0.25, bot: -0.33 }; // the breech ring: deeper below the bore than above
+const RG = { R: 0.25, sh: 0.13, s0: 0.6, s1: 0.82, bot: -0.33 }; // the round breech ring, its slot (half height, z), the keel's bottom
 const CR = { top: -0.205, bot: -0.43, w: 0.44, z0: -3.35, z1: 0.42 }; // the cradle's trough under the barrel
 const CYL = { y: -0.51, x: 0.115, r: 0.1, z0: -3.3 }; // the buffer (left) and the recuperator (right) under it
 const SZ = -0.38; // front face of the shield (root z)
@@ -204,40 +204,46 @@ export function buildK16({ scheme = 'bunt' } = {}) {
   // the jacket's locking ring and the slides under it that ride the cradle's ways
   B.add('camo', zTube(STEP + 0.1, STEP + 0.22, 0.182, 0.182, 26));
   for (const z of [STEP + 0.3, RING0 - 0.35]) B.add('dark', box(0.34, 0.035, 0.2, 0, CR.top + 0.025, z));
-  // breech ring: the front round the chamber, top, bottom and left walls round the block's slot (open right)
-  const sl = BR - RING0 - 0.14, rz = (RING0 + 0.14 + BR) / 2, hw = RG.w / 2;
-  const disc = [];
-  for (let i = 0; i < 18; i++) disc.push([0.085 * Math.cos(-i / 18 * TAU), 0.085 * Math.sin(-i / 18 * TAU)]);
-  B.add('camo', plate([[-hw, RG.bot], [hw, RG.bot], [hw, RG.top], [-hw, RG.top]], [disc], RING0, RING0 + 0.14));
-  B.add('camo', rbox(RG.w, 0.11, sl, 0.015, 0, RG.top - 0.055, rz));
-  B.add('camo', rbox(RG.w, 0.11, sl, 0.015, 0, RG.bot + 0.055, rz));
-  B.add('camo', box(0.1, RG.top - RG.bot - 0.22, sl, -hw + 0.05, (RG.top + RG.bot) / 2, rz));
-  B.add('char', zTube(RING0 - 0.7, RING0 + 0.14, 0.0747, 0.085, 18, 0, 0, true).scale(-1, 1, 1));
+  // breech ring, a round casting only a little wider than the barrel (refs/k16: Q31251 from behind, the Watertown
+  // photos and 3397931 from the rear left): the front round the chamber; the slot for the transverse block
+  // (Querkeil) cut right through it (it shows from the left with the block drawn); the thick rear part with the loading
+  // opening, round on the bore and running out through the rim to the left (the C seen from behind), bolted below the
+  // opening; a keel under the ring on the cradle's slides and the lug for the recoil rods
+  const { R, sh: SH, s0, s1 } = RG, rz = (RING0 + 0.14 + BR) / 2;
+  B.add('camo', cast(barrel([[RING0, 0.187], [RING0 + 0.035, R - 0.012], [RING0 + 0.06, R], [s0, R], [s0, 0.0747]], 40)), { uv: true });
+  for (const g of slotCaps(R, SH, s0, s1 + 0.034, 40)) B.add('camo', cast(g), { uv: true }); // (into the rear part's rounded front edge: no seam)
+  B.add('camo', cast(roundWall(R, 0.09, true, BR - s1, BR, 0.035)), { uv: true });
+  B.add('char', zTube(RING0 - 0.7, s0, 0.0735, 0.0735, 18, 0, 0, true).scale(-1, 1, 1)); // (inside the bore's wall)
+  for (const s of [-1, 1]) B.add('ash', box(2 * Math.sqrt(R * R - SH * SH) - 0.01, 0.002, s1 - s0, 0, s * (SH - 0.002), (s0 + s1) / 2)); // the slot's floor and roof, in shadow
   B.add('char', new THREE.CircleGeometry(0.0747, 18).translate(0, 0, RING0 - 0.7));
-  B.add('dark', box(0.004, 0.13, 0.28, -hw - 0.002, 0.0, rz + 0.03)); // the recess for the block's handle
-  B.add('camo', rivets([V(-hw - 0.001, RG.top - 0.055, RING0 + 0.06), V(-hw - 0.001, RG.bot + 0.055, RING0 + 0.06), V(-hw - 0.001, RG.top - 0.055, BR - 0.06), V(-hw - 0.001, RG.bot + 0.055, BR - 0.06)], V(-1, 0, 0), 0.015));
+  B.add('dark', rivets([-125, -95, -65, -30].map((a) => V(Math.cos(a * DEG) * 0.175, Math.sin(a * DEG) * 0.175, BR - 0.004)), V(0, 0, 1), 0.02, 0.7));
+  B.add('camo', rbox(0.26, 0.15, BR - RING0 - 0.05, 0.03, 0, RG.bot + 0.075, (RING0 + BR) / 2 - 0.02));
   // the lug under the ring and the two rods into the cylinders (long enough to stay in at full recoil)
   B.add('camo', box(0.38, 0.16, 0.14, 0, RG.bot - 0.08, RING0 + 0.16));
   for (const s of [-1, 1]) B.add('steel', zTube(-1.55, RING0 + 0.1, 0.04, 0.04, 10, s * CYL.x, CYL.y));
-  // the firing gear on the top right of the ring, the lifting eyes, the loading handles on the left
-  B.add('dark', box(0.08, 0.07, 0.16, 0.16, RG.top + 0.035, BR - 0.14));
-  B.add('steel', rod(V(0.17, RG.top + 0.06, BR - 0.08), V(0.22, RG.top + 0.13, BR + 0.04), 0.012, 5));
-  for (const z of [RING0 + 0.08, BR - 0.08]) B.add('steel', new THREE.TorusGeometry(0.035, 0.01, 5, 10).translate(-0.08, RG.top + 0.03, z));
-  for (const y of [-0.05, 0.06]) {
-    B.add('dark', rod(V(-hw, y, rz - 0.1), V(-hw - 0.07, y, rz - 0.1), 0.012, 6));
-    B.add('dark', rod(V(-hw - 0.07, y, rz - 0.1), V(-hw - 0.07, y, rz + 0.15), 0.012, 6));
-    B.add('dark', rod(V(-hw - 0.07, y, rz + 0.15), V(-hw, y, rz + 0.15), 0.012, 6));
-  }
+  // the firing gear on the top right of the rear part, the lifting eyes on the ring's top
+  B.add('dark', box(0.08, 0.08, 0.13, 0.14, 0.2, BR - 0.1));
+  B.add('steel', rod(V(0.15, 0.24, BR - 0.06), V(0.2, 0.31, BR + 0.04), 0.012, 5));
+  for (const z of [RING0 + 0.09, BR - 0.07]) B.add('steel', new THREE.TorusGeometry(0.035, 0.01, 5, 10).translate(-0.08, 0.265, z));
   B.build(rc, { dirt: 0.15, y0: TR.y });
 
+  // the block, in the slot ahead of the rear part: its right end turned to the ring's round, so it closes flush with
+  // the ring's side; its machined face (the firing lock on the bore) shows through the opening while it is shut
   const br = pivotAt(rig, rc, 'breech', 0, 0, rz);
   const K = rig.part();
-  const bw = RG.w - 0.1 - 0.006, bh = RG.top - RG.bot - 0.226;
-  K.add('camo', rbox(bw, bh, sl - 0.006, 0.01, 0.05, (RG.top + RG.bot) / 2, 0));
-  K.add('dark', zTube(sl / 2 - 0.006, sl / 2 + 0.02, 0.04, 0.04, 12, 0, 0)); // firing pin housing
-  K.add('char', new THREE.CircleGeometry(0.01, 8).translate(0, 0, sl / 2 + 0.0205));
-  K.add('dark', box(0.07, 0.07, 0.04, 0.19, -0.03, sl / 2 + 0.015)); // the crank's stud
-  K.add('steel', rod(V(0.19, -0.03, sl / 2 + 0.035), V(0.19, -0.19, sl / 2 + 0.085), 0.016, 6)); // the crank handle
+  const kz0 = s0 + 0.003 - rz, kz1 = s1 - 0.003 - rz, kh = SH - 0.004, kx0 = -0.18, ka = Math.asin(kh / R), kx1 = R * Math.cos(ka);
+  const ks = new THREE.Shape();
+  ks.moveTo(kx0, -kh); ks.lineTo(kx1, -kh); ks.absarc(0, 0, R, -ka, ka, false); ks.lineTo(kx0, kh); ks.lineTo(kx0, -kh);
+  K.add('camo', cast(new THREE.ExtrudeGeometry(ks, { depth: kz1 - kz0, bevelEnabled: false, curveSegments: 10 }).translate(0, 0, kz0)), { uv: true });
+  K.add('steel', box(0.3, kh * 2 - 0.02, 0.004, kx0 + 0.155, 0, kz1 + 0.001), { tint: 0x9a9c94 });
+  K.add('dark', zTube(kz1 - 0.004, kz1 + 0.016, 0.035, 0.035, 12, 0, 0)); // the firing lock
+  K.add('char', new THREE.CircleGeometry(0.01, 8).translate(0, 0, kz1 + 0.0165));
+  // the crank's boss on the block's right end and its handle hanging down outside the ring (inside 0.3 m of the bore,
+  // clear of the cheeks when the breech dips between them)
+  const km = (kz0 + kz1) / 2;
+  K.add('dark', xTube(kx1 - 0.01, R + 0.025, 0.04, 0.04, 12, 0, km));
+  K.add('steel', rod(V(R + 0.015, 0, km), V(R + 0.02, -0.17, km + 0.05), 0.016, 6));
+  K.add('dark', sphere(0.022, R + 0.02, -0.18, km + 0.053, 1, 1.4, 1, 8));
   K.build(br, { dirt: 0 });
   slidingBlock(rig, br, 0.28);
 
@@ -291,6 +297,48 @@ function shellKind() {
 }
 
 // ---------------------------------------------------------------- parts
+
+// cast steel has no panel seams: the paint's metric box-projected UVs (as kit.js projectUV, but each triangle by its
+// own face, so a fillet's two halves of a quad agree) moved two thirds of a metre up, so the camouflage texture's plate
+// seams (one runs along the bore's line) fall off the breech
+function cast(g) {
+  g = g.index ? g.toNonIndexed() : g;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1).sub(a); c.fromBufferAttribute(p, i + 2).sub(a);
+    b.cross(c);
+    const nx = Math.abs(b.x), ny = Math.abs(b.y), nz = Math.abs(b.z), ax = nx >= ny && nx >= nz ? 0 : ny >= nz ? 1 : 2;
+    for (let k = 0; k < 3; k++) {
+      const x = p.getX(i + k), y = p.getY(i + k), z = p.getZ(i + k);
+      uv[(i + k) * 2] = (ax === 0 ? z : x) / 4;
+      uv[(i + k) * 2 + 1] = (ax === 1 ? z : y) / 4 + 1 / 6;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+// The ring's rear part, as common.js keyholePlate draws it with R > 0 but with the round outline in finer steps, so it
+// meets the ring's round without a seam: a disc of radius R between z1 - t and z1 with the loading opening of radius r
+// on the bore, running out through the rim to the left when `c` (the C seen from behind), its edges rounded by `bevel`
+function roundWall(R, r, c, t, z1, bevel, seg = 48) {
+  const s = new THREE.Shape();
+  if (c) {
+    const a = Math.asin(r / R), xr = -R * Math.cos(a);
+    s.moveTo(xr, r);
+    s.absarc(0, 0, R, Math.PI - a, -Math.PI + a, true);
+    s.lineTo(0, -r);
+    s.absarc(0, 0, r, -Math.PI / 2, Math.PI / 2, false);
+    s.lineTo(xr, r);
+  } else {
+    s.absarc(0, 0, R, 0, Math.PI * 2, false);
+    s.holes.push(new THREE.Path().absarc(0, 0, r, 0, Math.PI * 2, true));
+  }
+  const b = Math.min(bevel, t * 0.3);
+  const g = new THREE.ExtrudeGeometry(s, { depth: t - 2 * b, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 3, curveSegments: seg });
+  return g.translate(0, 0, z1 - t + b);
+}
 
 // A flat plate from a front outline [x, y] with holes, between z0 and z1.
 function plate(outline, holes, z0, z1) {

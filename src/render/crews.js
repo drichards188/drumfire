@@ -231,10 +231,12 @@ export class GunCrew {
     rope.visible = false;
     this.rope = rope;
     for (const o of [this.shellA, this.shellB, this.bag, this.staff, rope]) rig.root.add(o);
-    // the breech block's free edge (where the hands go to swing it)
-    const br = rig.pivots.breech;
-    this.grip = new THREE.Object3D();
-    if (br) {
+    // where the hands go to swing the breech block: the model's own handle when it names one (rig.anchors.blockGrip,
+    // turning with setBreech: a crank or a lever, which a recessed block face behind a rear wall needs), else the
+    // block's free edge
+    const br = rig.pivots.breech, named = rig.anchors.blockGrip ?? null;
+    this.grip = named ?? new THREE.Object3D();
+    if (!named && br) {
       this.grip.position.set(-2 * Math.abs(br.position.x) * 0.9, 0, 0.12);
       br.add(this.grip);
     }
@@ -249,8 +251,8 @@ export class GunCrew {
     this.makeField();
     if (rig.loadingStage) {
       this.makeLoadingCart();
-      // The real transverse handle on this interrupted-screw carrier.
-      this.grip.position.set(-0.21, 0, 0.36);
+      // The real transverse handle on this interrupted-screw carrier (unless the model names its own).
+      if (!named) this.grip.position.set(-0.21, 0, 0.36);
       for (const m of this.men) if (m.beh === 'ram') { m.sx = m.spot.x; m.sz = m.spot.z; }
     }
   }

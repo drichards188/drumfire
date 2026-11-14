@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, frontProfile, gearArc, zLathe, loft, rivets, rivetRow, rivetPoly, mirrorX, mergeAll } from '../../kit.js';
+import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sideProfile, frontProfile, gearArc, zLathe, loft, rivets, rivetRow, rivetPoly, mirrorX, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, keyholePlate, ringBand } from './common.js';
 
 /**
  * 21 cm Mörser 16, the heavy howitzer of the Fußartillerie on its box carriage, as it stood in Flanders in 1917 and
@@ -155,19 +155,19 @@ export function buildM16({ scheme = 'bunt' } = {}) {
     B.add('dark', box(0.01, 0.005, 0.34, Math.cos(a) * 0.103, Math.sin(a) * 0.103, MZ + 0.17, 0, 0, a + Math.PI / 2));
   }
   B.add('camo', zTube(st + 0.2, st + 0.24, 0.24, 0.24, 28)); // a shrunk hoop on the jacket
-  // the ring: front plate, top and bottom, the left wall; the wedge's slot open to the right
-  const rl = BR - RING0, fz = RING0 + 0.13;
-  // the front plate round the chamber's mouth (a square opening the round passes through)
-  const ch = 0.122;
-  B.add('camo', rbox(RG.w * 2, RG.top - ch, 0.13, 0.04, 0, (RG.top + ch) / 2, RING0 + 0.065));
-  B.add('camo', rbox(RG.w * 2, -ch - RG.bot, 0.13, 0.04, 0, (RG.bot - ch) / 2, RING0 + 0.065));
-  for (const s of [-1, 1]) B.add('camo', box(RG.w - ch, ch * 2, 0.13, s * (RG.w + ch) / 2, 0, RING0 + 0.065));
-  B.add('camo', rbox(RG.w * 2, RG.top - RG.slot, BR - fz, 0.035, 0, (RG.top + RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', rbox(RG.w * 2, -RG.slot - RG.bot, BR - fz, 0.035, 0, (RG.bot - RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', box(0.12, RG.slot * 2, BR - fz, -RG.w + 0.06, 0, (BR + fz) / 2));
+  // the ring, a big squared casting with rounded corners and edges (refs/m16 Battlefields Park 01, 02, Quebec 6, 13):
+  // the front round the chamber's mouth, top and bottom walls and the left wall round the wedge's slot (open to the
+  // right, where the wedge comes out), and the thick rear wall with the loading opening, round on the bore and open to
+  // the ring's left edge (a C seen from behind; from the left it shows as the dark notch at the rear of the ring)
+  const fz = RING0 + 0.13, RW = 0.13, S1 = BR - RW, LR = 0.13; // the slot from fz to S1, the opening's radius
+  const OL = { x0: -RG.w, x1: RG.w, y0: RG.bot, y1: RG.top, cr: 0.08 }, rb = 0.035;
+  B.add('camo', keyholePlate({ ...OL, r: 0.122, chan: 'hole', t: fz - RING0, z1: fz, bevel: rb }));
+  B.add('camo', ringBand(OL, RG.slot, RG.top, fz - rb, S1 + rb));
+  B.add('camo', ringBand(OL, RG.bot, -RG.slot, fz - rb, S1 + rb));
+  B.add('camo', box(0.12, RG.slot * 2 + 0.01, S1 - fz, -RG.w + 0.06, 0, (S1 + fz) / 2));
+  B.add('camo', keyholePlate({ ...OL, r: LR, t: RW, z1: BR, bevel: rb }));
   B.add('char', new THREE.CircleGeometry(0.116, 20).translate(0, 0, RING0 - 0.449)); // the chamber's dark depth
-  for (const y of [-RG.slot, RG.slot]) B.add('dark', box(RG.w + 0.18, 0.01, 0.004, (RG.w - 0.18) / 2, y, BR + 0.001));
-  B.add('dark', box(0.01, RG.slot * 2, 0.004, -0.18, 0, BR + 0.001));
+  B.add('char', zTube(RING0 - 0.448, fz + 0.001, 0.114, 0.114, 20, 0, 0, true).scale(-1, 1, 1)); // its walls, seen from inside
   // lugs for the rods: the recuperator's two from the top into the housing, the buffer's two from below into the trough
   B.add('camo', box(0.36, 0.18, 0.14, 0, RG.top + 0.07, RING0 + 0.07));
   B.add('camo', box(0.36, 0.12, 0.14, 0, RG.bot - 0.04, RING0 + 0.07));
@@ -177,23 +177,41 @@ export function buildM16({ scheme = 'bunt' } = {}) {
   B.add('steel', rod(V(0.2, RG.top + 0.05, BR - 0.08), V(0.24, RG.top + 0.2, BR - 0.02), 0.016, 6));
   B.build(rc, { dirt: 0.15, y0: TR.y });
 
-  // ---- the wedge
-  const bl = BR - fz, bz = (BR + fz) / 2, bw = RG.w * 2 - 0.12;
+  // ---- the wedge, between the ring's front and its rear wall: its machined face (the firing lock on the bore) bright in
+  // the loading opening while it is shut, the dark chamber there once it has run out to the right
+  const bz = (BR + fz) / 2, bw = RG.w * 2 - 0.12, TRV = bw - 0.04;
+  const kz = (S1 + fz) / 2 - bz, kd = S1 - fz - 0.004, kf = kz + kd / 2; // the wedge in the pivot's frame
   const br = pivotAt(rig, rc, 'breech', 0, 0, bz);
   const K = rig.part();
-  K.add('camo', box(bw, RG.slot * 2 - 0.006, bl - 0.004, 0.06, 0, 0));
-  K.add('steel', zTube(bl / 2 - 0.002, bl / 2 + 0.025, 0.035, 0.035, 12, 0.0, 0)); // firing lock
-  K.add('dark', box(0.08, 0.08, 0.05, -0.1, 0.03, bl / 2 + 0.02));
-  K.add('steel', rod(V(-0.1, 0.05, bl / 2 + 0.04), V(-0.12, 0.3, bl / 2 + 0.08), 0.02, 6)); // the crank handle
-  K.add('steel', rod(V(-0.12, 0.3, bl / 2 + 0.08), V(-0.22, 0.34, bl / 2 + 0.15), 0.02, 6));
-  K.add('dark', sphere(0.03, -0.22, 0.34, bl / 2 + 0.15, 1.3, 1, 1, 8));
+  K.add('camo', rbox(bw, RG.slot * 2 - 0.006, kd, 0.012, 0.06, 0, kz));
+  K.add('steel', box(bw - 0.01, RG.slot * 2 - 0.016, 0.003, 0.06, 0, kf + 0.001));
+  // the firing lock: a round cap with a slot across it, sunk in a dark ring on the bore
+  K.add('dark', zTube(kf, kf + 0.005, 0.05, 0.05, 20, 0, 0));
+  K.add('steel', zTube(kf + 0.004, kf + 0.016, 0.041, 0.041, 20, 0, 0));
+  K.add('dark', box(0.058, 0.012, 0.005, 0, 0, kf + 0.017));
   K.build(br, { dirt: 0 });
-  slidingBlock(rig, br, bw - 0.04);
-  const block = rig.setBreech;
-  rig.setBreech = (k) => { block(k); rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25))); };
+  slidingBlock(rig, br, TRV);
 
-  // ---- the loading tray (Ladeschale), hooked onto the ring's slot while the round goes in (as the K 18's): its lip on
-  // the slot's floor, a riser up the ring's face, the floor at the shell's underside; off the gun it is not drawn
+  // the wedge's crank on the rear face, right of the opening (Battlefields Park 01): a boss, the arm and its handle
+  // standing back; a turn and a half runs the wedge across, so it hangs down to the right shut and up to the left open
+  const ck = node(rc, 'wedgeCrank', 0.205, 0.165, BR);
+  const CK = rig.part();
+  CK.add('dark', zTube(0, 0.04, 0.038, 0.038, 14, 0, 0));
+  CK.add('steel', box(0.03, 0.15, 0.022, 0, -0.065, 0.045));
+  CK.add('steel', zTube(0.035, 0.13, 0.014, 0.014, 8, 0, -0.13));
+  CK.add('dark', zTube(0.13, 0.15, 0.018, 0.015, 8, 0, -0.13));
+  CK.build(ck, { dirt: 0 });
+  rig.anchors.blockGrip = node(ck, 'blockGrip', 0, -0.13, 0.14); // the handle, turning with the crank (crews.js: the hands that work the block)
+  const block = rig.setBreech;
+  rig.setBreech = (k) => {
+    block(k);
+    ck.rotation.z = 0.5 + 3 * Math.PI * Math.min(1, Math.max(0, k));
+    rig.setTray?.(1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25)));
+  };
+  rig.setBreech(0);
+
+  // ---- the loading tray (Ladeschale), hooked onto the ring while the round goes in (as the K 18's): its lip in the foot
+  // of the loading opening, a riser up the ring's face, the floor at the shell's underside; off the gun it is not drawn
   rig.loadEl = 3 * DEG;
   const sr = sh.radius, yb = -RG.slot;
   const tp = pivotAt(rig, rc, 'loadTray', 0, yb, BR - 0.05);

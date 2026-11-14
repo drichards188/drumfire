@@ -3,7 +3,7 @@ import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, sideProfile, front
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, ring, L90, R90, TAU } from '../../t/fieldkit.js';
 import { floorFade } from '../../rig.js';
 import { buildShell } from '../../shells.js';
-import { panoramicSight, slidingBlock } from './common.js';
+import { panoramicSight, slidingBlock, castRing, slotBlock } from './common.js';
 
 /**
  * 15 cm schwere Feldhaubitze 18 as the motorised divisional batteries had it in 1944 (refs/sfh18: the surviving
@@ -193,44 +193,44 @@ export function buildSFH18({ scheme = 'dgelb' } = {}) {
   const rc = pivotAt(rig, el, 'recoil', 0, 0, 0);
   const B = rig.part();
   // the tube: a recessed bore, a slight muzzle swell, the slim tapering chase, the collar, the jacket
-  B.add('camo', zLathe([[MZ + 0.35, 0.0745], [MZ, 0.0745], [MZ, 0.094], [MZ + 0.012, 0.105], [MZ + 0.14, 0.108], [MZ + 0.2, 0.104], [STEP, 0.116], [STEP, 0.122], [STEP + 0.02, 0.14], [STEP + 0.075, 0.14], [STEP + 0.085, 0.13], [RING0 - 0.02, 0.131], [RING0, 0.131], [RING0, 0.0001]], 28));
+  B.add('camo', zLathe([[MZ + 0.35, 0.0745], [MZ, 0.0745], [MZ, 0.094], [MZ + 0.012, 0.105], [MZ + 0.14, 0.108], [MZ + 0.2, 0.104], [STEP, 0.116], [STEP, 0.122], [STEP + 0.02, 0.14], [STEP + 0.075, 0.14], [STEP + 0.085, 0.13], [RING0 - 0.02, 0.131], [RING0, 0.131], [RING0, 0.084]], 28)); // the chamber stays open for the round
   B.add('char', new THREE.CircleGeometry(0.0745, 18).rotateY(Math.PI).translate(0, 0, MZ + 0.35));
   for (let i = 0; i < 12; i++) { // rifling lands, seen down the muzzle
     const a = (i / 12) * TAU;
     B.add('dark', box(0.008, 0.004, 0.34, Math.cos(a) * 0.072, Math.sin(a) * 0.072, MZ + 0.17, 0, 0, a + Math.PI / 2));
   }
-  // the squared breech ring with chamfered top edges: front plate, top and bottom, the left wall; the block slot
-  // is open to the right
-  const rw = 0.235, rt = 0.18, ry = 0.105;
-  B.add('camo', frontProfile([[-rw, -rt], [rw, -rt], [rw, 0.12], [rw - 0.06, rt], [-rw + 0.06, rt], [-rw, 0.12]], RING0, 0.2));
-  B.add('camo', frontProfile([[-rw, ry], [rw, ry], [rw, 0.12], [rw - 0.06, rt], [-rw + 0.06, rt], [-rw, 0.12]], 0.2, BR));
-  B.add('camo', box(rw * 2, rt - ry, BR - 0.2, 0, -(rt + ry) / 2, (BR + 0.2) / 2));
-  B.add('camo', box(0.085, ry * 2, BR - 0.2, -rw + 0.0425, 0, (BR + 0.2) / 2));
-  B.add('char', new THREE.CircleGeometry(0.083, 18).translate(0, 0, 0.2005)); // the chamber mouth behind the block
-  // the joint round the block on the rear face reads as a dark line
-  for (const y of [-ry, ry]) B.add('dark', box(rw + 0.15, 0.008, 0.004, (rw - 0.15) / 2, y, BR + 0.001));
-  B.add('dark', box(0.008, ry * 2, 0.004, -0.15, 0, BR + 0.001));
+  // the squared breech ring, a casting with chamfered top edges and well rounded corners (refs/sfh18 howitzer_1,
+  // Borden_2; Hummel Funmeru): the front part round the chamber, top, bottom and left walls round the block's slot (open
+  // to the right, where the block leaves) and the thick rear wall with the big loading opening, round on the bore and
+  // open to the left (k18.js castRing, the Krupp ring of the K 18 family); the opening takes the case's rim
+  const rw = 0.235, rt = 0.18, ry = 0.105, RW = 0.1;
+  const SL = { sx0: -0.15, x1: rw, sy: ry, zf: 0.2, zs: BR - RW }, ro = 0.092;
+  castRing(B, { top: [[-rw, 0.12, 0.03], [-rw + 0.06, rt, 0.03], [rw - 0.06, rt, 0.03], [rw, 0.12, 0.03]], bot: [[rw, -rt, 0.04], [-rw, -rt, 0.04]], ...SL, ro, ch: 0.084, z0: RING0, z1: BR, b: 0.02, deep: 0.45 });
   // lugs for the piston rods: the recuperator rod from the top rear, the buffer rod from the bottom front
   B.add('camo', box(0.1, 0.13, 0.1, 0, rt + 0.06, 0.41));
   B.add('steel', zTube(0.35, 0.365, 0.035, 0.035, 8, 0, REC.y));
   B.add('steel', zTube(-0.85, 0.36, 0.026, 0.026, 8, 0, REC.y));
   B.add('camo', box(0.1, 0.13, 0.1, 0, -rt - 0.06, 0.15));
   B.add('steel', zTube(-1.2, 0.12, 0.026, 0.026, 8, 0, hy));
-  // firing mechanism bracket and the lanyard lever on the rear face (nothing may stand out of the ring's sides: it
-  // drops between the cheeks at high elevation)
-  B.add('dark', box(0.05, 0.05, 0.05, 0.19, -0.135, BR + 0.02));
-  B.add('steel', rod(V(0.19, -0.135, BR + 0.04), V(0.21, -0.24, BR + 0.1), 0.011, 5));
+  // the lever on the rear wall's lower right ('Fest' and 'Lose' cast beside it, howitzer_1): a flat bar from the knob
+  // at the right edge down to the left (nothing may stand out of the ring's sides: it drops between the cheeks at high
+  // elevation)
+  const la = [0.2, -0.1], lb = [0.07, -0.16];
+  B.add('dark', box(Math.hypot(lb[0] - la[0], lb[1] - la[1]), 0.026, 0.012, (la[0] + lb[0]) / 2, (la[1] + lb[1]) / 2, BR + 0.006, 0, 0, Math.atan2(lb[1] - la[1], lb[0] - la[0])));
+  B.add('steel', zTube(BR, BR + 0.04, 0.015, 0.015, 10, la[0], la[1]));
+  B.add('dark', sphere(0.024, la[0], la[1], BR + 0.045, 1, 1, 0.8, 10));
   B.build(rc, { dirt: 0.15, y0: TR.y });
 
   // ---- the sliding block (breech pivot at the middle of the ring's slot)
   const bz = (BR + 0.2) / 2;
   const br = pivotAt(rig, rc, 'breech', 0, 0, bz);
   const K = rig.part();
-  K.add('camo', box(0.385, ry * 2 - 0.006, BR - 0.205, 0.0425, 0, 0));
-  K.add('steel', zTube((BR - 0.205) / 2, (BR - 0.205) / 2 + 0.025, 0.028, 0.028, 10, -0.02, 0)); // firing pin housing
-  K.add('dark', box(0.05, 0.05, 0.03, 0.17, 0.05, (BR - 0.205) / 2 + 0.012));
-  K.add('steel', rod(V(0.2, 0.06, 0.08), V(0.27, 0.17, 0.14), 0.015, 6)); // operating lever
-  K.add('dark', sphere(0.025, 0.27, 0.17, 0.14, 1, 1, 1, 8));
+  // the block between the front part and the rear wall (its machined face and the firing lock show through the
+  // opening while it is shut); the operating lever on its right end, swinging up and back past the breech face
+  const kf = slotBlock(K, { ...SL, px: 0, pz: bz, lock: 0.034 }), kz = kf - (SL.zs - SL.zf) / 2;
+  K.add('dark', xTube(rw - 0.004, rw + 0.012, 0.028, 0.028, 10, -0.03, kz));
+  K.add('steel', rod(V(rw + 0.007, -0.03, kz), V(rw + 0.007, 0.09, kf + RW + 0.06), 0.011, 6));
+  K.add('dark', sphere(0.021, rw + 0.004, 0.095, kf + RW + 0.07, 1, 1, 1, 8));
   K.build(br, { dirt: 0 });
   slidingBlock(rig, br, 0.26);
 

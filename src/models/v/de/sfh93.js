@@ -9,8 +9,8 @@ import { panoramicSight, slidingBlock } from './common.js';
  * sFH 02 and the sFH 13 replaced; in 1914 the reserve Fußartillerie took the 870 left in store to the front. As the
  * surviving guns show it (lovettartillery.com "15cm s.F.H. 1893": the gun at the side with its sight mount and
  * Gr. 12 shells; the Bavarian gun in the National WWI Museum, Kansas City; Jemappes; US Signal Corps 39749, from the
- * front) and en.wikipedia "15 cm sFH 93": a short plain barrel of 1.6 m (L/11) with a squared breech ring and an
- * early horizontal sliding wedge (Rundkeil, opening to the right), a rigid two-wheeled box trail of riveted plate
+ * front) and en.wikipedia "15 cm sFH 93": a short plain barrel of 1.6 m (L/11) ending in a round breech piece with no
+ * separate ring and an early horizontal sliding block (opening to the right), a rigid two-wheeled box trail of riveted plate
  * flasks rising to the trunnions over the axle, a toothed elevating arc under the barrel worked by a long ribbed
  * pinion across the front of the cheeks and a handwheel on the right, big wooden twelve-spoke wheels with a bolted
  * hub flange; no shield and NO recoil system. "In the field, only ramps were used": two wooden ramps
@@ -39,7 +39,7 @@ const WR = 0.7, WX = 0.8; // the wheels: radius over the tyre, centre plane
 const AXY = PLAT + WR; // the axle at rest (z = 0)
 const TR = { y: 1.32, z: 0.08 }; // trunnion axis in root space
 const MZ = -1.0, BR = 0.66, RING0 = 0.3; // muzzle, breech face, front of the ring (along the bore from the trunnions)
-const RG = { w: 0.2, top: 0.2, bot: -0.21, slot: 0.11 }; // breech ring half width, top, bottom, the wedge's slot
+const RG = { R: 0.19, xf: 0.12, f0: 0.34, f1: 0.61, s0: 0.4, s1: 0.56, h: 0.105, xs: -0.13, lo: 0.08 }; // the breech piece: its round, the flat on its right (x, from, to), the wedge's slot (z, half height, its blind left end), the loading opening
 const CX = 0.235, CT = 0.03; // the flasks' inner face, their thickness
 const TAILZ = 3.0; // where the trail's end stands on the planks
 const RL = 1.2, RISE = 0.26; // the run back and the rise up the ramps at full run back
@@ -114,18 +114,23 @@ export function buildSFH93({ scheme = 'bunt' } = {}) {
   barrelParts(B);
   B.build(el, { dirt: 0.15, y0: TR.y });
 
-  // ---- the wedge: it fills the ring between the left wall and the open right side and slides out to the right
-  const fz = RING0 + 0.1, bl = BR - fz, bz = (BR + fz) / 2, bx0 = -RG.w + 0.06, bw = RG.w - bx0;
-  const br = pivotAt(rig, el, 'breech', (bx0 + RG.w) / 2, 0, bz);
+  // ---- the wedge: a plain block in the slot ahead of the rear wall, its right end flush with the flat it opens in;
+  // its machined face (the firing lock on the bore) shows through the loading opening while it is shut
+  const fz = RING0 + 0.1, bx = 0.03, bz = (BR + fz) / 2; // (the block's pivot where the old squared ring had it)
+  const br = pivotAt(rig, el, 'breech', bx, 0, bz);
   const K = rig.part();
-  K.add('camo', box(bw, RG.slot * 2 - 0.006, bl - 0.004, 0, 0, 0));
-  K.add('camo', yTube(-RG.slot + 0.003, RG.slot - 0.003, bl / 2 - 0.002, bl / 2 - 0.002, 16, 0, 0).scale(1, 1, 0.3).translate(0, 0, bl / 2 - 0.02)); // the rounded back (Rundkeil)
-  K.add('steel', zTube(bl / 2 - 0.01, bl / 2 + 0.03, 0.026, 0.026, 10, -bw / 2 + 0.11, 0)); // the firing lock
-  K.add('dark', box(0.05, 0.06, 0.04, bw / 2 - 0.08, 0.03, bl / 2 + 0.02));
-  K.add('steel', rod(V(bw / 2 - 0.08, 0.05, bl / 2 + 0.03), V(bw / 2 - 0.05, 0.2, bl / 2 + 0.07), 0.016, 6)); // its crank
-  K.add('dark', sphere(0.024, bw / 2 - 0.05, 0.2, bl / 2 + 0.07, 1, 1.3, 1, 8));
+  const kx0 = RG.xs + 0.005 - bx, kx1 = RG.xf - bx, kz0 = RG.s0 + 0.003 - bz, kz1 = RG.s1 - 0.003 - bz, kh = RG.h - 0.003;
+  K.add('camo', cast(box(kx1 - kx0, kh * 2, kz1 - kz0, (kx0 + kx1) / 2, 0, (kz0 + kz1) / 2)), { uv: true });
+  K.add('steel', box(0.2, kh * 2 - 0.02, 0.004, -bx, 0, kz1 + 0.001), { tint: 0x9a9c94 });
+  K.add('dark', zTube(kz1 - 0.004, kz1 + 0.016, 0.026, 0.026, 10, -bx, 0)); // the firing lock
+  K.add('char', new THREE.CircleGeometry(0.008, 8).translate(-bx, 0, kz1 + 0.0165));
+  // the block's handle on its right end
+  const km = (kz0 + kz1) / 2;
+  K.add('dark', box(0.03, 0.06, 0.06, kx1 + 0.012, 0.0, km));
+  K.add('steel', rod(V(kx1 + 0.02, 0.02, km), V(kx1 + 0.04, 0.16, km + 0.05), 0.014, 6));
+  K.add('dark', sphere(0.022, kx1 + 0.04, 0.17, km + 0.053, 1, 1.3, 1, 8));
   K.build(br, { dirt: 0 });
-  slidingBlock(rig, br, bw - 0.05);
+  slidingBlock(rig, br, 0.29); // (the old wedge's travel)
 
   // ---------------------------------------------------------------- the run back up the ramps
   rig.recoilLength = RL;
@@ -375,13 +380,50 @@ function woodWheel(P, side) {
   P.add('steel', rod(V(side * 0.14, 0.07, 0), V(side * 0.14, -0.07, 0), 0.008, 5)); // the linch pin
 }
 
+// cast steel has no panel seams: the paint's metric box-projected UVs (as kit.js projectUV, but each triangle by its
+// own face, so a fillet's two halves of a quad agree) moved two thirds of a metre up, so the camouflage texture's plate
+// seams (one runs along the bore's line) fall off the breech
+function cast(g) {
+  g = g.index ? g.toNonIndexed() : g;
+  if (!g.attributes.normal) g.computeVertexNormals();
+  const p = g.attributes.position, uv = new Float32Array(p.count * 2), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i); b.fromBufferAttribute(p, i + 1).sub(a); c.fromBufferAttribute(p, i + 2).sub(a);
+    b.cross(c);
+    const nx = Math.abs(b.x), ny = Math.abs(b.y), nz = Math.abs(b.z), ax = nx >= ny && nx >= nz ? 0 : ny >= nz ? 1 : 2;
+    for (let k = 0; k < 3; k++) {
+      const x = p.getX(i + k), y = p.getY(i + k), z = p.getZ(i + k);
+      uv[(i + k) * 2] = (ax === 0 ? z : x) / 4;
+      uv[(i + k) * 2 + 1] = (ax === 1 ? z : y) / 4 + 1 / 6;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+// A length of the breech piece from z0 to z1: the round of radius R cut flat on the right at x = xf (xf 0: whole), the
+// wedge's slot [xs, h] cut in from the flat (to its blind left end, half height h), or a round opening of radius r on
+// the bore
+function facetPiece(R, xf, slot, r, z0, z1) {
+  const s = new THREE.Shape();
+  if (xf > 0) {
+    const a = Math.acos(xf / R), yf = R * Math.sin(a);
+    s.moveTo(xf, yf);
+    s.absarc(0, 0, R, a, Math.PI * 2 - a, false);
+    if (slot) { const [xs, h] = slot; s.lineTo(xf, -h); s.lineTo(xs, -h); s.lineTo(xs, h); s.lineTo(xf, h); }
+    s.lineTo(xf, yf);
+  } else s.absarc(0, 0, R, 0, Math.PI * 2, false);
+  if (r > 0) s.holes.push(new THREE.Path().absarc(0, 0, r, 0, Math.PI * 2, true));
+  return new THREE.ExtrudeGeometry(s, { depth: z1 - z0, bevelEnabled: false, curveSegments: 36 }).translate(0, 0, z0);
+}
+
 // ---------------------------------------------------------------- the barrel
 // A plain short forging: a lip at the muzzle, the chase tapering back to the trunnion band, the reinforce, and the
-// squared breech ring with a rounded top and the wedge's slot open to the right; the three pegs of the old sight on
-// the ring's top, the sight arch on its left; the toothed elevating arc hung under the barrel on a web.
+// round breech piece with the wedge's slot opening in a flat on its right; the three pegs of the old sight on its top,
+// the sight arch on its left; the toothed elevating arc hung under the barrel on a web.
 function barrelParts(B) {
   B.add('camo', zLathe([[MZ + 0.3, 0.0746], [MZ, 0.0746], [MZ, 0.15], [MZ + 0.012, 0.156], [MZ + 0.07, 0.156], [MZ + 0.085, 0.142], [-0.3, 0.155],
-    [-0.28, 0.166], [RING0 - 0.02, 0.166], [RING0, 0.17], [RING0, 0.0001]], 32));
+    [-0.28, 0.166], [RING0 - 0.02, 0.166], [RING0 - 0.02, RG.lo - 0.002], [RING0 - 0.3, RG.lo - 0.002], [RING0 - 0.3, 0.0001]], 32));
   B.add('char', new THREE.CircleGeometry(0.0746, 20).rotateY(Math.PI).translate(0, 0, MZ + 0.3));
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TAU;
@@ -394,23 +436,31 @@ function barrelParts(B) {
     B.add('camo', box(0.03, 0.2, 0.26, s * 0.18, 0, 0.01));
     B.add('steel', xTube(s * 0.18, s * (CX + 0.004), 0.06, 0.06, 16));
   }
-  // the ring: front plate round the chamber's mouth, top (rounded) and bottom, the left wall; the slot open right
-  const fz = RING0 + 0.1, ch = 0.078, rl = BR - fz;
-  B.add('camo', rbox(RG.w * 2, RG.top - ch, 0.1, 0.03, 0, (RG.top + ch) / 2, RING0 + 0.05));
-  B.add('camo', rbox(RG.w * 2, -ch - RG.bot, 0.1, 0.03, 0, (RG.bot - ch) / 2, RING0 + 0.05));
-  for (const s of [-1, 1]) B.add('camo', box(RG.w - ch, ch * 2, 0.1, s * (RG.w + ch) / 2, 0, RING0 + 0.05));
-  B.add('camo', rbox(RG.w * 2, RG.top - RG.slot, rl, 0.06, 0, (RG.top + RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', rbox(RG.w * 2, -RG.slot - RG.bot, rl, 0.03, 0, (RG.bot - RG.slot) / 2, (BR + fz) / 2));
-  B.add('camo', box(0.06, RG.slot * 2, rl, -RG.w + 0.03, 0, (BR + fz) / 2));
-  B.add('char', new THREE.CircleGeometry(0.078, 20).translate(0, 0, RING0 - 0.299));
-  for (const yy of [-RG.slot, RG.slot]) B.add('dark', box(RG.w * 2 - 0.06, 0.008, 0.004, 0.03, yy, BR + 0.001));
-  // the three pegs on the ring's top for the old sight, a lifting lug, the friction tube's vent and lanyard lever
-  for (const [x, z] of [[-0.07, fz + 0.06], [0.07, fz + 0.06], [0, BR - 0.06]]) B.add('steel', yTube(RG.top - 0.01, RG.top + 0.05, 0.012, 0.012, 6, x, z));
+  // the breech piece, no separate ring (refs/sfh93: the Cuperly stereo pair from behind, Cazals from the rear right): a
+  // plain cylinder stepping up from the reinforce to a flat rear face with the round loading opening, cut flat on the
+  // right where the tall slot of the early sliding block opens; the wedge slides in it ahead of the rear wall
+  const { R, xf, f0, f1, s0, s1, h, xs, lo } = RG;
+  B.add('camo', cast(zLathe([[RING0 - 0.03, 0.166], [RING0 + 0.005, R], [f0, R], [f0, lo - 0.002]], 48)), { uv: true });
+  B.add('camo', cast(facetPiece(R, xf, null, lo - 0.002, f0, s0)), { uv: true });
+  B.add('camo', cast(facetPiece(R, xf, [xs, h], 0, s0, s1)), { uv: true });
+  B.add('camo', cast(facetPiece(R, xf, null, lo, s1, f1)), { uv: true });
+  B.add('camo', cast(facetPiece(R, 0, null, lo, f1, BR - 0.016)), { uv: true });
+  B.add('camo', cast(zLathe([[BR - 0.017, R], [BR - 0.012, R], [BR - 0.003, R - 0.003], [BR, R - 0.012], [BR, lo + 0.008], [BR - 0.006, lo], [BR - 0.017, lo]], 48)), { uv: true });
+  // the chamber dark down to the trunnion band (whose solid tubes close the bore further in)
+  B.add('char', zTube(0.19, s0, lo - 0.003, lo - 0.003, 20, 0, 0, true).scale(-1, 1, 1));
+  for (const s of [-1, 1]) B.add('ash', box(xf - xs, 0.002, s1 - s0, (xs + xf) / 2, s * (h - 0.002), (s0 + s1) / 2)); // the slot's floor and roof, in shadow
+  B.add('char', new THREE.CircleGeometry(lo, 20).translate(0, 0, 0.19));
+  // the latch on the rear face right of the opening with its knob, a bolt boss on the left of the rim
+  B.add('dark', box(0.032, 0.15, 0.022, 0.108, 0.09, BR + 0.011));
+  B.add('dark', yTube(-0.035, 0.02, 0.017, 0.017, 10, 0.108, BR + 0.017));
+  B.add('dark', zTube(BR - 0.004, BR + 0.014, 0.018, 0.018, 8, -0.15, 0.05));
+  // the three pegs on the top for the old sight, a lifting lug, the friction tube's vent and lanyard lever
+  for (const [x, z] of [[-0.07, s0 - 0.02], [0.07, s0 - 0.02], [0, BR - 0.06]]) B.add('steel', yTube(R - 0.02, R + 0.05, 0.012, 0.012, 6, x, z));
   B.add('camo', box(0.08, 0.06, 0.14, 0, 0.19, -0.02));
-  B.add('dark', box(0.05, 0.05, 0.05, 0.12, RG.top + 0.01, BR - 0.05));
-  B.add('steel', rod(V(0.12, RG.top + 0.03, BR - 0.05), V(0.14, RG.top + 0.16, BR - 0.01), 0.014, 6));
+  B.add('dark', box(0.05, 0.05, 0.05, 0.075, 0.175, s0 + 0.04));
+  B.add('steel', rod(V(0.075, 0.19, s0 + 0.04), V(0.095, 0.32, s0 + 0.08), 0.014, 6));
   // the sight arch on the ring's left: a curved bar about the trunnions
-  const ax = -RG.w - 0.02, ar = BR - 0.04;
+  const ax = -RG.R - 0.02, ar = BR - 0.04;
   for (let i = 0; i < 6; i++) {
     const a0 = (-25 + i * 10) * DEG, a1 = (-15 + i * 10) * DEG;
     B.add('dark', rod(V(ax, ar * Math.sin(a0), ar * Math.cos(a0)), V(ax, ar * Math.sin(a1), ar * Math.cos(a1)), 0.014, 5));
