@@ -100,7 +100,7 @@ export const K5 = {
   HOOK: { up: 6.55, down: WAGON_Y + HANG, lift: TY + 0.35 + HANG, set: TY + HANG },
   SEAT: BRE - 1.45 - SHELL.len / 2, // the shell's middle rammed home: its base 1.45 m inside, the charge fills the chamber behind it
   RACK: { x: 1.2, y: PY + 0.9, z: 10.4 }, // the charge (fore charge bag ahead of the brass main case) on the rack's top shelf
-  STAFF_REST: { x: -2.15, y: PY + 0.85, z: 4.0 }, // the rammer staff's head on its hooks on the left railing (the staff runs back from it)
+  STAFF_REST: { x: -2.15, y: PY + 1.08, z: 4.0 }, // the rammer staff's head on its hooks on the left railing (the staff runs back from it; high enough for its cross handles, 1 m each way, to stand upright clear of the deck)
   LOCK: { x: 0.4, y: 0.3, z: BREC + 0.03 }, // the firing lock on the rear face (recoil frame), primed before the lay
   CRANK: { x: 0.64, y: 0.0, z: BREC - 0.76 }, // the wedge's handwheel on the right of the breech ring, ahead of the slot (recoil frame)
   HANDLES: [-0.05, 1.05], // the shell car's side handles (car frame z; x 0.6, y -0.45)

@@ -32,6 +32,9 @@ const SAG = sagitta(R, GZ);
 const BOGF = { axles: 5, pitch: 1.45, wr: 0.5, top: 1.3, fx: 0.95 }, PF = 7.2; // the front groups' bogies and their pitch
 const BOGR = { axles: 4, pitch: 1.45, wr: 0.5, top: 1.3, fx: 0.95 }, PRr = 5.8;
 const BOLY0 = RH + 1.3, BOLY1 = 2.6; // the subframes (span bolsters): on the bogies' pivots, their top
+// the jacks' hand pump on the front subframe (its frame: x out to the left, y up from the ground, z back): its body's
+// middle, and its lever's pivot on the body's outer top edge and length (the handle about chest high)
+const PUMP = { x: -1.5, y: 0.75, z: 3.4, lx: -1.68, lz: 3.5, len: 0.35 };
 const HF = -17.5, HR = 16.0, BUF = 0.4; // the carriage's ends, the buffers' reach
 const GX = 1.0; // the side girders' webs
 const GT = 3.6; // the girders' top
@@ -63,14 +66,14 @@ export const K12 = {
   HOOK: { up: BEAM - 0.7, down: WAGON_Y + HANG, set: TY + HANG },
   SEAT: TZ + BRE - 1.2 - SHELL.len / 2,
   RACK: { x: 1.75, y: DECK + 0.8, z: P0 + 1.0 }, // the next charge on the ready rack's top shelf, on the right railing
-  STAFF_REST: { x: -1.74, y: DECK + 0.88, z: ZB + SHELL.len / 2 + 0.1 }, // the staff's head on its hooks on the left railing
+  STAFF_REST: { x: -1.74, y: DECK + 1.03, z: ZB + SHELL.len / 2 + 0.1 }, // the staff's head on its hooks on the left railing
   LOCK: { x: 0.28, y: 0.28, z: BRE + 0.05 },
   CRANK: { x: 0.22, y: 0.6, z: BRE + 0.1 },
   HANDLES: [-0.2, 0.55],
   RAIL_TOP: { x: -0.34, dy: -SHELL.rad - 0.04 },
   WINCH: { x: -1.25, y: DECK + 1.1, z: HR - 0.55, axis: 'x' }, // the hoist winch's crank (its arm's pivot) on the rear portal's left leg
   ASIDE: [[-1.65, 3.4], [-1.65, 4.2]], // the trolley men out of the rammers' way
-  CAR_LANE: -0.88, CHG_X: 1.25, LANE: 0.98, TAKE_X: -1.38, BAR: 0.76, RAM_OFF: [2.3, 3.3],
+  CAR_LANE: -0.88, CHG_X: 1.25, LANE: 0.98, TAKE_X: -1.38, BAR: 0.95, RAM_OFF: [2.3, 3.3],
   WRENCH: { x: 0.4, dz: 0.33 }, PRIME: { x: 0.78, dz: 0.42 }, LAN_IN: 0.92, LAN_OUT: 1.42,
   wagonYaw: trackYaw(R, WZ),
 };
@@ -118,7 +121,7 @@ export function buildK12() {
   rig.rail = { ...K12, bodyX: -SAG, jack: () => lift.position.y, run: () => car.position.z };
 
   // ================================================================ subframes, bogies, jacks, the wagon (base: fixed)
-  const bogies = [];
+  const bogies = [], pumpAt = { x: 0, z: 0, h: 0 };
   const groups = [[-GZ, PF, BOGF], [GZ, PRr, BOGR]];
   for (const [zc, pitch, spec] of groups) {
     const za = zc - pitch / 2, zb = zc + pitch / 2;
@@ -137,10 +140,24 @@ export function buildK12() {
       Q.add('dark', yTube(BOLY1 - 0.1, BOLY1 - 0.05, 0.2, 0.2, 16, s * 1.25, dz));
     }
     if (zc < 0) {
-      Q.add('camo', rbox(0.7, 0.6, 1.0, 0.05, -1.35, BOLY0 + 0.1, 3.4)); // the pump and its motor
-      Q.add('dark', xTube(-1.75, -1.05, 0.14, 0.14, 12, BOLY0 + 0.1, 3.05));
-      Q.add('steel', yTube(BOLY0 + 0.4, BOLY0 + 0.7, 0.03, 0.03, 6, -1.5, 3.7));
-      Q.add('dark', rod(V(-1.2, BOLY0 + 0.35, 3.0), V(-1.25, BOLY1 - 0.1, 1.8), 0.025, 4)); // the pressure line
+      // the pump and its motor hung low off the subframe's left side, within reach from the ground (it sat on the
+      // subframe 1.6 to 2.2 m up and the jack man worked the air under it), its hand lever on top: pivot 'pump', rocked
+      // toward him and back (rig.setPump), its handle a crossbar for both hands
+      const { x: px, y: py, z: pz } = PUMP;
+      Q.add('camo', rbox(0.55, 0.5, 0.9, 0.05, px, py, pz)); // the pump and its motor
+      Q.add('dark', xTube(px - 0.3, px + 0.25, 0.12, 0.12, 12, py - 0.04, pz - 0.3));
+      for (const dz of [-0.35, 0.35]) Q.add('dark', rod(V(px + 0.2, py + 0.22, pz + dz), V(-0.98, BOLY0 + 0.04, pz + dz), 0.03, 4)); // its straps
+      Q.add('dark', rod(V(px + 0.22, py + 0.15, pz - 0.42), V(-1.25, BOLY1 - 0.1, 1.8), 0.025, 4)); // the pressure line
+      Q.add('dark', zTube(PUMP.lz - 0.06, PUMP.lz + 0.06, 0.04, 0.04, 8, PUMP.lx, py + 0.25)); // the lever's pivot
+      const lev = pivotAt(rig, g, 'pump', PUMP.lx, py + 0.25, PUMP.lz), L = mk();
+      L.add('steel', yTube(0, PUMP.len, 0.022, 0.022, 6, 0, 0));
+      L.add('dark', zTube(-0.13, 0.13, 0.02, 0.02, 6, 0, PUMP.len));
+      L.build(lev, { dirt: 0.3, y0: 0 });
+      rig.setPump = (a) => { lev.rotation.z = a; };
+      rig.pumpLen = PUMP.len;
+      // where its handle is, the subframe's place and turn (the jack man's spot)
+      const gy = g.rotation.y, c = Math.cos(gy), sn = Math.sin(gy);
+      pumpAt.x = g.position.x + PUMP.lx * c + PUMP.lz * sn; pumpAt.z = g.position.z - PUMP.lx * sn + PUMP.lz * c; pumpAt.h = gy;
     }
     // the carriage's recoil slides on the subframe (it runs back on them) and the run-out cylinders
     for (const s of [-1, 1]) {
@@ -528,7 +545,8 @@ export function buildK12() {
   spot('charge2', WX - 0.28, DECK, K12.RACK.z + 1.3, E, 'stand');
   spot('hoist', K12.WINCH.x + 0.35, DECK, K12.WINCH.z - 0.1, Wd, 'operate');
   spot('sling', -0.72, RH + WAGON.deck, ZPICK + 0.1, E, 'stand');
-  spot('jack', -2.15, 0, -GZ + 3.2, E, 'operate');
+  // (0.4 out from the pump's handle, facing it)
+  spot('jack', pumpAt.x - 0.4 * Math.cos(pumpAt.h), 0, pumpAt.z + 0.4 * Math.sin(pumpAt.h), E + pumpAt.h, 'operate');
   spot('rammer3', K12.TAKE_X, DECK, K12.STAFF_REST.z + K12.RAM_OFF[1], N, 'stand');
   spot('rammer4', WX - 0.35, DECK, K12.RACK.z + 3.4, E, 'stand');
   spot('phone', 2.6, 0, -2.0, Wd, 'phone');

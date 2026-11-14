@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { smooth, lerp, headingOf } from './anim.js';
 import { CREW_GAITS } from '../models/v/crew.js';
-import { paced, pacedT, turn, along } from './drill_pace.js';
+import { paced, pacedT, turn, along, barHand, swingStand, RAM_BEHIND, RAM_TURN } from './drill_pace.js';
 
 // The drill of the WW2 railway guns laid on a curved firing spur (the 28 cm Kurze Bruno, the 21 cm K 12): render/de/bruno.js
 // and render/de/k12.js export these hooks (render/crews_ww1.js picks them up by kind; render/crews.js calls them before
@@ -32,7 +32,8 @@ export const ROLES = {
 const STRIDE = CREW_GAITS.walk.stride, SSTRIDE = CREW_GAITS.sidestep.stride;
 const V_WALK = 1.25;
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _inv = new THREE.Matrix4();
-const _p = { x: 0, y: 0, z: 0 };
+const _p = { x: 0, y: 0, z: 0 }, _bh = { x: 0, y: 0, z: 0 }, _sw = { x: 0, z: 0, h: 0 };
+const WALL = Math.PI / 2; // a left rammer facing the left railing, to lift the staff off its hooks or hang it up
 const _path = [{ x: 0, z: 0 }, { x: 0, z: 0 }], _P = { x: 0, z: 0, h: 0, d: 0, len: 0 };
 const dist = (ax, az, bx, bz) => Math.hypot(bx - ax, bz - az);
 const win = (k, a, b, c, d) => smooth(k, a, b) * (1 - smooth(k, c, d));
@@ -130,6 +131,8 @@ function staffAt(c, crew, K, out) {
   out.line = line; out.S = S;
   return out;
 }
+// the K 12's jack pump lever, rocked toward the jack man and back about once a second while the jacks work
+const pumpA = (c) => (c.s === 'lay' || c.s === 'depress' ? 0.25 * Math.sin(c.now * 5.5) : 0);
 // the charge: on the rack, lifted, carried, laid on the trolley, rammed
 const carryE = (c, K) => paced(c.k, CH.carry[0], CH.carry[1], durOf(c), K.RACK.z - K.ZB - 0.05, 1.3, 0.4);
 function bagAt(c, crew, K, out) {
@@ -181,6 +184,7 @@ export function mechanisms(crew, c) {
   rig.setTrolley?.(trolleyZ(c, K));
   rig.setCrab?.(crabZ(c, K));
   rig.setHoist?.(hookY(c, K));
+  rig.setPump?.(pumpA(c));
   rig.update?.(0.016);
   return true;
 }
@@ -206,9 +210,20 @@ export function act(crew, m, c, h) {
     }
     case 'rSling': slingMan(crew, K, m, c); return true;
     case 'rJack': {
-      // at the hydraulic pump on the front subframe (the K 12): he works it while the jacks go up or down
-      const on = c.s === 'lay' || c.s === 'depress';
+      // at the hydraulic pump on the front subframe (the K 12): he rocks its lever while the jacks go up or down, both
+      // hands on its handle (the model's pivot 'pump', rocked by mechanisms)
+      const on = c.s === 'lay' || c.s === 'depress', P = crew.rig.pivots.pump;
       m.put(h.x, h.y, h.z, h.h, on ? 'operate' : 'stand', on ? c.now * 1.6 : crew.idleT + m.seed);
+      if (on && P) {
+        _inv.copy(crew.rig.root.matrixWorld).invert();
+        P.updateWorldMatrix(true, false);
+        const len = crew.rig.pumpLen ?? 0.35, rx = Math.cos(m.h), rz = -Math.sin(m.h);
+        P.localToWorld(_v.set(0, len, 0.12)).applyMatrix4(_inv);
+        P.localToWorld(_w.set(0, len, -0.12)).applyMatrix4(_inv);
+        const right = (_v.x - _w.x) * rx + (_v.z - _w.z) * rz >= 0;
+        m.hand('R', right ? _v.x : _w.x, right ? _v.y : _w.y, right ? _v.z : _w.z, 1);
+        m.hand('L', right ? _w.x : _v.x, right ? _w.y : _v.y, right ? _w.z : _v.z, 1);
+      }
       return true;
     }
   }
@@ -241,44 +256,45 @@ function ramMan(crew, K, m, c) {
   // (from the end of the shell step, on the cycle's clock)
   const T = crew.tl;
   if (side > 0 && c.s === 'shell' && k > 0.96 && T && Number.isFinite(T.now)) {
-    const t0 = T.at('shell', 0.96), t1 = T.at('ram', RAMW.ram.cross[1]), zS0 = K.ZB + K.SHELL.len / 2 + off, lx0 = K.LANE;
-    walkE(crew, K, m, hx, hz, lx0, zS0, paced((T.now - t0) / (t1 - t0), 0, 1, t1 - t0, dist(hx, hz, lx0, zS0), V_WALK, 0.3), Y, hh, 0);
+    const t0 = T.at('shell', 0.96), t1 = T.at('ram', RAMW.ram.cross[1]), zS0 = K.ZB + K.SHELL.len / 2 + off + RAM_BEHIND, lx0 = K.LANE;
+    walkE(crew, K, m, hx, hz, lx0, zS0, paced((T.now - t0) / (t1 - t0), 0, 1, t1 - t0, dist(hx, hz, lx0, zS0), V_WALK, 0.3), Y, hh, RAM_TURN);
     return;
   }
   if (!S) { place(crew, K, m, hx, Y, hz, hh, 'stand', crew.idleT + m.seed); return; }
-  const W = S.W, lx = side * K.LANE, zS = S.z0 + off, zH = K.STAFF_REST.z + off, TX = K.TAKE_X;
-  const inLane = () => place(crew, K, m, lx, Y, S.z + off, 0, 'walk', (zS - (S.z + off)) / STRIDE);
+  const W = S.W, lx = side * K.LANE, zS = S.z0 + off + RAM_BEHIND, zH = K.STAFF_REST.z + off, TX = K.TAKE_X, hL = side * RAM_TURN;
+  const inLane = () => place(crew, K, m, lx, Y, S.z + off + RAM_BEHIND, hL, 'walk', (S.z0 - S.z) / STRIDE);
   let hold = 0;
   if (side < 0) {
     const t0 = W.take[0], d0 = dist(hx, hz, TX, zH), homeK = Math.min(0.99, W.out[1] + 0.04), dH = dist(TX, zH, hx, hz);
     if (k < t0) place(crew, K, m, hx, Y, hz, hh, 'stand', crew.idleT + m.seed);
-    else if (k < W.swing[0]) { walkE(crew, K, m, hx, hz, TX, zH, paced(k, t0, W.swing[0], dur, d0, V_WALK, 0.3), Y, hh, 0); hold = smooth(k, W.swing[0] - 0.02, W.swing[0]); }
-    else if (k < W.swing[1]) { swingMan(crew, K, m, st.line, lx, zH, zS); hold = 1; }
+    else if (k < W.swing[0]) { walkE(crew, K, m, hx, hz, TX, zH, paced(k, t0, W.swing[0], dur, d0, V_WALK, 0.3), Y, hh, WALL); hold = smooth(k, W.swing[0] - 0.02, W.swing[0]); }
+    else if (k < W.swing[1]) { swingMan(crew, K, m, st.line, lx); hold = 1; }
     else if (k < W.out[0]) { inLane(); hold = 1; }
-    else if (k < W.out[1]) { swingMan(crew, K, m, st.line, lx, zH, zS); hold = 1; }
-    else if (k < homeK) { place(crew, K, m, TX, Y, zH, 0, 'stand', crew.idleT + m.seed); hold = 1 - smooth(k, homeK - 0.02, homeK); }
-    else walkE(crew, K, m, TX, zH, hx, hz, paced(k, homeK, 1, dur, dH, V_WALK, 0.3), Y, 0, hh);
+    else if (k < W.out[1]) { swingMan(crew, K, m, st.line, lx); hold = 1; }
+    else if (k < homeK) { place(crew, K, m, TX, Y, zH, WALL, 'stand', crew.idleT + m.seed); hold = 1 - smooth(k, homeK - 0.02, homeK); }
+    else walkE(crew, K, m, TX, zH, hx, hz, paced(k, homeK, 1, dur, dH, V_WALK, 0.3), Y, WALL, hh);
   } else {
     const d0 = dist(hx, hz, lx, zS), go = W.out[0] + 0.02, dH = dist(lx, zS, hx, hz);
     const ram = c.s === 'ram' && T && Number.isFinite(T.now), t0 = ram ? T.at('shell', 0.96) : 0, t1 = ram ? T.at('ram', W.cross[1]) : 0;
     const crossE = ram ? paced((T.now - t0) / (t1 - t0), 0, 1, t1 - t0, d0, V_WALK, 0.3) : paced(k, W.cross[0], W.cross[1], dur, d0, V_WALK, 0.3);
     if (!ram && k < W.cross[0]) place(crew, K, m, hx, Y, hz, hh, 'stand', crew.idleT + m.seed);
-    else if (k < W.push[0] && st.line < 0.999) walkE(crew, K, m, hx, hz, lx, zS, crossE, Y, hh, 0);
+    else if (k < W.push[0] && st.line < 0.999) walkE(crew, K, m, hx, hz, lx, zS, crossE, Y, hh, hL);
     else if (k < go) inLane();
-    else walkE(crew, K, m, lx, zS, hx, hz, paced(k, go, Math.min(1, go + 0.15), dur, dH, V_WALK, 0.3), Y, 0, hh);
+    else walkE(crew, K, m, lx, zS, hx, hz, paced(k, go, Math.min(1, go + 0.15), dur, dH, V_WALK, 0.3), Y, hL, hh);
     hold = k < go ? smooth(st.line, 0.85, 0.98) : 1 - smooth(k, go - 0.02, go);
   }
-  if (hold > 0.01) {
-    const hz2 = st.z + off, hx2 = st.x + side * (K.BAR - 0.14) * st.line;
-    hand(crew, K, m, 'R', hx2, st.y, hz2 - 0.05, hold);
-    hand(crew, K, m, 'L', hx2 + side * 0.12 * st.line, st.y, hz2 + 0.05, hold);
+  // hands on his cross handle once it is in line, on the staff itself on the hooks (rolled with the staff: props stands
+  // the handles upright on the hooks and rolls them flat into line)
+  if (hold > 0.01) for (const sd of ['L', 'R']) {
+    barHand(sd, side, st.line, K.BAR, _bh);
+    hand(crew, K, m, sd, st.x + _bh.x, st.y + _bh.y, st.z + off + _bh.z, hold);
   }
 }
-// a left rammer while the staff swings between its hooks (outboard of him) and the line: he sidesteps with it and gives
-// back a step as it passes in front of him
-function swingMan(crew, K, m, e, lx, zH, zS) {
-  const TX = K.TAKE_X, x = lerp(TX, lx, e), z = lerp(zH, zS, e) + 0.42 * Math.sin(Math.PI * e);
-  place(crew, K, m, x, K.DECK, z, 0, e > 0.01 && e < 0.99 ? 'sidestep' : 'stand', (x - TX) / SSTRIDE);
+// a left rammer while the staff swings between its hooks (outboard of him) and the line: he turns from the wall into
+// his lane, his hands out in front of him and the handle passing ahead (drill_pace.js swingStand)
+function swingMan(crew, K, m, e, lx) {
+  const st = STAFF_P, TX = K.TAKE_X, P = swingStand(e, st.x, st.z + K.RAM_OFF[+m.role.slice(-1) > 2 ? 1 : 0], K.BAR, lx, WALL, TX - K.STAFF_REST.x, _sw);
+  place(crew, K, m, P.x, K.DECK, P.z, P.h, e > 0.01 && e < 0.99 ? 'sidestep' : 'stand', (P.x - TX) / SSTRIDE);
 }
 
 // The two trolley men on its left. Standing by it they face it; to move it they turn into the way it goes over 0.4 s

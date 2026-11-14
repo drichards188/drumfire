@@ -63,14 +63,14 @@ export const BRUNO = {
   HOOK: { up: 4.85, down: WAGON_Y + HANG, set: TY + HANG },
   SEAT: TZ + BRE - 1.25 - SHELL.len / 2, // the shell's middle rammed home: its base 1.25 m inside, the charge behind it
   RACK: { x: 1.75, y: DECK + 0.8, z: 3.95 }, // the next charge on the ready rack's top shelf, on the right railing at the platform's front
-  STAFF_REST: { x: -1.74, y: DECK + 0.88, z: 2.3 }, // the staff's head on its hooks along the left walkway's railing
+  STAFF_REST: { x: -1.74, y: DECK + 1.03, z: 2.3 }, // the staff's head on its hooks along the left walkway's railing
   LOCK: { x: 0.3, y: 0.3, z: BRE + 0.05 }, // the firing lock on the breech face, right of the bore (recoil frame)
   CRANK: { x: 0.25, y: 0.62, z: BRE + 0.1 }, // the wedge's handwheel on top of the breech ring (recoil frame)
   HANDLES: [-0.2, 0.55], // the trolley's push handles (trolley frame z; x 0.5, y -0.55)
   RAIL_TOP: { x: -0.34, dy: -SHELL.rad - 0.04 }, // the trolley's side rail (trolley frame)
   WINCH: { x: -1.25, y: DECK + 1.1, z: HALF - 0.32, axis: 'z' }, // the hoist winch's crank (its arm's pivot) on the rear wall, left of the opening
   ASIDE: [[-1.62, 0.55], [-1.62, 1.35]], // the trolley men out of the rammers' way, at the front of the left walkway
-  CAR_LANE: -0.88, CHG_X: 1.25, LANE: 0.98, TAKE_X: -1.38, BAR: 0.76, RAM_OFF: [2.2, 3.1],
+  CAR_LANE: -0.88, CHG_X: 1.25, LANE: 0.98, TAKE_X: -1.38, BAR: 0.95, RAM_OFF: [2.2, 3.1],
   WRENCH: { x: 0.42, dz: 0.33 }, PRIME: { x: 0.8, dz: 0.42 }, LAN_IN: 0.92, LAN_OUT: 1.42,
   wagonYaw: trackYaw(R, WZ), // the wagon stands on the curve, turned from the car's axis
 };

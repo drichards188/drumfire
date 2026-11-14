@@ -67,7 +67,7 @@ export const MAX38 = {
   HOOK: { up: 5.25, down: WAGON_Y + HANG, lift: 4.66 + HANG, set: TY + HANG },
   SEAT: BRE - 1.7 - SHELL.len / 2, // the shell's middle rammed home: its base 1.7 m inside, the charge fills the chamber behind it
   RACK: { x: 1.1, y: 3.95, z: 11.65 }, // the charge (fore charge bag ahead of the brass main case) on the rack's top shelf
-  STAFF_REST: { x: -2.22, y: 4.0, z: 6.9 },
+  STAFF_REST: { x: -2.22, y: WALK + 1.08, z: 6.9 }, // high enough for the cross handles, 1 m each way, to stand upright clear of the deck
   LOCK: { x: -0.3, y: 0.42, z: BRE + 0.06 }, // the firing lock (recoil frame), primed before the lay
   HANDLES: [-0.05, 1.05], // the projectile car's side handles (car frame z; x 0.6, y -0.45) // the rammer staff's head on its hooks on the left railing
   CRANK: { x: 0.3, y: 0.82, z: BRE + 0.12 }, // the wedge's operating handwheel on top of the breech ring (recoil frame)

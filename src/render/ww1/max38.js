@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { smooth, lerp, clamp01, headingOf } from '../anim.js';
 import { CREW_GAITS } from '../../models/v/crew.js';
-import { paced, pacedT, turn, along } from '../drill_pace.js';
+import { paced, pacedT, turn, along, barHand, swingStand, RAM_BEHIND, RAM_TURN } from '../drill_pace.js';
 
 // The 38 cm "Langer Max" drill on its Bettung (render/crews.js calls these hooks before its own; DESIGN.md "WW1 German
 // mode"). The gun is loaded level (loadEl 0). Per loading step (k is the step's 0..1):
@@ -49,11 +49,12 @@ const RAIL_TOP = { x: -0.42, dy: -0.16 }; // the car's top side rail (car frame:
 const CHG_X = 1.75; // the charge men's lane on the right walkway
 const LANE = 1.05; // the rammers walk beside the car, clear of its wheels, and push on the staff's cross handles
 const TAKE_X = -1.85; // the left pair stands here to lift the staff off its hooks on the left railing
-const BAR = 0.8; // the cross handles' half length
+const BAR = 1.0; // the cross handles' half length (each man stands behind his end: drill_pace.js barHand)
+const WALL = Math.PI / 2; // a left rammer facing the left railing, to lift the staff off its hooks or hang it up
 const WRENCH = { x: 0.75, dz: 0.3 }; // where the lanyard man stands to wind the wedge's handwheel (z: BRE + dz)
 const PRIME = { x: -0.2, dz: 0.5 }; // and to prime the lock, behind the breech between the car's rails
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _inv = new THREE.Matrix4();
-const _p = { x: 0, z: 0 };
+const _p = { x: 0, z: 0 }, _bh = { x: 0, y: 0, z: 0 }, _sw = { x: 0, z: 0, h: 0 };
 const _path = [{ x: 0, z: 0 }, { x: 0, z: 0 }], _P = { x: 0, z: 0, h: 0, d: 0, len: 0 };
 
 // The rammer staff's stroke windows (shares of the step): swung into line off the hooks, the push, the draw back, swung
@@ -226,47 +227,47 @@ function ramMan(crew, m, c) {
   const i = +m.role.slice(-1) - 1, pair = i >> 1, side = i % 2 ? 1 : -1, off = RAM_OFF[pair];
   const hx = m.spot.x, hz = m.spot.z, hh = m.spot.heading, k = c.k, st = STAFF_P, S = st.S, dur = durOf(c);
   if (!S) { place(crew, m, hx, WALK, hz, hh, 'stand', crew.idleT + m.seed); return; }
-  const W = S.W, lx = side * LANE, zS = S.z0 + off, zH = SR.z + off;
+  const W = S.W, lx = side * LANE, zS = S.z0 + off + RAM_BEHIND, zH = SR.z + off, hL = side * RAM_TURN;
   const left = side < 0;
   // his place in the lane through the stroke, and the gait's phase there
-  const inLane = () => place(crew, m, lx, WALK, S.z + off, 0, 'walk', (zS - (S.z + off)) / STRIDE);
+  const inLane = () => place(crew, m, lx, WALK, S.z + off + RAM_BEHIND, hL, 'walk', (S.z0 - S.z) / STRIDE);
   let hold = 0;
   if (left) {
     const t0 = W.take[0], d0 = dist(hx, hz, TAKE_X, zH);
     const homeK = W.out[1] + 0.04, dH = dist(TAKE_X, zH, hx, hz);
     if (k < t0) place(crew, m, hx, WALK, hz, hh, 'stand', crew.idleT + m.seed);
-    else if (k < W.swing[0]) { walkE(crew, m, hx, hz, TAKE_X, zH, paced(k, t0, W.swing[0], dur, d0, V_WALK, 0.3), WALK, hh, 0); hold = smooth(k, W.swing[0] - 0.02, W.swing[0]); }
+    else if (k < W.swing[0]) { walkE(crew, m, hx, hz, TAKE_X, zH, paced(k, t0, W.swing[0], dur, d0, V_WALK, 0.3), WALK, hh, WALL); hold = smooth(k, W.swing[0] - 0.02, W.swing[0]); }
     else if (k < W.swing[1]) {
       // carrying it into line: a sidestep to the right, facing along it
-      swingMan(crew, m, st.line, lx, zH, zS);
+      swingMan(crew, m, st.line, lx);
       hold = 1;
     } else if (k < W.out[0]) { inLane(); hold = 1; }
     else if (k < W.out[1]) {
-      swingMan(crew, m, st.line, lx, zH, zS);
+      swingMan(crew, m, st.line, lx);
       hold = 1;
-    } else if (k < homeK) { place(crew, m, TAKE_X, WALK, zH, 0, 'stand', crew.idleT + m.seed); hold = 1 - smooth(k, homeK - 0.02, homeK); }
-    else walkE(crew, m, TAKE_X, zH, hx, hz, paced(k, homeK, 1, dur, dH, V_WALK, 0.3), WALK, 0, hh);
+    } else if (k < homeK) { place(crew, m, TAKE_X, WALK, zH, WALL, 'stand', crew.idleT + m.seed); hold = 1 - smooth(k, homeK - 0.02, homeK); }
+    else walkE(crew, m, TAKE_X, zH, hx, hz, paced(k, homeK, 1, dur, dH, V_WALK, 0.3), WALK, WALL, hh);
   } else {
     const d0 = dist(hx, hz, lx, zS), go = W.out[0] + 0.02, dH = dist(lx, zS, hx, hz);
     if (k < W.cross[0]) place(crew, m, hx, WALK, hz, hh, 'stand', crew.idleT + m.seed);
-    else if (k < W.push[0] && st.line < 0.999) walkE(crew, m, hx, hz, lx, zS, paced(k, W.cross[0], W.cross[1], dur, d0, V_WALK, 0.3), WALK, hh, 0);
+    else if (k < W.push[0] && st.line < 0.999) walkE(crew, m, hx, hz, lx, zS, paced(k, W.cross[0], W.cross[1], dur, d0, V_WALK, 0.3), WALK, hh, hL);
     else if (k < go) inLane();
-    else walkE(crew, m, lx, zS, hx, hz, paced(k, go, Math.min(1, go + 0.18), dur, dH, V_WALK, 0.3), WALK, 0, hh);
+    else walkE(crew, m, lx, zS, hx, hz, paced(k, go, Math.min(1, go + 0.18), dur, dH, V_WALK, 0.3), WALK, hL, hh);
     hold = k < go ? smooth(st.line, 0.85, 0.98) : 1 - smooth(k, go - 0.02, go);
   }
   // hands on the staff at his hold point: on the cross handle's end once it is in line, on the staff itself on the hooks
-  if (hold > 0.01) {
-    const hz2 = st.z + off, hx2 = st.x + side * 0.68 * st.line;
-    hand(crew, m, 'R', hx2, st.y, hz2 - 0.05, hold);
-    hand(crew, m, 'L', hx2 + side * 0.12 * st.line, st.y, hz2 + 0.05, hold);
+  // (rolled with the staff: props stands the handles upright on the hooks and rolls them flat into line)
+  if (hold > 0.01) for (const sd of ['L', 'R']) {
+    barHand(sd, side, st.line, BAR, _bh);
+    hand(crew, m, sd, st.x + _bh.x, st.y + _bh.y, st.z + off + _bh.z, hold);
   }
 }
 
-// a left rammer while the staff swings between its hooks (outboard of him) and the line (inboard): he sidesteps
-// inboard with it and gives back a step as it passes across in front of him, so it never goes through him
-function swingMan(crew, m, e, lx, zH, zS) {
-  const x = lerp(TAKE_X, lx, e), z = lerp(zH, zS, e) + 0.42 * Math.sin(Math.PI * e);
-  place(crew, m, x, WALK, z, 0, e > 0.01 && e < 0.99 ? 'sidestep' : 'stand', (x - TAKE_X) / SSTRIDE);
+// a left rammer while the staff swings between its hooks (outboard of him) and the line (inboard): he turns from the
+// wall into his lane, his hands out in front of him and the handle passing ahead (drill_pace.js swingStand)
+function swingMan(crew, m, e, lx) {
+  const st = STAFF_P, P = swingStand(e, st.x, st.z + RAM_OFF[+m.role.slice(-1) > 2 ? 1 : 0], BAR, lx, WALL, TAKE_X - SR.x, _sw);
+  place(crew, m, P.x, WALK, P.z, P.h, e > 0.01 && e < 0.99 ? 'sidestep' : 'stand', (P.x - TAKE_X) / SSTRIDE);
 }
 
 // The two car men in their lane on the left of the car. Standing by it they face it; to move it they turn into the

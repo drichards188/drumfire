@@ -205,6 +205,7 @@ function home(crew, m, G, h) {
 }
 
 // the rammers: two a side of the staff, the front pair at `man` (axial), the rear pair 0.65 m behind
+const RAM_LAT = 0.32, RAM_IN = 0.7;
 function ramMan(crew, m, c, h, G, d) {
   const H = home(crew, m, G, h), s = c.s;
   const r = (s === 'ram' || s === 'cartridge') ? d.ram : null;
@@ -212,28 +213,34 @@ function ramMan(crew, m, c, h, G, d) {
   const side = m.spot.x < 0 ? -1 : 1, rear = /[34]$/.test(m.role), back = rear ? 0.65 : 0;
   const a = r.man - back;
   crew.trayAt(a, _a);
-  const x = _a.x + crew.rt.x * side * 0.45, z = _a.z + crew.rt.z * side * 0.45;
+  // At work he stands RAM_LAT off the staff, turned RAM_IN toward it, both hands on it ahead of him (he used to face the
+  // breech 0.45 m off it with the far hand behind him, the arm wrapped back across his body); from his post and back to it
+  // he turns and closes in as he takes hold and lets go.
+  const w = r.phase === 'take' ? r.p : r.phase === 'home' ? 1 - r.p : 1, lat = lerp(0.45, RAM_LAT, w);
+  const x = _a.x + crew.rt.x * side * lat, z = _a.z + crew.rt.z * side * lat;
   // He faces the breech throughout and walks his axial place: backwards to take hold, forwards with each stroke, a
   // step back between strokes. One gait for all of it, its phase his axial place over the stride, so the feet stay
   // planted through every change of direction (a phase restarted at each stroke made them skid).
   // (in the gait from the first step back to the last step home, the strokes' ends and the hold included: a stand
   // pose for the frames between two strokes would plant the feet elsewhere and slide them back)
   const inGait = !((r.phase === 'take' && r.p <= 0) || (r.phase === 'home' && r.p >= 1));
-  m.put(x, H.y, z, crew.az, inGait ? 'walk' : 'stand', inGait ? (r.man - G.homeA) / STRIDE : crew.idleT + m.seed);
+  m.put(x, H.y, z, crew.az + side * RAM_IN * w, inGait ? 'walk' : 'stand', inGait ? (r.man - G.homeA) / STRIDE : crew.idleT + m.seed);
   // hands on the staff (it lies along the bore at the man's axial place)
   const onStaff = d.staff != null && (r.phase === 'push' || r.phase === 'hold' || (r.phase === 'back' && r.p < 0.15) || (r.phase === 'take' && r.p > 0.85));
   if (onStaff) {
-    const w = r.phase === 'back' ? 1 - r.p / 0.15 : r.phase === 'take' ? (r.p - 0.85) / 0.15 : 1;
-    crew.trayAt(a + 0.3, _b); m.hand(side < 0 ? 'R' : 'L', _b.x, _b.y, _b.z, w);
-    crew.trayAt(a - 0.2, _b); m.hand(side < 0 ? 'L' : 'R', _b.x, _b.y, _b.z, w);
+    const g = r.phase === 'back' ? 1 - r.p / 0.15 : r.phase === 'take' ? (r.p - 0.85) / 0.15 : 1;
+    crew.trayAt(a + 0.1, _b); m.hand(side < 0 ? 'R' : 'L', _b.x, _b.y, _b.z, g); // the near hand
+    crew.trayAt(a + 0.45, _b); m.hand(side < 0 ? 'L' : 'R', _b.x, _b.y, _b.z, g); // the far one, ahead of it
   }
 }
 
+// a roller walking the shell along stands ROLL_LAT off its flank, turned ROLL_IN toward it
+const ROLL_LAT = 0.33, ROLL_IN = 0.6;
 // The rollers: they walk to the trolley while the wedge is opened, roll the shell off it onto the lift's car walking
 // beside it, hands on its flank, and walk back. Even pace, and they turn into the walk and out of it (drill_pace.js).
 function rollMan(crew, m, c, h, G, d) {
   const H = home(crew, m, G, h), s = c.s, k = c.k, side = m.spot.x < G.lift.x ? -1 : 1;
-  const sx = G.lift.x + side * 0.7, dur = c.p.job?.dur ?? 18;
+  const sx = G.lift.x + side * (crew.srad * 0.95 + ROLL_LAT), dur = c.p.job?.dur ?? 18, HP = side * ROLL_IN;
   const zPush = (p) => lerp(G.stack.z, G.lift.foot.z, p) + 0.45;
   const hx = m.spot.x, hz = m.spot.z, hh = m.spot.heading, d0 = Math.hypot(sx - hx, zPush(0) - hz), d1 = Math.hypot(hx - sx, hz - zPush(1));
   const out = headingOf(sx - hx, zPush(0) - hz), back = headingOf(hx - sx, hz - zPush(1));
@@ -243,28 +250,29 @@ function rollMan(crew, m, c, h, G, d) {
     const tw = Math.min(0.8 * dur, d0 / 1.2 + 0.3), t0 = 0.9 * dur - tw, tt = k * dur;
     const e = paced(k, 0.1, 0.9, dur, d0, 1.2, 0.3, true);
     x = lerp(hx, sx, e); z = lerp(hz, zPush(0), e);
-    head = tt < t0 ? turn(hh, out, clamp01((tt - t0 + 0.4) / 0.4)) : e < 1 ? out : turn(out, 0, clamp01((tt - 0.9 * dur) / 0.35));
+    head = tt < t0 ? turn(hh, out, clamp01((tt - t0 + 0.4) / 0.4)) : e < 1 ? out : turn(out, HP, clamp01((tt - 0.9 * dur) / 0.35));
     if (e > 0 && e < 1) { pose = 'walk'; t = (d0 * e) / STRIDE; }
   } else if (s === 'shell' && k < 0.5) {
     if (k < 0.2) {
       // walking it along: the shell moves on the mechanism's smooth curve, they keep pace with it
       const p = smooth(k, 0.04, 0.2);
-      x = sx; z = zPush(p); head = 0;
+      x = sx; z = zPush(p); head = HP;
       if (p > 0.005 && p < 0.995) { pose = 'walk'; t = (zPush(0) - z) / STRIDE; }
       hands = win(k, 0.02, 0.05, 0.18, 0.2);
     } else {
       // back home: a turn on the spot, the walk, a turn into his place
       const tw = d1 / 1.2 + 0.3, tt = (k - 0.24) * dur, e = paced(k, 0.24, 0.5, dur, d1, 1.2, 0.3);
       x = lerp(sx, hx, e); z = lerp(zPush(1), hz, e);
-      head = e <= 0 ? turn(0, back, clamp01((k - 0.2) * dur / 0.5)) : e < 1 ? back : turn(back, hh, clamp01((tt - tw) / 0.5));
+      head = e <= 0 ? turn(HP, back, clamp01((k - 0.2) * dur / 0.5)) : e < 1 ? back : turn(back, hh, clamp01((tt - tw) / 0.5));
       if (e > 0 && e < 1) { pose = 'walk'; t = (d1 * e) / STRIDE; }
     }
   }
   toRoot(crew, x, z);
   m.put(_p.x, H.y, _p.z, head + crew.az, pose, t);
   if (hands > 0 && d.vis) {
-    // palms on the shell's flank, its rear half: the near hand ahead, the far one across his body behind it
-    for (const [hand, dz] of side < 0 ? [['R', 0.25], ['L', 0.5]] : [['L', 0.25], ['R', 0.5]]) {
+    // palms on the shell's flank, its rear half, both ahead of him: the near hand 0.15 m, the far one 0.45 m (it used
+    // to reach back across his body behind him)
+    for (const [hand, dz] of side < 0 ? [['R', 0.3], ['L', 0]] : [['L', 0.3], ['R', 0]]) {
       toRoot(crew, G.lift.x + side * crew.srad * 0.95, zPush(smooth(k, 0.04, 0.2)) - 0.45 + dz);
       m.hand(hand, _p.x, G.stack.y + 0.02, _p.z, hands);
     }

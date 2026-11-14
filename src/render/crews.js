@@ -64,6 +64,8 @@ const V_CARRY = 1.1, V_BAG = 1.2, V_WALK = 1.3, V_PAIR = 0.9, PAIR_OMEGA = 1.3, 
 // is for, at a walking pace, instead of covering the whole way inside a 1 to 2 s step at a run
 // (the German field and heavy guns; the British guns keep their step-bound drill for now)
 const TIMED = new Set(['lefh18', 'sfh18', 'k17', 'sfh13', 'k18', 'mrs18', 'm16', ...TIMED_WW1]);
+// the heavies' German rammer team at work: RAM_LAT off the staff, turned RAM_IN toward it (ramMan)
+const RAM_LAT = 0.32, RAM_IN = 0.6, RAM_STAG = 0.45;
 // the man who works the breech block of these heavies (the rammers stand 3 m back on the K 18's platform: their
 // hands used to stretch the whole way to the handle)
 const BLOCK_MAN = { k18: 'lanyard', mrs18: 'lanyard', m16: 'lanyard', ...BLOCK_MAN_WW1 };
@@ -998,21 +1000,46 @@ export class GunCrew {
     const effort = this.ramK * (1 - smooth(c.k, 0.76, 0.95));
     const stepping = (adv > 0.025 && ((c.k > 0.18 && c.k < 0.7) || c.k > 0.8 || (this.timed() && c.s === 'cartridge' && (c.k > 0.15 && c.k < 0.5))))
       || (back > 0 && (c.s === 'shell' && c.k < 0.15 || c.s === 'ram' && c.k > 0.55 && c.k < 0.8));
-    m.put(h.x + this.bd.x * adv, h.y, h.z + this.bd.z * adv, h.h, stepping ? on ? 'carryWalk' : 'walk' : on ? 'ramLoad' : 'stand', stepping ? (adv - back) / (on ? CSTRIDE : STRIDE) : on ? effort : this.idleT + m.seed);
-    if (this.staffOwner && (on || m === this.staffOwner)) {
+    // his hold on the staff, back from its head: fixed to the shaft through a stroke, so the hands travel with the wood
+    // instead of sliding to its nearest point beside him
+    let d = 0, dRaw = 0;
+    if (this.staffOwner) {
       const hu = this.u.x * this.u.x + this.u.z * this.u.z || 1;
       const base = m.home(this.tmp[1]), startBack = this.pairLead && !this.timed() && c.s === 'ram' ? 1.2 : 0;
       const fwd = this.timed() && c.s === 'cartridge' ? adv : 0; // (the timed rammers' walk up for the cartridge)
       const sm = ((base.x - this.bd.x * (startBack - fwd) - this.T.x) * this.u.x + (base.z - this.bd.z * (startBack - fwd) - this.T.z) * this.u.z) / hu;
       const start = c.s === 'cartridge' ? -0.7 : this.aRam0 - this.half;
-      // These distances are fixed to the shaft during a stroke: the hands travel with
-      // the wood instead of continually sliding to its nearest point beside the man.
-      const d = Math.max(0.3, Math.min(this.staffLen - 0.5, start - (this.aT + sm)));
-      const hold = Math.min(1.05, this.staffLen - 0.1), e = this.staffGrip ?? 0, near = BRITISH.has(this.kind) ? 'R' : this.staffSide(m, d); // (the British keep their old hands)
-      // the hand on the staff's side forward, the other behind it (see the light guns' rammer above)
+      dRaw = start - (this.aT + sm);
+      d = Math.max(0.3, Math.min(this.staffLen - 0.5, dRaw));
+    }
+    // A German rammer holds the staff, and takes the ram's pose, only while it is in line and long enough to reach him
+    // (the pose held his hands out at nothing while it swung in, and the H M1's rear pair through the charge's short
+    // stroke; hands far down it chased it as it tilted); the first man has it throughout. The team closes in to RAM_LAT off it and turns RAM_IN toward it, both
+    // hands on it ahead of him (abreast of it, the far hand was behind him, the arm wrapped back across his body).
+    // (in a team of two the man on the right of it works up to RAM_STAG further back, as far as the staff behind him
+    // allows, so the pair abreast either side do not reach for the same place and lock arms over it)
+    const de = !BRITISH.has(this.kind), e = this.staffGrip ?? 0;
+    const lat = (h.x - this.T.x) * this.rt.x + (h.z - this.T.z) * this.rt.z, sd = lat < 0 ? -1 : 1;
+    const stag = de && sd > 0 && m !== this.staffOwner && rammers.length <= 2 ? Math.max(0, Math.min(RAM_STAG, this.staffLen - 0.75 - dRaw)) : 0;
+    dRaw += stag; d = Math.max(0.3, Math.min(this.staffLen - 0.5, d + stag));
+    const holds = !de || m === this.staffOwner || (on && e > 0.88 && dRaw < this.staffLen - 0.25), work = on && holds && (!de || e > 0.88);
+    const eg = de && work && this.staffOwner ? smooth(e, 0.3, 0.9) : 0;
+    let inX = 0, inZ = 0, turnIn = 0;
+    if (eg > 0) {
+      const step = Math.max(0, Math.abs(lat) - RAM_LAT) * eg;
+      inX = -this.rt.x * sd * step - this.bd.x * stag * eg; inZ = -this.rt.z * sd * step - this.bd.z * stag * eg; turnIn = sd * RAM_IN * eg;
+    }
+    m.put(h.x + this.bd.x * adv + inX, h.y, h.z + this.bd.z * adv + inZ, h.h + turnIn, stepping ? work ? 'carryWalk' : 'walk' : work ? 'ramLoad' : 'stand', stepping ? (adv - back) / (work ? CSTRIDE : STRIDE) : work ? effort : this.idleT + m.seed);
+    if (this.staffOwner && (on || m === this.staffOwner) && holds) {
+      const hold = Math.min(1.05, this.staffLen - 0.1), near = BRITISH.has(this.kind) ? 'R' : this.staffSide(m, d); // (the British keep their old hands)
+      // the hand on the staff's side forward, the other behind it (see the light guns' rammer above); the German team's
+      // both ahead of him, the near one 0.1 m, the far one 0.45 m, on his side of the shaft (the pair either side of it
+      // had their fists in the same place)
       for (const side of ['L', 'R']) {
-        _a.set(0, 0, lerp(hold, side === near ? d : Math.min(this.staffLen - 0.1, d + 0.38), e)).applyMatrix4(this.staff.matrix);
-        const grip = m === this.staffOwner && side === (this.staffRest ?? 'R') ? 1 : smooth(e, 0.45, 0.95);
+        const at = de ? Math.max(0.05, d - (side === near ? 0.1 : 0.45)) : side === near ? d : Math.min(this.staffLen - 0.1, d + 0.38);
+        _a.set(0, 0, lerp(hold, at, e)).applyMatrix4(this.staff.matrix);
+        if (de) { _a.x += this.rt.x * sd * 0.04 * e; _a.z += this.rt.z * sd * 0.04 * e; }
+        const grip = m === this.staffOwner && side === (this.staffRest ?? 'R') ? 1 : de ? smooth(e, 0.88, 1) : smooth(e, 0.45, 0.95);
         m.hand(side, _a.x, _a.y, _a.z, grip);
       }
     }
