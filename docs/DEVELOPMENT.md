@@ -36,10 +36,13 @@ node tools/shot.mjs "/?mode=ww1&play=1" shots/x.png --lineup k5,wespe,m99   # th
 node tools/researchtest.mjs 1 2 3 --era de --lineup set:k38+hummel+wespe+nbw42+k5   # career battles with a named lineup (@3: every part at its top)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
 node tools/voicetest.mjs --op flanders --unit 1 --seconds 200  # the German crew voices in a battle (--op ridge: WW1), headless: the lines in order and their rules
+node tools/perfwatch.mjs                                      # follows the frame recorder's newest session while you play: a line per spike or slow stretch
+node tools/perfreport.mjs [session]                           # sums a recorded session (default perf/LATEST): frame times, spikes by cause, the worst
 ```
 
 - **`simtest`** runs whole games on worker threads and prints win rates and per-game figures. Run it after changing the gun, shell, target or difficulty tables, the AI crews, the enemy or the director.
 - **`shot.mjs`** launches its own headless Chromium through `playwright-core` (Chromium from `~/.cache/ms-playwright`). Its other flags are `--size WxH`, `--until "expr"` (wait for a condition), `--eval "expr"` (run after the wait, result printed) and `--dev` (dev mode on, every battery open).
+- **The frame recorder** (`src/perfrec.js`) runs on every game page the dev server serves (`?perf=0` turns it off; the build never has it). It times each stage of the frame and writes the spikes, with the 2 seconds before them and what was happening, to `perf/<session>.jsonl` through the dev server; F3 shows the file. Play, then run `perfreport` (or `perfwatch` while playing).
 - **`menushots.mjs`** takes the main menu's background stills from the game itself: for each gun it opens the game page with every battery open, hides the console, puts the gun on auto, runs the battle on until it fires and captures the blast (`--size WxH`, `--quality`, `--out`). Each run plays a new battle, so look at the pictures before keeping them.
 
 ## URL parameters

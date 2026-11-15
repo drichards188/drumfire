@@ -34,7 +34,10 @@ export class DynamicResolution {
       ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
     this._free = [];
     this._pending = [];
+    this._tags = []; // each pending query's frame tag (`tag`, set by the frame recorder, src/perfrec.js)
     this._active = null;
+    this.tag = 0;
+    this.onGpu = null; // (ms, tag): every timed frame, for the frame recorder
     this._gpuSum = 0;
     this._gpuN = 0;
   }
@@ -63,6 +66,7 @@ export class DynamicResolution {
     if (!this._active) return;
     this._gl.endQuery(this._ext.TIME_ELAPSED_EXT);
     this._pending.push(this._active);
+    this._tags.push(this.tag);
     this._active = null;
   }
   _poll() {
@@ -74,10 +78,12 @@ export class DynamicResolution {
       if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
       const ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
       this._pending.shift();
+      const tag = this._tags.shift();
       this._free.push(q);
       if (!disjoint) {
         this._gpuSum += ns / 1e6;
         this._gpuN++;
+        this.onGpu?.(ns / 1e6, tag);
       }
     }
   }

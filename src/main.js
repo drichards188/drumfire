@@ -1020,6 +1020,7 @@ async function init() {
   const asVec = (p, out) => out.set(p.x, p.y ?? 0, p.z);
   const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _dir = new THREE.Vector3();
   const seenShells = new WeakSet();
+  let perf = null; // the frame recorder (src/perfrec.js, dev server only), made before the loop
   const handlers = {
     // a gun fired: muzzle blast, light, recoil, sound, shake
     fire(unit, piece, shell) {
@@ -1183,12 +1184,14 @@ async function init() {
     sim.events = sim.events || {};
     for (const [name, fn] of Object.entries(handlers)) {
       sim.events[name] = (...args) => {
+        const t0 = perf ? performance.now() : 0;
         try {
           fn(...args);
         } catch (e) {
           console.warn(`event ${name}: ${e.message}`);
         }
         drumfire.hooks[name]?.(...args);
+        if (perf) perf.event(name, args, performance.now() - t0);
       };
     }
     // the title screen's cutaways: a gun fires in the demonstration battle, the camera rides its shell
@@ -1461,7 +1464,31 @@ async function init() {
   let frameAvg = 16;
   const bracketPt = new THREE.Vector3();
 
+  // The frame recorder on the dev server (src/perfrec.js, tools/perfwatch.mjs, tools/perfreport.mjs): every stage of the
+  // frame timed, the spikes written to perf/<session>.jsonl with what was happening. ?perf=0 turns it off; the headless
+  // tools (navigator.webdriver) have it only with ?perf=1. The build never loads it.
+  if (import.meta.env.DEV && query.get('perf') !== '0' && (!navigator.webdriver || query.get('perf') === '1')) {
+    try {
+      const { createPerfRecorder } = await import('./perfrec.js');
+      const brief = () => ({ st: state, sim: sim ? Math.round(sim.time) : null, ph: sim?.phase ?? null, ts: params.timeScale,
+        unit: UNITS[selected]?.kind ?? null, cam: following ? 'shell' : gview?.active ? 'gun' : freeCam ? 'free' : chase.mode });
+      perf = createPerfRecorder({ renderer, dynRes, fx, flares, sim, context: {
+        camera,
+        timeScale: () => params.timeScale,
+        settings: () => ({ quality: params.quality, dynamicRes: params.dynamicRes, weather: params.weather, mode: WW2 ? 'ww2' : WW1 ? 'ww1' : 'ww1917' }),
+        brief,
+        full: () => ({ ...brief(), quality: params.quality, dist: Math.round(chase.dist), at: [camera.position.x, camera.position.y, camera.position.z].map(Math.round),
+          flares: flares.items.length, flashes: flares.flashes.length, hidden: renderLayer?.detail?.hidden ?? null }),
+      } });
+      drumfire.perf = perf;
+    } catch (e) {
+      console.warn(`frame recorder: ${e.message}`);
+    }
+  }
+
   const frame = (forcedDt, draw = true) => {
+    // (the frame recorder times the drawn frames only, not a fast-forward's)
+    const pr = perf && forcedDt == null && draw && perf.frameStart() ? perf : null;
     timer.update();
     const rawDt = forcedDt ?? THREE.MathUtils.clamp(timer.getDelta(), 0, 0.1);
     frameAvg += (rawDt * 1000 - frameAvg) * 0.05;
@@ -1488,6 +1515,7 @@ async function init() {
     // (a lesson's demo may work the gun's keys itself: tutorial.gunInput)
     if (gview?.active && sim?.gunner) sim.gunner.setInput(tutorial?.gunInput ?? (following ? IDLE : gview.input()));
     fx.closeUp = !!gview?.active && !following; // at a gun, a blast near the eye throws fewer puffs (fx/artillery.js lod)
+    pr?.mark('sim');
     if (dt > 0 && !left) sim?.update(dt); // (a battle left early stands still behind its summary)
     syncGunner();
     feed?.update();
@@ -1496,6 +1524,7 @@ async function init() {
     if (tutorial?.active && !DAY_WEATHER.includes(params.weather)) setWeather('Clear', true);
     tutorial?.update(rawDt);
     if (SANDBOX || !sim) stepFakeShells(dt);
+    pr?.mark('render');
     if (!renderLayer) for (const rig of rigs.values()) {
       rig.update?.(dt);
       if (rig.rec > 0) {
@@ -1509,6 +1538,7 @@ async function init() {
     // at a gun in person (not riding a shell): its crew in the close tier, the far field thinned (render/guns.js pov)
     if (renderLayer?.guns) renderLayer.guns.pov = gview?.active && !following && sim?.gunner?.st ? sim.gunner.st : null;
     if (sim) renderLayer?.update?.(dt, rawDt, sim, fx, camera);
+    pr?.mark('mode');
     if (sim) modeR?.update?.(dt, rawDt, sim, camera);
     // a V-weapon site frames each new step of its drill and its launch (ww2/render.js), only while the camera
     // orbits that unit and the player is not dragging it; the player's own orbit and zoom stand in between
@@ -1520,8 +1550,11 @@ async function init() {
         chase.goalDist = f.dist;
       }
     }
+    pr?.mark('world');
     world?.update?.(dt, camera);
+    pr?.mark('craters');
     craters?.update?.(dt, camera);
+    pr?.mark('hooks');
     if (sim) {
       for (const sh of sim.shells) {
         if (!seenShells.has(sh)) {
@@ -1531,6 +1564,7 @@ async function init() {
       }
     }
     for (const f of drumfire.onFrame) f(dt, rawDt, t);
+    pr?.mark('camera');
 
     const atGun = !!gview?.active && !following; // first person at a gun (src/ww2/gunnerView.js), not the chase camera
     if (gview) gview.riding = following; // (the shell ride's drag and wheel are the chase camera's)
@@ -1568,8 +1602,10 @@ async function init() {
       }
     }
 
+    pr?.mark('terrain');
     terrain.update(camera);
 
+    pr?.mark('sky');
     atmosphere.update(chase.focus, t, camera);
     const light = atmosphere.sun;
     light.intensity = (atmosphere.sunBase ?? light.intensity) * params.sunGain;
@@ -1580,6 +1616,7 @@ async function init() {
     nightHemi.intensity = params.nightGlow * atmosphere.night * (1 - 0.3 * weather.state.storm);
 
     const lightEnv = { sunDir: atmosphere.lightDir, sunColor: sunColorN, sunIntensity: 6.5, ambient };
+    pr?.mark('clouds');
     clouds.update(dt, camera, {
       ...lightEnv,
       sunIntensity: 6.5 * (1 - 0.65 * atmosphere.night),
@@ -1587,9 +1624,12 @@ async function init() {
       deck: weather.state.deck ?? 0,
     });
     fx.wind.set(-4 * weather.state.wind, 0, 1.6 * weather.state.wind);
+    pr?.mark('fx');
     fx.update(dt, camera, { ...lightEnv, night: atmosphere.night });
     flares.wind.copy(fx.wind);
+    pr?.mark('flares');
     flares.update(dt, camera, (2 * Math.tan((camera.fov * Math.PI) / 360)) / (vh * post.pixelRatio));
+    pr?.mark('weather');
     weather.update(dt, t, camera, atmosphere);
 
     scene.fog.density = params.fogDensity * weather.state.fog;
@@ -1620,9 +1660,11 @@ async function init() {
     gu.uNight.value = nightK;
     gu.uSharpen.value = params.sharpen;
     post.dof.enabled = false;
+    pr?.mark('post');
     post.update(t, rawDt, atmosphere.sunDir, sunColorN, sun.elevation);
     lu.uRays.value *= params.godRays * (1 - weather.state.storm);
 
+    pr?.mark('draw');
     renderer.info.reset();
     renderer.shadowMap.needsUpdate = true;
     if (draw) {
@@ -1633,6 +1675,7 @@ async function init() {
     stats.update();
 
     // HUD, console, audio
+    pr?.mark('panel');
     hud.setClock(hour);
     // a threat level's mission (ww1/director.js goal: the objectives), four times a second
     if ((goalTimer -= rawDt) <= 0) {
@@ -1649,6 +1692,7 @@ async function init() {
       const su = UNITS[selected];
       gview.setButton(manOk() && (gview.active || (mods.ww2gunner.MANNABLE.has(su.kind) && canCommand(su.id) && !!sim?.unitById(su.id)?.alive)), gview.active);
     }
+    pr?.mark('audio');
     if (audio) {
       ambTimer -= rawDt;
       if (ambTimer <= 0) {
@@ -1660,6 +1704,7 @@ async function init() {
       audio.update?.(rawDt, camera);
     }
 
+    pr?.mark('hud');
     if (params.dynamicRes && draw && forcedDt == null && dynRes.update(rawDt)) {
       resScale = dynRes.scale;
       applyPixelRatio();
@@ -1688,9 +1733,11 @@ async function init() {
           `particles  ${c.smoke ?? 0} smoke, ${c.glow ?? 0} glow, ${c.debris ?? 0} debris  lights ${globalUniforms.uFlareCount.value} (${flares.items.length} flares, ${flares.flashes.length} flashes)\n` +
           `battle     ${sim ? `${sim.state} phase ${sim.phase} shells ${sim.shells.length}` : 'no sim'}\n` +
           `camera     ${camera.position.x.toFixed(0)}, ${camera.position.y.toFixed(0)}, ${camera.position.z.toFixed(0)}  dist ${chase.dist.toFixed(0)}  trauma ${chase.trauma.toFixed(2)}\n` +
-          `clock      ${String(Math.floor(hour)).padStart(2, '0')}:${String(Math.floor((hour % 1) * 60)).padStart(2, '0')}  sun ${sun.elevation.toFixed(1)} deg bearing ${sun.bearing.toFixed(0)}  weather ${params.weather}`
+          `clock      ${String(Math.floor(hour)).padStart(2, '0')}:${String(Math.floor((hour % 1) * 60)).padStart(2, '0')}  sun ${sun.elevation.toFixed(1)} deg bearing ${sun.bearing.toFixed(0)}  weather ${params.weather}` +
+          (perf ? `\nrecorder   perf/${perf.session}.jsonl` : '')
       );
     }
+    pr?.frameEnd();
   };
   renderer.setAnimationLoop(() => frame());
 
