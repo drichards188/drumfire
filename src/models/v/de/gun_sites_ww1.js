@@ -5,7 +5,8 @@ import { shellStack, sandWall, crate } from '../../../world/props.js';
 
 /**
  * The WW1 German gun positions of the Flanders salient, 1917-18 (the WW1 German mode): buildGunSite1918(kind, seed)
- * -> { root } in the piece's frame (front -Z, x right, ground y = 0), for kinds 'sfh13' | 'm16' | 'k17' | 'bertha'.
+ * -> { root } in the piece's frame (front -Z, x right, ground y = 0), for kinds 'sfh13' | 'm16' | 'k17' | 'bertha' |
+ * 'fk16' | 'k16' | 'sfh93' | 'rk92' | 'm99'.
  * The integration agent places the root at the piece's placement turned to its zero line (src/ww1/render.js).
  *
  * In the salient the water stood a spade's depth down, so the German batteries built their positions up rather than
@@ -23,6 +24,13 @@ import { shellStack, sandWall, crate } from '../../../world/props.js';
  * sides, only the barrel the front. The ready rounds lie where neither the trail nor the crew's homes reach (for the
  * sFH 13 and the Mörser 16 on their rigs' shellStack anchors; the 10 cm K 17's pile is on its own safe spot, see
  * PITS.k17.pile). The net's poles stand in the breastwork, its front edge behind the breech's sweep.
+ *
+ * The guns without a recoil system (the sFH 93, the Ringkanone C/92, the Mörser 99, 2026-11-14) bring their own plank
+ * bed and ramps in the model (it does not turn; the carriage is levered round on it), so their pits draw no platform
+ * and no trail arc: the walls stand round the bed with the rear wall clear of its back corners and of the trail at
+ * full run back up the ramps and full traverse, the side walls clear of the detachment's stations, and the ready
+ * rounds lie on the bed where the rig's shellStack anchor has the shell number pick them up. Ramps or not, a gun in a
+ * standing position of 1917-18 was dug or built in like any other.
  */
 const DEG = Math.PI / 180;
 
@@ -43,6 +51,20 @@ const PITS = {
 // overall against the K 17's 9; the rounds 7.7 cm and 15 cm)
 PITS.fk16 = { ...PITS.k17, front: 3.0, side: 3.8, rear: 4.6, arc: [3.1, 4.1, 64], shell: { r: 0.04, len: 0.34, cols: 6, tiers: 2 } };
 PITS.k16 = { ...PITS.k17, front: 3.8, side: 4.6, rear: 5.8, arc: [3.9, 5.0, 64], net: { x: 4.4, z0: 1.4, z1: 5.2, hBack: 2.9, hFront: 2.65 }, pile: { phi: 95, r: 3.9, bask: [106, 113, 4.0], crate: [121, 3.75] }, shell: { r: 0.075, len: 0.66, cols: 4, tiers: 2 } };
+// the ramp guns (their models' beds, PF: sFH 93 half width 2.4, z -1.1 to 4.75; C/92 3.4, -1.8 to 6.2; Mörser 99 3.8,
+// -1.9 to 5.7): no platform or arc of the pit's own (`walk`: where the duckboard starts, behind the bed); a1 at 50 so
+// the rear radius holds over the bed's back corners and the side radius begins where the bed's edge has come in under
+// it; the side radius 0.4 m past the trail's end at full run back (sFH 93 4.2, C/92 5.3, Mörser 99 4.65 from the axle),
+// which the carriage levered round to the arc's 58 degrees takes into the side sector; the net's poles in the
+// breastwork; the pile on the bed (`y`) at the rig's shellStack anchor (sFH 93 2.15, 2.2; C/92 2.9, 2.0; Mörser 99
+// 3.3, 1.6), the baskets and the crate off the bed by the lanyard man's side (the Mörser's on the left, by its
+// ammunition numbers)
+PITS.sfh93 = { front: 3.0, side: 4.6, rear: 6.0, a1: 50, a2: 135, gate: 12, wall: 0.8, plat: null, arc: null, walk: 4.85,
+  net: { x: 4.6, z0: 1.0, z1: 5.0, hBack: 2.8, hFront: 2.55 }, pile: { phi: 44.3, r: 3.08, y: 0.07, bask: [106, 113, 3.3], crate: [121, 3.1] }, niche: -100, dug: -1, shell: { r: 0.075, len: 0.56, cols: 4, tiers: 2 } };
+PITS.rk92 = { front: 3.4, side: 5.7, rear: 7.6, a1: 50, a2: 135, gate: 12, wall: 0.8, plat: null, arc: null, walk: 6.3,
+  net: { x: 5.7, z0: 1.2, z1: 5.4, hBack: 2.9, hFront: 2.65 }, pile: { phi: 55.4, r: 3.52, y: 0.08, bask: [106, 113, 4.0], crate: [121, 4.1] }, niche: -100, dug: -1, shell: { r: 0.075, len: 0.5, cols: 4, tiers: 2 } };
+PITS.m99 = { front: 3.6, side: 5.1, rear: 7.4, a1: 50, a2: 135, gate: 11, wall: 0.9, plat: null, arc: null, walk: 5.8,
+  net: { x: 4.9, z0: 1.4, z1: 6.2, hBack: 3.15, hFront: 2.95 }, pile: { phi: 64.1, r: 3.67, y: 0.08, bask: [-106, -113, 4.3], crate: [-121, 4.3] }, niche: 118, dug: 1, shell: { r: 0.106, len: 0.8, cols: 3, tiers: 2 } };
 const PAINT = 0x5a5e55, BAND = 0xc8a82a, BRASS = 0x8a7236;
 
 export function buildGunSite1918(kind, seed = 1) {
@@ -81,18 +103,23 @@ function pit(m, K, seed, h) {
     puddle(m, ...P(phi, r), 0.35 + h2(k, seed, 5) * 0.45, seed + k);
   }
 
-  // the wheels' plank platform and the trail's arc of planks (the spade shifted along it for the traverse)
+  // the wheels' plank platform and the trail's arc of planks (the spade shifted along it for the traverse); the ramp
+  // guns stand on their own bed (the model's)
   const pl = K.plat;
-  for (let x = -pl.x + 0.13; x < pl.x; x += 0.27) m.box('plank', x, 0.025, (pl.z0 + pl.z1) / 2, 0.25, 0.05, pl.z1 - pl.z0 - h2(x * 7, seed, 6) * 0.15, 0, grey(0.75 + h2(x * 9, seed, 7) * 0.2), { u0: x * 3 });
-  for (const z of [pl.z0 + 0.15, pl.z1 - 0.15]) m.box('timber', 0, 0.006, z, pl.x * 2, 0.012, 0.18, 0, grey(0.6));
-  const [ai, ao, ah] = K.arc;
-  for (let a = -ah; a <= ah; a += 4.2) {
-    const phi = a * DEG, c = P(phi, (ai + ao) / 2);
-    m.box('plank', c[0], 0.03, c[1], 0.25, 0.06, ao - ai, phi, grey(0.7 + h2(a, seed, 8) * 0.25), { u0: a });
+  if (pl) {
+    for (let x = -pl.x + 0.13; x < pl.x; x += 0.27) m.box('plank', x, 0.025, (pl.z0 + pl.z1) / 2, 0.25, 0.05, pl.z1 - pl.z0 - h2(x * 7, seed, 6) * 0.15, 0, grey(0.75 + h2(x * 9, seed, 7) * 0.2), { u0: x * 3 });
+    for (const z of [pl.z0 + 0.15, pl.z1 - 0.15]) m.box('timber', 0, 0.006, z, pl.x * 2, 0.012, 0.18, 0, grey(0.6));
   }
-  for (const r of [ai + 0.1, ao - 0.1]) for (let a = -ah; a < ah; a += 8) {
-    const p0 = P(a * DEG, r), p1 = P((a + 8) * DEG, r);
-    m.beam('timber', [p0[0], 0.008, p0[1]], [p1[0], 0.008, p1[1]], 0.16, 0.016, grey(0.55));
+  if (K.arc) {
+    const [ai, ao, ah] = K.arc;
+    for (let a = -ah; a <= ah; a += 4.2) {
+      const phi = a * DEG, c = P(phi, (ai + ao) / 2);
+      m.box('plank', c[0], 0.03, c[1], 0.25, 0.06, ao - ai, phi, grey(0.7 + h2(a, seed, 8) * 0.25), { u0: a });
+    }
+    for (const r of [ai + 0.1, ao - 0.1]) for (let a = -ah; a < ah; a += 8) {
+      const p0 = P(a * DEG, r), p1 = P((a + 8) * DEG, r);
+      m.beam('timber', [p0[0], 0.008, p0[1]], [p1[0], 0.008, p1[1]], 0.16, 0.016, grey(0.55));
+    }
   }
 
   // the breastwork: sandbag courses round the pit (lower in front), revetted inside with posts and wattle
@@ -117,7 +144,7 @@ function pit(m, K, seed, h) {
   // the gate's posts and the duckboard walk out of it, turning to the dugout's entrance
   const gr = K.rear + th / 2, gx = gr * Math.sin(g * DEG);
   for (const s of [-1, 1]) m.cyl('timber', s * gx, 0, gr * Math.cos(g * DEG), 0.08, 0.07, K.wall + 0.35, 7, grey(0.6));
-  const dz0 = K.arc[1] + 0.1, dz1 = K.rear + 3.4, dx = K.dug * 3.2;
+  const dz0 = K.arc ? K.arc[1] + 0.1 : K.walk, dz1 = K.rear + 3.4, dx = K.dug * 3.2;
   duckboard(m, [0, dz0], [0, dz1], seed);
   duckboard(m, [0, dz1 + 0.35], [dx - K.dug * 1.0, dz1 + 0.35], seed + 1);
   dugout(m, dx, dz1 + 0.35, K.dug > 0 ? Math.PI / 2 : -Math.PI / 2, seed);
@@ -125,7 +152,7 @@ function pit(m, K, seed, h) {
   // the ready rounds on their dunnage by the right wall (or wherever the kind's pile is), charge boxes and wicker
   // cartridge baskets beside them; a timbered shell niche in the breastwork
   const pp = K.pile, [px, pz] = P(pp.phi * DEG, pp.r);
-  shellStack(m, h, px, pz, pp.phi * DEG, { r: K.shell.r, len: K.shell.len, cols: K.shell.cols, tiers: K.shell.tiers, paint: PAINT, band: BAND });
+  shellStack(m, pp.y ? () => pp.y : h, px, pz, pp.phi * DEG, { r: K.shell.r, len: K.shell.len, cols: K.shell.cols, tiers: K.shell.tiers, paint: PAINT, band: BAND });
   for (let k = 0; k < 4; k++) {
     const [bx, bz] = P((pp.bask[0] + (pp.bask[1] - pp.bask[0]) * (k >> 1)) * DEG, pp.bask[2] + (k & 1) * 0.32);
     m.cyl('wattle', bx, 0, bz, 0.13, 0.15, 0.48, 9, grey(0.85 + h2(k, seed, 14) * 0.15));

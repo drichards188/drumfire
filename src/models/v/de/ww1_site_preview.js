@@ -5,8 +5,8 @@ import { buildGun, GUN_ERA } from '../../guns.js';
 import { GUNS } from '../../../sim/tables.js';
 
 // The WW1 German gun positions (gun_sites_ww1.js) with the gun standing in them, for ww1_field_preview.html:
-//   ?site=sfh13|m16|k17|bertha  &cam=az,el,dist (az 0 from the front, 90 from the right)  &az=<traverse rad>
-//   &el=<elevation rad>  &seed=N  &gun=0 (the position alone)  &top=1 (a plan view from above)  &nonet=1
+//   ?site=sfh13|m16|k17|bertha|fk16|k16|sfh93|rk92|m99  &cam=az,el,dist (az 0 from the front, 90 from the right)  &az=<traverse rad>
+//   &el=<elevation rad>  &rec=<run back 0..1>  &seed=N  &gun=0 (the position alone)  &top=1 (a plan view from above)  &nonet=1
 const q = new URLSearchParams(location.search);
 const kind = q.get('site');
 GUN_ERA.ww1 = true;
@@ -50,6 +50,7 @@ if (q.get('gun') !== '0') {
   const g = GUNS[kind];
   rig.setTraverse?.(Number(q.get('az') ?? 0));
   rig.setElevation?.(Number(q.get('el') ?? g?.restEl ?? 0.3));
+  if (q.get('rec')) rig.setRecoil?.(Number(q.get('rec'))); // &rec=1: the carriage at full run back (the ramp guns up their ramps)
   rig.update?.(0);
   scene.add(rig.root);
 }

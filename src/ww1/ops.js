@@ -31,7 +31,9 @@ export const OPS = {
       // ordered by calibre, smallest first (the unit keys 1 to 6 and the tab column follow the ids)
       {
         id: 1, kind: 'k17', name: '10 cm Kanone 17', callsign: 'Cäsar', battery: 'Batterie 721 (10 cm Kanonen)', pos: P(9300, -600), zero: 272 * DEG,
-        pieces: [{ kind: 'k17', dx: 0, dz: -18 }, { kind: 'k17', dx: 3, dz: 18 }], // the British 60-pounder section's spacing, framed by the unit's camera
+        // the British 60-pounder section's spacing, framed by the unit's camera; the second gun 5 m further on, its pit clear
+        // of the road that crosses the position between the two (2026-11-14)
+        pieces: [{ kind: 'k17', dx: 0, dz: -18 }, { kind: 'k17', dx: 6, dz: 22 }],
         role: 'Long guns: the railhead, the roads and the batteries deep in the rear, shrapnel on the traffic.',
       },
       {
@@ -188,7 +190,10 @@ export const RIDGE_WW2 = [
 // the later WW2 ones, on the ridge only when the lineup names them, as RIDGE_WW2. Placed clear of the villages, the
 // woods, the Karl's road between its stops and the other pits: the trench mortar and the Wurfgerät forward between our
 // front and support trenches (their reach is a kilometre or two), the railway guns far back on their own spurs, the
-// self-propelled guns with a second position each (`positions`, special.js MoveCtl: T drives there).
+// self-propelled guns with a second position each (`positions`, special.js MoveCtl: T drives there). Every gun and every
+// position stands 40 m or more from the trenches of trenchlines.js and its pit off the roads and tracks (2026-11-14: the
+// sFH 93 had stood on the reserve trench, the Wespe's second position on it too, a Nebelwerfer 6 m from a
+// communication trench).
 export const RIDGE_MORE = [
   {
     id: 14, kind: 'fk16', name: '7.7 cm FK 16', callsign: 'Franz', battery: '3. Batterie, Feldartillerie-Regiment 50', pos: P(6000, -2500), zero: 270 * DEG, era: 'ww1',
@@ -239,7 +244,7 @@ export const RIDGE_MORE = [
     id: 24, kind: 'wespe', name: '10.5 cm Wespe', callsign: 'Wespe', battery: '1. Batterie, Panzer-Artillerie-Regiment 74', pos: P(6600, -1900), zero: 270 * DEG,
     pieces: [{ kind: 'wespe', dx: 0, dz: -40 }, { kind: 'wespe', dx: 4, dz: -13 }, { kind: 'wespe', dx: 2, dz: 13 }, { kind: 'wespe', dx: -3, dz: 40 }],
     special: 'move', resupply: 1,
-    positions: [{ id: 'a', name: 'Stellung A', pos: P(6600, -1900) }, { id: 'b', name: 'Stellung B', pos: P(6250, -3000) }],
+    positions: [{ id: 'a', name: 'Stellung A', pos: P(6600, -1900) }, { id: 'b', name: 'Stellung B', pos: P(6400, -3000) }],
     role: 'Self-propelled field howitzers: fire, then drive to the other position (T) before the counter-battery fire comes down.',
   },
   {
@@ -250,7 +255,7 @@ export const RIDGE_MORE = [
     role: 'Self-propelled heavy howitzers: the sFH 18 on a tank chassis. Fire, then move (T) before their guns answer.',
   },
   {
-    id: 26, kind: 'nbw42', name: '21 cm Nebelwerfer 42', callsign: 'Nebel', battery: 'Werfer-Batterie (21 cm)', pos: P(5900, -1600), zero: 270 * DEG,
+    id: 26, kind: 'nbw42', name: '21 cm Nebelwerfer 42', callsign: 'Nebel', battery: 'Werfer-Batterie (21 cm)', pos: P(5900, -1675), zero: 270 * DEG,
     pieces: [{ kind: 'nbw42', dx: 0, dz: -22 }, { kind: 'nbw42', dx: 2, dz: 0 }, { kind: 'nbw42', dx: -1, dz: 22 }],
     role: 'Five-tube rocket launchers: ripples of 112 kg rockets to 7.8 km. Slow to reload, and the smoke gives them away.',
   },
@@ -267,7 +272,7 @@ export const RIDGE_MORE = [
     role: 'The old fortress gun without a recoil system: it runs up its ramps at every shot, rolls back by its own weight and is levered back onto its line, so each round falls like a ranging round. 40 kg shells to 12 km: the batteries, the roads and the depots.',
   },
   {
-    id: 29, kind: 'sfh93', name: '15 cm sFH 93', callsign: 'Siegfried', battery: 'Reserve-Fußartillerie-Batterie 18', pos: P(6600, 700), zero: 270 * DEG, era: 'ww1',
+    id: 29, kind: 'sfh93', name: '15 cm sFH 93', callsign: 'Siegfried', battery: 'Reserve-Fußartillerie-Batterie 18', pos: P(6150, 700), zero: 270 * DEG, era: 'ww1',
     pieces: [{ kind: 'sfh93', dx: 0, dz: -48 }, { kind: 'sfh93', dx: 4, dz: -16 }, { kind: 'sfh93', dx: 2, dz: 16 }, { kind: 'sfh93', dx: -3, dz: 48 }],
     role: 'The old heavy field howitzer without a recoil system, off its ramps and re-laid after every shot: 42 kg shells to 6 km on the 18-pounders, the tanks and the Sperrfeuer.',
   },
@@ -275,7 +280,7 @@ export const RIDGE_MORE = [
 // the Karl's prepared stops (its controller, ww2/special.js KarlCtl: set up in the first)
 export const RIDGE_POSITIONS = [
   { id: 'a', name: 'Stellung A, northern approach', pos: P(5700, 1800), cover: 0.7 },
-  { id: 'b', name: 'Stellung B, central approach', pos: P(4500, -1300), cover: 0.8 },
+  { id: 'b', name: 'Stellung B, central approach', pos: P(4850, -1300), cover: 0.8 },
 ];
 // the heavy and the long guns' targets in the career's battle (`role`, sim/specialists.js: offered only while a battery
 // that can serve them is in the field), as WW2 Flanders has them: deep, 11 to 15 km west, past every gun's reach but
@@ -326,7 +331,7 @@ export const RIDGE_FORWARD = [
 export function ridgeWW2Pads(units) {
   const pads = [];
   const size = { gustav: [55, 190], karl: [40, 50], k18: [9, 9], mrs18: [9, 9], nbw41: [6, 6],
-    fk16: [8, 10], k16: [9, 12], m99: [10, 12], rk92: [9, 12], sfh93: [8, 10], beta: [26, 26], k38: [10, 12], hm1: [22, 22], bruno: [24, 60], k5: [26, 26],
+    fk16: [8, 10], k16: [9, 12], m99: [10, 15], rk92: [9, 15], sfh93: [9, 13], beta: [26, 26], k38: [10, 12], hm1: [22, 22], bruno: [24, 60], k5: [26, 26],
     k12: [22, 80], wespe: [7, 9], hummel: [8, 10], nbw42: [6, 6], swg40: [6, 6] };
   for (const u of units) {
     const big = size[u.kind] ?? [8, 8];

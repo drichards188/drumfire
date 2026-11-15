@@ -29,7 +29,8 @@ const PARIS_RUN_IN = 34, PARIS_LOWER = 7;
 // the big guns' firing positions: the builder's name in guns.EXTRAS
 const SITE_OF = { max38: 'buildMax38Site', gamma: 'buildGammaSite', paris: 'buildParisSite', beta: 'buildBetaSite' };
 // the regular units' gun positions (gun_sites_ww1.js)
-const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha', 'fk16', 'k16']); // (the Mörser 99's plank platform is its own emplacement, in its model)
+// (the ramp guns' pits stand round the plank bed in their models, 2026-11-14)
+const PITS = new Set(['sfh13', 'm16', 'k17', 'bertha', 'fk16', 'k16', 'sfh93', 'rk92', 'm99']);
 
 const smooth = (t, a, b) => { const k = Math.min(1, Math.max(0, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
 const _p = new THREE.Vector3(), _d = new THREE.Vector3(), _b = new THREE.Vector3(), _q = new THREE.Quaternion(), _f = new THREE.Vector3(0, 0, -1);
