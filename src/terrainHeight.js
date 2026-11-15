@@ -46,9 +46,13 @@ function natural(x, z, fine) {
   h += 6 * rise * (vn(x / 1500 + 3, z / 1900, 2) - 0.5) * 2; // low spurs running off the ridge
   h += 0.8 * (vn(x / 340, z / 340, 3) - 0.5) + 0.35 * rise * (vn(x / 130 + 9, z / 130, 8) - 0.5) * 2;
   if (fine) h += 0.3 * (vn(x / 61, z / 61, 4) - 0.5) + 0.1 * (vn(x / 17, z / 17, 6) - 0.5);
-  // far country: low hills well beyond the sector so the horizon is not a table
-  const m = smooth(16000, 26000, Math.hypot(x - 3000, z));
-  if (m > 0) h += m * (42 * Math.pow(vn(x / 6000 + 3, z / 6000 + 9, 9), 1.5) + 14 * vn(x / 2300, z / 2300, 10));
+  // far country: low hills well beyond the sector so the horizon is not a table (Math.hypot only past 15,999 m: it
+  // builds an array of its arguments, garbage on every ground sample, and nearer m is 0 either way)
+  const ex = x - 3000;
+  if (ex * ex + z * z > 15999 * 15999) {
+    const m = smooth(16000, 26000, Math.hypot(ex, z));
+    if (m > 0) h += m * (42 * Math.pow(vn(x / 6000 + 3, z / 6000 + 9, 9), 1.5) + 14 * vn(x / 2300, z / 2300, 10));
+  }
   return h;
 }
 

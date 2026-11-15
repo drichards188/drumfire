@@ -162,9 +162,10 @@ class Level {
 
   // the quads under the finer level are dropped
   setHole(r) {
-    const key = r ? `${r.x0}|${r.x1}|${r.z0}|${r.z1}|${this.gx0}|${this.gz0}` : 'none';
-    if (key === this.holeKey) return;
-    this.holeKey = key;
+    // (the last hole compared number by number: a key string built for every level every frame was garbage)
+    const k = this.holeKey;
+    if (r ? k && k[0] === r.x0 && k[1] === r.x1 && k[2] === r.z0 && k[3] === r.z1 && k[4] === this.gx0 && k[5] === this.gz0 : k === null) return;
+    this.holeKey = r ? [r.x0, r.x1, r.z0, r.z1, this.gx0, this.gz0] : null;
     const c = this.cell, idx = this.index;
     let n = 0;
     for (let j = 0; j < N; j++) {
@@ -457,7 +458,9 @@ export class Terrain {
       }
       const f = L[k - 1];
       const e = (N * f.cell) / 2;
-      lv.setHole(f.valid ? { x0: f.cx - e, x1: f.cx + e, z0: f.cz - e, z1: f.cz + e } : null);
+      const R = lv.holeR ??= { x0: 0, x1: 0, z0: 0, z1: 0 };
+      R.x0 = f.cx - e; R.x1 = f.cx + e; R.z0 = f.cz - e; R.z1 = f.cz + e;
+      lv.setHole(f.valid ? R : null);
     }
     // the trench and track masks and the trees (re-planted every 110 m, 20 to 50 ms each) wait the same way, and each
     // takes a frame of its own: none while a level was rebuilt, the trees not while the masks were

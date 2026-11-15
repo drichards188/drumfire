@@ -58,6 +58,21 @@ const travel = (k) => {
   return k < e ? v * k * k / (2 * e) : k > 1 - e ? 1 - v * (1 - k) ** 2 / (2 * e) : v * (k - e / 2);
 };
 const R_STAND = 0.3, R_WALK = 0.3;
+// (a regex literal is a new object each time it is evaluated: tested per man in the per-frame code, /^pair/ alone
+// was the battle's biggest source of garbage with the K 38 selected)
+const PAIR = /^pair/;
+// a kept snapPair answer still holds when the blockers within its reach of c are the same, in the same order
+function sameNear(e, blk, c) {
+  const N = e.near;
+  let j = 0;
+  for (const b of blk) {
+    const dx = b[0] - c.x, dz = b[1] - c.z;
+    if (Math.sqrt(dx * dx + dz * dz) >= e.reach + b[2]) continue;
+    if (j >= N.length || N[j] !== b[0] || N[j + 1] !== b[1] || N[j + 2] !== b[2]) return false;
+    j += 3;
+  }
+  return j === N.length;
+}
 // Paces of the walks the cycle clock schedules (m/s): a man carrying a round, a man with a cartridge, empty handed.
 const V_CARRY = 1.1, V_BAG = 1.2, V_WALK = 1.3, V_PAIR = 0.9, PAIR_OMEGA = 1.3, ONE_OMEGA = 3.2; // (two men with a 70 to 110 kg shell between them)
 // kinds whose carriers walk on the cycle clock (GunCrew.timeline): they set off in the step before the one their round
@@ -325,7 +340,7 @@ export class GunCrew {
     }
     F.blk.length = 0;
     this.lw = F.level(this.workY); this.l0 = F.level(0);
-    this.pairLead = this.men.find((q) => /^pair/.test(q.beh)) ?? null;
+    this.pairLead = this.men.find((q) => PAIR.test(q.beh)) ?? null;
     this.snapTmp = out;
     // the super-heavies' drill equipment now, not at the first update: built then, its materials were compiled in play
     // (a hitch) and missed patchSceneFog (main.js runs it after the crews are made)
@@ -395,23 +410,27 @@ export class GunCrew {
 
   // standing men are obstacles for the walkers (not the one asking)
   blockers(except) {
-    const b = this.field.blk, ca = this.ca, sa = this.sa;
-    b.length = 0;
+    // (each field read once: every crew and man has its own shape, so V8 reads these through its generic path, which
+    // boxes every number it reads in a new object, 780 bytes of garbage a call when read per man; and the list filled
+    // in place and trimmed at the end, since emptied with length = 0 V8 threw its storage away)
+    const b = this.field.blk, ca = this.ca, sa = this.sa, pvx = this.pvx, pvz = this.pvz, ew = except.world;
+    let n = 0;
     for (const m of this.men) {
-      if (m === except || /^pair/.test(m.beh)) continue;
+      if (m === except || PAIR.test(m.beh)) continue;
       const k = m.bk ??= [0, 0, 0.32];
       // the man's place in root space, then in the asker's frame
       let x = m.sx, z = m.sz;
-      if (!m.world) { const dx = m.sx - this.pvx, dz = m.sz - this.pvz; x = dx * ca + dz * sa + this.pvx; z = -dx * sa + dz * ca + this.pvz; }
-      if (!except.world) { const dx = x - this.pvx, dz = z - this.pvz; k[0] = dx * ca - dz * sa + this.pvx; k[1] = dx * sa + dz * ca + this.pvz; } else { k[0] = x; k[1] = z; }
-      b.push(k);
+      if (!m.world) { const dx = x - pvx, dz = z - pvz; x = dx * ca + dz * sa + pvx; z = -dx * sa + dz * ca + pvz; }
+      if (!ew) { const dx = x - pvx, dz = z - pvz; k[0] = dx * ca - dz * sa + pvx; k[1] = dx * sa + dz * ca + pvz; } else { k[0] = x; k[1] = z; }
+      b[n++] = k;
     }
     // the timed kinds' carrying pair, where it waits by the stack (root space, pairMan), keeps the others' routes off it
-    if (this.pairWait && this.timed() && !/^pair/.test(except.beh)) for (const w of this.pairWait) {
+    if (this.pairWait && this.timed() && !PAIR.test(except.beh)) for (const w of this.pairWait) {
       const k = w[5] ??= [0, 0, 0.32];
-      if (!except.world) { const dx = w[0] - this.pvx, dz = w[1] - this.pvz; k[0] = dx * ca - dz * sa + this.pvx; k[1] = dx * sa + dz * ca + this.pvz; } else { k[0] = w[0]; k[1] = w[1]; }
-      b.push(k);
+      if (!ew) { const dx = w[0] - pvx, dz = w[1] - pvz; k[0] = dx * ca - dz * sa + pvx; k[1] = dx * sa + dz * ca + pvz; } else { k[0] = w[0]; k[1] = w[1]; }
+      b[n++] = k;
     }
+    if (b.length !== n) b.length = n;
     return b;
   }
 
@@ -1344,7 +1363,7 @@ export class GunCrew {
   // the two carriers of the 9.2-inch: the pair walks one route (planned for both, 0.84 m apart) from the stack
   // to the rear end of the tray, the shell hanging between them
   pairMan(m, c, h) {
-    const side = m.beh === 'pair0' ? -1 : 1, F = this.field, lead = this.pairLead ??= this.men.find((q) => /^pair/.test(q.beh));
+    const side = m.beh === 'pair0' ? -1 : 1, F = this.field, lead = this.pairLead ??= this.men.find((q) => PAIR.test(q.beh));
     // how far each man walks from the shell's line: the German pair closer, so the far hand reaches the round without
     // an arm through his belly (0.42 left it 0.87 m from his far shoulder)
     const pw = this.pairW ??= BRITISH.has(this.kind) ? 0.42 : 0.38;
@@ -1517,20 +1536,40 @@ export class GunCrew {
   // move a pair's centre until both men, pairW (0.42 m) either side of it, stand clear; the German pair faces `to`
   // from each place tried, as it will stand there (tried at the heading from the first place, a pair moved a metre
   // aside turned on its new place and its outer man stood in the elevating number at his wheel)
+  // The search is a pure function of its inputs and of the blockers near enough to have met it (within the radius it
+  // searched, the pair's half width and the clearances). Most frames ask the same again (the tray's end and the stack
+  // hold still for seconds; the tray's end of the K 38 and the Mörser 18 is always 0.75 m out), so the answer is kept
+  // per call site (`to`) and given back while those match: the same place as a new search, without its thousands of
+  // tests and the garbage they made (the K 38's crew made half the battle's, and the collections it brought on landed
+  // here as 20 to 130 ms frames, perf/ 2026-11-15).
   snapPair(fl, l, c, hd, to) {
-    const w = this.pairW ?? 0.42, F = this.field, turn = !BRITISH.has(this.kind);
+    const w = this.pairW ?? 0.42, F = this.field, turn = !BRITISH.has(this.kind), blk = F.blk;
+    const M = this.snapMemo ??= new Map();
+    let e = M.get(to);
+    if (e && e.fl === fl && e.l === l && e.cx === c.x && e.cz === c.z && e.w === w && e.ca === F.ca && e.sa === F.sa
+      && (turn ? e.tx === to.x && e.tz === to.z : e.hd === hd) && sameNear(e, blk, c)) { c.x = e.rx; c.z = e.rz; return; }
     const ok = (x, z) => {
       const h = turn ? headingOf(to.x - x, to.z - z) : hd, ox = Math.cos(h) * w, oz = -Math.sin(h) * w;
       return F.free(fl, l, x + ox, z + oz, R_STAND) && F.free(fl, l, x - ox, z - oz, R_STAND);
     };
-    if (ok(c.x, c.z)) return;
-    for (let r = 0.05; r < 3; r += 0.05) {
-      const n = Math.max(8, Math.ceil(r * 40));
-      for (let a = 0; a < n; a++) {
-        const x = c.x + Math.cos((a / n) * 6.2832) * r, z = c.z + Math.sin((a / n) * 6.2832) * r;
-        if (ok(x, z)) { c.x = x; c.z = z; return; }
+    let rf = 0, rx = c.x, rz = c.z;
+    if (!ok(c.x, c.z)) {
+      rf = 3;
+      search: for (let r = 0.05; r < 3; r += 0.05) {
+        const n = Math.max(8, Math.ceil(r * 40));
+        for (let a = 0; a < n; a++) {
+          const x = c.x + Math.cos((a / n) * 6.2832) * r, z = c.z + Math.sin((a / n) * 6.2832) * r;
+          if (ok(x, z)) { rx = x; rz = z; rf = r; break search; }
+        }
       }
     }
+    if (!e) M.set(to, e = { near: [] });
+    e.fl = fl; e.l = l; e.cx = c.x; e.cz = c.z; e.w = w; e.ca = F.ca; e.sa = F.sa; e.tx = to.x; e.tz = to.z; e.hd = hd;
+    e.rx = rx; e.rz = rz; e.reach = rf + w + R_STAND + 1e-6;
+    const N = e.near;
+    N.length = 0;
+    for (const b of blk) { const dx = b[0] - c.x, dz = b[1] - c.z; if (Math.sqrt(dx * dx + dz * dz) < e.reach + b[2]) N.push(b[0], b[1], b[2]); }
+    c.x = rx; c.z = rz;
   }
 
   rootXZ(m, f, out) {
@@ -1539,7 +1578,7 @@ export class GunCrew {
   }
 
   mate(m) {
-    return this.men.find((q) => q !== m && /^pair/.test(q.beh));
+    return this.men.find((q) => q !== m && PAIR.test(q.beh));
   }
 
   // loaders at the tray of the crane / trolley guns: hands steady the shell as it comes down

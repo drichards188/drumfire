@@ -112,6 +112,7 @@ function poll() {
         if (o.k === 'start') say(`SESSION ${o.session}: ${o.url} quality ${o.quality} ${o.w}x${o.h}@${o.dpr} gpu ${o.gpu}${o.gpuTimed ? ' (timed)' : ''}`);
         else if (o.k === 'sec') onSecond(o);
         else if (o.k === 'spike' && analyse(o)) onSpike(o);
+        else if (o.k === 'gap') say(`GAP ${Math.round(o.dur)} ms at ${Math.round(o.t / 1000)} s: ${o.hidden ? 'window hidden' : o.blur ? 'window lost focus' : 'window showing and focused, a freeze'}`);
       }
     }
   }

@@ -201,7 +201,9 @@ export class CrewVoices {
 
   live() {
     const s = this.sim;
-    return this.enabled && !!s && !s.attract && this.active() && Object.keys(this.lines).length > 0;
+    // (the lines counted once they are in: Object.keys every frame was garbage)
+    if (this.nLinesOf !== this.lines) { this.nLinesOf = this.lines; this.nLines = Object.keys(this.lines).length; }
+    return this.enabled && !!s && !s.attract && this.active() && this.nLines > 0;
   }
 
   unit() {

@@ -206,11 +206,12 @@ function home(crew, m, G, h) {
 
 // the rammers: two a side of the staff, the front pair at `man` (axial), the rear pair 0.65 m behind
 const RAM_LAT = 0.32, RAM_IN = 0.7;
+const REAR_ROLE = /[34]$/; // (made once: a regex literal is a new object each time it runs)
 function ramMan(crew, m, c, h, G, d) {
   const H = home(crew, m, G, h), s = c.s;
   const r = (s === 'ram' || s === 'cartridge') ? d.ram : null;
   if (!r || r.phase === 'idle' || r.man == null) { m.put(H.x, H.y, H.z, H.h, 'stand', crew.idleT + m.seed); return; }
-  const side = m.spot.x < 0 ? -1 : 1, rear = /[34]$/.test(m.role), back = rear ? 0.65 : 0;
+  const side = m.spot.x < 0 ? -1 : 1, rear = REAR_ROLE.test(m.role), back = rear ? 0.65 : 0;
   const a = r.man - back;
   crew.trayAt(a, _a);
   // At work he stands RAM_LAT off the staff, turned RAM_IN toward it, both hands on it ahead of him (he used to face the

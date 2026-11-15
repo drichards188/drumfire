@@ -113,6 +113,23 @@ function report(file, { worst = 12, json = false } = {}) {
   for (const s of secs) for (const [k, v] of Object.entries(s.stages ?? {})) stageMean[k] = (stageMean[k] ?? 0) + v * s.n;
   console.log('\nmean ms per frame by stage: ' + Object.entries(stageMean).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v / frames)}`).join(', '));
 
+  // gaps too long to count as frames: a freeze, or the window hidden (sessions before 2026-11-15 have no gap lines,
+  // only seconds missing from the summary)
+  const gaps = lines.filter((l) => l.k === 'gap');
+  if (gaps.length) {
+    console.log('\ngaps over 0.5 s left out of the frame times:');
+    for (const g of gaps) {
+      const lo = (g.loaf ?? []).reduce((a, b) => (!a || b.dur > a.dur ? b : a), null);
+      const page = !lo ? 'no frame report' : lo.block >= g.dur * 0.5 ? `the page busy ${fmt(lo.block)} ms` : 'the page idle, waiting on the browser';
+      const win = g.hidden ? 'window hidden (switched away or minimised)' : g.blur ? 'window lost focus but showing' : 'window showing and focused: a freeze';
+      console.log(`  ${clock(g.t / 1000)} ${fmt(g.dur)} ms, ${win}; ${page} | ${g.ctx?.unit ?? ''} cam ${g.ctx?.cam ?? ''}`);
+    }
+  } else {
+    const miss = [];
+    for (let i = 1; i < secs.length; i++) if (secs[i].t - secs[i - 1].t > 2.2) miss.push(`${clock(secs[i - 1].t)} to ${clock(secs[i].t)}`);
+    if (miss.length) console.log(`\nseconds missing (a gap over 2.5 s or the window hidden; this session predates gap lines): ${miss.join(', ')}`);
+  }
+
   if (!spikes.length) return;
   const an = spikes.map((sp) => ({ sp, a: analyse(sp) })).filter((x) => x.a);
   const causes = {};

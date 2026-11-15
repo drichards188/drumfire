@@ -14,6 +14,9 @@ const CELL = 0.1, LO = 0.1, HI = 1.75;
 const MOVERS = new Set(['elevation', 'recoil', 'breech', 'tray', 'crane', 'hoist', 'trolley']);
 const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _p = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 const cache = new Map();
+// a plane distance for the hot loops (every cell of a search, every man of every check): Math.hypot allocates an array
+// per call in V8, and the collections it brought on, a few times a minute, landed in this code as 20 to 90 ms frames
+const hyp = (dx, dz) => Math.sqrt(dx * dx + dz * dz);
 
 function groupOf(o) {
   let g = null;
@@ -255,7 +258,7 @@ export class CrewField {
 
   free(fl, l, x, z, r, world = false) {
     if (this.dAt(fl, l, x, z, world) < r) return false;
-    for (const b of this.blk) if (Math.hypot(b[0] - x, b[1] - z) < r + b[2]) return false;
+    for (const b of this.blk) if (hyp(b[0] - x, b[1] - z) < r + b[2]) return false;
     return true;
   }
 
@@ -292,7 +295,7 @@ export class CrewField {
 
   // clearance asked of a walker at (x, z): r in the open, relaxed to 0.2 at either end of his walk (he starts and ends close to things)
   rAt(x, z, ends, r) {
-    const d = Math.min(Math.hypot(x - ends[0], z - ends[1]), Math.hypot(x - ends[2], z - ends[3]));
+    const d = Math.min(hyp(x - ends[0], z - ends[1]), hyp(x - ends[2], z - ends[3]));
     return Math.min(r, this.relax + d * 0.5);
   }
 
@@ -328,7 +331,7 @@ export class CrewField {
       OS[k] = st;
       const x = x0 + ((k % w) + 0.5) * CELL, z = z0 + (((k / w) | 0) + 0.5) * CELL, re = this.rAt(x, z, E, rr);
       let v = this.dAt(fl, l, x, z, world) >= re;
-      if (v) for (const b of this.blk) if (Math.hypot(b[0] - x, b[1] - z) < re + b[2]) { v = false; break; }
+      if (v) for (const b of this.blk) if (hyp(b[0] - x, b[1] - z) < re + b[2]) { v = false; break; }
       OV[k] = v ? 1 : 0;
       return v;
     };
@@ -404,7 +407,7 @@ export class CrewField {
       const k = H[0]; H[0] = H[--hn]; down(0);
       if (C[k]) continue;
       C[k] = 1;
-      const ki = k % w, kj = (k / w) | 0, x = x0 + (ki + 0.5) * CELL, z = z0 + (kj + 0.5) * CELL, d = Math.hypot(x - gx, z - gz);
+      const ki = k % w, kj = (k / w) | 0, x = x0 + (ki + 0.5) * CELL, z = z0 + (kj + 0.5) * CELL, d = hyp(x - gx, z - gz);
       if (d < best && this.free(fl, l, x, z, r, world)) { best = d; bk = k; }
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
         if (!di && !dj) continue;

@@ -37,6 +37,7 @@ const HEAVY = new Set(Object.keys(ROLES_HEAVY));
 const Y = new THREE.Vector3(0, 1, 0);
 const v = new THREE.Vector3(), w = new THREE.Vector3(), q = new THREE.Vector3();
 const inv = new THREE.Matrix4();
+const LEAD_ROLE = /[12]$/; // (made once: a regex literal is a new object each time it runs)
 const windowK = (k, a, b, c, d) => smooth(k, a, b) * (1 - smooth(k, c, d));
 // the Gustav still being put together (rig.assembly < 1, the railway preparation): no galleries, no platform yet
 const unbuilt = (crew) => crew.kind === 'gustav' && (crew.rig.assembly ?? 1) < 1;
@@ -313,7 +314,7 @@ export function heavyAct(crew, m, c, h) {
       const side = m.spot.x < 0 ? -1 : 1, clearance = crew.kind === 'gustav' ? 1.08 : m.role === 'rammer1' ? 0.5 : 0.88;
       const off = side * clearance - m.sx;
       h.x += crew.rt.x * off; h.z += crew.rt.z * off;
-      const lead = /[12]$/.test(m.role), on = s === 'ram' && k > 0.1 && k < 0.97;
+      const lead = LEAD_ROLE.test(m.role), on = s === 'ram' && k > 0.1 && k < 0.97;
       const heading = headingOf(crew.T.x - h.x, crew.T.z - h.z);
       m.put(h.x, h.y, h.z, lead ? side < 0 ? -Math.PI / 2 + crew.az : Math.PI / 2 + crew.az : heading,
         lead && on ? 'operate' : 'stand', on ? ramp(k, 0.14, 0.97) * 4 : crew.idleT + m.seed);

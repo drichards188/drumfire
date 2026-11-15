@@ -31,7 +31,7 @@ import { ChaseCamera } from './camera.js';
 import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
 import { ww2Theatre, OPS } from './ww2/theatre.js';
 import { QUALITY, sunAt, blastTrauma } from './presets.js';
-import { warmUp } from './render/warmup.js';
+import { warmUp, gpuSettled } from './render/warmup.js';
 
 // The sim, the render layer, the panel, audio, the gun models, the world dressing and the craters
 // are written by other agents: they are loaded here only if their files exist and work, so the page
@@ -1761,6 +1761,9 @@ async function init() {
     selectUnit(selected);
     start();
   }
+  // the browser draws the new battle's warm-up in its GPU process after this: wait for it behind the loading screen,
+  // or the first frames of the battle hang on it (render/warmup.js gpuSettled)
+  await gpuSettled(renderer);
   hideLoading();
 
   Object.assign(drumfire, {

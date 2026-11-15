@@ -6,7 +6,8 @@ import { TH, lenU, strich } from '../theatre.js';
 // the console's length unit: yards in the British game, metres in the WW2 mode (ui/theatre.js)
 export const toYd = (m) => m / lenU();
 export const fromYd = (y) => y * lenU();
-export const commas = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g; // (made once: a regex literal is a new object each call, and the console draws these every frame)
+export const commas = (n) => String(Math.round(n)).replace(THOUSANDS, ',');
 export const yd = (m) => commas(toYd(m));
 
 // radians -> "094°12′" (degrees and minutes, the way a line is laid on the dial sight)

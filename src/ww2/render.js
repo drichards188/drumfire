@@ -119,10 +119,23 @@ export function createWW2Render({ scene, sim, terrain, fx, rigs, renderLayer, un
       slot(id, id, sites, 15000, () => {
         // the ground under a point of the site's frame, in its rail-head frame (the flak stands off the levelled pad)
         let root = null;
+        // (each point's answer kept until a crater lands or the site moves: the works ask for the same few points every
+        // frame, and every terrain sample was garbage, a twentieth of the battle's with the Gustav in the lineup)
+        const memo = new Float64Array(64 * 3).fill(NaN); // x, z, height per slot
+        const seen = [NaN, NaN, NaN, NaN, -1]; // the root's x, y, z and yaw and the crater count the memo is for
         const ground = (x, z) => {
           if (!root) return -0.55;
+          const P = root.position, cn = terrain.craters?.n ?? 0;
+          if (P.x !== seen[0] || P.y !== seen[1] || P.z !== seen[2] || root.rotation.y !== seen[3] || cn !== seen[4]) {
+            memo.fill(NaN);
+            seen[0] = P.x; seen[1] = P.y; seen[2] = P.z; seen[3] = root.rotation.y; seen[4] = cn;
+          }
+          const o = ((Math.imul(Math.round(x * 8), 73856093) ^ Math.imul(Math.round(z * 8), 19349663)) & 63) * 3;
+          if (memo[o] === x && memo[o + 1] === z) return memo[o + 2];
           const c = Math.cos(root.rotation.y), s = Math.sin(root.rotation.y);
-          return terrain.heightAt(root.position.x + x * c + z * s, root.position.z - x * s + z * c) - root.position.y - 0.55;
+          const h = terrain.heightAt(P.x + x * c + z * s, P.z - x * s + z * c) - P.y - 0.55;
+          memo[o] = x; memo[o + 1] = z; memo[o + 2] = h;
+          return h;
         };
         const site = buildSite({ arc, yard, ground });
         root = site.root;

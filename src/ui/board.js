@@ -951,4 +951,5 @@ export class Board {
 
   sos(id, T) { (this.sosCall || (this.sosCall = {}))[id] = T; }
 }
-const commasInt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g; // (made once: a regex literal is a new object each call)
+const commasInt = (n) => String(Math.round(n)).replace(THOUSANDS, ',');

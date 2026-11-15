@@ -35,12 +35,13 @@ export class ShellViews {
       const morphs = b.parts.flatMap((part, j) => (part.morph ? [{ m: meshes[j], f: part.morph }] : []));
       this.kinds.set(kind, { meshes, morphs, length: b.length, n: 0 });
     }
+    this.list = [...this.kinds.values()]; // (walked each frame: a Map's iterators were garbage)
   }
 
   /** @param camera THREE.Camera (optional, enlargement needs it) */
   update(sim, camera) {
     if (camera) this.pxPerRad = (this.viewH ?? 900) / (2 * Math.tan((camera.fov * Math.PI) / 360));
-    for (const k of this.kinds.values()) k.n = 0;
+    for (const k of this.list) k.n = 0;
     const a = sim.alpha ?? 1;
     for (const sh of sim.shells) {
       const k = this.kinds.get(sh.kind);
@@ -60,7 +61,7 @@ export class ShellViews {
       for (const q of k.morphs) { _w.morphTargetInfluences[0] = q.f(sh); q.m.setMorphAt(k.n, _w); }
       k.n++;
     }
-    for (const k of this.kinds.values()) {
+    for (const k of this.list) {
       for (const m of k.meshes) {
         m.count = k.n;
         m.instanceMatrix.needsUpdate = true;

@@ -77,8 +77,15 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
     observer.observe({ type: 'long-animation-frame', buffered: false });
   } catch { observer = null; }
 
-  const onVisible = () => { skipNext = true; };
+  // a gap too long to be a frame (HUGE, or the window hidden) gets its own line a second later, with the browser's report
+  // of it and what the window did meanwhile, so a freeze can be told from the player switching windows (it used to be
+  // dropped unseen: a 4.3 s stall on 2026-11-15 showed only as missing seconds)
+  let sawHidden = false, sawBlur = false;
+  const gaps = []; // { at, dur, hidden, blur, focus }
+  const onVisible = () => { skipNext = true; if (document.hidden) sawHidden = true; };
+  const onBlur = () => { sawBlur = true; };
   document.addEventListener('visibilitychange', onVisible);
+  addEventListener('blur', onBlur);
 
   // the session's header: the machine and the settings
   {
@@ -100,13 +107,22 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
       if (open) frameEnd();
       const o = row * W;
       const dur = now - starts[row];
-      if (skipNext || dur > HUGE || document.hidden) rows[o + C.dur] = -1;
-      else {
+      if (skipNext || dur > HUGE || document.hidden) {
+        rows[o + C.dur] = -1;
+        if (dur > 500) {
+          const hidden = sawHidden || document.hidden;
+          gaps.push({ at: starts[row], dur, hidden, blur: sawBlur, focus: document.hasFocus() });
+          // a freeze with the window showing: the frames before it are written as a spike's (it stays out of the seconds)
+          if (!skipNext && !hidden) { rows[o + C.dur] = dur; spike(row, dur, sawBlur); }
+        }
+      } else {
         rows[o + C.dur] = dur;
         account(row, dur);
-        if (dur > SPIKE_MIN && dur > usual * 2) spike(row, dur);
+        if (dur > SPIKE_MIN && dur > usual * 2) spike(row, dur, sawBlur);
       }
       skipNext = false;
+      sawHidden = false;
+      sawBlur = false;
     }
     frameNo++;
     row = frameNo % RING;
@@ -122,6 +138,7 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
       dynRes._poll?.(); // (its own update polls only while dynamic resolution is on)
     }
     if (capture && now >= capture.untilT) flushCapture();
+    if (gaps.length && now - gaps[0].at - gaps[0].dur > 1000) flushGaps(now);
     if (now - secAt >= 1000) second(now);
     if (now - sentAt >= SEND) send(now);
     return true;
@@ -215,7 +232,7 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
     secAt = now;
   }
 
-  function spike(i, dur) {
+  function spike(i, dur, blur = false) {
     const f = ids[i];
     const end = starts[i] + dur + AFTER;
     if (capture) {
@@ -227,7 +244,18 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
     }
     let from = f;
     while (from > 0 && from > f - RING + 60 && ids[(from - 1) % RING] === from - 1 && starts[i] - starts[(from - 1) % RING] <= BEFORE) from--;
-    capture = { from, untilT: end, spikes: [f], usual, ctx: context?.full?.() ?? {} };
+    // (blur: the window lost focus during the worst frame; focus: it has it now)
+    capture = { from, untilT: end, spikes: [f], usual, ctx: { ...context?.full?.(), blur, focus: document.hasFocus() } };
+  }
+
+  function flushGaps(now) {
+    for (let i = 0; i < gaps.length;) {
+      const g = gaps[i];
+      if (now - g.at - g.dur < 1000) { i++; continue; }
+      const lo = loafs.filter((e) => e.t + t0 + e.dur >= g.at && e.t + t0 <= g.at + g.dur);
+      line({ k: 'gap', t: r1(g.at - t0), dur: r1(g.dur), hidden: g.hidden, blur: g.blur, focus: g.focus, ctx: context?.brief?.() ?? {}, loaf: lo });
+      gaps.splice(i, 1);
+    }
   }
 
   function flushCapture() {
@@ -266,6 +294,7 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
 
   const onHide = () => {
     if (capture) flushCapture();
+    flushGaps(Infinity);
     if (out.length) navigator.sendBeacon?.(`/__perf?s=${session}`, new Blob([out.join('\n') + '\n'], { type: 'text/plain' }));
     out.length = 0;
   };
@@ -275,6 +304,7 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
     onHide();
     observer?.disconnect();
     document.removeEventListener('visibilitychange', onVisible);
+    removeEventListener('blur', onBlur);
     removeEventListener('pagehide', onHide);
     if (dynRes) dynRes.onGpu = null;
   }

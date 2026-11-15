@@ -26,8 +26,9 @@ function makePuffAtlas(size = 128) {
 
 // ---------------------------------------------------------------- particle pool
 // hug: the puff rides on the ground at hug * its size (dust rings follow the terrain); gy: the ground
-// height where it started (cheap test for when a falling lump of spray can have reached the ground)
-const FIELDS = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'age', 'life', 's0', 's1', 'rot', 'rotV', 'r', 'g', 'b', 'a', 'glow', 'tile', 'drag', 'buoy', 'kind', 'len', 'hug', 'gy', 'grav', 'sx', 'sy'];
+// height where it started (cheap test for when a falling lump of spray can have reached the ground); hx, hz: where
+// a hugging puff last looked the ground up
+const FIELDS = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'age', 'life', 's0', 's1', 'rot', 'rotV', 'r', 'g', 'b', 'a', 'glow', 'tile', 'drag', 'buoy', 'kind', 'len', 'hug', 'gy', 'grav', 'sx', 'sy', 'hx', 'hz'];
 
 class Pool {
   constructor(max) {
@@ -398,6 +399,7 @@ export class FX {
     P.sx[i] = stretch ? stretch[0] : 1; P.sy[i] = stretch ? stretch[1] : 1;
     if (stretch) { P.rot[i] = 0; P.rotV[i] = 0; }
     P.gy[i] = gy !== null ? gy : this.curGy !== null ? this.curGy : kind === SMOKE.SPRAY ? this.ground(x, z) : -1e9;
+    P.hx[i] = 1e9; // (a hugging puff looks the ground up on its first update)
     return i;
   }
 
@@ -979,8 +981,10 @@ export class FX {
       if (P.hug[i] > 0) {
         // a dust ring rides the terrain: its centre sits a fraction of its own size above the ground
         const tt = P.age[i] / P.life[i];
-        const g0 = this.ground(P.px[i], P.pz[i]);
-        P.gy[i] = g0;
+        // (again only once it has drifted 0.3 m: every dust puff's lookup every frame was a tenth of the battle's garbage)
+        const ex = P.px[i] - P.hx[i], ez = P.pz[i] - P.hz[i];
+        if (ex * ex + ez * ez > 0.09) { P.gy[i] = this.ground(P.px[i], P.pz[i]); P.hx[i] = P.px[i]; P.hz[i] = P.pz[i]; }
+        const g0 = P.gy[i];
         P.py[i] = g0 + P.hug[i] * (P.s0[i] + (P.s1[i] - P.s0[i]) * (1 - Math.pow(1 - tt, 2.2)));
         P.vy[i] = 0;
       } else if (P.kind[i] === SMOKE.SPRAY) {
