@@ -397,6 +397,7 @@ async function init() {
         onFocus: (id, task) => modeR?.focusTask?.(id, task), // a Gustav task clicked on the procedure card
         isUnlocked: (u) => canCommand(u.id),
         keyFor: (id) => { const k = (FIELDED ?? UNITS).findIndex(u => u.id === id) + 1; return k >= 1 && k <= 10 ? k % 10 : ''; }, // (keys 1 to 9 and 0 by the units in the field; the 11th on have none)
+        rank: (id) => { const k = (FIELDED ?? UNITS).findIndex((u) => u.id === id); return k < 0 ? 1e9 : k; }, // (the tabs in the same order)
       });
     }
   } catch (e) {
@@ -455,7 +456,8 @@ async function init() {
   let freeCam = false;
   // ?unit=N is the unit id (1 to 5); without it the 1917 battle opens on the 15-inch, the Group's centrepiece
   // (a WW1 lesson: the batteries it lends, so key 1 is the first of them)
-  FIELDED = RESEARCH_ERA ? UNITS.filter((u) => career.lineupKinds(RESEARCH_ERA).includes(u.kind)) : WW1_LESSON?.kinds ? UNITS.filter((u) => WW1_LESSON.kinds.includes(u.kind)) : UNITS;
+  // (the career battle: in the lineup's slot order, menu.js; its off-map weapons have no unit)
+  FIELDED = RESEARCH_ERA ? career.lineupKinds(RESEARCH_ERA).map((k) => UNITS.find((u) => u.kind === k)).filter(Boolean) : WW1_LESSON?.kinds ? UNITS.filter((u) => WW1_LESSON.kinds.includes(u.kind)) : UNITS;
   // (?unit=N: the N-th unit in the field)
   let selected = Math.max(0, UNITS.indexOf(FIELDED[Math.max(0, Math.min(FIELDED.length - 1, Number(query.get('unit') ?? (TH ? 1 : FIELDED.findIndex((u) => u.kind === 'bl15') + 1)) - 1))]));
   if (RANGE && UNITS.some((u) => u.kind === query.get('kind'))) selected = UNITS.findIndex((u) => u.kind === query.get('kind'));

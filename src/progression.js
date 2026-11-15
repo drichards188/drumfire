@@ -1,6 +1,7 @@
 import { BATTERIES, CAMPAIGN, missionById } from './campaign-data.js';
-import { TREES, TREE_OF, nodeOf, needsOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
+import { TREES, TREE_OF, RANK_GATE, nodeOf, needsOf, weightOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
 import { SLOTS, MAX_LEVEL } from './threat.js';
+const ROMAN = ['I', 'II', 'III', 'IV'];
 export { BATTERIES };
 // v4: one German tree and a research target (research.js); the saves before it are not carried over (a new career)
 export const SAVE_KEY = 'drumfire.campaign.v4';
@@ -77,17 +78,27 @@ export class Progression {
   unlocked(kind) {
     return !!nodeOf(kind) && (this.dev || this.owns(kind));
   }
-  // what still stands before a battery's research (the one before it in its line, or a line's `via` beside it), or null
+  // what still stands before a battery's research in its line (the one before it), or null
   blockerOf(kind) {
     return needsOf(kind).find((k) => !this.owns(k)) ?? null;
   }
-  // why a battery cannot be researched now ('' when it can: what must come before it is the career's)
+  // a rank still shut to the career (research.js RANK_GATE: so many batteries of the rank before, any line):
+  // { rank, need, have }, or null when it is open
+  rankGate(kind) {
+    const n = nodeOf(kind), tree = eraOfKind(kind), need = RANK_GATE[tree]?.[n?.tier];
+    if (!need) return null;
+    const have = TREES[tree].filter((q) => q.tier === n.tier - 1 && this.owns(q.kind)).length;
+    return have >= need ? null : { rank: n.tier, need, have };
+  }
+  // why a battery cannot be researched now ('' when it can: the one before it in its line is the career's, its rank open)
   researchBlock(kind) {
     const n = nodeOf(kind);
     if (!n) return 'not in a research tree';
     if (this.owns(kind)) return 'researched';
     const b = this.blockerOf(kind);
     if (b) return `research the ${BATTERIES.find((q) => q.kind === b)?.name ?? b} first`;
+    const g = this.rankGate(kind);
+    if (g) return `rank ${ROMAN[g.rank - 1]} opens with ${g.need} rank ${ROMAN[g.rank - 2]} batteries (${g.have} so far)`;
     return '';
   }
   // the RP still wanted, and how far it has got (0 to 1)
@@ -182,7 +193,7 @@ export class Progression {
     const auto = (pool, off) => {
       if (off) return [...pool].sort((a, b) => b.cost - a.cost);
       const best = [...new Map(pool.map((q) => [q.line, q])).values()];
-      const rest = pool.filter((q) => !best.includes(q)).sort((a, b) => (b.line === 'howitzers') - (a.line === 'howitzers') || b.tier - a.tier || b.cost - a.cost);
+      const rest = pool.filter((q) => !best.includes(q)).sort((a, b) => (b.line === 'howitzers') - (a.line === 'howitzers') || weightOf(b.kind) - weightOf(a.kind) || b.cost - a.cost);
       return [...best, ...rest];
     };
     const pick = (off, n) => {
@@ -225,6 +236,28 @@ export class Progression {
     this.lineup[tree] = kinds.map((k) => (k === out ? kind : k));
     this.save();
     return true;
+  }
+  // put a battery in a given slot of its row (on the map or off it, 0-based; the order the battle's number keys and
+  // tabs follow): one out of the lineup takes that slot (the battery in it leaves the lineup) or, the slot empty, the
+  // row's first empty one; one in the lineup changes places with the battery in that slot
+  placeLineup(kind, index) {
+    if (!this.unlocked(kind)) return false;
+    const tree = eraOfKind(kind), off = isOffmap(kind), kinds = this.lineupKinds(tree);
+    const row = kinds.filter((k) => isOffmap(k) === off), rest = kinds.filter((k) => isOffmap(k) !== off), from = row.indexOf(kind);
+    if (!(index >= 0 && index < (off ? SLOTS.support : SLOTS.map))) return false;
+    if (from >= 0) {
+      if (index === from || index >= row.length) return false; // (a battery in the lineup moves only onto another)
+      [row[from], row[index]] = [row[index], row[from]];
+    } else if (index < row.length) row[index] = kind;
+    else row.push(kind);
+    this.lineup[tree] = off ? [...rest, ...row] : [...row, ...rest];
+    this.save();
+    return true;
+  }
+  // a battery's slot in the lineup ({ off, i }, i 0-based in its row), or null
+  slotOf(kind) {
+    const off = isOffmap(kind), i = this.lineupKinds(eraOfKind(kind)).filter((k) => isOffmap(k) === off).indexOf(kind);
+    return i < 0 ? null : { off, i };
   }
 
   // ------------------------------------------------------------------ the threat levels (threat.js)

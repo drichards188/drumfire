@@ -8,10 +8,14 @@
 // multipliers on the gun tables (sim/guns.js `u.mods`), not weapons data.
 //
 // Germany is one tree (the 1917 and the WW2 guns together, as War Thunder's nations): lines of one type each, a
-// battery researched only after the one before it in its line (`after`), the lines never crossing. `rank` is its
-// weight class (I field, II heavy, III super-heavy, IV the giants and the weapons off the map), as War Thunder's ranks
-// (it scales the upgrade costs). The first battery of a rank I line can be researched from the start; a line that starts
-// higher opens once its `via`, a battery in the line beside it, is researched; a career owns only
+// battery researched only after the one before it in its line (`after`), the lines never crossing. Its rank (`tier`)
+// is its era and its weight in it, as War Thunder's ranks (since 2026-11-14): I and II the guns of 1914 to 1918 (I field
+// and medium, II heavy and super-heavy), III and IV those of 1939 to 1945 (III field, medium and the rockets, IV heavy,
+// super-heavy and the V-weapons). The ranks keep the eras together; the price is the battery's power alone, whatever its
+// era (the user, 2026-11-14: a WW2 field howitzer is cheap, the WW1 siege guns are hard to get). A rank opens as War
+// Thunder's do: rank I from the start, each rank above once the career has RANK_GATE of the
+// rank before (any line). `weight` is the old weight class (I field to IV the giants), which scales the upgrade costs and
+// orders the lineup picked for you; a career owns only
 // the 15 cm Ringkanone C/92 (the line `guns`, cost 0; the K 17 until 2026-11-01, which older saves keep: progression.js). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
 // open battle as off-map support: picked, given a target, they fire in their own time. The British 1917 tree is kept
 // for when Britain comes back; the menu does not show it for now.
@@ -21,19 +25,20 @@ import { OPS as OPS_WW1, RIDGE_MORE } from './ww1/ops.js';
 
 export const LINES = {
   // in this order on the Research screen: a line that starts above rank I stands beside the line of its `via`
+  // (the lines open at rank I first, then those that start at rank II, the rockets, all of 1939 to 1945, last)
   de: [
     { id: 'howitzers', name: 'Field artillery', de: 'Feldartillerie' },
+    { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
     { id: 'mortars', name: 'Mortars', de: 'Mörser' },
     { id: 'siege', name: 'Siege guns', de: 'Belagerungsgeschütze' },
-    { id: 'guns', name: 'Long-range guns', de: 'Kanonen' },
     { id: 'railway', name: 'Railway guns', de: 'Eisenbahngeschütze' },
-    { id: 'rockets', name: 'Rockets', de: 'Werfer' },
     { id: 'support', name: 'Off-map support', de: 'Fernwaffen' },
+    { id: 'rockets', name: 'Rockets', de: 'Werfer' },
   ],
   '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
 };
 // the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: the starting battery);
-// `via` (the first of a line above rank I): a battery in the line beside it, researched before this line opens
+// `tier` the rank (the German tree: era and weight, RANK_GATE), `weight` the weight class where it differs from it
 export const TREES = {
   '1917': [
     { kind: 'bl6', line: 'all', tier: 1, after: null, cost: 0 },
@@ -43,49 +48,58 @@ export const TREES = {
     { kind: 'rail', line: 'all', tier: 4, after: 'bl60', cost: 2000 },
   ],
   de: [
-    // each line runs from the guns of 1914 to 1918 to those of the second war, heavier as it goes (docs/PROGRESSION.md)
+    // each line runs from the guns of 1914 to 1918 (ranks I and II) to those of the second war (III and IV), heavier as
+    // it goes (docs/PROGRESSION.md)
     { kind: 'fk16', line: 'howitzers', tier: 1, after: null, cost: 300 },
     { kind: 'sfh93', line: 'howitzers', tier: 1, after: 'fk16', cost: 350 },
     { kind: 'sfh13', line: 'howitzers', tier: 1, after: 'sfh93', cost: 450 },
-    { kind: 'lefh18', line: 'howitzers', tier: 1, after: 'sfh13', cost: 600 },
-    { kind: 'sfh18', line: 'howitzers', tier: 2, after: 'lefh18', cost: 1100 },
-    { kind: 'wespe', line: 'howitzers', tier: 2, after: 'sfh18', cost: 1500 },
-    { kind: 'hummel', line: 'howitzers', tier: 2, after: 'wespe', cost: 2000 },
+    { kind: 'lefh18', line: 'howitzers', tier: 3, weight: 1, after: 'sfh13', cost: 600 },
+    { kind: 'sfh18', line: 'howitzers', tier: 3, weight: 2, after: 'lefh18', cost: 1100 },
+    { kind: 'wespe', line: 'howitzers', tier: 3, weight: 2, after: 'sfh18', cost: 1500 },
+    { kind: 'hummel', line: 'howitzers', tier: 4, weight: 2, after: 'wespe', cost: 2000 },
     { kind: 'rk92', line: 'guns', tier: 1, after: null, cost: 0 },
     { kind: 'k17', line: 'guns', tier: 1, after: 'rk92', cost: 350 },
     { kind: 'k16', line: 'guns', tier: 2, after: 'k17', cost: 700 },
-    { kind: 'k18', line: 'guns', tier: 2, after: 'k16', cost: 1100 },
-    { kind: 'k38', line: 'guns', tier: 3, after: 'k18', cost: 2000 },
-    { kind: 'max38', line: 'railway', tier: 3, after: null, via: 'k16', cost: 2400 },
-    { kind: 'bruno', line: 'railway', tier: 3, after: 'max38', cost: 2800 },
-    { kind: 'k5', line: 'railway', tier: 3, after: 'bruno', cost: 3400 },
-    { kind: 'paris', line: 'railway', tier: 4, after: 'k5', cost: 4000, offmap: true },
-    { kind: 'k12', line: 'railway', tier: 4, after: 'paris', cost: 4600 },
+    { kind: 'k18', line: 'guns', tier: 3, weight: 2, after: 'k16', cost: 1100 },
+    { kind: 'k38', line: 'guns', tier: 4, weight: 3, after: 'k18', cost: 2000 },
+    { kind: 'max38', line: 'railway', tier: 2, weight: 3, after: null, cost: 2400 },
+    { kind: 'paris', line: 'railway', tier: 2, weight: 4, after: 'max38', cost: 4000, offmap: true },
+    { kind: 'bruno', line: 'railway', tier: 4, weight: 3, after: 'paris', cost: 2800 },
+    { kind: 'k5', line: 'railway', tier: 4, weight: 3, after: 'bruno', cost: 3400 },
+    { kind: 'k12', line: 'railway', tier: 4, after: 'k5', cost: 4600 },
     { kind: 'gustav', line: 'railway', tier: 4, after: 'k12', cost: 5000 },
-    { kind: 'm99', line: 'mortars', tier: 2, after: null, via: 'sfh13', cost: 600 },
+    { kind: 'm99', line: 'mortars', tier: 1, weight: 2, after: null, cost: 600 },
     { kind: 'm16', line: 'mortars', tier: 2, after: 'm99', cost: 900 },
-    { kind: 'mrs18', line: 'mortars', tier: 2, after: 'm16', cost: 1300 },
-    { kind: 'hm1', line: 'mortars', tier: 3, after: 'mrs18', cost: 2600 },
-    { kind: 'beta', line: 'siege', tier: 3, after: null, via: 'm16', cost: 2000 },
-    { kind: 'gamma', line: 'siege', tier: 3, after: 'beta', cost: 2400 },
-    { kind: 'bertha', line: 'siege', tier: 3, after: 'gamma', cost: 2800 },
+    { kind: 'mrs18', line: 'mortars', tier: 3, weight: 2, after: 'm16', cost: 1300 },
+    { kind: 'hm1', line: 'mortars', tier: 4, weight: 3, after: 'mrs18', cost: 2600 },
+    { kind: 'beta', line: 'siege', tier: 2, weight: 3, after: null, cost: 2000 },
+    { kind: 'gamma', line: 'siege', tier: 2, weight: 3, after: 'beta', cost: 2400 },
+    { kind: 'bertha', line: 'siege', tier: 2, weight: 3, after: 'gamma', cost: 2800 },
     { kind: 'karl', line: 'siege', tier: 4, after: 'bertha', cost: 4000 },
-    { kind: 'nbw41', line: 'rockets', tier: 1, after: null, cost: 450 },
-    { kind: 'swg40', line: 'rockets', tier: 2, after: 'nbw41', cost: 800 },
-    { kind: 'nbw42', line: 'rockets', tier: 2, after: 'swg40', cost: 1200 },
-    { kind: 'gotha', line: 'support', tier: 3, after: null, via: 'swg40', cost: 2000, offmap: true },
+    { kind: 'nbw41', line: 'rockets', tier: 3, weight: 1, after: null, cost: 450 },
+    { kind: 'swg40', line: 'rockets', tier: 3, weight: 2, after: 'nbw41', cost: 800 },
+    { kind: 'nbw42', line: 'rockets', tier: 3, weight: 2, after: 'swg40', cost: 1200 },
+    { kind: 'gotha', line: 'support', tier: 2, weight: 3, after: null, cost: 2000, offmap: true },
     { kind: 'v1', line: 'support', tier: 4, after: 'gotha', cost: 3000, offmap: true },
     { kind: 'v2', line: 'support', tier: 4, after: 'v1', cost: 4500, offmap: true },
   ],
 };
+// War Thunder's rank rule (the German tree): a rank opens once the career has this many batteries of the rank before
+// it, in any line (rank I is open from the start; the starting C/92 counts). So a career fields the guns of 1914 to 1918
+// first, and the second war's open with three of the Great War's heavy batteries, the cheaper ones will do: the siege
+// guns stay a long goal (from threat level 6 the strongpoints want 28 cm shells and more).
+export const RANK_GATE = { de: { 2: 3, 3: 3, 4: 4 } };
+// the era of a German rank, for the Research screen
+export const RANK_ERA = { de: ['1914 to 1918', '1914 to 1918', '1939 to 1945', '1939 to 1945'] };
 export const RESEARCH_ERAS = Object.keys(TREES);
 // the tree a game era's guns are researched in (the German eras share one)
 export const TREE_OF = { '1917': '1917', ww1: 'de', ww2: 'de', de: 'de' };
 export const nodeOf = (kind) => RESEARCH_ERAS.map((e) => TREES[e].find((n) => n.kind === kind)).find(Boolean) ?? null;
 export const eraOfKind = (kind) => RESEARCH_ERAS.find((e) => TREES[e].some((n) => n.kind === kind)) ?? null;
-// what must be researched before a battery: the one before it in its line, and for the first of a line above rank I
-// its `via` in the line beside it
-export const needsOf = (kind) => { const n = nodeOf(kind); return n ? [n.after, n.via].filter(Boolean) : []; };
+// what must be researched before a battery in its line: the one before it (its rank's gate aside, RANK_GATE)
+export const needsOf = (kind) => { const n = nodeOf(kind); return n?.after ? [n.after] : []; };
+// a battery's weight class (the upgrade costs' scale, the lineup picked for you): `weight`, else its rank
+export const weightOf = (kind) => { const n = nodeOf(kind); return n ? n.weight ?? n.tier : 1; };
 // the battery after this one in its line (null at the line's end)
 export const nextInLine = (kind) => TREES[eraOfKind(kind)]?.find((n) => n.after === kind) ?? null;
 // the batteries that fight from off the map (off-map support): never in a gun pit
@@ -128,14 +142,14 @@ const SAY = {
 export const partEffect = (part, level) => (level > 0 ? Object.entries(part.fx).map(([k, v]) => SAY[k](v[level - 1])).join(', ') : '');
 
 // Battery points. A part's level n costs PART_COST[n - 1] and the k-th gun GUN_COST * (k - 1), both times the
-// battery's tier (a heavier battery earns more for each round, so it pays more).
+// battery's weight class (a heavier battery earns more for each round, so it pays more; weightOf, not its era's rank).
 const TIER_K = [1, 1.2, 1.4, 1.6];
 const PART_COST = [80, 170, 300];
 const GUN_COST = 120;
 const round10 = (v) => Math.round(v / 10) * 10;
 // the cost of the next level of a part (guns: the next gun), or null when it is at its top
 export function nextCost(kind, part, have) {
-  const k = TIER_K[(nodeOf(kind)?.tier ?? 1) - 1];
+  const k = TIER_K[weightOf(kind) - 1];
   if (part === 'guns') return have < maxGuns(kind) ? round10(GUN_COST * have * k) : null;
   return have < LEVELS ? round10(PART_COST[have] * k) : null;
 }

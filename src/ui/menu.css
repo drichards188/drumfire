@@ -287,6 +287,7 @@ body.menu #view, body.menu #panel { display: none; }
 .hg-cell { position: relative; flex: 1 1 0; min-width: 136px; max-width: 200px; display: grid; }
 .hg-cell > .hg-slot { min-width: 0; max-width: none; }
 .hg-cell > .hg-slot small { padding-right: 30px; }
+.hg-cell > .hg-slot { padding-top: 26px; } /* (a line along the top for its number or Off-map and its rank: a long name wraps under it) */
 .hg-cell.first-off { margin-left: 14px; }
 .hg-cell.first-off::before { content: ''; position: absolute; left: -12px; top: 10px; bottom: 10px; border-left: 1px dashed #a49b6966; }
 .hg-slot.empty { border-style: dashed; background: #141914b8; align-content: center; }
@@ -315,6 +316,35 @@ body.menu #view, body.menu #panel { display: none; }
 .hg-bench-row:hover, .hg-bench-row:focus-visible { border-color: #d2b77d; background: #403d2be8; }
 .hg-bench-none { grid-column: 1 / -1; font-size: 12px; color: #acb09e; }
 .hg-bench > .rs-act { justify-self: start; }
+/* a slot's number: its key and tab in battle */
+.hg-slot-n { position: absolute; top: 7px; left: 12px; font: 700 10px var(--mono); letter-spacing: .06em; color: #c2a464; }
+/* a battery being put in a slot of its choosing (menu.js markPlacing): the slots it can take lit, each with what it
+   would do there in place of the rank; the rest muted; its own slot dashed; the strip over the bar names it */
+.hg-slot-do { position: absolute; top: 6px; right: 6px; pointer-events: none; padding: 3px 6px; font: 700 8px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #171b16; background: #d2b77d; }
+.hg-slot-do:empty { display: none; }
+.hg-bar.placing .hg-swap, .hg-bar.placing .hg-slot-tier { visibility: hidden; }
+.hg-cell.mute > .hg-slot { opacity: .38; cursor: default; }
+.hg-cell.mute > .hg-slot:hover { border-color: #a49b6944; color: inherit; }
+.hg-cell.target > .hg-slot { border: 1px solid #d2b77d; cursor: pointer; animation: hg-lit .4s cubic-bezier(.22, 1, .36, 1); }
+.hg-cell.target > .hg-slot:hover, .hg-cell.target > .hg-slot:focus-visible, .hg-cell.drop > .hg-slot {
+  background: linear-gradient(180deg, #4f4831f2, #25261bf8); color: #f2e6c4; box-shadow: inset 0 0 0 1px #d2b77d, 0 8px 24px #0006;
+}
+.hg-cell.drop > .hg-slot-do, .hg-cell.target:hover > .hg-slot-do { background: #f0d999; }
+.hg-cell.from > .hg-slot { border: 1px dashed #d2b77d99; cursor: default; }
+.hg-cell.from > .hg-slot-do { color: #d8c690; background: #11150fe6; box-shadow: inset 0 0 0 1px #a49b6988; }
+@keyframes hg-lit { from { box-shadow: 0 0 0 5px #d2b77d55, 0 8px 24px #0006; } }
+/* the slot just filled, lit for a moment */
+.hg-cell.placed > .hg-slot { animation: hg-placed 1.2s cubic-bezier(.22, 1, .36, 1); }
+@keyframes hg-placed { from { box-shadow: 0 0 0 2px #f0d999, 0 0 28px #d2b77d99; } }
+@media (prefers-reduced-motion: reduce) { .hg-cell.target > .hg-slot, .hg-cell.placed > .hg-slot { animation: none; } }
+.hg-place {
+  position: absolute; z-index: 3; left: 0; bottom: calc(100% + 10px); max-width: 100%; display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+  padding: 8px 8px 8px 14px; border: 1px solid #c2a464; background: #11150fee; box-shadow: 0 10px 30px #0008;
+  font: 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #d8cfae;
+}
+.hg-place[hidden] { display: none; }
+.hg-place b { font: normal 16px var(--serif); letter-spacing: 0; text-transform: none; color: #f2e6c4; }
+.hg-place-done { padding: 3px 6px 3px 0; font: 11px var(--mono); letter-spacing: .04em; text-transform: none; color: #9fbf86; }
 
 /* the Research screen: the tree beside the battery shown, on the folio's paper */
 /* the Research screen: one screenful under the top bar (wider than the hangar's column: the tree wants the room), a
@@ -359,6 +389,9 @@ body.menu #view, body.menu #panel { display: none; }
 .rs-band { grid-column: 1 / -1; margin: -4px 0; background: #c2bc9308; border-top: 1px solid #a49b6926; border-bottom: 1px solid #a49b6926; display: flex; align-items: flex-start; }
 .rs-band:nth-of-type(2n) { background: #c2bc9312; }
 .rs-band span { width: 26px; padding-top: 8px; text-align: center; font: 11px var(--mono); letter-spacing: .08em; color: #c2a464; }
+/* a rank still shut: its count of the batteries it waits for under the numeral (menu.js, research.js RANK_GATE) */
+.rs-band.shut span { color: #8f957f; }
+.rs-band span small { display: block; margin-top: 5px; font-size: 9px; letter-spacing: 0; color: #f0c36a; }
 .rs-line-n { grid-row: 1; display: grid; gap: 2px; min-height: 34px; align-content: end; padding: 10px 0 5px; position: sticky; top: 0; z-index: 2; background: #1f241e; box-shadow: 0 6px 0 #1f241e; }
 .rs-line-n b { font: 9px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: #c9c5ae; font-weight: normal; }
 .rs-line-n small { font: italic 11px var(--serif); color: #8f957f; }
@@ -386,6 +419,18 @@ body.menu #view, body.menu #panel { display: none; }
 .rs-node.target { border-color: #c79a4a; }
 .rs-node.target small { color: #f0c36a; }
 .rs-node.on { border-color: #d2b77d; background: #3a3826f2; box-shadow: 0 0 0 1px #d2b77d; color: #f2e6c4; }
+/* a battery in the lineup: its slot in the corner (Off: the off-map slot) */
+.rs-node.in:not(.on) { border-color: #8fae7a88; }
+.rs-node.in b { padding-right: 22px; }
+.rs-node-slot { position: absolute; top: 6px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px; display: grid; place-items: center; font: 700 9px var(--mono); color: #141914; background: #9fbf86; }
+/* the battery's place in the lineup on its card: where it fights, and the buttons that choose its slot */
+.rs-lineup { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; padding: 9px 10px 9px 12px; background: #c2bc930d; }
+.rs-lineup-at { font: 11px var(--mono); letter-spacing: .06em; color: #aaa88b; }
+.rs-lineup-at.in { color: #9fbf86; }
+.rs-lineup-at.in::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #9fbf86; vertical-align: 1px; }
+.rs-lineup-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.rs-act.primary { border-color: #d2b77d; background: #bca16a; color: #171b16; }
+.rs-act.primary:hover:not(:disabled) { background: #d8bf86; }
 .rs-card { grid-area: card; display: grid; gap: 12px; align-content: start; min-height: 0; overflow: auto; padding: 0 0 18px; scrollbar-color: #6d6f5e transparent; }
 .rs-card > :not(.rs-pic) { margin: 0 18px; }
 .rs-pic { aspect-ratio: 16 / 8; background: #151b17 center / cover no-repeat; border-bottom: 1px solid #a49b6944; filter: saturate(.9); }
@@ -422,6 +467,7 @@ body.menu #view, body.menu #panel { display: none; }
 }
 .mn-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; border-top: 1px solid #9b906343; padding-top: 14px; }
 .mn-rsv .mn-foot { margin-top: 10px; padding-top: 8px; }
+.mn-rsv > .rsv-bar { grid-area: auto; margin-top: 12px; } /* (not the hangar grid's `bar` area: in this grid that made a column of its own) */
 @media (min-width: 1000px) and (min-height: 560px) {
   /* one screenful: the panes scroll, the page does not */
   /* the menu a column, so the screen takes whatever the top bar leaves (one row or two) */
@@ -429,7 +475,7 @@ body.menu #view, body.menu #panel { display: none; }
   .mn-rsv { flex: 1 1 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
   .mn-rsv > .rsv-help { grid-row: 1; }
   .mn-rsv > .rsv-body, .mn-rsv > .mn-roster { grid-row: 2; }
-  .mn-rsv > .mn-foot { grid-row: 3; }
+  .mn-rsv > .mn-foot, .mn-rsv > .rsv-bar { grid-row: 3; }
   .mn-rsv .rsv-body, .mn-rsv .rs { min-height: 0; height: 100%; }
 }
 .mn-save { color: #828d7b; font: 9px var(--mono); }

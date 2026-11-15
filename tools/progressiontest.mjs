@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { Progression, SAVE_KEY } from '../src/progression.js';
-import { TREES, LINES, nodeOf, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus, isOffmap } from '../src/research.js';
+import { TREES, LINES, RANK_GATE, gunEraOf, nodeOf, PARTS, maxGuns, loadoutOf, modsOf, maxedLevels, opposition, battleReward, missionBonus, isOffmap } from '../src/research.js';
 import { SLOTS, MAX_LEVEL, threatOf } from '../src/threat.js';
 import { GUNS } from '../src/sim/tables.js';
 import { BATTERIES, CAMPAIGN } from '../src/campaign-data.js';
@@ -21,17 +21,19 @@ assert.equal(new Progression(storage).dev, false, 'Switching dev mode off must s
 assert.deepEqual(DE.filter(k=>career.unlocked(k)), ['rk92'], 'A new career owns the 15 cm Ringkanone C/92 alone');
 assert.equal(career.targetOf('de'), 'fk16', 'A new career researches the cheapest open battery (the FK 16)');
 assert.equal(career.targetOf('ww1'), 'fk16', 'The 1918 and the WW2 eras share the German tree');
-// only rank I lines are open from the start; a line that starts higher opens with its `via`, in the line beside it
+// the ranks are eras (I and II the guns of 1914 to 1918, III and IV the second war's), each line in rank order; only rank
+// I is open from the start, and a rank opens with RANK_GATE batteries of the rank before (War Thunder's rule)
 {
-  const ids = LINES.de.map((l) => l.id);
-  for (const n of TREES.de.filter((q) => !q.after)) {
-    if (n.tier === 1) { assert.ok(!n.via, `${n.kind}: a rank I line needs nothing`); assert.equal(career.researchBlock(n.kind) === '' || career.owns(n.kind), true, `${n.kind} is open from the start`); continue; }
-    const v = nodeOf(n.via);
-    assert.ok(v && v.line !== n.line, `${n.kind}: a line above rank I names a battery of another line`);
-    assert.equal(Math.abs(ids.indexOf(v.line) - ids.indexOf(n.line)), 1, `${n.kind}: its via stands in the column beside it`);
-    assert.ok(career.researchBlock(n.kind), `${n.kind} is closed to a new career`);
+  for (const n of TREES.de) {
+    assert.equal(gunEraOf(n.kind) === 'ww1', n.tier <= 2, `${n.kind}: rank ${n.tier} is its era's`);
+    assert.ok(!n.via, `${n.kind}: no line opens through another line`);
+    if (n.after) assert.ok(nodeOf(n.after).line === n.line && nodeOf(n.after).tier <= n.tier, `${n.kind}: its line runs in rank order`);
   }
+  // (the price is power, not era: a WW1 siege gun costs more than the second war's field guns)
+  assert.ok(['beta', 'gamma', 'bertha'].every((k) => nodeOf(k).cost > Math.max(nodeOf('lefh18').cost, nodeOf('sfh18').cost, nodeOf('nbw41').cost)), 'The siege guns are dearer than the WW2 field guns');
   assert.ok(TREES.de.every((n) => career.researchBlock(n.kind) === '' ? n.tier === 1 : true), 'A new career can research nothing above rank I');
+  assert.match(career.researchBlock('max38'), /rank II opens with 3 rank I batteries \(1 so far\)/, 'A shut rank says what it waits for');
+  assert.deepEqual(career.rankGate('k16'), { rank: 2, need: RANK_GATE.de[2], have: 1 });
 }
 // every mission, operation and lesson is open from the start, in any order
 assert.ok(CAMPAIGN.every(m=>career.canPlay(m.id)), 'Every mission must be open from the start');
@@ -39,10 +41,11 @@ assert.equal(career.canPlay('earn-nothing'), false);
 assert.ok(menuItems(career).every(i=>!i.locked), 'No menu entry may be locked');
 // a campaign mission is a one-off RP challenge: its first win pays the research target, the RP over a battery's cost
 // going on down its line
-assert.equal(career.complete('earn-v1'), 1500);
-assert.deepEqual([...career.researched].sort(), ['fk16','sfh13','sfh93'], '1,500 RP research the FK 16 (300), the sFH 93 (350) and the sFH 13 (450)');
-assert.equal(career.targetOf('de'), 'lefh18', 'The rest goes on down the line');
-assert.equal(career.costLeft('lefh18'), 600 - 400);
+assert.equal(career.complete('earn-v1'), missionBonus(CAMPAIGN.find((m) => m.id === 'earn-v1')));
+assert.equal(missionBonus(CAMPAIGN.find((m) => m.id === 'earn-v1')), 1500, 'half the V-1\'s research cost');
+assert.deepEqual([...career.researched].sort(), ['fk16','k17','sfh13','sfh93'], '1,500 RP research the FK 16 (300), the sFH 93 (350), the sFH 13 (450) and, the leFH 18 waiting for rank III, the cheapest open battery: the K 17 (350)');
+assert.equal(career.targetOf('de'), 'k16', 'The rest goes on down the K 17\'s line');
+assert.equal(career.costLeft('k16'), 700 - 50);
 assert.equal(career.complete('earn-v1'), 0, 'Only the first win pays');
 assert.equal(career.unlocked('v1'), false, 'A mission win grants no battery');
 // research: in line order, anywhere in the tree, the target picked on the Research screen
@@ -55,7 +58,7 @@ assert.equal(career.setTarget('m99'), true, 'The first of any line is open');
 assert.equal(career.research('m99'), false, 'Research takes the RP (unless points are unlimited)');
 assert.equal(career.reward('ww1', { rp: 300, batteries: { rk92: 1000, m99: 50 } }), true);
 assert.equal(career.costLeft('m99'), 600 - 300);
-assert.equal(career.costLeft('lefh18'), 200, 'Progress on a battery left for another is kept');
+assert.equal(career.costLeft('k16'), 650, 'Progress on a battery left for another is kept');
 assert.equal(career.bp.rk92, 1000);
 assert.equal(career.bp.m99, 50, 'Points of a battery not yet researched are kept for it');
 assert.equal(career.battles.de, 1);
@@ -73,7 +76,7 @@ for (let i = 0; i < 4; i++) assert.equal(reread.upgrade('rk92','barrel'), i < 3,
 assert.equal(reread.bp.rk92, 800 - 550);
 // the open battle's lineup: the researched batteries with their levels
 const bde = reread.battle('ww1');
-assert.deepEqual(Object.keys(bde.loadout).sort(), ['fk16','rk92','sfh13','sfh93']);
+assert.deepEqual(Object.keys(bde.loadout).sort(), ['fk16','k17','rk92','sfh13','sfh93']);
 assert.equal(bde.loadout.rk92.guns, 2);
 assert.equal(bde.loadout.sfh13.guns, 1);
 assert.equal(bde.loadout.rk92.mods.dmg, 1.12);
@@ -145,12 +148,15 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   assert.match(c.researchBlock('mrs18'), /21 cm Mörser 16 first/, 'The tree order still holds');
   assert.equal(c.research('mrs18'), false);
   assert.equal(c.research('m16'), false, 'The Mörser 99 comes first');
-  assert.match(c.researchBlock('m99'), /15 cm sFH 13 first/, 'The mortars open with the sFH 13 beside them');
-  assert.equal(c.research('m99'), false);
-  for (const k of ['fk16', 'sfh93', 'sfh13']) assert.equal(c.research(k), true);
+  assert.equal(c.researchBlock('m99'), '', 'The mortars start at rank I');
   assert.equal(c.research('m99'), true);
+  assert.match(c.researchBlock('m16'), /rank II opens with 3 rank I batteries \(2 so far\)/, 'and rank II waits for a third rank I battery');
+  assert.equal(c.research('fk16'), true);
   assert.equal(c.research('m16'), true);
-  assert.equal(c.research('mrs18'), true);
+  for (const k of ['k17', 'k16']) assert.equal(c.research(k), true);
+  assert.match(c.researchBlock('mrs18'), /rank III opens with 3 rank II batteries \(2 so far\)/, 'The second war waits for three of the Great War\'s heavies');
+  assert.equal(c.research('gotha'), true);
+  assert.equal(c.research('mrs18'), true, 'any three: the siege guns are not needed');
   assert.equal(c.rp.de, 0, 'Nothing is spent');
   for (let i = 0; i < 3; i++) assert.equal(c.upgrade('rk92', 'shells'), true);
   assert.equal(c.bp.rk92 ?? 0, 0);
@@ -162,7 +168,7 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   const r = new Progression(st);
   assert.deepEqual([r.researched.size, r.completed.size, r.rp.de, r.battles.de, r.level('rk92', 'shells', false), r.bp.rk92 ?? 0, r.targetOf('de')], [0, 0, 0, 0, 0, 0, 'fk16']);
   assert.deepEqual([r.dev, r.free], [true, true], 'The switches stay');
-  assert.equal(r.complete('earn-k18'), 550, 'A campaign mission pays its bonus again after a reset');
+  assert.equal(r.complete('earn-k18'), missionBonus(CAMPAIGN.find((m) => m.id === 'earn-k18')), 'A campaign mission pays its bonus again after a reset');
   // everything researched: the RP wait for the next battery the tree gets
   r.setFree(false);
   r.reward('de', { rp: 1e6, batteries: {} });
@@ -194,6 +200,25 @@ assert.ok(DE.every(k=>new Progression(storage).unlocked(k)));
   assert.deepEqual(c.lineupKinds('de'), before.map((k, i) => (i === slot ? 'm16' : k)), 'The swap keeps the slot');
   assert.equal(c.swapLineup('v2', 'v1'), true);
   assert.ok(c.inLineup('v1') && !c.inLineup('v2') && c.lineupKinds('de').length === SLOTS.map + SLOTS.support);
+  // a battery put in a slot of its choosing (the Research screen, a drag): in place of the one there, or swapping
+  // places with it if it is in the lineup already; never off its own row, and the battle's order follows
+  const row = () => c.lineupKinds('de').filter((k) => !isOffmap(k));
+  const r0 = row(), nw = c.benchOf('de', false)[0];
+  assert.equal(c.placeLineup(nw, 2), true);
+  assert.deepEqual(row(), r0.map((k, i) => (i === 2 ? nw : k)), 'A battery out of the lineup takes the slot chosen');
+  assert.ok(!c.inLineup(r0[2]), 'and the one in it leaves');
+  assert.equal(c.placeLineup(nw, 0), true);
+  assert.deepEqual(row().slice(0, 3), [nw, r0[1], r0[0]], 'One in the lineup changes places with the slot\'s battery');
+  assert.deepEqual(c.slotOf(nw), { off: false, i: 0 });
+  assert.equal(c.placeLineup(nw, 0), false, 'Its own slot is no move');
+  assert.equal(c.placeLineup(nw, SLOTS.map), false, 'No slot past the row');
+  assert.deepEqual(c.slotOf('v1'), { off: true, i: 0 });
+  assert.equal(c.placeLineup('v2', 0), true, 'An off-map weapon takes the off-map slot');
+  assert.ok(c.inLineup('v2') && !c.inLineup('v1') && row()[0] === nw);
+  assert.deepEqual(new Progression(st).lineupKinds('de').filter((k) => !isOffmap(k)), row(), 'The order survives a reload');
+  assert.equal(c.toggleLineup(row()[4]), true);
+  assert.equal(c.placeLineup(nw, 4), false, 'A battery in the lineup does not move into an empty slot');
+  assert.equal(c.placeLineup(c.benchOf('de', false)[0], 4), true, 'one out of it does');
   c.setDev(false);
   assert.deepEqual(c.lineupKinds('de'), ['rk92'], 'A new career fields its C/92');
   assert.match(c.lineupBlock('rk92'), /needs a battery/);

@@ -1,7 +1,7 @@
 import { Progression } from '../progression.js';
 import { exportSave, importSave } from '../saves.js';
 import { BATTERIES } from '../campaign-data.js';
-import { TREES, LINES, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
+import { TREES, LINES, RANK_ERA, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
 import { menuItems, hrefOf, GUIDE, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
@@ -77,7 +77,11 @@ const rangeBtn = (era, kind) => {
 const bar = (k) => { const b = el('span', 'rs-bar'), f = el('i'); f.style.width = `${Math.round(Math.min(1, k) * 100)}%`; b.append(f); return b; };
 const lineOf = (kind) => LINES[eraOfKind(kind)]?.find((l) => l.id === nodeOf(kind)?.line);
 // what a locked battery waits for (on the Research screen an arrow points from it)
-const afterText = (career, kind) => `After the ${nameOf(career.blockerOf(kind))}`;
+// (the one before it in its line, or its rank's gate: research.js RANK_GATE)
+const afterText = (career, kind) => {
+  const b = career.blockerOf(kind), g = b ? null : career.rankGate(kind);
+  return b ? `After the ${nameOf(b)}` : g ? `Rank ${ROMAN[g.rank - 1]}: ${g.have} of ${g.need} rank ${ROMAN[g.rank - 2]}` : '';
+};
 // The Research tree's arrows: an SVG over the grid (sized by CSS to the grid, never by its own drawing, which would
 // hold the tree at an old width), drawn from where the nodes landed and again whenever the tree changes size. Down a line, bottom edge to top edge; across to the line beside it (a `via`), out of the side, along
 // the gap between the columns and into the other side. `state(link)` gives its look: 'own' (both researched), 'open'
@@ -177,11 +181,38 @@ function researchBlock(career, kind, onChange) {
   return box;
 }
 
+// A battery's place in the lineup on the Research screen's card: in which slot it takes the field, and the buttons that
+// put it in one (`lu.start`: the slot bar lights the slots it can take), move it, or leave it out
+function lineupRow(career, kind, lu) {
+  const row = el('div', 'rs-lineup'), s = career.slotOf(kind), on = lu.placing?.kind === kind;
+  const where = el('p', `rs-lineup-at${s ? ' in' : ''}`, s ? `In battle · ${s.off ? 'off-map slot' : `slot ${s.i + 1}`}` : 'Not in your lineup');
+  if (s && !s.off) where.title = `Key ${s.i + 1} and the ${['first', 'second', 'third', 'fourth', 'fifth'][s.i] ?? `${s.i + 1}th`} tab in battle`;
+  row.append(where);
+  const acts = el('div', 'rs-lineup-acts');
+  if (on) {
+    const b = actBtn('Cancel', `place:${kind}`, '', () => lu.start(null));
+    b.setAttribute('aria-pressed', 'true');
+    acts.append(b);
+  } else if (!s) {
+    const b = actBtn('Take into battle', `place:${kind}`, '', () => lu.start(kind));
+    b.classList.add('primary');
+    b.title = 'Choose its slot in the lineup: an empty one, or one whose battery it replaces';
+    acts.append(b);
+  } else {
+    const others = career.lineupKinds(eraOfKind(kind)).filter((k) => k !== kind && isOffmap(k) === s.off).length;
+    if (others) acts.append(actBtn('Change slot', `place:${kind}`, '', () => lu.start(kind)));
+    acts.append(actBtn('Leave out', `leave:${kind}`, career.lineupBlock(kind), () => lu.leave(kind)));
+  }
+  row.append(acts);
+  return row;
+}
+
 // The Research screen (research.js, progression.js): the battery being researched and how far it has got, the tree in
 // its lines (a column each, the batteries in the order they are researched, each with its rank; click one to see it)
 // beside the battery shown, with its picture: make it the research target, or spend its own points on its guns and
-// parts. It shows the career itself; dev mode only lays every battery at its top over it in battle.
-function researchView(career, era, shown, onShow, onChange, onHangar) {
+// parts, and put it in a slot of the lineup (`lu`, lineupRow; a battery the career has can also be dragged from the
+// tree onto a slot). It shows the career itself; dev mode only lays every battery at its top over it in battle.
+function researchView(career, era, shown, onShow, onChange, onHangar, lu) {
   const tree = TREES[era], kind = shownIn(era, shown), node = nodeOf(kind), tgt = career.targetOf(era);
   const root = el('div', 'rs');
   // the strip over the tree: what is being researched and how far it has got, and the one rule to know
@@ -196,27 +227,37 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
     how.append(el('small', null, `${num(career.rp[era])} RP to spare`));
   }
   purse.append(what, how);
-  head.append(purse, el('p', 'rs-help', 'Every battle\'s research points go to the battery you are researching. Follow the arrows: each battery opens the next.'));
+  head.append(purse, el('p', 'rs-help', 'Every battle\'s research points go to the battery you are researching. Follow the arrows down each line; a rank opens once you have enough batteries of the rank above it.'));
   if (career.dev) head.append(el('p', 'rs-note', 'Dev mode is on: every battery can join the lineup, at its best in battle.'));
   root.append(head);
   const side = el('div', 'rs-side');
-  // the tree as War Thunder draws it: a column per line, a horizontal band per rank (I at the top), and an arrow from
-  // each battery to the ones it opens (down its line, and across to the line beside it for a `via`)
+  // the tree as War Thunder draws it: a column per line, a horizontal band per rank (I at the top; its era on hover), a
+  // shut rank's count in its gutter, and an arrow from each battery to the next in its line
   const lines = LINES[era], ranks = [...new Set(tree.map((n) => n.tier))].sort((a, b) => a - b);
   const rows = Object.fromEntries(ranks.map((t) => [t, Math.max(...lines.map((l) => tree.filter((q) => q.line === l.id && q.tier === t).length))]));
   const cols = el('div', 'rs-tree'), wrap = el('div', 'rs-tree-wrap');
   cols.style.setProperty('--lines', lines.length);
   let row = 2;
-  const start = {};
+  const start = {}, eras = RANK_ERA[era], tracks = ['auto']; // (the rows' sizes: the line names' row, then each rank's rows)
   for (const t of ranks) {
+    for (let i = 0; i < rows[t]; i++) tracks.push('minmax(var(--rs-row), auto)');
     start[t] = row;
     const band = el('div', 'rs-band');
     band.style.gridRow = `${row} / span ${rows[t]}`;
-    band.append(el('span', null, ROMAN[t - 1]));
-    band.title = `Rank ${ROMAN[t - 1]}`;
+    const no = el('span', null, ROMAN[t - 1]);
+    band.append(no);
+    band.title = `Rank ${ROMAN[t - 1]}${eras ? ` · ${eras[t - 1]}` : ''}`;
+    // a rank still shut: the batteries of the rank before it the career has, of how many it takes (War Thunder's lock)
+    const g = career.rankGate(tree.find((n) => n.tier === t).kind);
+    if (g) {
+      band.classList.add('shut');
+      no.append(el('small', null, `${g.have}/${g.need}`));
+      band.title += ` · opens with ${g.need} rank ${ROMAN[t - 2]} batteries (${g.have} so far)`;
+    }
     cols.append(band);
     row += rows[t];
   }
+  cols.style.gridTemplateRows = tracks.join(' ');
   const nodes = {};
   lines.forEach((line, c) => {
     const h = el('div', 'rs-line-n');
@@ -241,6 +282,18 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
       const name = el('b', null, nameOf(n.kind));
       if (WIP_KINDS.has(n.kind)) name.append(wipBadge());
       b.append(name);
+      // in the lineup: its slot; one the career can field drags onto a slot of the bar below
+      const slot = career.unlocked(n.kind) ? career.slotOf(n.kind) : null;
+      if (slot) {
+        b.classList.add('in');
+        b.append(el('span', 'rs-node-slot', slot.off ? 'Off' : String(slot.i + 1)));
+        b.title += ` · In battle, ${slot.off ? 'off-map slot' : `slot ${slot.i + 1}`}`;
+      }
+      if (career.unlocked(n.kind)) {
+        b.draggable = true;
+        b.dataset.drag = n.kind;
+        b.title += slot ? ' · Drag onto another slot to swap' : ' · Drag onto a slot below to take it into battle';
+      }
       if (on) b.append(bar(career.researchShare(n.kind)));
       b.append(el('small', null, own ? (maxGuns(n.kind) > 1 ? `${career.level(n.kind, 'guns', false)} of ${maxGuns(n.kind)} guns` : 'Researched')
         : on ? `Researching · ${Math.round(career.researchShare(n.kind) * 100)}%` : `${num(n.cost)} RP`));
@@ -250,7 +303,8 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
     }
   });
   const links = tree.flatMap((n) => [n.after, n.via].filter(Boolean).map((from) => ({ from, to: n.kind })));
-  cols.append(treeArrows(cols, nodes, links, (l) => (career.owns(l.to) ? 'own' : career.owns(l.from) ? 'open' : 'shut')));
+  // (lit amber only into a battery that can be researched now: not one whose rank is still shut)
+  cols.append(treeArrows(cols, nodes, links, (l) => (career.owns(l.to) ? 'own' : career.owns(l.from) && !career.rankGate(l.to) ? 'open' : 'shut')));
   wrap.append(cols);
   side.append(wrap);
   root.append(side);
@@ -269,7 +323,9 @@ function researchView(career, era, shown, onShow, onChange, onHangar) {
   const acts = el('div', 'rs-head-acts');
   acts.append(actBtn('Preview the full battery', `preview:${kind}`, '', () => onHangar(kind)), rangeBtn(era, kind));
   chead.append(title, acts);
-  card.append(chead, career.owns(kind) ? modsBlock(career, kind, onChange) : researchBlock(career, kind, onChange));
+  card.append(chead);
+  if (career.unlocked(kind)) card.append(lineupRow(career, kind, lu));
+  card.append(career.owns(kind) ? modsBlock(career, kind, onChange) : researchBlock(career, kind, onChange));
   root.append(card);
   return root;
 }
@@ -370,7 +426,7 @@ function hangarInfo(career, era, kind, preview = false, onLineup = null) {
     const figs = [
       ['Range', `${(maxRange(kind) / 1000).toFixed(1)} km`],
       ['Shell', g.mass ? `${num(g.mass)} kg` : '-'],
-      ['Reload', `${Math.round(load * mods.load)} s${mods.load < 1 ? ` (was ${Math.round(load)})` : ''}`],
+      ['Reload', `${Math.round(load * mods.load)} s`],
       ['Guns', sandbox ? String(guns) : `${guns} of ${maxGuns(kind)}`],
       ['Crew', (() => { const base = detachmentOf(kind, g.crew), all = crewOf(kind, levels, g.crew); return `${base} a gun${all > base ? ` + ${all - base} reliefs` : ''}${DETACHMENT[kind]?.est ? ' (est.)' : ''}`; })()],
       ['Traverse', `±${Math.round((g.traverse * 180) / Math.PI)}°`],
@@ -436,8 +492,11 @@ function slotCards(career, era, kind, onPick, kinds = kindsOf(era)) {
 }
 
 // The slot bar of a career: the lineup's SLOTS.map batteries on the map and SLOTS.support off it (threat.js), each
-// slot with a swap that opens the bench (`swap`: the slot open, { off, out }), an empty slot opening it at once
-function lineupSlots(career, era, kind, onPick, swap, onSwap) {
+// slot with a swap that opens the bench (`swap`: the slot open, { off, out }), an empty slot opening it at once. The
+// slots on the map are numbered as the battle's number keys and tabs follow them. A battery is also put in a slot of
+// its choosing (menu.js `placing`, `markPlacing`: Take into battle on the Research screen, or dragged there from the
+// tree or from another slot); `placed` ({ off, i }) is the slot just filled, lit for a moment.
+function lineupSlots(career, era, kind, onPick, swap, onSwap, placed = null) {
   const ks = career.lineupKinds(era), cells = [];
   for (const off of [false, true]) {
     const mine = ks.filter((k) => isOffmap(k) === off), n = off ? SLOTS.support : SLOTS.map;
@@ -445,6 +504,10 @@ function lineupSlots(career, era, kind, onPick, swap, onSwap) {
       const k = mine[i] ?? null, cell = el('div', `hg-cell${off ? ' off' : ''}${off && i === 0 ? ' first-off' : ''}`);
       const open = !!swap && swap.off === off && swap.out === k;
       cell.classList.toggle('swapping', open);
+      cell.classList.toggle('placed', !!placed && placed.off === off && placed.i === i);
+      cell.dataset.off = off ? '1' : '0';
+      cell.dataset.i = i;
+      if (k) cell.dataset.kind = k;
       if (k) {
         const [card] = slotCards(career, era, kind, onPick, [k]);
         // (as it takes the field: its guns, dev mode's included, never its research)
@@ -456,6 +519,8 @@ function lineupSlots(career, era, kind, onPick, swap, onSwap) {
         if (!off && m > 1) card.querySelector('small').before(pips(g, m));
         card.querySelector('small').textContent = off ? 'Off-map support' : `${g} of ${m} ${m === 1 ? 'gun' : 'guns'}${career.owns(k) ? '' : ' · dev mode'}`;
         if (off) card.prepend(el('span', 'hg-slot-in', 'Off-map'));
+        card.draggable = true;
+        card.dataset.drag = k;
         const sw = el('button', 'hg-swap', '⇄');
         sw.type = 'button';
         sw.dataset.act = `swap:${k}`;
@@ -473,6 +538,13 @@ function lineupSlots(career, era, kind, onPick, swap, onSwap) {
         b.addEventListener('click', () => onSwap(open ? null : { off, out: null }));
         cell.append(b);
       }
+      // its number key in battle, and what a battery being placed would do here (markPlacing)
+      if (!off) {
+        const no = el('span', 'hg-slot-n', String(i + 1));
+        no.title = `Slot ${i + 1}: key ${i + 1} in battle`;
+        cell.querySelector('.hg-slot').prepend(no);
+      }
+      cell.append(el('span', 'hg-slot-do'));
       cells.push(cell);
     }
   }
@@ -578,13 +650,13 @@ export function mountMenu(root = document.getElementById('menu')) {
     <div class="hg-preview" hidden><span>Preview: the full battery</span><button type="button" class="rs-act" data-act="back-research">Back to research</button></div>
     <section class="hg-info" aria-label="Battery"></section>
     <aside class="hg-mods" aria-label="Modifications"></aside>
-    <footer class="hg-bar"><div class="hg-slots" role="toolbar" aria-label="Batteries"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span>${SAVE_FILE}</div></footer>
+    <footer class="hg-bar"><div class="hg-place" role="status" aria-live="polite" hidden></div><div class="hg-slots" role="toolbar" aria-label="Lineup"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span>${SAVE_FILE}</div></footer>
   </main>
   <div class="mn-rsv" data-for="research" hidden>
     <p class="rsv-help"></p>
     <div class="rsv-body"></div>
     <ul class="mn-roster" hidden></ul>
-    <footer class="mn-foot"><span class="mn-save"></span>${SAVE_FILE}</footer>
+    <footer class="hg-bar rsv-bar"><div class="hg-place" role="status" aria-live="polite" hidden></div><div class="hg-slots" role="toolbar" aria-label="Lineup"></div><div class="mn-status"><span class="hg-count"></span><span class="mn-save"></span>${SAVE_FILE}</div></footer>
   </div>
   <input type="file" class="mn-file-in" accept=".json,application/json" hidden>`;
   const $ = (s) => root.querySelector(s);
@@ -627,10 +699,105 @@ export function mountMenu(root = document.getElementById('menu')) {
   // the battery in the hangar: the one chosen if it is in the lineup, else the lineup's first; or the one previewed
   let preview = null;
   const inHangar = () => { const ks = hangarKinds(career, era), k = shown(); return preview ?? (ks.includes(k) ? k : ks[0] ?? k); };
-  const pick = (kind, to = view) => { (memo.rs ??= {})[era] = kind; view = to; preview = null; swap = null; save(); render(); };
+  const pick = (kind, to = view) => { (memo.rs ??= {})[era] = kind; view = to; preview = null; swap = null; placing = null; save(); render(); };
   // the lineup slot whose bench is open ({ off, out }: off the map or on it, the battery in it or null), or null
   let swap = null;
-  const setSwap = (s) => { swap = s; render(); };
+  const setSwap = (s) => { swap = s; if (s) placing = null; render(); };
+  // a battery being put in a slot of its choosing ({ kind, off, moving: in the lineup already, drag: being dragged }),
+  // the slot just filled ({ off, i }, lit once) and the line over the bar that says where it went (`note`, 4 s)
+  let placing = null, placed = null, note = '', noteT = 0;
+  const barNow = () => (view === 'research' ? $('.rsv-bar') : $('.mn-hangar .hg-bar'));
+  const setPlacing = (kind, drag = false) => {
+    placing = kind && TREES[era] && career.unlocked(kind) ? { kind, off: isOffmap(kind), moving: !!career.slotOf(kind), drag } : null;
+    if (placing) { swap = null; note = ''; }
+    // (a drag only marks the bar: building the page again would take the dragged element out of it and end the drag)
+    if (drag) { const bar = barNow(); bar.querySelector(':scope > .hg-bench')?.remove(); markPlacing(bar); return; }
+    render();
+    if (!placing) return;
+    // (a page that scrolls, a phone's: the bar into sight, under the battery's card)
+    const bar = barNow(), r = bar.getBoundingClientRect();
+    if (r.bottom > innerHeight || r.top < 0) bar.scrollIntoView({ block: 'end', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    toSlot(bar.querySelector('.hg-cell.target .hg-slot'));
+  };
+  // the focus onto a slot, the bar scrolled sideways to it
+  const toSlot = (s) => {
+    if (!s) return;
+    s.focus({ preventScroll: true });
+    const bar = s.closest('.hg-slots'), a = s.getBoundingClientRect(), b = bar.getBoundingClientRect();
+    if (a.left < b.left) bar.scrollLeft += a.left - b.left;
+    else if (a.right > b.right) bar.scrollLeft += a.right - b.right;
+  };
+  // the battery being placed into slot i of its row
+  const place = (off, i) => {
+    const p = placing;
+    if (!p) return;
+    const row = career.lineupKinds(era).filter((k) => isOffmap(k) === off), out = row[i] ?? null, from = row.indexOf(p.kind);
+    placing = null;
+    if (career.placeLineup(p.kind, i)) {
+      const at = (j) => (off ? 'the off-map slot' : `slot ${j + 1}`);
+      placed = { off, i: Math.min(i, row.length - (p.moving ? 1 : 0)) };
+      note = `${nameIn(p.kind)} in ${at(placed.i)}${out ? (p.moving ? `; the ${nameIn(out)} to ${at(from)}` : `; the ${nameIn(out)} left out`) : ''}.`;
+      clearTimeout(noteT);
+      noteT = setTimeout(() => { note = ''; markPlacing(barNow()); }, 4000);
+    }
+    render();
+    toSlot(barNow().querySelector(`.hg-cell[data-off="${off ? 1 : 0}"][data-i="${placed?.i ?? i}"] .hg-slot`));
+  };
+  // the slot bar while a battery is placed: the slots it can take lit with what it would do there (into the row's first
+  // empty slot, in place of the battery in a slot, or, one in the lineup already, changing places), the rest muted and
+  // out of the tab order; over the bar the battery's name and Cancel, or for a moment after, where it went
+  function markPlacing(bar) {
+    const p = placing, row = p ? career.lineupKinds(era).filter((k) => isOffmap(k) === p.off) : [];
+    bar.classList.toggle('placing', !!p);
+    for (const cell of bar.querySelectorAll('.hg-cell')) {
+      const off = cell.dataset.off === '1', i = +cell.dataset.i, k = cell.dataset.kind ?? null, slot = cell.querySelector('.hg-slot');
+      const from = !!p && k === p.kind, target = !!p && off === p.off && !from && (k ? true : !p.moving && i === row.length);
+      cell.classList.toggle('target', target);
+      cell.classList.toggle('from', from);
+      cell.classList.toggle('mute', !!p && !target && !from);
+      cell.classList.remove('drop');
+      cell.querySelector('.hg-slot-do').textContent = target ? (!k ? 'Put here' : p.moving ? 'Swap' : 'Replace') : from ? 'Now here' : '';
+      if (p) {
+        const where = off ? 'Off-map slot' : `Slot ${i + 1}`;
+        slot.setAttribute('aria-disabled', String(!target));
+        slot.setAttribute('aria-label', !target ? `${where}${k ? `: the ${nameIn(k)}` : ''}` : !k ? `${where}: put the ${nameIn(p.kind)} here`
+          : `${where}: ${p.moving ? 'swap places with' : 'replace'} the ${nameIn(k)}`);
+        slot.tabIndex = target ? 0 : -1;
+      } else for (const a of ['aria-disabled', 'aria-label', 'tabindex']) slot.removeAttribute(a);
+    }
+    const strip = bar.querySelector('.hg-place');
+    strip.hidden = !p && !note;
+    if (p) {
+      const x = el('button', 'rs-act', 'Cancel');
+      x.type = 'button';
+      x.title = 'Esc';
+      x.addEventListener('click', () => setPlacing(null));
+      strip.replaceChildren(el('b', null, nameIn(p.kind)), el('span', null, p.moving ? 'Swap places with which battery?' : 'Into which slot?'), x);
+    } else strip.replaceChildren(...(note ? [el('span', 'hg-place-done', note)] : []));
+  }
+  // the lineup's slot bar under a screen (`bar`: the hangar's or the Research screen's) with its bench and the count
+  function renderBar(bar, kind) {
+    const slotsEl = bar.querySelector('.hg-slots'), research = bar.classList.contains('rsv-bar');
+    slotsEl.replaceChildren(...(TREES[era] ? lineupSlots(career, era, kind, (k) => pick(k), swap, setSwap, placed) : research ? [] : slotCards(career, era, kind, (k) => pick(k), kindsOf(era))));
+    const bench = bar.querySelector(':scope > .hg-bench');
+    if (swap && TREES[era]) {
+      const card = benchCard(career, era, swap, (k) => { career.swapLineup(swap.out, k); pick(k); },
+        () => { career.toggleLineup(swap.out); swap = null; render(); }, () => pick(inHangar(), 'research'), () => setSwap(null));
+      bench ? bench.replaceWith(card) : bar.prepend(card);
+    } else bench?.remove();
+    // the lineup's slots taken (threat.js SLOTS)
+    const ks = TREES[era] ? career.lineupKinds(era) : [], off = ks.filter(isOffmap).length;
+    bar.querySelector('.hg-count').textContent = TREES[era] ? `Lineup ${ks.length - off} of ${SLOTS.map} · off-map ${off} of ${SLOTS.support}` : '';
+    markPlacing(bar);
+    // the chosen slot into view along the bar, sideways only (scrollIntoView also scrolled the page past the top bar on a phone)
+    const slotOn = slotsEl.querySelector('.hg-slot.on');
+    if (slotOn) {
+      const a = slotOn.getBoundingClientRect(), b = slotsEl.getBoundingClientRect();
+      if (a.left < b.left) slotsEl.scrollLeft += a.left - b.left;
+      else if (a.right > b.right) slotsEl.scrollLeft += a.right - b.right;
+    }
+    edges(slotsEl);
+  }
 
   function select(item, focus = false) {
     if (!playable(item)) return;
@@ -847,35 +1014,17 @@ export function mountMenu(root = document.getElementById('menu')) {
     keepFocus($('.mn-hangar'), () => {
       $('.hg-info').replaceChildren(hangarInfo(career, era, kind, !!preview, render));
       $('.hg-mods').replaceChildren(hangarMods(career, era, kind, render, () => pick(kind, 'research'), (part) => hangar.lookAt(part)));
-      $('.hg-slots').replaceChildren(...(TREES[era] ? lineupSlots(career, era, preview ? null : kind, (k) => pick(k), swap, setSwap) : slotCards(career, era, preview ? null : kind, (k) => pick(k), kindsOf(era))));
-      const bench = $('.hg-bar > .hg-bench');
-      if (swap && TREES[era]) {
-        const card = benchCard(career, era, swap, (k) => { career.swapLineup(swap.out, k); pick(k); },
-          () => { career.toggleLineup(swap.out); swap = null; render(); }, () => pick(inHangar(), 'research'), () => setSwap(null));
-        bench ? bench.replaceWith(card) : $('.hg-bar').prepend(card);
-      } else bench?.remove();
+      renderBar($('.mn-hangar .hg-bar'), preview ? null : kind);
     });
-    // the lineup's slots taken (threat.js SLOTS)
-    const ks = TREES[era] ? career.lineupKinds(era) : [], off = ks.filter(isOffmap).length;
-    $('.hg-count').textContent = TREES[era] ? `Lineup ${ks.length - off} of ${SLOTS.map} · off-map ${off} of ${SLOTS.support}` : '';
-    // the chosen slot into view along the bar, sideways only (scrollIntoView also scrolled the page past the top bar on a phone)
-    const slotOn = $('.hg-slots .hg-slot.on'), slotBar = $('.hg-slots');
-    if (slotOn && slotBar) {
-      const a = slotOn.getBoundingClientRect(), b = slotBar.getBoundingClientRect();
-      if (a.left < b.left) slotBar.scrollLeft += a.left - b.left;
-      else if (a.right > b.right) slotBar.scrollLeft += a.right - b.right;
-    }
-    edges();
   }
 
-  // the slot bar's fading ends while there is more of the lineup to scroll to on that side
-  const slots = $('.hg-slots');
-  const edges = () => {
-    slots.classList.toggle('more-l', slots.scrollLeft > 2);
-    slots.classList.toggle('more-r', slots.scrollLeft + slots.clientWidth < slots.scrollWidth - 2);
+  // the slot bars' fading ends while there is more of the lineup to scroll to on that side
+  const edges = (s) => {
+    s.classList.toggle('more-l', s.scrollLeft > 2);
+    s.classList.toggle('more-r', s.scrollLeft + s.clientWidth < s.scrollWidth - 2);
   };
-  slots.addEventListener('scroll', edges, { passive: true });
-  addEventListener('resize', edges);
+  for (const s of $$('.hg-slots')) s.addEventListener('scroll', () => edges(s), { passive: true });
+  addEventListener('resize', () => { for (const s of $$('.hg-slots')) edges(s); });
 
   // the Research screen of the era: its tree and the battery shown (the WW1 German sandbox: its roster)
   function renderResearch() {
@@ -898,7 +1047,11 @@ export function mountMenu(root = document.getElementById('menu')) {
     }
     const kind = shown();
     still(stillOf(kind) ? [stillOf(kind)] : stillsOf({ era }));
-    keepFocus($('.rsv-body'), () => $('.rsv-body').replaceChildren(researchView(career, era, kind, (k) => pick(k), render, (k) => { (memo.rs ??= {})[era] = k; view = 'hangar'; preview = k; save(); render(); root.scrollTop = 0; })));
+    const lu = { placing, start: (k) => setPlacing(k), leave: (k) => { career.toggleLineup(k); render(); } };
+    keepFocus($('.mn-rsv'), () => {
+      $('.rsv-body').replaceChildren(researchView(career, era, kind, (k) => pick(k), render, (k) => { (memo.rs ??= {})[era] = k; view = 'hangar'; preview = k; save(); render(); root.scrollTop = 0; }, lu));
+      renderBar($('.rsv-bar'), kind);
+    });
   }
 
   function render() {
@@ -909,6 +1062,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (!loaded) loading.querySelector('.ml-era').textContent = `${NATIONS.find((n) => n.id === era).name} · the batteries drawn up for inspection`;
     if (open) renderDrop();
     if (view === 'research') renderResearch(); else renderHangar();
+    placed = null; // (lit once)
     // the hangar is loaded behind the loading screen whichever screen opens first
     if (view === 'research' && !loaded) hangar.show({ era: gunEraOf(inHangar()), battery: parade(career, era, inHangar()) });
   }
@@ -939,6 +1093,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     sel = null;
     preview = null;
     swap = null;
+    placing = null;
     save();
     render();
     // the address remembers the era (a reload or a game's way back keeps it); nothing is loaded
@@ -992,10 +1147,46 @@ export function mountMenu(root = document.getElementById('menu')) {
   addEventListener('pointerdown', (e) => { if (open && !drop.contains(e.target) && !modeBtn.contains(e.target)) setOpen(false); });
   // and one outside the bench and the slot bar closes the bench
   addEventListener('pointerdown', (e) => { if (swap && !e.target.closest?.('.hg-bench, .hg-slots')) setSwap(null); });
+  // placing a battery: a lit slot takes it, its own slot or a press anywhere else but the bar or a battery to drag
+  // gives up (the slots' own clicks are held back meanwhile)
+  addEventListener('pointerdown', (e) => { if (placing && !placing.drag && !e.target.closest?.('.hg-bar, [data-act^="place:"], [data-drag]')) setPlacing(null); });
+  for (const bar of $$('.hg-bar')) bar.addEventListener('click', (e) => {
+    const cell = e.target.closest('.hg-cell');
+    if (!placing || !cell) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (cell.classList.contains('target')) place(cell.dataset.off === '1', +cell.dataset.i);
+    else if (cell.classList.contains('from')) setPlacing(null);
+  }, true);
+  // dragging a battery the career can field, from the tree or from its slot, onto a slot: the same as placing it
+  root.addEventListener('dragstart', (e) => {
+    const k = e.target.closest?.('[data-drag]')?.dataset.drag;
+    if (!k || !TREES[era]) return;
+    e.dataTransfer.setData('text/plain', nameIn(k));
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => setPlacing(k, true)); // (once the drag is under way: changing the page in dragstart can cancel it)
+  });
+  root.addEventListener('dragover', (e) => {
+    if (!placing?.drag) return;
+    const cell = e.target.closest?.('.hg-cell.target');
+    for (const c of $$('.hg-cell.drop')) if (c !== cell) c.classList.remove('drop');
+    if (!cell) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    cell.classList.add('drop');
+  });
+  root.addEventListener('drop', (e) => {
+    const cell = e.target.closest?.('.hg-cell.target');
+    if (!placing?.drag || !cell) return;
+    e.preventDefault();
+    place(cell.dataset.off === '1', +cell.dataset.i);
+  });
+  root.addEventListener('dragend', () => { if (placing?.drag) setPlacing(null); });
   // Escape closes the chooser; in it Up and Down walk the list; Enter goes to battle; in the hangar Left and Right
   // walk the batteries
   addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && open) { setOpen(false); modeBtn.focus(); return; }
+    if (e.code === 'Escape' && placing) { const k = placing.kind; setPlacing(null); $(`[data-act="place:${CSS.escape(k)}"]`)?.focus(); return; }
     if (e.code === 'Escape' && swap) { setSwap(null); return; }
     if (e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); go(); return; }
     if (!open && view === 'hangar' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight') && !e.target.closest?.('input')) {

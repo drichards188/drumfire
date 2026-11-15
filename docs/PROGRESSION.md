@@ -9,24 +9,27 @@ You start with one gun of the **15 cm Ringkanone C/92** and no upgrades, and fig
 
 ## The tree
 
-Seven lines, one type each, and each runs from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order, and lines never cross. The lines that start at rank I (field artillery, long-range guns, rockets) are open from the start; the others open once you research a battery in the line beside them:
+Seven lines, one type each, and each runs from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order, and lines never cross.
 
-- **Mortars** after the 15 cm sFH 13 (field artillery).
-- **Siege guns** after the 21 cm Mörser 16 (mortars).
-- **Railway guns** after the 15 cm K 16 (long-range guns).
-- **Off-map support** after the schweres Wurfgerät 40 (rockets).
+**Ranks are eras, as in War Thunder.** Ranks I and II are the guns of 1914 to 1918 (I field and medium, II heavy and super-heavy), ranks III and IV those of 1939 to 1945 (III field, medium and rockets, IV heavy, super-heavy and the V-weapons). The price is the battery's power, whatever its era: a WW2 field howitzer is cheap, the WW1 siege guns are hard to get.
 
-The rank (I to IV) is the battery's weight class and scales its upgrade costs.
+**A rank opens with the rank before it.** Rank I is open from the start. Each rank above opens once you have enough batteries of the rank before it, from any line:
+
+- **Rank II** (1914 to 1918, heavy) with 3 of rank I. Your C/92 counts.
+- **Rank III** (1939 to 1945) with 3 of rank II. The cheaper heavies will do: you can go on to the second war without the siege guns, but from threat level 6 the strongpoints only break under 28 cm shells and more, so a cheap lineup stalls there.
+- **Rank IV** (1939 to 1945, heavy) with 4 of rank III.
+
+On the Research screen a rank still shut shows how many it has of how many it needs (2/3) under its number; hover a rank for its era.
 
 | Line | Batteries in order (rank, RP) |
 | --- | --- |
-| Field artillery | 7.7 cm FK 16 (I, 300) → 15 cm sFH 93 (I, 350) → 15 cm sFH 13 (I, 450) → 10.5 cm leFH 18 (I, 600) → 15 cm sFH 18 (II, 1,100) → Wespe (II, 1,500) → Hummel (II, 2,000) |
-| Long-range guns | 15 cm Ringkanone C/92 (I, yours) → 10 cm K 17 (I, 350) → 15 cm K 16 (II, 700) → 17 cm K 18 (II, 1,100) → 21 cm K 38 (III, 2,000) |
-| Railway guns | 38 cm Langer Max (III, 2,400) → 28 cm Kurze Bruno (III, 2,800) → 28 cm K5 (III, 3,400) → Paris Gun (IV, 4,000) → 21 cm K 12 (IV, 4,600) → Gustav (IV, 5,000) |
-| Mortars | 21 cm Mörser 99 (II, 600) → 21 cm Mörser 16 (II, 900) → 21 cm Mörser 18 (II, 1,300) → 35.5 cm H M1 (III, 2,600) |
-| Siege guns | 30.5 cm Beta-Gerät (III, 2,000) → 42 cm Gamma (III, 2,400) → 42 cm Bertha (III, 2,800) → Karl-Gerät (IV, 4,000) |
-| Rockets | Nebelwerfer 41 (I, 450) → schweres Wurfgerät 40 (II, 800) → Nebelwerfer 42 (II, 1,200) |
-| Off-map support | Gotha strike (III, 2,000) → V-1 (IV, 3,000) → V-2 (IV, 4,500) |
+| Field artillery | 7.7 cm FK 16 (I, 300) → 15 cm sFH 93 (I, 350) → 15 cm sFH 13 (I, 450) → 10.5 cm leFH 18 (III, 600) → 15 cm sFH 18 (III, 1,100) → Wespe (III, 1,500) → Hummel (IV, 2,000) |
+| Long-range guns | 15 cm Ringkanone C/92 (I, yours) → 10 cm K 17 (I, 350) → 15 cm K 16 (II, 700) → 17 cm K 18 (III, 1,100) → 21 cm K 38 (IV, 2,000) |
+| Mortars | 21 cm Mörser 99 (I, 600) → 21 cm Mörser 16 (II, 900) → 21 cm Mörser 18 (III, 1,300) → 35.5 cm H M1 (IV, 2,600) |
+| Siege guns | 30.5 cm Beta-Gerät (II, 2,000) → 42 cm Gamma (II, 2,400) → 42 cm Bertha (II, 2,800) → Karl-Gerät (IV, 4,000) |
+| Railway guns | 38 cm Langer Max (II, 2,400) → Paris Gun (II, 4,000) → 28 cm Kurze Bruno (IV, 2,800) → 28 cm K5 (IV, 3,400) → 21 cm K 12 (IV, 4,600) → Gustav (IV, 5,000) |
+| Off-map support | Gotha strike (II, 2,000) → V-1 (IV, 3,000) → V-2 (IV, 4,500) |
+| Rockets | Nebelwerfer 41 (III, 450) → schweres Wurfgerät 40 (III, 800) → Nebelwerfer 42 (III, 1,200) |
 
 What the new batteries bring (2026-11-01):
 
@@ -50,7 +53,7 @@ What the new batteries bring (2026-11-01):
 
 ## Your lineup
 
-As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** take the field. Choose them in the hangar: its bar along the bottom holds only the lineup's slots, each with a swap (⇄) that opens the bench (the batteries you have outside the lineup, on the map or off it as the slot is), where picking one puts it in that slot or the slot is left empty; an empty slot opens the bench at once, and "Leave out of battle" beside the battery empties its slot. Until you choose, the lineup is the best battery of each line (the first five lines', as there are five slots), then more field artillery (the Sperrfeuer's guns), then the heaviest; off the map the dearest. Dev mode opens every battery to the lineup, at its best, but the slots stay the same.
+As in War Thunder's crew slots, at most **5 batteries on the map and 1 off it** take the field, in the order of their slots: slot 1 is key 1 and the first tab in battle. On the Research screen, click a battery you have and **Take into battle**: the slots it can take light up (an empty one, or one whose battery it replaces) and a click puts it there; **Change slot** swaps a battery of the lineup with another, and dragging a battery from the tree, or one slot onto another, does the same. The Hangar's bar along the bottom holds only the lineup's slots, each with a swap (⇄) that opens the bench (the batteries you have outside the lineup, on the map or off it as the slot is), where picking one puts it in that slot or the slot is left empty; an empty slot opens the bench at once, and "Leave out of battle" beside the battery empties its slot. Until you choose, the lineup is the best battery of each line (the first five lines', as there are five slots), then more field artillery (the Sperrfeuer's guns), then the heaviest; off the map the dearest. Dev mode opens every battery to the lineup, at its best, but the slots stay the same.
 
 ## Threat levels
 
@@ -95,7 +98,7 @@ The open battle at a threat level is one generated mission (`src/operation.js`, 
 - **Ammunition supply**: +20%, +40%, +60% shells in hand and faster resupply.
 - **Relief crews**: +25%, +50%, +75% men at each gun, to take turns at the heavy work so the crew stays fresh (fatigue itself is not modelled). In the game the extra men are reserves, so a gun slows only when casualties take it below its drill's number, and the fresher hands load 3%, 6%, 10% faster. They stand in the hangar's ranks.
 
-You buy them in any order with the battery's own points. Costs rise with the level and the battery's tier: a tier I part costs 80, 170 and 300, and the second gun 120.
+You buy them in any order with the battery's own points. Costs rise with the level and the battery's weight (field guns lightest, then heavy, super-heavy and the giants; not its rank, which is its era): a field gun's part costs 80, 170 and 300, and the second gun 120.
 
 ## What a battle pays
 
@@ -186,6 +189,9 @@ The **Dev mode** switch in the top right corner of the menu bar is off by defaul
 - **Modifiers and the fail limit.** Since the levels end on their orders, a modifier that slows the work (mist, poor intelligence, a shell shortage, rain) costs failed missions: with modifiers rolled, levels 5 and 6 win 33 and 19 % for the auto crews against 42 and 36 % before. The fail limit may want to rise with each modifier.
 - **Level separation.** One level above a lineup's own is clearly harder at levels 2, 3, 4, 7 and 9, but barely at 5, 8 and 10. Level 5's reference lineup gives the auto crews nothing over level 4's, and levels 9 and 10 differ only by upgrades.
 - **A scripted player on the ridge.** The balance is the auto crews' only; a competent player's win rates per level are unmeasured. `tools/researchtest.mjs` has no `--level` option.
+- **Air raids the player can answer** (noted 2026-11-15). A Camel raid's alert gives about 40 s, but only a Wespe or a Hummel can do anything with it (T drives it to its other position).
+  - **Why:** the raid bombs where the loudest battery stood when it was called (`src/ww2/enemy.js` `airUpdate`, signature over 0.45). The alert does not name that battery, and the open battle has no flak. HOLD only makes the next raid less likely to pick it (and repairs its guns).
+  - **Ideas:** name the battery in the alert ("Fliegeralarm! 2 Camels on the K 38, about 40 s"). Add a take-cover order for it: the men safe until the all clear, the guns stopped and still exposed, as the Paris Gun's crew does on its own (`src/ww1/paris.js` `COVER_R`). Its gate needs a reason in `problem()`.
 - **Not built:** raids at night and an enemy railway gun hunting your batteries (both dropped from the levels' text).
 
 **Rewards and the economy**
@@ -194,7 +200,7 @@ The **Dev mode** switch in the top right corner of the menu bar is off by defaul
 
 **The tree and the lineup**
 - **The light guns' drill.** The leFH 18's crew looks fast: 8.6 s a round, about 6 s with its best breech. The proposal is about 12 s for the leFH 18 and 16 s for the sFH 18, and a look at the other light guns. It is a balance change, so re-run the tests.
-- **Choosing the lineup.** The slot bar's swap and "Leave out of battle" for now: no drag between slots, no saved lineups.
+- **Choosing the lineup.** The slot bar's swap, a drag or Take into battle to a chosen slot, and "Leave out of battle": no saved lineups yet.
 - **The fifteen new batteries (2026-11-01).** Not yet: serving the Wespe, the Hummel and the Wurfgerät in person; menu background stills for them; their research costs and pay are unplaytested. Further ideas are under "The tree" above.
 - **Britain's return**, with its own tree (`TREES['1917']` is kept).
 

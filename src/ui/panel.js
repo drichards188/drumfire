@@ -165,7 +165,9 @@ export class Panel {
   _buildTabs(units) {
     this.tabsEl.replaceChildren();
     this.tabs.clear();
-    units.forEach((u, i) => {
+    // (opts.rank: the order the number keys follow, the career lineup's slots; else the sim's)
+    const order = this.opts.rank ? [...units].sort((a, b) => this.opts.rank(a.id) - this.opts.rank(b.id)) : units;
+    order.forEach((u, i) => {
       const t = el('div', 'tab');
       const key = el('span', 'tkey', String(this.opts.keyFor?.(u.id) ?? i + 1));
       const main = el('div', 'tmain');
