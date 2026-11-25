@@ -597,16 +597,20 @@ export class GunCrew {
     this.player = m;
   }
 
-  // the player's man's eyes (world position into out, after update) and the heading he faces; null without one
+  // the player's man's eyes (world position into out, after update) and the heading he faces; null without one. The
+  // lifelike man (render/crew2, posed after the drill in the same frame) gives them from his head as his clip has it;
+  // the old figure from its neck. The heading is the figure's either way, as in the Godot game.
   eye(out) {
     const m = this.player;
     if (!m || !m.root.visible || !m.fig.bones.neck) return null;
-    m.fig.bones.neck.getWorldPosition(out);
-    m.fig.root.getWorldQuaternion(_q);
+    m.fig.root.getWorldQuaternion(_q); // (also brings the figure's matrixWorld up to date for the lifelike eye)
     _c.set(0, 0, -1).applyQuaternion(_q);
-    // the head bone sits about 0.1 above the neck, the eyes a little above and ahead of it
-    out.addScaledVector(_c, 0.07);
-    out.y += 0.18 * m.fig.root.scale.y;
+    if (!m.c2?.eye(out, _c)) {
+      m.fig.bones.neck.getWorldPosition(out);
+      // the head bone sits about 0.1 above the neck, the eyes a little above and ahead of it
+      out.addScaledVector(_c, 0.07);
+      out.y += 0.18 * m.fig.root.scale.y;
+    }
     return Math.atan2(-_c.x, -_c.z);
   }
 

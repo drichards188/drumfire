@@ -49,8 +49,12 @@ export function crew2Wanted() {
   return q.get('mode') === 'ww1' || q.get('mode') === 'ww2';
 }
 
+// the gunner's eyes from the head's joint: ahead along his facing and above (the Godot game's Crew2.EyeAhead and
+// EyeUp; the old figure's are 0.07 ahead and 0.18 above its neck, crews.js eye)
+const EYE_AHEAD = 0.063, EYE_UP = 0.075;
+
 const noop = () => {};
-const _p = new THREE.Vector3(), _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _frustum = new THREE.Frustum();
+const _p = new THREE.Vector3(), _s = new THREE.Sphere(), _m = new THREE.Matrix4(), _frustum = new THREE.Frustum(), _zero = new THREE.Vector3();
 // a man this far round his feet still counts as in sight (his shadow, a fast turn of the camera)
 const SIGHT_R = 2.5;
 
@@ -91,6 +95,7 @@ class Man2 {
     this.boneRoot.add(this.bones[sk.hips]);
     this.dirty = true;
     this.neck = this.bones[sk.solver[3]];
+    this.headB = sk.solver[4];
     this.headless = false;
     const sk3 = skeleton, fneck = m.fig.bones.neck;
     sk3.update = () => {
@@ -125,6 +130,19 @@ class Man2 {
     if (l === this.lod) return;
     this.lod = l;
     for (let k = 0; k < 3; k++) for (const o of this.lods[k]) o.visible = k === l;
+  }
+
+  // The gunner's eyes (world, into out; the Godot game's CrewFigure.Eye): his head's joint as his animator posed him
+  // this frame, EYE_AHEAD along fwd (his facing, a world unit vector) and EYE_UP above it. From the animator, not his
+  // bones: the player's man has his head scaled away there. False while he is not drawn or not posed. Needs his
+  // figure's matrixWorld current (crews.js eye).
+  eye(out, fwd) {
+    if (!this.root.visible || !this.shown) return false;
+    const r = this.m.fig.root;
+    this.anim.point(this.headB, _zero, out).applyMatrix4(r.matrixWorld);
+    out.addScaledVector(fwd, EYE_AHEAD);
+    out.y += EYE_UP * r.scale.y;
+    return true;
   }
 }
 
@@ -304,6 +322,9 @@ export class Crew2 {
       const c = m.c2;
       if (!c) continue;
       if (!m.root.visible) { c.shown = false; continue; }
+      // the man whose place the player has taken (crews.js setPlayer): posed in full every frame, in sight or not,
+      // since the gunner's eye is read from his head (Man2.eye)
+      const me = m === crew.player;
       // the lod by his distance, with a margin either side so it does not flicker
       _p.copy(m.root.position).applyMatrix4(M);
       const d = cam ? cam.position.distanceTo(_p) : 0;
@@ -314,18 +335,18 @@ export class Crew2 {
       // out of the camera's sight: not posed (his body keeps its last pose under the figure's root, and is taken
       // afresh when he comes back into sight)
       _s.center.set(_p.x, _p.y + 1, _p.z); _s.radius = SIGHT_R;
-      if (cam && !_frustum.intersectsSphere(_s)) { c.shown = false; l.offscreen++; continue; }
+      if (cam && !me && !_frustum.intersectsSphere(_s)) { c.shown = false; l.offscreen++; continue; }
       l.lod[lod]++;
       // a far man at the near level is posed every second frame (he is a few pixels tall), as is a mid one
       let step = dt;
-      const every = level < 2 ? 1 : lod === 2 ? FAR_EVERY : lod === 1 && d > FINE_RANGE ? MID_EVERY : 1;
+      const every = me || level < 2 ? 1 : lod === 2 ? FAR_EVERY : lod === 1 && d > FINE_RANGE ? MID_EVERY : 1;
       if (every > 1 && c.shown) {
         c.wait += dt;
         if (++c.tick % every) { l.skipped++; continue; }
         step = c.wait;
       }
       c.wait = 0;
-      const hands = level >= 2 && lod < 2, fine = hands && d < FINE_RANGE;
+      const hands = me || (level >= 2 && lod < 2), fine = hands && (me || d < FINE_RANGE);
       if (!c.shown) { c.anim.cut(); c.shown = true; }
       const fig = m.fig, a = c.anim;
       a.place(m.root.position.x, m.root.position.y, m.root.position.z, m.root.rotation.y);
