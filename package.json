@@ -1,7 +1,7 @@
 {
   "name": "threejs-drumfire",
   "version": "0.1.0",
-  "description": "Drumfire: command heavy artillery from a fire control console, in three.js",
+  "description": "Drumfire: command the biggest guns of both World Wars, in three.js",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
