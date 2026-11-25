@@ -41,7 +41,9 @@ export function spLoader(crew, m, c, h) {
   crew.carryMan(m, c, h, 'bag');
   if (s === 'shell' || s === 'ram' || s === 'cartridge') return;
   crew.bag.visible = false;
-  if (Math.hypot(m.x - h.x, m.z - h.z) > 0.02 || Math.abs(wrapPi(m.h - h.h)) > 0.05) return;
+  // (the place the drill gave him, not the one he is shown at: spaced, his stance and the others move him a little)
+  const S = m.sp, x = S ? S.rawX : m.x, z = S ? S.rawZ : m.z, hd = S ? S.rawH : m.h;
+  if (Math.hypot(x - h.x, z - h.z) > 0.02 || Math.abs(wrapPi(hd - h.h)) > 0.05) return;
   crew.breechMan(m, c, h);
 }
 

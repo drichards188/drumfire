@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { smooth, ramp, lerp, wrapPi, headingOf } from './anim.js';
 import { CREW_GAITS } from '../models/v/crew.js';
+import { way } from './crewspace.js';
 
 // Loading choreography roles of the super-heavy German pieces (render/crews.js merges these into its ROLES):
 // role (the rig's crew spot) -> behaviour. The behaviours are crews.js's: cmd, lay, wheel, lan, guide0/1
@@ -437,6 +438,7 @@ function shuffle(m, ax, az, bx, bz, e, y, hd) {
   if (!(e > 0.002 && e < 0.998) || d < 0.04) return false;
   const fw = -(dx * Math.sin(hd) + dz * Math.cos(hd)), rt = dx * Math.cos(hd) - dz * Math.sin(hd);
   const x = lerp(ax, bx, e), z = lerp(az, bz, e);
+  way(m.crew, m, ax, az, bx, bz);
   if (Math.abs(rt) > Math.abs(fw)) m.put(x, y, z, hd, 'sidestep', (rt * e) / SIDE);
   else m.put(x, y, z, hd, 'walk', (fw * e) / STRIDE);
   return true;
@@ -696,6 +698,7 @@ function berthaBagman(crew, m, c, h) {
     hd += wrapPi(faceRack - hd) * smooth(u, 0.7, 1);
     if (k < 0.67) { pose = 'stand'; t = crew.idleT + m.seed; } else { pose = 'walk'; t = (u * P.len) / STRIDE; }
   }
+  if (k >= 0.1 && k < 0.95) way(crew, m, H.x, H.z, px, pz);
   m.put(x, H.y, z, hd, pose, t);
   // the charge: on the stage at his feet, then in his arms, then laid on the tray and driven home ahead of the staff
   const fx = -Math.sin(m.h), fz = -Math.cos(m.h);
@@ -865,7 +868,8 @@ export function heavyProps(crew, c) {
     supportCart(d.cart, crew.workY);
   }
   if (d.chargeCart) d.chargeCart.visible = crew.kind !== 'karl' && c.s === 'cartridge' && c.k < 0.92; // the Karl's ramp carries it
-  crew.staff.visible = crew.staffA != null;
+  // (spaced: with no rammer at the gun there is no staff)
+  crew.staff.visible = crew.staffA != null && (!crew.spacing || crew.rammerIn());
   if (crew.staff.visible) {
     crew.trayAt(crew.staffA, crew.staff.position);
     crew.staff.rotation.set(Math.asin(crew.u.y), crew.az, 0);

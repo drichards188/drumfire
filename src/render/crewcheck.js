@@ -301,12 +301,13 @@ function patchMen(crew) {
   }
   if (patched || !crew.men.length) return;
   patched = true;
-  const P = Object.getPrototypeOf(crew.men[0]), hand = P.hand;
+  const P = Object.getPrototypeOf(crew.men[0]), reach = P.reach;
   // a target the man was sent to (w > 0.9) counts as missed only when the hand still holds it: crews.js lets go of one
-  // beyond an arm's reach (counted apart as `drop`)
-  P.hand = function (side, x, y, z, w = 1) {
+  // beyond an arm's reach (counted apart as `drop`). Measured where the IK is put on (Man.reach): the spaced German
+  // crews' Man.hand only asks, and their hands take hold and let go in a hand's time (crewspace.js)
+  P.reach = function (side, x, y, z, w = 1, far = true) {
     this.hw = 0;
-    const r = hand.call(this, side, x, y, z, w);
+    const r = reach.call(this, side, x, y, z, w, far);
     if (w > 0.9 && this._audit) { if ((this.hw ?? w) > 0.9) this._audit.hands[side] = [x, y, z]; else if ((this.hw ?? 1) < 0.5) this._audit.drop = (this._audit.drop ?? 0) + 1; }
     return r;
   };
@@ -546,7 +547,7 @@ function runGun(kind, scn, speed, scns0 = scn) {
     auditMotion(crew, res, crew.c, T);
     // &stop=step@k: end the run there (cycle 1) and leave the crew posed for a look (window.__lastCrew)
     // (&trace=role,t0,t1: that man's place, heading and pose each frame between the times, into window.__trace)
-    if (q.get('trace')) { const [role, t0, t1] = q.get('trace').split(','), m = crew.byRole.get(role); if (m && T >= +t0 && T <= +t1) (window.__trace ??= []).push(`${T.toFixed(2)} ${p.job?.step ?? p.state} x${m.x.toFixed(2)} z${m.z.toFixed(2)} h${m.h.toFixed(2)} ${m._pose} ears${crew.ears.toFixed(2)}`); }
+    if (q.get('trace')) { const [role, t0, t1] = q.get('trace').split(','), m = crew.byRole.get(role); if (m && T >= +t0 && T <= +t1) (window.__trace ??= []).push(`${T.toFixed(2)} ${p.job?.step ?? p.state} x${m.x.toFixed(2)} z${m.z.toFixed(2)} h${m.h.toFixed(2)} ${m._pose} ears${crew.ears.toFixed(2)}${m.sp ? ` raw ${m.sp.rawX.toFixed(2)},${m.sp.rawZ.toFixed(2)},${m.sp.rawH.toFixed(2)} ${m.sp.drillPose} sep ${m.sp.sepX.toFixed(2)},${m.sp.sepZ.toFixed(2)} off ${m.sp.OffX.toFixed(2)},${m.sp.OffZ.toFixed(2)},${m.sp.OffH.toFixed(2)} st ${m.sp.StX.toFixed(2)},${m.sp.StZ.toFixed(2)},${m.sp.StH.toFixed(2)} face ${m.sp.FaceH.toFixed(2)} grip ${m.sp.gripW[0].toFixed(2)},${m.sp.gripW[1].toFixed(2)} ask ${m.sp.askAt[0] === crew.spNow ? m.sp.askW[0].toFixed(2) : '-'},${m.sp.askAt[1] === crew.spNow ? m.sp.askW[1].toFixed(2) : '-'}${m.sp.swapped ? ' swapped' : ''}` : ''}`); }
     if (q.get('stop') && cycle === 1 && p.job?.step === q.get('stop').split('@')[0] && p.job.t / p.job.dur >= Number(q.get('stop').split('@')[1])) { window.__lastP = p; break; }
     if (snap) for (const sh of shots) {
       if (sh.done) continue;

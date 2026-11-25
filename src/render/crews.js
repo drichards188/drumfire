@@ -8,6 +8,7 @@ import { crewForRoleDE } from '../models/v/crew.js';
 import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crews_de.js';
 import { ROLES_HEAVY, heavyBuild, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
 import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, TIMED_WW1, BLOCK_MAN_WW1, BAG_SIDE_WW1, LOADER_AT_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
+import { ManSpace, spaceClock, spaceReset, spacePut, spaceStep, ask, hands, holding, way, slide } from './crewspace.js';
 // a node and every parent up to the rig's root are visible (an anchor whose part the rig has hidden is not)
 const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent) if (!n.visible) return false; return !!node; };
 
@@ -50,7 +51,7 @@ const WORLD_ROLES = new Set(['crane1', 'crane2', 'ammo1', 'ammo2', 'crane', 'she
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _inv = new THREE.Matrix4();
 const _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _y = new THREE.Vector3(0, 1, 0);
 const _pt = { x: 0, z: 0, h: 0, d: 0 };
-const _hand = new THREE.Vector3(), _gA = new THREE.Vector3(), _gB = new THREE.Vector3(), _M = new THREE.Matrix4();
+const _hand = new THREE.Vector3(), _gA = new THREE.Vector3(), _gB = new THREE.Vector3(), _gR = new THREE.Vector3(), _M = new THREE.Matrix4();
 // Ease only the first and last footfall; the middle of a walk keeps a useful steady pace.
 const travel = (k) => {
   k = clamp01(k);
@@ -81,6 +82,20 @@ const V_CARRY = 1.1, V_BAG = 1.2, V_WALK = 1.3, V_PAIR = 0.9, PAIR_OMEGA = 1.3, 
 const TIMED = new Set(['lefh18', 'sfh18', 'k17', 'sfh13', 'k18', 'mrs18', 'm16', ...TIMED_WW1]);
 // the heavies' German rammer team at work: RAM_LAT off the staff, turned RAM_IN toward it (ramMan)
 const RAM_LAT = 0.32, RAM_IN = 0.6, RAM_STAG = 0.45;
+// the spaced drill (crewspace.js, the German crews): where the staff stands before the man who carries it, to his side
+// and ahead (m; and with another man close on that side); where the light guns' rammer holds it at work, from its butt
+// (m); the seconds it takes from upright into the bore, and back (a staff of two or three metres tipped in a third of a
+// second had its head at 11 m/s)
+const STAFF_SIDE = 0.22, STAFF_FWD = 0.2, STAFF_SIDE_NEAR = 0.05, STAFF_FWD_NEAR = 0.32, RAM_BUTT = 0.45, RAM_FORE = 0.92;
+const staffSwing = (L) => Math.max(1.05, L * 0.4);
+// (spaced: where he holds the staff stood beside him, from its head: 1.14 m above the butt on the ground)
+const staffHold = (L) => Math.max(0.1, L - 1.14);
+// The lanyard pose's phase by the seconds since the shot (spaced). The pose pulls the hand 40 cm between 0.55 and 0.72
+// of its phase and lets it back between 0.8 and 0.95: run in a third of a second, the pull took 0.06 s (10 m/s). Here
+// the pull takes 0.16 s and the way back 0.19 s, round the same moment.
+const pullT = (tf) => tf < 0 ? 1 : tf < 0.12 ? 0.55 * tf / 0.12 : tf < 0.28 ? 0.55 + 0.17 * (tf - 0.12) / 0.16
+  : tf < 0.31 ? 0.72 + 0.08 * (tf - 0.28) / 0.03 : tf < 0.5 ? 0.8 + 0.15 * (tf - 0.31) / 0.19 : 1;
+const _sp = { x: 0, y: 0, z: 0, h: 0, pose: 'stand', t: 0 };
 // the man who works the breech block of these heavies (the rammers stand 3 m back on the K 18's platform: their
 // hands used to stretch the whole way to the handle)
 const BLOCK_MAN = { k18: 'lanyard', mrs18: 'lanyard', m16: 'lanyard', ...BLOCK_MAN_WW1 };
@@ -123,6 +138,8 @@ class Man {
     this.li = 0; this.plans = {};
     this.seed = idx * 1.37;
     this.noEars = false;
+    // the spaced drill's state (crewspace.js), for the German crews
+    this.sp = crew.spacing ? new ManSpace() : null;
   }
 
   // the spot in root space for the current traverse
@@ -147,6 +164,12 @@ class Man {
       if (Math.abs(d) > 2.6) d = Math.abs(d) * ((x - c.pvx) * c.rt.x + (z - c.pvz) * c.rt.z < 0 ? 1 : -1);
       h += d * 0.32 * c.ears;
       if (c.ears > 0.5) pose = 'ears';
+    }
+    // (spaced: his place settled among the others, and his gait fitted to how he then really moves; on the car's own
+    // frame, so its run back at the shot is not taken for a jump)
+    if (this.sp) {
+      spacePut(c, this, x, y, z, h, pose, POSES.has(pose) ? pose : (FALLBACK[pose] ?? 'stand'), t, _sp);
+      x = _sp.x; y = _sp.y; z = _sp.z; h = _sp.h; pose = _sp.pose; t = _sp.t;
     }
     if (this.spot.car) { x += c.carX; z += c.carZ; } // standing on the railway car: it rolls back along the track with the gun
     this.x = x; this.y = y; this.z = z; this.h = h;
@@ -195,10 +218,17 @@ class Man {
   // put the grip point of a hand on a root-space point (after put)
   hand(side, x, y, z, w = 1) {
     if (w <= 0.01 || this.crew.level < 2) return;
+    // (spaced, the hand is only asked here: once both of the man's grips are known he is given them, crewspace.js hands)
+    if (this.sp) { ask(this.crew, this, side === 'L' ? 0 : 1, x, y, z, w); return; }
+    this.reach(side, x, y, z, w);
+  }
+
+  // the IK onto the grip; far: a grip beyond the arm is let go (the spaced drill has done that itself, in its own time)
+  reach(side, x, y, z, w, far = true) {
     const dx = x - this.x, dz = z - this.z, ch = Math.cos(this.h), sh = Math.sin(this.h), sc = 1 / this.root.scale.x;
     // a grip further than an arm reaches from his chest lets go instead of hauling the arm out straight at nothing
     // (shoulder 0.19 m off the middle, arm and fist 0.65 m: past about 0.9 m the IK only points)
-    w *= 1 - smooth(Math.hypot(dx * sc, (y - this.y) * sc - 1.33, dz * sc), 0.88, 1.02);
+    if (far) w *= 1 - smooth(Math.hypot(dx * sc, (y - this.y) * sc - 1.33, dz * sc), 0.88, 1.02);
     this.hw = w; // (tools/crewaudit.mjs reads it)
     if (w <= 0.01) return;
     _hand.set((dx * ch - dz * sh) * sc, (y - this.y) * sc, (dx * sh + dz * ch) * sc);
@@ -226,6 +256,14 @@ export class GunCrew {
     this.kind = kind;
     this.men = [];
     this.level = 2;
+    // The German crews are spaced (crewspace.js): kept clear of each other and the steel, never jumping, their grips
+    // before them, their steps on the ground they cover. The British crews are parked as they stand.
+    this.spacing = !BRITISH.has(kind);
+    this.spLast = NaN; this.spNow = 0; this.spDt = 0;
+    // (spaced) the staff's swing into the bore as shown (0 at his side, 1 in the bore; NaN: as the drill has it), where
+    // its head last was along the bore, the side and the closeness its man carries it at, a man gone from the gun with it
+    this.staffE = NaN; this.staffWas = 0; this.carrySide = 0; this.carryClose = false; this.staffTaken = false;
+    this.ldThere = 1; this.casualties = 0; this.ropeLen = NaN; this.ropeEnd = new THREE.Vector3();
     this.blend = 1;
     this.idleT = 0;
     this.carX = 0; this.carZ = 0; // how far the railway car has rolled back along the track (rig.pivots.car), metres
@@ -276,6 +314,8 @@ export class GunCrew {
     this.grips = rig.anchors.grips ?? null;
     rig.anchors.crew.forEach((s, i) => this.men.push(new Man(this, s, i)));
     this.byRole = new Map(this.men.map((m) => [m.role, m]));
+    // the two who carry a shell between them (the spacing moves them as one)
+    this.pair0 = this.men.find((q) => q.beh === 'pair0') ?? null; this.pair1 = this.men.find((q) => q.beh === 'pair1') ?? null;
     this.TL = new THREE.Vector3(); this.BL = new THREE.Vector3(); this.uL = new THREE.Vector3(0, 0, -1); this.aTL = 0;
     this.loadFrame();
     // the height of the loading platform behind the breech (the stack is on the ground)
@@ -386,6 +426,25 @@ export class GunCrew {
     return Math.hypot(_gA.x - m.x, (_gA.y - m.y) / m.root.scale.x - 1.33, _gA.z - m.z) < 0.95 * m.root.scale.x;
   }
 
+  // whether a grip's hub is within an arm of his chest from where he stands now
+  inReach(m, w) {
+    w.updateWorldMatrix(true, false);
+    _gR.setFromMatrixPosition(w.matrixWorld).applyMatrix4(_inv);
+    const sc = 1 / m.root.scale.x;
+    return Math.hypot((_gR.x - m.x) * sc, (_gR.y - m.y) * sc - 1.33, (_gR.z - m.z) * sc) < 1.0;
+  }
+
+  // a point on a wheel's rim at angle ang, or its mirror image across the hub when that is nearer (px, py, pz) (root)
+  rimNear(node, ang, px, py, pz, out) {
+    node.updateWorldMatrix(true, false); _M.copy(_inv).multiply(node.matrixWorld);
+    out.setFromMatrixPosition(_M);
+    const r = (node.userData.r ?? 0) * _gR.setFromMatrixColumn(_M, 0).length(), dx = px - out.x, dy = py - out.y, dz = pz - out.z;
+    _gR.setFromMatrixColumn(_M, 1).normalize(); const ky = _gR.x * dx + _gR.y * dy + _gR.z * dz;
+    _gR.setFromMatrixColumn(_M, 2).normalize(); const kz = _gR.x * dx + _gR.y * dy + _gR.z * dz, phi = Math.atan2(kz, ky);
+    if (Math.cos(ang - phi) < 0) ang = 2 * phi + Math.PI - ang;
+    return out.add(_gR.set(0, Math.cos(ang), Math.sin(ang)).transformDirection(_M).multiplyScalar(r));
+  }
+
   // His hands on his grips: on a wheel's rim, turning with t (the pose's phase, which runs while he lays); with a second
   // place (a sight, a second wheel) each hand takes the one on its side, else the other hand goes across the same rim.
   workGrip(m, t) {
@@ -401,8 +460,60 @@ export class GunCrew {
     };
     at(w, a, _gA);
     if (w2) at(w2, a + 1.3, _gB); else at(w, a + Math.PI, _gB);
+    const rx = Math.cos(m.h), rz = -Math.sin(m.h);
+    if (m.sp) {
+      // (spaced: the right hand used to take whichever grip was to the right this frame: with a wheel and a sight the
+      // two hands changed places every half turn, 70 cm in a frame; on one wheel both jumped across it at once. Spaced,
+      // each hand keeps its own, and a grip that jumps is let go and taken again in a hand's time: crewspace.js)
+      const S = m.sp, now = this.spNow;
+      S.fixedAt = now;
+      // (of two, a wheel he cannot reach from where he stands is left: both hands go on the one he can)
+      let one = w2 ? null : w;
+      if (w2) {
+        const nw = this.inReach(m, w), n2 = this.inReach(m, w2);
+        if (nw !== n2) { const q = nw ? w : w2; if (q.userData.r) one = q; }
+      }
+      if (!one) {
+        if (now - S.workAt > 0.5 || now < S.workAt) {
+          w.updateWorldMatrix(true, false); _M.copy(_inv).multiply(w.matrixWorld); _hand.setFromMatrixPosition(_M);
+          w2.updateWorldMatrix(true, false); _M.copy(_inv).multiply(w2.matrixWorld); _c.setFromMatrixPosition(_M);
+          S.workFirst = (_hand.x - _c.x) * rx + (_hand.z - _c.z) * rz >= -0.08;
+        }
+        S.workAt = now;
+        // two things: each keeps its hand (the one to his right the right hand; one behind the other, the wheel), and a
+        // hand on a wheel keeps to the half of its rim nearer his chest (round the far side it was out of his reach)
+        const cy = m.y + 1.33 * m.root.scale.x;
+        if (w.userData.r) this.rimNear(w, a, m.x, cy, m.z, _gA);
+        if (w2.userData.r) this.rimNear(w2, a + 1.3, m.x, cy, m.z, _gB);
+        const wr = S.workFirst ? _gA : _gB, wl = S.workFirst ? _gB : _gA;
+        m.hand('R', wr.x, wr.y, wr.z, 1);
+        m.hand('L', wl.x, wl.y, wl.z, 1);
+        return;
+      }
+      S.workAt = now;
+      // One wheel. Facing him, each hand stays on the rim on its own side: it goes round with the rim down that side and
+      // slides back along it, the left a quarter turn after the right. (In the Godot version's drill each hand let go
+      // at the bottom and took a new hold at the top, a quarter of a second off the wheel every half turn.) Edge on to
+      // him, the rim has no left and right side: the two hands stay half a turn apart on it.
+      one.updateWorldMatrix(true, false); _M.copy(_inv).multiply(one.matrixWorld);
+      _c.setFromMatrixColumn(_M, 0).normalize();
+      const across = _c.x * rx + _c.z * rz;
+      if (across * across < 0.84) {
+        _c.setFromMatrixColumn(_M, 1).normalize(); const ry = _c.x * rx + _c.z * rz;
+        _c.setFromMatrixColumn(_M, 2).normalize(); const rzz = _c.x * rx + _c.z * rz;
+        // phi: the rim's angle furthest to his right; a point further than a quarter turn from it is mirrored back
+        const phi = Math.atan2(rzz, ry);
+        let aR = a, aL = a + Math.PI / 2;
+        if (Math.cos(aR - phi) < 0) aR = 2 * phi + Math.PI - aR;
+        if (Math.cos(aL - phi) > 0) aL = 2 * phi + Math.PI - aL;
+        at(one, aR, _gA); at(one, aL, _gB);
+      } else { at(one, a, _gA); at(one, a + Math.PI, _gB); }
+      m.hand('R', _gA.x, _gA.y, _gA.z, 1);
+      m.hand('L', _gB.x, _gB.y, _gB.z, 1);
+      return;
+    }
     // which is on his right (root space, his heading)
-    const rx = Math.cos(m.h), rz = -Math.sin(m.h), right = (_gA.x - _gB.x) * rx + (_gA.z - _gB.z) * rz >= 0;
+    const right = (_gA.x - _gB.x) * rx + (_gA.z - _gB.z) * rz >= 0;
     const R = right ? _gA : _gB, L = right ? _gB : _gA;
     m.hand('R', R.x, R.y, R.z, 1);
     m.hand('L', L.x, L.y, L.z, 1);
@@ -499,6 +610,7 @@ export class GunCrew {
   setLevel(level) {
     this.level = level;
     const vis = level > 0;
+    if (!vis && this.spacing) spaceReset(this);
     if (this.heavyDrill) this.heavyDrill.root.visible = vis;
     if (this.loadingCart) this.loadingCart.visible = vis;
     if (this.chargeRest) this.chargeRest.visible = vis;
@@ -591,6 +703,7 @@ export class GunCrew {
     const rig = this.rig, g = GUNS[p.kind];
     const now = sim.time + (sim.alpha ?? 0) * STEP;
     this.blend = 1 - Math.exp(-14 * Math.max(rawDt, 0.008));
+    if (this.spacing) spaceClock(this, now);
     this.idleT = now * 0.25;
     this.prepare(p);
     const job = p.job;
@@ -610,27 +723,77 @@ export class GunCrew {
     const c = { p, s, k, tf, tw, now, st: p.state, loaded: p.loaded, i: job ? job.i : -1 };
     this.c = c;
     this.tl = this.timeline(p, k);
+    this.casualties = Math.max(0, p.crewMax - p.crew);
     this.state(c);
     // Mechanisms and their contact points must belong to this frame before hands are solved.
     this.mechanisms(c);
     rig.root.updateMatrixWorld(true);
-    // casualties: the last men of the list leave the gun (never the player's man: the next one down goes instead)
-    const casualties = Math.max(0, p.crewMax - p.crew);
-    const pi = this.player ? this.men.indexOf(this.player) : -1;
     for (let i = 0; i < this.men.length; i++) {
       const m = this.men[i];
-      const rank = pi < 0 || i > pi ? i : i === pi ? -1 : i + 1;
-      const gone = p.state === 'dead' || rank >= this.men.length - casualties;
-      if (gone) { m.hide(); continue; }
+      if (this.gone(i)) { m.hide(); if (this.spacing) this.dropped(m); continue; }
       m.root.visible = true;
       this.act(m, c);
+      if (this.spacing) hands(this, m);
     }
+    if (this.spacing) spaceStep(this);
     this.props(c);
     // The props live in the rig's root, not in the parts they rest on: each is drawn only while its part is, so a
     // rig that hides a part (the Gustav's assembly) hides what lies on it. The next shell is the shell stack's; the
     // shell in hand, the cartridges, the staff and the rope are the gun's (its tray).
     if (!shown(rig.anchors.shellStack, rig.root)) this.shellB.visible = false;
     if (!shown(rig.anchors.tray, rig.root)) for (const o of [this.shellA, this.shellB, this.bag, this.staff, this.rope]) o.visible = false;
+  }
+
+  // casualties: the last men of the list leave the gun (never the player's man: the next one down goes instead)
+  gone(i) {
+    const pi = this.player ? this.men.indexOf(this.player) : -1, rank = pi < 0 || i > pi ? i : i === pi ? -1 : i + 1;
+    return this.c.p.state === 'dead' || rank >= this.men.length - this.casualties;
+  }
+
+  // a rammer is at the gun (spaced: with none there is no staff)
+  rammerIn() {
+    for (let i = 0; i < this.men.length; i++) if (this.men[i].beh === 'ram' && !this.gone(i)) return true;
+    return false;
+  }
+
+  // (spaced: what a man who has left the gun carried goes with him; it stayed shown in the air where he last had it,
+  // and was back in his arms in one frame when he came back or the next step put it somewhere)
+  dropped(m) {
+    switch (m.beh) {
+      case 'carry': this.shellA.visible = false; break;
+      case 'pair0': this.shellA.visible = false; this.pairShell = null; break;
+      case 'bag': this.bag.visible = false; break;
+      case 'lan': this.rope.visible = false; break;
+      case 'spPass': if (this.rig.passShell) this.rig.passShell.visible = false; break;
+    }
+  }
+
+  // which side of the bore's line a man's post is on, looking along the bore (-1 left, 1 right)
+  lineSide(m) {
+    const H = m.home(this.tmp[5]);
+    return (H.x - this.TL.x) * this.rt.x + (H.z - this.TL.z) * this.rt.z < 0 ? -1 : 1;
+  }
+
+  // The side the staff's man carries it on (-1 left, 1 right): towards the bore, where he will work it. With another man
+  // posted close by on that side (two rammers either side of the bore's line) it stands right before him, not out to
+  // his side, or his arm would be in the other's. Settled once, from the posts.
+  carrySideOf(owner) {
+    if (this.carrySide !== 0) return this.carrySide;
+    const side = -this.lineSide(owner), H = owner.home(this.tmp[5]), ox = H.x, oz = H.z;
+    for (const q of this.men) {
+      if (q === owner) continue;
+      const Q = q.home(this.tmp[5]), dx = Q.x - ox, dz = Q.z - oz, lat = (dx * this.rt.x + dz * this.rt.z) * side;
+      if (lat > 0.1 && lat < 0.95 && Math.abs(dx * this.bd.x + dz * this.bd.z) < 0.6) this.carryClose = true;
+    }
+    return this.carrySide = side;
+  }
+
+  // the turn away from the shot that Man.put lays on a man at (x, z) heading h
+  earsTurn(x, z, h) {
+    if (!(this.ears > 0.01)) return 0;
+    let d = wrapPi(this.az + Math.PI - h);
+    if (Math.abs(d) > 2.6) d = Math.abs(d) * ((x - this.pvx) * this.rt.x + (z - this.pvz) * this.rt.z < 0 ? 1 : -1);
+    return d * 0.32 * this.ears;
   }
 
   // The loading cycle on one clock: tl.at(step, k) is the second of the cycle at fraction k of that step, tl.now the
@@ -703,16 +866,36 @@ export class GunCrew {
     }
     if (ww1State(this, c)) return;
     if (heavyState(this, c)) return;
-    const owner = this.ramList?.[0] ?? this.men.find((m) => m.beh === 'ram');
+    // (spaced, the staff is the first rammer's who is at the gun, and with none there is no staff: it stayed with a man
+    // who had left, and worked by itself. The frame it changes hands it is not shown)
+    let owner = null;
+    if (this.spacing) { for (let i = 0; i < this.men.length; i++) if (this.men[i].beh === 'ram' && !this.gone(i)) { owner = this.men[i]; break; } }
+    else owner = this.ramList?.[0] ?? this.men.find((m) => m.beh === 'ram');
+    this.staffTaken = this.spacing && owner !== this.staffOwner && this.staffOwner != null && owner != null;
+    if (this.spacing && !owner) this.staffOwner = null;
     if (owner) {
       // The same staff is carried at rest, lowered into line, withdrawn and stood up again.
       // Its transform is shared by the prop and every hand, including the acquisition arcs.
-      const h = this.ramPlace(owner, c, this.tmp[0]), side = owner.sx < 0 ? -1 : 1;
+      const h = this.ramPlace(owner, c, this.tmp[0]);
+      let side = owner.sx < 0 ? -1 : 1, yaw = h.h;
       // a hand's breadth in front of him (it was 0.12 m along the world's z, behind men facing the other way, where a
       // hand on it twists the arm round), held by the hand on the side it stands (the right hand reaching across to a
       // staff on his left put the forearm through his chest)
       const br = BRITISH.has(this.kind), fwd = br ? 0 : 0.12;
       this.staff.position.set(h.x + Math.cos(h.h) * side * 0.25 - Math.sin(h.h) * fwd, h.y + 0.12, h.z - Math.sin(h.h) * side * 0.25 - Math.cos(h.h) * fwd + (br ? 0.12 : 0));
+      if (this.spacing) {
+        // Spaced, the staff is his to hold: stood on its butt before him, the head up, on his side towards the bore,
+        // where he will work it (carrySideOf), in the hand that then holds its butt; and it goes with him as he is shown
+        // (his turn from the shot, the spacing, his stance). It used to stand on its head beside his post, for some on
+        // the side away from the bore, and to be swung through him into the bore, his hand going the length of it.
+        const S = owner.sp, L = this.staffLen;
+        side = this.carrySideOf(owner);
+        yaw += this.earsTurn(h.x, h.z, h.h) + (S.track ? S.OffH + S.StH + S.FaceH : 0);
+        const cy = Math.cos(yaw), sy = Math.sin(yaw), ss = side * (this.carryClose ? STAFF_SIDE_NEAR : STAFF_SIDE), sf = this.carryClose ? STAFF_FWD_NEAR : STAFF_FWD;
+        this.staff.position.set(h.x + cy * ss - sy * sf, h.y + 0.03 + L, h.z - sy * ss - cy * sf);
+        if (S.track) { this.staff.position.x += S.sepX + S.OffX + S.StX; this.staff.position.z += S.sepZ + S.OffZ + S.StZ; }
+        if (owner.spot.car) { this.staff.position.x += this.carX; this.staff.position.z += this.carZ; }
+      }
       this.staffRest = br || side > 0 ? 'R' : 'L';
       let standBack = 0;
       if (this.pairLead && !this.rig.loadingStage && !this.timed()) {
@@ -724,12 +907,48 @@ export class GunCrew {
         this.staff.position.set(h.x + this.rt.x * 0.35, h.y + 0.12, h.z + this.rt.z * 0.35);
         this.staffRest = (this.rt.x * Math.cos(h.h) - this.rt.z * Math.sin(h.h)) < 0 ? 'L' : 'R';
       }
-      this.staff.rotation.set(-Math.PI / 2, h.h, 0);
+      this.staff.rotation.set(this.spacing ? Math.PI / 2 : -Math.PI / 2, yaw, 0);
       let engage = 0;
       if (s === 'ram') engage = smooth(k, 0, 0.16) * (slow ? 1 : 1 - smooth(k, 0.92, 1));
       else if (slow && s === 'cartridge' && this.staffA != null) engage = 1 - smooth(k, 0.3, 0.42);
       else if (s === 'cartridge' && this.staffA != null) engage = smooth(k, 0.5, 0.56) * (1 - smooth(k, 0.92, 0.97));
-      if (engage > 0 && this.staffA != null) {
+      if (this.spacing) {
+        // A staff of two or three metres is not tipped in a third of a second (its head was at 11 m/s on the 21 cm
+        // mortar): the swing takes staffSwing each way, and on the cycle clock it starts that much before the stroke, in
+        // the end of the shell step, so that it lies behind the shell as the stroke begins. Between the ram and the
+        // cartridge the heavy guns' staff is stood up and brought down again as far as the time allows.
+        const L = this.staffLen, sw = staffSwing(L), dt = this.spDt, T = this.tl;
+        if (T) {
+          const now = T.now;
+          let want = 0, was = NaN;
+          if (Number.isFinite(now)) {
+            const a0 = T.at('ram', 0.18) - sw;
+            if (slow) want = now >= a0 && now < T.at('cartridge', 0.3) ? 1 : 0;
+            else {
+              want = (now >= a0 && now < T.at('ram', 0.92)) || (now >= T.at('cartridge', 0.55) - sw && now < T.at('cartridge', 0.92)) ? 1 : 0;
+              if (s === 'cartridge' && k < 0.5) was = -0.7;
+            }
+            if (now < T.at('ram', 0)) was = this.aRam0 - this.half;
+          }
+          engage = want;
+          // (where its head goes while no stroke says: to the start of the next one, at a walk)
+          if (this.staffA == null && !Number.isNaN(was)) this.staffWas += Math.max(-dt, Math.min(dt, was - this.staffWas));
+        }
+        this.staffE = Number.isNaN(this.staffE) ? engage : this.staffE + Math.max(-dt / sw, Math.min(dt / sw, engage - this.staffE));
+        engage = 0.5 * (this.staffE + smooth(this.staffE, 0, 1));
+        if (this.staffA != null) this.staffWas = this.staffA;
+        if (engage > 0) {
+          // (its butt, by his hand, goes straight from the ground to its place behind the bore, and the head swings
+          // about it: with the head going straight the butt dipped, and his hand with it)
+          this.trayAt(this.staffA ?? this.staffWas, _a);
+          _q.setFromEuler(_e.set(Math.asin(this.u.y), this.az, 0));
+          _b.set(0, 0, L).applyQuaternion(this.staff.quaternion).add(this.staff.position);
+          _c.set(0, 0, L).applyQuaternion(_q).add(_a);
+          _b.lerp(_c, engage);
+          this.staff.quaternion.slerp(_q, engage);
+          this.staff.position.set(0, 0, -L).applyQuaternion(this.staff.quaternion).add(_b);
+        }
+      } else if (engage > 0 && this.staffA != null) {
         this.trayAt(this.staffA, _a);
         this.staff.position.lerp(_a, engage);
         _q.setFromEuler(_e.set(Math.asin(this.u.y), this.az, 0));
@@ -754,7 +973,8 @@ export class GunCrew {
     const moving =Math.abs(p.cmd.az - p.az) > 3e-4 || Math.abs(p.cmd.el - p.el) > 3e-4 || s === 'lay' || s === 'depress';
     switch (m.beh) {
       case 'lay':
-        m.put(h.x, h.y, h.z, h.h, 'lay', moving ? (p.az + p.el) * 30 : 0);
+        // (spaced, the wheel stays where the laying left it: it went back to zero in one frame, the hands with it)
+        m.put(h.x, h.y, h.z, h.h, 'lay', moving || this.spacing ? (p.az + p.el) * 30 : 0);
         break;
       case 'wheel':
         m.put(h.x, h.y, h.z, h.h, moving ? 'operate' : 'stand', moving ? c.now * 1.4 : this.idleT + m.seed);
@@ -784,13 +1004,31 @@ export class GunCrew {
     // he keeps the lanyard taut and his eyes on the gun through the shot (turning away and back read as a jerk)
     m.noEars = true;
     // the pull: the hand snaps back at the shot
-    m.put(h.x, h.y, h.z, h.h, on ? (BRITISH.has(this.kind) ? 'lanyardBR' : 'lanyard') : 'stand', on ? clamp01(c.tf * 3) : this.idleT + m.seed);
+    m.put(h.x, h.y, h.z, h.h, on ? (BRITISH.has(this.kind) ? 'lanyardBR' : 'lanyard') : 'stand', on ? (this.spacing ? pullT(c.tf) : clamp01(c.tf * 3)) : this.idleT + m.seed);
     const rope = this.rope;
     rope.visible = on && this.level > 1;
     if (rope.visible) {
       m.root.updateMatrixWorld(true);
       m.fig.anchors.handR.getWorldPosition(_a).applyMatrix4(_inv);
       _b.copy(this.B).addScaledVector(this.u, 0.3).add(_c.set(0.15, 0.25, 0));
+      if (this.spacing) {
+        // Spaced, the lanyard is drawn from his hand, and at the shot it has left the lock: it keeps the length it was
+        // pulled at and falls from his hand. Tied to the breech, it went back with the recoil and was stretched after
+        // it, a metre in a tenth of a second.
+        const free = c.st === 'recoil' && c.tf < 0.5;
+        if (!free || Number.isNaN(this.ropeLen)) { this.ropeEnd.copy(_b); this.ropeLen = _c.copy(_b).sub(_a).length(); }
+        _c.copy(this.ropeEnd).sub(_a).normalize();
+        let len = Math.max(0.05, this.ropeLen);
+        if (free) {
+          _c.lerp(_b.set(0, -1, 0), smooth(c.tf, 0.03, 0.4)).normalize();
+          // (not into the ground he stands on)
+          if (_c.y < -0.05) len = Math.min(len, Math.max(0.05, (_a.y - m.y - 0.03) / -_c.y));
+        }
+        rope.position.copy(_a);
+        rope.scale.set(1, len, 1);
+        rope.quaternion.setFromUnitVectors(_y, _c);
+        return;
+      }
       _c.copy(_a).sub(_b);
       const len = Math.max(0.05, _c.length());
       rope.position.copy(_b);
@@ -850,6 +1088,7 @@ export class GunCrew {
   // out, works it and helps the rounds in, and steps back in the lay (from his post 1.5 m back his hands reached for a
   // handle a metre beyond them). Puts him and returns true when he is away from his post.
   loaderAt(m, c, h, pose, t) {
+    this.ldThere = 1;
     if (!this.timed() || !LIGHT.has(this.kind) || !this.GL || !this.tl || LOADER_AT[this.kind] === null) return false;
     const T = this.tl, g = GUNS[this.kind], G = this.GL, home = this.tmp[1];
     m.home(home);
@@ -866,15 +1105,19 @@ export class GunCrew {
     const at = this.rootXZ(m, out, _pp2), rotA = m.world ? 0 : this.az, face = headingOf(G.x - at.x, G.z - at.z);
     // (beside the block, not behind it, so he may come in while the barrel is still running out; back at his post by
     // the end of the lay, turning quicker if he must)
-    const tIn = 0.45 + (g.runout ?? 1) * 0.15, l0 = T.at('lay', 0);
+    let tIn = 0.45 + (g.runout ?? 1) * 0.15;
+    const l0 = T.at('lay', 0);
     const wIn = Pin.len / V_WALK + this.pairTurns(Pin, home.h - rotA, face - rotA, ONE_OMEGA);
     const wOut = Math.max(0.3, Math.min(Pout.len / V_WALK + this.pairTurns(Pout, face - rotA, home.h - rotA, ONE_OMEGA), T.end - l0 - 0.05));
+    // (spaced, he is beside the block as the barrel comes home, not before: setting off 0.45 s and a seventh of the
+    // run-out after the shot, he stood in the breech's way while it was still running out)
+    if (this.spacing) tIn = Math.max(tIn, 0.45 + (g.runout ?? 1) - wIn);
     let P = null, u = 0, hs = 0, he = 0, W = 1;
     if (T.now === Infinity || (Number.isFinite(T.now) && T.now >= l0 + wOut)) return false; // back at his post for the shot
     if (Number.isFinite(T.now) && T.now >= l0) { P = Pout; u = (T.now - l0) / wOut; hs = face; he = home.h; W = wOut; }
     else if (c.tf >= 0 && c.tf < tIn + wIn) {
       if (c.tf <= tIn) return false;
-      P = Pin; u = (c.tf - tIn) / wIn; hs = home.h; he = face; W = wIn;
+      P = Pin; u = (c.tf - tIn) / wIn; hs = home.h; he = face; W = wIn; this.ldThere = smooth(u, 0.85, 1);
     }
     if (!P) {
       // working the block he moves with its handle (it slides out across the breech, out of reach of a man standing still)
@@ -898,7 +1141,8 @@ export class GunCrew {
       m.put(h.x, h.y, h.z, h.h, open ? 'ramLoad' : 'stand', open ? smooth(k, 0.12, 0.82) : this.idleT + m.seed);
     if (open) {
       this.grip.getWorldPosition(_a).applyMatrix4(_inv);
-      const grip = smooth(k, 0, 0.12) * (1 - smooth(k, 0.88, 1));
+      // (spaced: his hands go to the block when he is there)
+      const grip = smooth(k, 0, 0.12) * (1 - smooth(k, 0.88, 1)) * (this.spacing ? this.ldThere : 1);
       m.hand('R', _a.x, _a.y, _a.z, grip);
       m.hand('L', _a.x, _a.y - 0.1, _a.z + 0.1, grip);
     } else if (s === 'prime') {
@@ -932,7 +1176,11 @@ export class GunCrew {
     const tIn0 = d > 0.05 ? Math.abs(wrapPi(wayIn - hh)) / ONE_OMEGA : 0, tIn1 = d > 0.05 ? Math.abs(wrapPi(fwd - wayIn)) / ONE_OMEGA : Math.abs(wrapPi(fwd - hh)) / ONE_OMEGA;
     const wayOut = wrapPi(wayIn + Math.PI), tOut0 = d > 0.05 ? Math.abs(wrapPi(wayOut - fwd)) / ONE_OMEGA : 0, tOut1 = d > 0.05 ? Math.abs(wrapPi(hh - wayOut)) / ONE_OMEGA : 0;
     const wIn = d / V_WALK + tIn0 + tIn1, wOut = d / V_WALK + tOut0 + tOut1;
-    const now = T.now, tR = T.at('ram', 0), tA = tR - wIn - 0.15, tB = T.at('cartridge', 0.42), tC = tB + wOut;
+    const now = T.now, tR = T.at('ram', 0), tA = tR - wIn - 0.15;
+    let tB = T.at('cartridge', 0.42);
+    // (spaced, he goes back when he has stood the staff up, which takes its time: staffSwing)
+    if (this.spacing) tB = Math.max(tB, T.at('cartridge', 0.3) + staffSwing(L) * 0.8);
+    const tC = tB + wOut;
     if (now < tA || now > tC) return out;
     if (now < tR || now > tB) {
       const back = now > tB, tt = back ? now - tB : now - tA, wt = back ? wOut : wIn;
@@ -943,11 +1191,13 @@ export class GunCrew {
       else if (tt > wt - a1) { f = 1; out.h = (d > 0.05 ? hW : hA) + wrapPi(hB - (d > 0.05 ? hW : hA)) * smooth(tt, wt - a1, wt); }
       else { f = travel((tt - a0) / Math.max(0.01, wt - a0 - a1)); out.h = hW; }
       out.x = lerp(fx, tx, f); out.z = lerp(fz, tz, f);
+      way(this, m, fx, fz, tx, tz);
       out.mode = 'walk'; out.moving = tt > 0 && tt < wt; out.dist = d * f + Math.abs(wrapPi(hW - hA)) * 0.12 * Math.min(1, tt / Math.max(0.01, a0));
       return out;
     }
     const head = this.staffA ?? head0, Pq = P(head, this._rp1 ??= { x: 0, z: 0 });
     out.x = Pq.x; out.z = Pq.z; out.h = fwd; out.mode = 'ram';
+    way(this, m, P0.x, P0.z, Pq.x, Pq.z);
     const k = c.k;
     out.moving = c.s === 'ram' ? k > 0.18 && k < 0.72 : c.s === 'cartridge' && k < 0.3;
     out.dist = Math.abs(head - head0);
@@ -966,16 +1216,27 @@ export class GunCrew {
     if (this.timed() && LIGHT.has(this.kind)) {
       const R = this.ramPlace(m, c, this.tmp[6] ??= { x: 0, z: 0, h: 0, y: 0 });
       if (R.mode !== 'home') {
-        const on = this.staffA != null && (c.s === 'ram' || c.s === 'cartridge');
+        // (spaced, he leans to the staff as he brings it down, before the stroke's step: his pose used to change with the
+        // step, his second hand half on)
+        const sp = this.spacing, on = sp ? (this.staffGrip ?? 0) > 0.2 && (this.staffA != null || c.s === 'shell') : this.staffA != null && (c.s === 'ram' || c.s === 'cartridge');
         const walk = R.mode === 'walk';
-        m.put(R.x, h.y, R.z, R.h, walk ? (R.moving ? 'walk' : 'stand') : R.moving ? 'carryWalk' : on ? 'ramLoad' : 'stand', walk ? (R.moving ? R.dist / STRIDE : this.idleT + m.seed) : R.moving ? R.dist / CSTRIDE : on ? this.ramK * (1 - smooth(c.k, 0.76, 0.95)) : this.idleT + m.seed);
+        m.put(R.x, h.y, R.z, R.h, walk ? (R.moving ? 'walk' : sp && on ? 'ramLoad' : 'stand') : R.moving ? 'carryWalk' : on ? 'ramLoad' : 'stand', walk ? (R.moving ? R.dist / STRIDE : sp && on ? 0 : this.idleT + m.seed) : R.moving ? R.dist / CSTRIDE : on ? this.ramK * (1 - smooth(c.k, 0.76, sp ? 1 : 0.95)) : this.idleT + m.seed);
+        if (!walk) holding(this, m);
         if (m === this.staffOwner) {
           // the butt end in both hands once the staff is in line: the hand on the staff's side forward, the other
           // back by the hip (the same hands whichever side he works from, the arms crossed through his chest)
-          const e = this.staffGrip ?? 0, hold = Math.min(1.05, this.staffLen - 0.1), near = BRITISH.has(this.kind) ? 'L' : this.staffSide(m, this.staffLen - 0.55);
-          for (const side of ['L', 'R']) {
-            _a.set(0, 0, lerp(hold, side === near ? this.staffLen - 0.55 : this.staffLen - 0.12, e)).applyMatrix4(this.staff.matrix);
-            m.hand(side, _a.x, _a.y, _a.z, side === (this.staffRest ?? 'R') ? 1 : smooth(e, 0.45, 0.95));
+          // (spaced: his hand on the staff's side holds it beside him, RAM_BUTT from the butt, the other takes it ahead
+          // of him, RAM_FORE from it; the far hand held the butt behind his back, and at 0.28 m from the butt the near
+          // one was beside his hip, the arm solved again every frame)
+          const L = this.staffLen, e = this.staffGrip ?? 0, hold = sp ? staffHold(L) : Math.min(1.05, L - 0.1);
+          const near = BRITISH.has(this.kind) ? 'L' : sp ? (this.lineSide(m) > 0 ? 'L' : 'R') : this.staffSide(m, L - 0.55);
+          const zn = sp ? L - RAM_BUTT : L - 0.55, zf = sp ? L - RAM_FORE : L - 0.12;
+          for (let i = 0; i < 2; i++) {
+            const side = i ? 'R' : 'L';
+            let z = lerp(hold, side === near ? zn : zf, e);
+            if (sp) z = slide(this, m, i, z);
+            _a.set(0, 0, z).applyMatrix4(this.staff.matrix);
+            m.hand(side, _a.x, _a.y, _a.z, side === (this.staffRest ?? 'R') ? 1 : sp ? smooth(e, 0.7, 0.97) : smooth(e, 0.45, 0.95));
           }
         }
         return;
@@ -1042,7 +1303,10 @@ export class GunCrew {
     const stag = de && sd > 0 && m !== this.staffOwner && rammers.length <= 2 ? Math.max(0, Math.min(RAM_STAG, this.staffLen - 0.75 - dRaw)) : 0;
     dRaw += stag; d = Math.max(0.3, Math.min(this.staffLen - 0.5, d + stag));
     const holds = !de || m === this.staffOwner || (on && e > 0.88 && dRaw < this.staffLen - 0.25), work = on && holds && (!de || e > 0.88);
-    const eg = de && work && this.staffOwner ? smooth(e, 0.3, 0.9) : 0;
+    // (spaced, he steps in and turns to the staff as he takes hold, and for as long as the staff is down at all: it is
+    // still coming up when the stroke's step is over; he used to do it all at once when his grip passed 0.88)
+    const sp = this.spacing, onE = on || (sp && e > 0.01);
+    const eg = (sp ? onE && (m === this.staffOwner || dRaw < this.staffLen - 0.25) : de && work) && this.staffOwner ? (sp && m !== this.staffOwner ? smooth(e, 0.7, 0.95) : smooth(e, 0.3, 0.9)) : 0;
     let inX = 0, inZ = 0, turnIn = 0;
     if (eg > 0) {
       const step = Math.max(0, Math.abs(lat) - RAM_LAT) * eg;
@@ -1050,13 +1314,24 @@ export class GunCrew {
     }
     m.put(h.x + this.bd.x * adv + inX, h.y, h.z + this.bd.z * adv + inZ, h.h + turnIn, stepping ? work ? 'carryWalk' : 'walk' : work ? 'ramLoad' : 'stand', stepping ? (adv - back) / (work ? CSTRIDE : STRIDE) : work ? effort : this.idleT + m.seed);
     if (this.staffOwner && (on || m === this.staffOwner) && holds) {
-      const hold = Math.min(1.05, this.staffLen - 0.1), near = BRITISH.has(this.kind) ? 'R' : this.staffSide(m, d); // (the British keep their old hands)
+      if (onE && e > 0.3) holding(this, m);
+      // (spaced, the hand on the staff's side is the near one for as long as he works it: it changed as the staff's
+      // point passed his middle, and the two hands changed places in a frame)
+      const hold = sp ? staffHold(this.staffLen) : Math.min(1.05, this.staffLen - 0.1), near = BRITISH.has(this.kind) ? 'R' : sp ? (sd > 0 ? 'L' : 'R') : this.staffSide(m, d); // (the British keep their old hands)
+      if (sp && this.staffA != null) {
+        // (his hands keep ahead of him on the staff: drawn back faster than he stepped back, the grips passed behind him)
+        const hu = this.u.x * this.u.x + this.u.z * this.u.z || 1;
+        d = Math.max(0.3, Math.min(d, this.staffA - this.aT - ((m.sp.rawX - this.T.x) * this.u.x + (m.sp.rawZ - this.T.z) * this.u.z) / hu));
+      }
       // the hand on the staff's side forward, the other behind it (see the light guns' rammer above); the German team's
       // both ahead of him, the near one 0.1 m, the far one 0.45 m, on his side of the shaft (the pair either side of it
       // had their fists in the same place)
-      for (const side of ['L', 'R']) {
+      for (let i = 0; i < 2; i++) {
+        const side = i ? 'R' : 'L';
         const at = de ? Math.max(0.05, d - (side === near ? 0.1 : 0.45)) : side === near ? d : Math.min(this.staffLen - 0.1, d + 0.38);
-        _a.set(0, 0, lerp(hold, at, e)).applyMatrix4(this.staff.matrix);
+        let z = lerp(hold, at, e);
+        if (sp) z = slide(this, m, i, z);
+        _a.set(0, 0, z).applyMatrix4(this.staff.matrix);
         if (de) { _a.x += this.rt.x * sd * 0.04 * e; _a.z += this.rt.z * sd * 0.04 * e; }
         const grip = m === this.staffOwner && side === (this.staffRest ?? 'R') ? 1 : de ? smooth(e, 0.88, 1) : smooth(e, 0.45, 0.95);
         m.hand(side, _a.x, _a.y, _a.z, grip);
@@ -1151,10 +1426,11 @@ export class GunCrew {
     if (!have) { carry.visible = false; return; }
     // The carrier retains ownership until the whole shell rests on the tray. His hands then
     // withdraw while the round stays put; the next step starts from exactly that transform.
-    const fx = -Math.sin(m.h), fz = -Math.cos(m.h), len = shell ? this.slen : this.bagLen;
-    let cx = m.x + fx * 0.42, cy = y + 1.07, cz = m.z + fz * 0.42, yaw = m.h - Math.PI / 2, pitch = 0;
+    // (the round goes with the man as he is shown: spaced, a step down may be eased)
+    const fx = -Math.sin(m.h), fz = -Math.cos(m.h), len = shell ? this.slen : this.bagLen, py = this.spacing ? m.y : y;
+    let cx = m.x + fx * 0.42, cy = py + 1.07, cz = m.z + fz * 0.42, yaw = m.h - Math.PI / 2, pitch = 0;
     if (phase === 'pick') {
-      cy = y + lerp(0.45, 1.07, lift);
+      cy = py + lerp(0.45, 1.07, lift);
       cx = m.x + fx * lerp(0.48, 0.42, lift); cz = m.z + fz * lerp(0.48, 0.42, lift);
     } else if (phase === 'place') {
       if (shell) {
@@ -1441,7 +1717,11 @@ export class GunCrew {
     m.put(rx, y, rz, rh, pose, moving ? dist / gait : phase === 'wait' ? this.idleT + m.seed : phase === 'lift' ? smooth(kk, 0.3, 1) : pushing ? smooth(kk, 0.42, 0.85) : 0);
     // the shell hangs between the two (drawn once, by the left man) at their midpoint
     if (side < 0) {
-      const rm = this.rootXZ(m, C, _pp3), mx = rm.x, mz = rm.z, mh = rot ? hd + this.az : hd;
+      const rm = this.rootXZ(m, C, _pp3), mh = rot ? hd + this.az : hd;
+      let mx = rm.x, mz = rm.z;
+      // (spaced, the shell goes with the pair as they are shown)
+      const A = m.sp, B = this.pair1?.sp;
+      if (A && B && A.track && B.track) { mx += (A.sepX + A.OffX + A.StX + B.sepX + B.OffX + B.StX) / 2; mz += (A.sepZ + A.OffZ + A.StZ + B.sepZ + B.OffZ + B.StZ) / 2; }
       let cx, cy, cz, yaw = mh, pitch = 0, vis = true;
       // (German: carried out in front of the two, ahead of their hips, so the outer hand reaches it past the belly and
       // not through it, and lying on the ground by the stack: the British 9.2-inch's lies on its planks)
@@ -1666,7 +1946,8 @@ export class GunCrew {
       this.placeProp(A, _c, this.az, Math.asin(this.u.y), c.k < 0.82);
     }
     // state() has placed the staff before the hands; it remains in its owner's grasp at rest.
-    this.staff.visible = !!this.staffOwner && this.level > 0;
+    // (spaced: the frame it changes hands, it is not shown)
+    this.staff.visible = !!this.staffOwner && this.level > 0 && !this.staffTaken;
   }
 
   craneShells(c) {
