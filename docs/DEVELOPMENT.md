@@ -143,7 +143,7 @@ The German pages' crews are the Godot version's crew2 bodies, riding on the proc
 - **The test range on the ridge.** It offers only the 1918 guns, not the WW2 ones the career can field there.
 - **The consoles.** The Karl's and the Gustav's fire order card is squeezed under the procedure card at the smallest height, and the line-of-fire label on the board is not part of the label avoidance.
 - **The hangar's dress.** On the battle page every crew dresses by its own gun's era; the hangar should be checked against the same rule.
-- **Lifelike crewmen.** The hangar's parade still shows the old figures, and the gunner's eye at a gun is still the old figure's head, not the animator's.
+- **Lifelike crewmen.** The gunner's eye at a gun is still the old figure's head, not the animator's.
 - **Headless Chromium.** On 2026-10-28 the chromium-1247 build stopped drawing 2D canvases (a plain `fillRect` hangs), so every page looked frozen in the headless tools. Run them with `CHROME=chromium-1217` until it is reinstalled or the cause is found.
 - **Planned for the WW2 mode**, not built yet ([WW2.md, "Planned improvements"](WW2.md#d-planned-improvements-not-built-yet)): short skill moments at the key steps of the V-1 and V-2 launches; shoot and scoot for the A4 (several firing points, the convoy driving between them); and the Karl's crew, who slide along in their standing poses while it drives between positions.
 - **The Paris Gun's target effects.** Its effects on the railway junction, the tank depot and the reserve camp are written but inactive: they need the gun in the open battle, which no operation has. Only the aerodrome's (fewer raids on the gun) works.

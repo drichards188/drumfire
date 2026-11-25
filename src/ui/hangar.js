@@ -14,7 +14,14 @@
 // before it in view, under a veil if it takes more than a moment. Without WebGL the chosen gun's still from the game
 // (public/menu/<kind>.jpg) stands in. The scene is its own: none of the battlefield's shader patches (the props'
 // materials come from world/textures.js, not world/mats.js).
+// The German dress is worn by the lifelike crewmen (render/crew2/parade.js: the battle's bodies, baked once in their
+// standing poses, a lod each by his height on screen), only the outfits the parade needs loaded, behind the same
+// loading screen; ?crew2=0, or a file that fails, keeps the old figures. The scene stands still, so the shadow map is
+// drawn only when the parade, its light or the camouflage cover changes.
 import { STILLS, stillUrl } from '../menuItems.js';
+const CREW2 = typeof location === 'undefined' || new URLSearchParams(location.search).get('crew2') !== '0';
+let crew2Lib = null;
+const loadCrew2 = () => (crew2Lib ??= import('../render/crew2/parade.js').then((m) => new m.ParadeCrew2()));
 
 let lib = null;
 const loadLib = () => (lib ??= Promise.all([
@@ -115,6 +122,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.autoUpdate = false; // (nothing moves: redrawn by light() and look() when that changes)
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 0.95;
     const scene = new THREE.Scene();
@@ -482,10 +490,16 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     baked.set(key, b);
     return b;
   }
-  // the men of a parade: [outfit, skin, x, z, yaw] each, drawn as one instanced mesh per dress
-  function men(list) {
+  // the men of a parade: [outfit, skin, x, z, yaw] each, drawn as one instanced mesh per dress; with c2 (the lifelike
+  // crewmen, loaded) those whose outfit it has are its men (render/crew2/parade.js), the skin picking their pose and face
+  function men(list, c2 = null) {
     const { THREE } = three;
     const by = new Map(), o = new THREE.Object3D(), out = [];
+    if (c2) {
+      const lifelike = list.filter((m) => c2.has(m[0]));
+      if (lifelike.length) out.push(c2.men(lifelike));
+      list = list.filter((m) => !c2.has(m[0]));
+    }
     for (const m of list) {
       const k = `${m[0]}|${m[1]}`;
       if (!by.has(k)) by.set(k, []);
@@ -794,9 +808,19 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     const lot = { x0: lx0, x1: lx1, first, zFront: z0 - F.depth - 1.5, zBack: Math.max(t.box.max.z, piles ? zsLast + 3 : 0), height: t.box.max.y };
     // the inspecting officer and his sergeant, facing the ranks (a railway gun's: its right-hand half, off the bed)
     if (all) list.push([D.officer, 2, party - 0.6, lot.zFront - 1.5, Math.PI], [D.sergeant, 1, party + 0.9, lot.zFront - 0.6, Math.PI]);
-    const crews = men(list);
+    // the German dress on the lifelike crewmen: the outfits this parade wears loaded (once), else the old figures
+    let c2 = null, crews = null;
+    if (CREW2 && D.green && list.length) {
+      try {
+        progress('Dressing the detachments', 0.62);
+        c2 = await loadCrew2();
+        await c2.load(list.map((m) => m[0]), (k) => progress('Dressing the detachments', 0.62 + 0.16 * k));
+        crews = men(list, c2);
+      } catch (e) { console.warn('hangar: the old crew figures stand in:', e.message); }
+    }
+    crews ??= men(list);
     group.add(...crews);
-    return { group, crews, lot, spots };
+    return { group, crews, lot, spots, men2: crews.find((c) => c.isParadeMen) ?? null };
   }
 
   function dispose(p) {
@@ -867,6 +891,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     const s = sun.shadow.camera, e = r * 1.5 + 8;
     Object.assign(s, { left: -e, right: e, top: e, bottom: -e, near: 1, far: r * 8 + 200 });
     s.updateProjectionMatrix();
+    three.renderer.shadowMap.needsUpdate = true;
   }
   function focus(now = true) {
     const { camera, controls } = three, v = framing();
@@ -894,7 +919,8 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     const dist = Math.max(4, sp.r / Math.min(tanV * cam.aspect * free, tanV * 0.7));
     const faces = sp.face ?? [-38, -65, -15, 20, -95, 50, 180, -140, 140];
     const meshes = [];
-    park.group.traverse((o) => { if (o.isMesh && o.visible) meshes.push(o); });
+    // (the lifelike men by their shadow's stand-ins: every man, whichever lod the view now draws him in)
+    park.group.traverse((o) => { if (o.isMesh && (o.visible || o.userData.ray) && !o.userData.noRay) meshes.push(o); });
     const slack = Math.min(0.8, sp.r * 0.4), probe = sp.r * 0.25;
     const offsets = [[0, 0, 0], [probe, 0, 0], [-probe, 0, 0], [0, probe, 0], [0, 0, probe], [0, 0, -probe]];
     const dir = new THREE.Vector3(), aimAt = new THREE.Vector3();
@@ -932,8 +958,8 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     }
     // the camouflage net and the screens are drawn back while another upgrade is looked at (the battlefield's cutaway
     // does the same round the gun in view)
-    const cover = park.group.getObjectByName('cover');
-    if (cover) cover.visible = !looking || looking === 'camo';
+    const cover = park.group.getObjectByName('cover'), covered = !looking || looking === 'camo';
+    if (cover && cover.visible !== covered) { cover.visible = covered; three.renderer.shadowMap.needsUpdate = true; }
     if (!looking) { ring.visible = false; aim(framing(), now); return; }
     const sp = park.spots[looking], view = bestView(looking, sp);
     ring.visible = true;
@@ -946,7 +972,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
   function frame() {
     raf = 0;
     if (!active || !three || !park || document.hidden) return;
-    const { controls, camera, renderer, scene } = three;
+    const { controls, camera } = three;
     if (glide) {
       const k = Math.min(1, (performance.now() - glide.t0) / glide.dur), e = k * k * (3 - 2 * k);
       controls.target.lerpVectors(glide.from.target, glide.to.target, e);
@@ -955,8 +981,17 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
     } else if (!looking && !controls.autoRotate && performance.now() > idleUntil) controls.autoRotate = true;
     if (ring?.visible) { pulse += 0.05; ring.material.opacity = 0.45 + 0.35 * Math.sin(pulse * 2.2); }
     controls.update();
-    renderer.render(scene, camera);
+    draw();
     raf = requestAnimationFrame(frame);
+  }
+  // one frame: the lifelike men's lods for the camera, and their shadow's stand-ins out for a frame that redraws the
+  // shadow map
+  function draw() {
+    const { renderer, scene, camera } = three, men2 = park?.men2, shade = renderer.shadowMap.needsUpdate;
+    men2?.update(camera, renderer);
+    if (shade) men2?.shadows(true);
+    renderer.render(scene, camera);
+    if (shade) men2?.shadows(false);
   }
   const run = () => { if (active && three && park && !raf) raf = requestAnimationFrame(frame); };
   document.addEventListener('visibilitychange', run);
@@ -993,7 +1028,8 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       if (ring) ring.visible = false;
       focus(true);
       three.resize();
-      renderer.render(scene, camera);
+      draw();
+      crew2Lib?.then((c2) => c2.keep(p.men2?.outfits ?? new Set()), () => {}); // (the other war's outfits off the GPU)
       await nextFrame();
       progress('Ready', 1);
       still.hidden = true;
@@ -1031,7 +1067,7 @@ export function createHangar(host, { onProgress = () => {}, onReady = () => {} }
       idleUntil = Infinity;
       if (ring) ring.material.opacity = 0.6;
       three.resize();
-      three.renderer.render(three.scene, three.camera);
+      draw();
       return true;
     },
     get three() { return three; }, // the scene, camera and controls, for the headless tools (window.__menuHangar)

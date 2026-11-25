@@ -271,7 +271,9 @@ Ported on 2026-11-25 from the Godot game; its `tools/blender/crew/README.md` is 
   drill pose, from motion capture and keyed work); `skin_b.jpg` to `skin_d.jpg` (the faces' skin pictures).
 - **Modules**, ports of the Godot C#: `index.js` (`Crew2`; Crew2.cs and CrewFigure.cs), `animator.js` (CrewAnimator),
   `clips.js` (CrewClips), `limits.js` (PoseLimits), `settle.js` (PoseSettle), `feet.js` (FootPlant), `skeleton.js`
-  (CrewSkeleton), `pose.js` (CrewPose), `math.js`.
+  (CrewSkeleton), `pose.js` (CrewPose), `math.js`; and `files.js` (`Crew2Files`: crew2.json, the checks, the outfits,
+  clips.json and the skins, each once; no shader patches, the battle hands in `patch` for its fog) and `parade.js`
+  (`ParadeCrew2`, the menu hangar's men, below).
 - **On top of the drill.** crew.js's figure is still posed by the drill every frame (its bones, its anchors and the
   props in its hands stay); its mesh is hidden and the lifelike body under the same root is posed from it: the clip
   for the figure's pose and phase on the live solver pose, the hands put back on the solver's grips by IK, the arms
@@ -279,7 +281,7 @@ Ported on 2026-11-25 from the Godot game; its `tools/blender/crew/README.md` is 
   `crew2.begin(camera)`, `crew2.sync(crew, piece, now, camera, dt, level)` after each crew's drill, then
   `crew2.end()`. The figure gained `outfitName`, `armIk` and `reached` (which arms the solver or a `reach()` put on a
   grip) and `_poseT` (the phase it was posed at).
-- **Loading.** `GunViews` starts `crew2.load(crews)` when it is built, for the outfits the page's crews wear only (a
+- **Loading.** `GunViews` starts `crew2.load(crews)` (through `Crew2Files`) when it is built, for the outfits the page's crews wear only (a
   1917 page needs three: about 24 MB of files and about 415 MiB of textures; 720 MiB with all six); main awaits
   `crew2.ready(onProgress)` behind the loading screen ("Dressing the crews") before compiling the shaders. An outfit
   missing, failing its check or not standing in crew2.json's zero pose keeps the old figure, as does every man if
@@ -291,7 +293,26 @@ Ported on 2026-11-25 from the Godot game; its `tools/blender/crew/README.md` is 
   gun served in person keeps them instead of the close tier (`CrewHD`). Measured: +0.35 ms CPU a frame with a
   battery's crews in view (worst 1.5 ms), the same draw calls in the usual view and 3 to 4 % fewer triangles there;
   `crew2.stats` reads the cost.
-- **Not yet:** the hangar's parade (still the old figures) and the gunner's eye from the animator's head.
+- **The gunner's eye** (`Man2.eye(out, fwd)`, the Godot game's `CrewFigure.Eye`): the head's joint as the animator
+  posed the man this frame (`anim.point`; not his bones, whose head is scaled away for the player), 0.063 m ahead along
+  the figure's facing and 0.075 m above. `GunCrew.eye` takes it whenever the man is drawn and posed, else the old
+  figure's neck. The man at the player's post (`crew.player`) is posed in full every frame, in view or not; the view's
+  own smoothing (`gunnerView.js` `place`) is the only damping, as in the Godot game.
+- **The hangar's parade** (`parade.js`, the Godot game's MenuScene.Man; `ui/hangar.js` `men`): the German dress worn by
+  these men, standing still, so each outfit's poses are worked out once and baked: man v (up to four an outfit) in the
+  standing clip and moment the animator gives man v (`clips.json` 'stand' only), every lod mesh skinned on the CPU
+  into plain geometry with face v's blend shape and skin, cached; a parade's men instanced by outfit, pose, lod and
+  material. Before each draw, only when the camera moved, every man gets a lod by his height on screen (lod0 over 110
+  px, lod1 over 30 px, 10 % give; at most 24 on lod0 and 200 on lod1, the tallest first) and a man out of the view is
+  not drawn. Shadows come from stand-ins (every man on lod1, lod2 past 120 men) drawn only into the shadow map, which
+  the hangar now redraws only when the parade, its light or the camouflage cover changes (`shadowMap.autoUpdate`
+  false). Only the outfits the parade wears are loaded, behind the hangar's loading step ("Dressing the
+  detachments"); the other war's textures leave the GPU on a swap (`keep`). `?crew2=0` on the menu, or a file that
+  fails, keeps the old baked figures (the gear menu's switch is not stored). Cost on the Gamma's and the Gustav's
+  parades (440 men, 1600 x 900): a frame 1.4M and 0.75M triangles and about 150 draws, from 5.4M and 5.7M and about 290
+  before (the men alone: 13 draws and 1.25M triangles, from 18 and 5.1M); a frame that redraws the shadow map about
+  1.6M and 290 draws. Files on the menu: about 24 MB for the three 1917 outfits (18 MB for the two 1944 ones), about
+  435 MB of textures at most (lod0's only once a man is near).
 
 ### Simulation (`src/sim/`, simulation agent)
 
@@ -538,7 +559,8 @@ settings (lil-gui behind the gear button); `QUALITY` presets (Low/Medium/High/Ul
 shadow map, AO, samples and the fx budget. `window.__drumfire` exposes every system, `frame(dt, draw)`
 and `fastForward(seconds, { unit, scale })`. URL params `?quality=`, `?play=1`, `?difficulty=`, `?unit=N`.
 The page boots through `src/boot.js`: `/` is the main menu (`src/ui/menu.js`, entries from `src/menuItems.js`; only its
-hangar loads three.js, `src/ui/hangar.js`, and nothing of the battlefield), a URL with `play`, `tutorial` or `sandbox` is a game page whose loading screen
+hangar loads three.js, `src/ui/hangar.js`, and nothing of the battlefield; its German dress is the lifelike crewmen,
+`render/crew2/parade.js`), a URL with `play`, `tutorial` or `sandbox` is a game page whose loading screen
 (`src/ui/loading.js`) stands while `init()` builds the world; then `start()` runs `sim.newGame` (or the lesson
 starts) at once.
 
@@ -1435,7 +1457,8 @@ lies over the 3D view, and the console beside it still commands the Group.
   (`check()`, after the guns' step), and so do a new game and the end of a battle; a lesson refuses `man`.
 - **Page** (`gunnerView.js`, `gunner.css`). `POST_ROLE` names the crew role at each post (officer, chief or
   sergeant, layer, loader or loader1, lanyard). `render/crews.js` `GunCrew.setPlayer(role)` hides that man's head (he is never the
-  casualty taken off the gun) and `eye(out)` gives his eyes. The camera sits a little behind and above them (`VIEW`),
+  casualty taken off the gun) and `eye(out)` gives his eyes (with the lifelike crewmen from his head as his clip poses
+  it that frame: "Lifelike crewmen (crew2)"; else from the figure's neck). The camera sits a little behind and above them (`VIEW`),
   turned to the post's work: the middle of the barrel for the commander, the muzzle for the layer, the breech for the
   loader and the firer (`VIEW_KIND`: the Gustav's and the Karl's commanders stand further back and higher). Main cuts
   the camouflage nets away round the sim's piece positions, so the Karl's nets clear where it stands now, not on the
@@ -2813,3 +2836,5 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (camera: the gun that fires next, 2026-11-25) Ported from the Godot battle (its `FocusUnit` and `NextGun`): on the German pages choosing a battery frames its gun that fires next instead of the battery's anchor (main.js `frameGun`, `nextGun`, `GUN_SIZE`, `gunSize`, `FRAME_GUN`; Camera, "Choosing a battery"). `nextGun` takes the first live gun that is ready, else one laying or loaded, else the one furthest through its loading cycle (`loadedBy`: `ji` plus the step's fraction), else No. 1, passing over a `blocked` gun while another can fire. The view is from the front-left quarter (0.9 rad round from the barrel's line as laid), pitch 0.18, the focus 1.3·k above the gun's ground and 10·k away, k the model's size corner to corner over the sFH 13's 7.5 m (the gun the Godot framing was set on), measured from each kind's first rig at barrel level (`GUN_SIZE`, visible meshes, instanced ones by their own boxes); further when the footprint seen from that quarter would not fit nine tenths of the half-width. It frames only on a choice (key, tab, C back, leaving a gun, battle start); the player's orbit and zoom stand between, the zoom glides on from an orbit's distance (`d0`), and `placeEye` keeps the focus on a gun that drives. Not on the title screen or at the V-1 and V-2 sites; when a mode layer frames (`modeR.framing`, the Gustav's tasks) the target goes back to the unit's anchor. The British game keeps its battery view.
 - (crews: spaced, 2026-11-25) Ported from the Godot version's DrillSpacing, DrillStance and DrillGait (2026-11-24, measured there on the sFH 13, the Mörser 18, the Hummel and Bertha): the German crews are spaced (`src/render/crewspace.js`, `GunCrew.spacing`, never the British; Module contracts, "Crews"). After the drill puts each man, `Man.put` settles his place (`m.sp`: the drill's `rawX..rawH`, `sep` clear of the others and the steel, `off` taking up jumps, the stance's turn and step, the face-his-way turn) and fits his gait to the ground he covers. `Man.hand` only asks; `hands()` gives each hand its grip after the man's drill (uncrossed, let go and retaken in a hand's time, following the drill's eased weights); `Man.reach` is the IK call, which `crewcheck.js` now hooks instead of `Man.hand`. Departures from the Godot version, for this game's thirty-odd drills with teams on one staff, handle or roller: men with a hand on something fixed are at work (not pushed apart from each other, moving with what they hold, a jump only above 6 m/s), the hands follow the drill's eased weights, and the lost-grip rule is not ported (it left the railway guns' rammers with their hands in the air through the stroke). Also, spaced: props of a man gone from the gun are hidden (`dropped`); the staff is the first rammer's at the gun (none there, no staff, `crews_heavy.js` too), stood on its butt beside him on his side towards the bore, swung over max(1.05 s, 0.4 s a metre) starting before the stroke (`staffSwing`), the rammer going back only once it is up; the lanyard is drawn from the hand and falls free at the shot (`pullT`: the pull 0.16 s, was 0.06 s); the light guns' loader arrives as the barrel comes home (`loaderAt`); handwheel hands stay on their half of the rim (`rimNear`), and a layer with two wheels and one out of reach puts both hands on the other; the lay wheel stays where the laying left it. `de/wespe.js` `spLoader` reads `m.sp.rawX/rawZ/rawH`, not `m.x`, for the drill's own place. Measured with `node tools/crewaudit.mjs <the 27 German kinds> --scn 0 --json --brief`, seconds past a glance over all 27 drills, `shots/crewaudit-before-godotport.json` against `shots/crewaudit-godotport.json`: grip 222.2 to 205.1, props 6.9 to 7.7, hit 52.3 to 22.7, self 25.9 to 8.4, joint 22.7 to 6.5. Known regressions: props +0.8 s (loads shown a frame or three before the hands reach them); the Hummel layer's left hand cannot reach either handwheel from his post (20.5 s, needs the post or the grips moved in the model); Bertha's rammers 1.3 s worse under the uncross by angle.
 - (render: lifelike crewmen, 2026-11-25) Ported from the Godot game's crew2 (Module contracts, "Lifelike crewmen (crew2)"), German pages only: `public/crew2/` holds its `assets/models/crew2` outfits (six .glb with their checks, `crew2.json`, `clips.json`, three skin pictures); `src/render/crew2/` ports its Clips (CrewAnimator, PoseLimits, PoseSettle, FootPlant) and Crew2/CrewFigure; the contract is the Godot `tools/blender/crew/README.md`. crew.js's figure is still posed by the drill; its mesh is hidden and `GunViews.crew2.sync` drives the lifelike body after each crew's drill. The figure gained `outfitName`, `armIk`, `reached` and `_poseT`. LOD0 to 30 m, LOD1 to 110 m, fine detail within 54 m; full animation within 110 m at crew level 2, every second frame beyond 54 m; LOD2 posed every second frame without hands and casting no shadow; men off-screen not posed; bones kept out of the scene graph. While they are on, `CrewHD` (the close tier at a gun served in person) is not used. main awaits `crew2.ready()` ("Dressing the crews") before compiling. `?crew2=0` gives the old figures, `?crew2=1` forces the lifelike ones; gear menu "Lifelike crewmen". A page loads its crews' outfits only: about 24 MB and about 415 MiB of textures on a 1917 page (720 MiB with all six). Measured cost: +0.35 ms CPU a frame with a battery's crews in view (worst 1.5 ms), draw calls the same in the usual view, triangles 3 to 4 % fewer there. Credits (README): the CMU motion capture acknowledgement, MakeHuman bodies (CC0, made with MPFB), cloth and leather from Poly Haven and ambientCG (CC0; the Godot project's `tools/blender/crew_src/SOURCES.md`). Not yet: the hangar's parade (still the old figures), the gunner's eye from the animator's head.
+- (render: the gunner's eye on the lifelike crewman, 2026-11-25) Ported from the Godot game's `CrewFigure.Eye`: with crew2 on, the first-person eye is the head's joint as the animator posed the man this frame, 0.063 m ahead and 0.075 m above (`render/crew2/index.js` `Man2.eye`, called by `render/crews.js` `GunCrew.eye`; the old figure's neck rule without crew2); the man at the player's post is posed in full every frame, in view or not. Measured on the range over an sFH 13 cycle: the eye 5 to 7 cm from the old one, no frame read before its pose, the view's motion above about 3 Hz 3.2 mm RMS against 2.3 with the old figure (no extra damping). Fixed on the way: `GunCrew.makeField` put the rig back at its place before `gripPost` read the grips' world matrices as root space, so a layer at a named handwheel had the wheel's map position for his home and walked kilometres off whenever he laid (since 2026-11-14), the gunner's view at the layer's post with him; the rig now stays at rest through the men's places.
+- (menu: the lifelike crewmen on parade, 2026-11-25) As the Godot game's hangar (its commit 96d3948): the hangar's German dress is worn by the lifelike crewmen (Module contracts, "Lifelike crewmen (crew2)", "The hangar's parade"). New `render/crew2/files.js` (`Crew2Files`, `OUTFITS`, `standsInZero`: the loading `index.js` had, shared, without `shaderlib.js`; `index.js` `_load` now goes through it with `patch` for the fog, nothing else changed in battle) and `render/crew2/parade.js` (`ParadeCrew2`, `ParadeMen`). `ui/hangar.js`: `men(list, c2)`, a `draw()` for every frame (the men's lods, the shadow's stand-ins), `shadowMap.autoUpdate` false with `needsUpdate` from `light()` and the cover's toggle in `look()`, `bestView` rays through the stand-ins (`userData.ray`, `noRay`), `CREW2` (`?crew2=0`), the parade's `men2` (`park.men2.stats`).
