@@ -5,12 +5,14 @@ Back to the [README](../README.md).
 ## Running it
 
 ```bash
+git lfs install  # once per machine, before cloning (public/crew2 is in Git LFS)
 npm install
 npm run dev      # http://localhost:5201 (Vite runs with --host, so it is also reachable on the local network)
 npm run build    # production bundle in dist/
 npm run preview  # serve the built bundle on http://localhost:4173
 ```
 
+- **Git LFS.** The lifelike crewmen's models, clips and skin pictures (`public/crew2/*.glb`, `*.jpg`, `clips.json`, about 43 MB) are in [Git LFS](https://git-lfs.com) (`.gitattributes`). A clone made without it holds small pointer files instead: run `git lfs pull`. Until then the crewmen fail to load and the game keeps the older figures.
 - **Browser.** A browser with WebGL2 is required.
 - **Sharing.** Build the game and put the contents of `dist/` at the root of a web server.
 - **Any folder.** `vite.config.js` sets `base: './'` and the menu's links, stills and back links are relative (`index.html?...`, `bertha.html`, `menu/<id>.jpg`), so the build runs at the root of a site or in a subfolder (itch.io, a GitHub Pages project page), but not from `file://` (module scripts and the audio worker need a server). For itch.io, zip the contents of `dist/` (`index.html` at the zip's root) and upload it as an HTML game.

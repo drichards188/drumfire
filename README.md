@@ -19,18 +19,19 @@
 ## Play it
 
 ```bash
+git lfs install  # once per machine, before cloning: the crewmen's models are in Git LFS
 npm install
 npm run dev      # then open http://localhost:5201
 ```
 
-You need a browser with WebGL2 and graphics acceleration on. To share it, run `npm run build` and serve `dist/` from any folder of a web server (not `file://`); for itch.io, zip the contents of `dist/` and upload it as an HTML game. Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+The lifelike crewmen are kept in [Git LFS](https://git-lfs.com); cloned without it, run `git lfs pull`, or the game falls back to its older figures. You need a browser with WebGL2 and graphics acceleration on. To share it, run `npm run build` and serve `dist/` from any folder of a web server (not `file://`); for itch.io, zip the contents of `dist/` and upload it as an HTML game. Details: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Controls
 
 | Key | Action |
 |---|---|
 | 1 to 9 | select a unit |
-| P | WW2: man the selected battery's gun in first person (1 to 4 the posts, E the work) |
+| P | German modes: man the selected battery's gun in first person (1 to 4 the posts, E the work) |
 | Mouse drag, wheel | orbit and zoom the camera |
 | Tab, Enter | move to a mission and take it |
 | Space | fire |
