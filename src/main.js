@@ -168,6 +168,28 @@ const NET_CLEAR = { bl15: 17, bl92: 12, bl6: 9, bl60: 9, rail: 32, lefh18: 9, sf
   fk16: 8, k16: 12, m99: 12, rk92: 11, sfh93: 10, beta: 16, k38: 15, hm1: 18, bruno: 30, k5: 36, k12: 45, wespe: 8, hummel: 9, nbw42: 6, swg40: 6 };
 // the muzzle flash light by calibre, in flares.flash units (the fx module sends its own; this is the fallback)
 const flashOf = (calibre) => 4.9e4 * calibre * calibre;
+// The German pages frame the gun that fires next when a battery is chosen (frameGun in init); the British game keeps its
+// view of the battery. GUN_SIZE: per gun kind, the framing's scale `k`, the model's size corner to corner over the
+// sFH 13's (7.5 m), the gun the Godot battle's framing was set on (10 m back, 1.3 m up), and its footprint (x0 x1 z0 z1,
+// metres in the gun's own frame) to fit the view's width. Measured from each kind's first rig as built, so it follows
+// the models from a field gun to the Gustav; only what is drawn (a rig's hidden parts are not the gun)
+const FRAME_GUN = (WW1 || WW2) && !!TH;
+const GUN_SIZE = {};
+const _gb = new THREE.Box3(), _gm = new THREE.Box3(), _gs = new THREE.Vector3();
+const gunSize = (root) => {
+  _gb.makeEmpty();
+  root.updateMatrixWorld(true);
+  root.traverseVisible((o) => {
+    if (!o.isMesh) return;
+    if (o.isInstancedMesh) {
+      o.computeBoundingBox();
+      _gm.copy(o.boundingBox);
+    } else _gm.copy(o.geometry.boundingBox ?? (o.geometry.computeBoundingBox(), o.geometry.boundingBox));
+    _gb.union(_gm.applyMatrix4(o.matrixWorld));
+  });
+  if (_gb.isEmpty()) return { k: 1, x0: -1, x1: 1, z0: -2, z1: 4 };
+  return { k: Math.max(0.5, _gb.getSize(_gs).length() / 7.5), x0: _gb.min.x, x1: _gb.max.x, z0: _gb.min.z, z1: _gb.max.z };
+};
 
 async function init() {
   const view = document.getElementById('view');
@@ -268,6 +290,11 @@ async function init() {
       try {
         const rig = mods.guns.buildGun(p.kind);
         if (!rig?.root) throw new Error('no rig');
+        // (measured in the rig's own frame, the barrel level: before it is placed, turned and elevated)
+        if (FRAME_GUN && !GUN_SIZE[p.kind]) {
+          rig.setElevation?.(0);
+          GUN_SIZE[p.kind] = gunSize(rig.root);
+        }
         rig.root.position.set(p.x, terrain.heightAt(p.x, p.z), p.z);
         rig.root.rotation.y = headingFor(p.bearing);
         rig.setElevation?.(0.5);
@@ -585,6 +612,49 @@ async function init() {
   // ---------------------------------------------------------------- units and camera
   // every unit is the player's but in the career's open battle, where only the lineup's (which is all the sim fields)
   const canCommand = (id) => (RANGE ? UNITS.find((u) => u.id === id)?.kind === RANGE_KIND : state === 'tutorial' || !RESEARCH_ERA || FIELDED.some((u) => u.id === id));
+  // The gun that fires next when ordered (the Godot battle's NextGun): the first live one ready, else one laying or
+  // loaded, else the one furthest through its loading cycle, else No. 1. A gun that cannot make the order (out of arc or
+  // range) never fires (sim/guns.js pickGuns), so it is passed over while another can
+  const loadedBy = (p) => (p.state === 'loading' && p.job ? p.ji + p.job.t / Math.max(0.01, p.job.dur) : -1);
+  const nextGun = (su) => {
+    const live = su.pieces.filter((p) => p.state !== 'dead'), can = live.filter((p) => !p.blocked), ps = can.length ? can : live;
+    if (!ps.length) return su.pieces[0] ?? null;
+    return ps.find((p) => p.state === 'ready') ?? ps.find((p) => p.state === 'laying' || p.loaded) ?? ps.reduce((b, p) => (loadedBy(p) > loadedBy(b) ? p : b));
+  };
+  // German pages (the Godot battle's FocusUnit): choosing a battery (a key, a tab, C back from the free camera, leaving a
+  // gun) frames its gun that fires next, from the front quarter across the muzzle to the breech and the crew, low and as
+  // close as the gun's size allows (GUN_SIZE). Only then: the player's orbit and zoom stand until the next choice. The
+  // focus goes with the gun if it drives (placeEye, per frame). Not the title screen's drift, nor the V-weapon sites, whose
+  // layer frames each step of their drill itself; a layer's framing (the Gustav's tasks) takes the view back to the unit
+  const QUARTER = 0.9; // (rad round from the muzzle's line, to the gun's left)
+  const gunEye = new THREE.Object3D(), _eq = new THREE.Quaternion(), _ef = new THREE.Vector3();
+  let eyeRig = null, eyeUp = 0;
+  const placeEye = (force) => {
+    const r = eyeRig.root.position;
+    if (force || r.x !== gunEye.position.x || r.z !== gunEye.position.z) gunEye.position.set(r.x, terrain.heightAt(r.x, r.z) + eyeUp, r.z);
+  };
+  const frameGun = (u, d0) => {
+    if (!FRAME_GUN || state === 'title' || u.kind === 'v1' || u.kind === 'v2') return false;
+    const su = sim?.unitById?.(u.id), p = su && nextGun(su), rig = p && rigs.get(`${u.id}:${p.i}`), g = p && GUN_SIZE[p.kind];
+    if (!rig || !g) return false;
+    eyeRig = rig;
+    eyeUp = 1.3 * g.k;
+    placeEye(true);
+    chase.setTarget(gunEye, { behind: false });
+    if (d0 != null) chase.dist = d0; // (from an orbit the zoom glides on from where it was: no pop out to 12 m and back)
+    // (the barrel's line as laid now: the traverse pivot, the whole gun when it turns on its bed or platform)
+    _ef.set(0, 0, -1).applyQuaternion((rig.pivots?.traverse ?? rig.root).getWorldQuaternion(_eq));
+    const yaw = Math.atan2(_ef.x, _ef.z) + QUARTER;
+    chase.goalYaw = chase.yaw + ((((yaw - chase.yaw) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
+    chase.goalPitch = 0.18;
+    // the Godot distance, or further when the gun's footprint seen from that quarter is wider than this view (a long
+    // barrel's muzzle, a wide bed or platform: each corner inside nine tenths of the half width)
+    const tw = Math.tan(Math.atan(Math.tan((params.fov * Math.PI) / 360) * camera.aspect) * 0.9), s = Math.sin(QUARTER), c = Math.cos(QUARTER);
+    let fit = 0;
+    for (const x of [g.x0, g.x1]) for (const z of [g.z0, g.z1]) fit = Math.max(fit, Math.abs(z * s - x * c) / tw - (x * s + z * c));
+    chase.goalDist = Math.max(chase.minDist, 10 * g.k, fit);
+    return true;
+  };
   const selectUnit = (i) => {
     if (i < 0 || i >= UNITS.length) return;
     if ((state === 'playing' || state === 'ended') && !canCommand(UNITS[i].id)) {
@@ -593,15 +663,18 @@ async function init() {
     }
     selected = i;
     const u = UNITS[i];
+    const d0 = chase.mode === 'unit' ? chase.dist : null; // (the orbit's distance as it stands: releaseShot puts it in 12 to 90 m)
     freeCam = false;
     following = false;
     chase.free(false);
     chase.releaseShot();
-    chase.setTarget(unitRoot[u.id]);
-    chase.goalDist = unitDist[u.id] ?? KIND[u.kind].dist;
-    // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
-    chase.goalYaw += 0.75;
-    chase.goalPitch = 0.17;
+    if (!frameGun(u, d0)) {
+      chase.setTarget(unitRoot[u.id]);
+      chase.goalDist = unitDist[u.id] ?? KIND[u.kind].dist;
+      // a low three-quarter view from behind the right shoulder: the gun in profile, the blast out of the muzzle
+      chase.goalYaw += 0.75;
+      chase.goalPitch = 0.17;
+    }
     hud.setUnit(u.name, `\u201c${u.callsign}\u201d, ${u.battery}`, WIP_KINDS.has(u.kind) ? WIP_LINE : '');
     renderLayer?.select?.(u.id);
     modeR?.reselect?.(); // a V-weapon site frames its step again
@@ -1557,11 +1630,13 @@ async function init() {
     if (modeR?.framing && sim && state !== 'title' && chase.mode === 'unit' && !freeCam && !chase.dragging) {
       const f = modeR.framing(UNITS[selected]?.id);
       if (f) {
+        if (chase.target === gunEye) chase.setTarget(unitRoot[UNITS[selected].id], { behind: false }); // (its anchor is the layer's)
         if (f.yaw != null) chase.goalYaw = chase.yaw + (((f.yaw - chase.yaw) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
         chase.goalPitch = f.pitch;
         chase.goalDist = f.dist;
       }
     }
+    if (eyeRig && chase.target === gunEye) placeEye(); // (the framed gun drives: a self-propelled gun, the Karl)
     pr?.mark('world');
     world?.update?.(dt, camera);
     pr?.mark('craters');
