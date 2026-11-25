@@ -6,6 +6,7 @@ import { GunCrew } from './crews.js';
 import { VCrew, VKINDS } from './crews_vweap.js';
 import { smooth } from './anim.js';
 import { CrewHD } from './crewhd.js';
+import { Crew2 } from './crew2/index.js';
 
 // Gun rigs posed from the sim every frame: traverse and elevation from piece.az and piece.el, the
 // recoil from the time since the shot (a fast run back on the buffers, a pause, the slow run out on
@@ -80,6 +81,9 @@ export class GunViews {
     try { this.crewHD = new CrewHD(scene); } catch (e) { console.warn('crew HD tier:', e.message); this.crewHD = null; }
     this.build(sim);
     this.allViews = [...this.views];
+    // the lifelike crewmen on the German pages (render/crew2): loaded behind the loading screen (main awaits ready)
+    this.crew2 = new Crew2();
+    this.crew2.load(this.allViews.map((v) => v.crew));
   }
 
   build(sim) {
@@ -156,6 +160,7 @@ export class GunViews {
     const now = sim.time + alpha * STEP;
     const cam = this.camera;
     const pov = this.povDetail ? this.pov : null, at = pov ? this.byKey.get(`${pov.unitId}:${pov.pi}`) : null;
+    this.crew2.begin(cam);
     // at a gun in person: meshes far from the battery need more than a pixel to be drawn (render/detail.js)
     this.detail?.setFocus?.(at ? at.rig.root.position : null);
     for (const v of this.views) {
@@ -216,7 +221,7 @@ export class GunViews {
           // at a gun in person the other batteries' crews are not drawn beyond 60 m; that gun's crew, and the
           // battery's other guns' within 25 m, get the close tier
           if (at && v.unit.id !== pov.unitId && d > 60) level = 0;
-          this.crewHD?.want(v.crew, !!at && !dead && v.unit.id === pov.unitId && (v === at || d < 25));
+          this.crewHD?.want(v.crew, !this.crew2.active && !!at && !dead && v.unit.id === pov.unitId && (v === at || d < 25));
         }
         if (dead) level = 0;
         if (level !== v.lvl) {
@@ -226,9 +231,11 @@ export class GunViews {
         if (level > 0) {
           if (level === 1 && (v.skip = (v.skip ?? 0) + 1) % 3) continue;
           v.crew.update(p, sim, rawDt * (level === 1 ? 3 : 1), level);
+          this.crew2.sync(v.crew, p, now, cam, dt * (level === 1 ? 3 : 1), level);
         }
       }
     }
     this.crewHD?.update();
+    this.crew2.end();
   }
 }

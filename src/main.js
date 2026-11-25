@@ -544,6 +544,7 @@ async function init() {
   });
   // far batteries' and targets' sub-pixel parts are not drawn (src/render/detail.js); off to compare
   gui.add(params, 'detailCull').name('Hide sub-pixel detail').onChange((v) => { if (renderLayer?.detail) renderLayer.detail.enabled = v; });
+  if (renderLayer?.guns?.crew2?.wanted) gui.add(renderLayer.guns.crew2, 'enabled').name('Lifelike crewmen'); // (render/crew2; off: the old figures)
   gui.add(params, 'upscaleSharpen', 0, 1, 0.05).name('Upscale sharpening').onChange((v) => { post.upscale.uniforms.uSharp.value = v; });
   const fPlay = gui.addFolder('Game');
   fPlay.add(params, 'difficulty', ['Easy', 'Normal', 'Hard']).name('Difficulty (next game)').listen();
@@ -1503,6 +1504,8 @@ async function init() {
   }).observe(view);
 
   // ---------------------------------------------------------------- first frame
+  // the lifelike crewmen (render/crew2): their models and clips in place before the shaders are compiled and uploaded
+  await renderLayer?.guns?.crew2?.ready((p) => hud.setLoading(0.72 + 0.12 * p, 'Dressing the crews'));
   await step(0.85, 'Compiling shaders');
   applyQuality(startQuality);
   weather.set(params.weather, true);

@@ -851,6 +851,9 @@ export function buildCrewman(opts = {}) {
   const fig = {
     root, mesh, bones, anchors: { handL, handR, carry }, grip: opts.grip ?? 0.2, outfit: o,
     groundSlope: { x: 0, z: 0 },
+    // for the lifelike crewmen (render/crew2): the outfit's name, which arms the last pose put by IK on a grip and
+    // which of them a reach() put there after it; solvePose also keeps the phase it was asked (_poseT)
+    outfitName: opts.outfit ?? null, armIk: [false, false], reached: [false, false],
     pose: (name, t = 0, blend = 1) => solvePose(fig, name, t, blend),
     reach: (side, point, blend = 1, fingers = null, palm = null, pole = null) => reach(fig, side, point, blend, fingers, palm, pole),
     dispose: () => mesh.skeleton.dispose(),
@@ -1563,6 +1566,8 @@ function solvePose(fig, name, t, blend) {
   }
   carry.position.copy(_pcar); carry.quaternion.copy(_qcar);
   fig._poseName = name;
+  fig._poseT = t;
+  fig.armIk[0] = S.arms[0].ik; fig.armIk[1] = S.arms[1].ik; fig.reached[0] = fig.reached[1] = false;
 }
 
 const _rf = new V3(), _rn = new V3(), _rp = new V3();
@@ -1584,6 +1589,7 @@ function reach(fig, side, point, blend, fingers, palm, pole) {
   blendGrip(B, i, RA, k);
   armIK(i, RA, _qc, _sh);
   for (let j = b; j < b + 3; j++) B[j].quaternion.copy(TQ[j]);
+  fig.armIk[i] = fig.reached[i] = true;
 }
 
 // The outfit options for a gun-crew role at spot i (varied skin so a crew is not clones).
