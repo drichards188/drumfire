@@ -424,7 +424,7 @@ export class GunnerView {
     const rd = (k) => `${k} round${k > 1 ? 's' : ''}`;
     set(this.fireChip, p.rounds > 0 ? `FEUER: ${rd(p.rounds)}` : u.mode === 'manual' ? `on your pull: ${rd(u.order.rounds)}` : 'no Feuer yet');
     this.fireChip.title = p.rounds > 0 ? 'The battery has ordered Feuer for this gun' : u.mode === 'manual'
-      ? 'The battery is on manual: the firer\'s pull is the order to fire for this gun (rounds per gun: R on the console)'
+      ? 'The battery is at your orders: the firer\'s pull is the order to fire for this gun (rounds per gun: R on the console)'
       : 'The battery commander has not given Feuer for this gun yet';
     cls(this.fireChip, 'fire', p.rounds > 0);
     set(this.orderNote, !o ? (u.mode === 'manual' ? 'Lay the battery from the console: click the board, or take a mission.' : 'The battery commander has none for this gun yet.')

@@ -21,7 +21,9 @@ dirt and smoke move like dirt and smoke, light falls off, sound travels at 343 m
 with the wheel; F follows the unit's newest shell to its burst); the right half is the unit's fire
 control console: the artillery board (a trench map with the grid), the fire order, the range table,
 the observers' messages and the guns' state. Units not selected fight on their own (AI crews) in
-whatever mode the player left them.
+whatever mode the player left them. (The German open battles have no auto mode since 2026-11-25: every battery waits
+for the player's orders and the crews fight on their own only while the player serves a gun; the German pages' console
+has no range table. See UI.)
 
 This file is the contract between the agents building the game in parallel. If you need to change a
 shared interface, keep it backward compatible and note it in the "Changelog" at the end.
@@ -364,10 +366,61 @@ line in degrees and minutes, range in yards, charge, elevation from the range ta
 the range table; the message pad (telephone and wireless messages as written slips); the guns' state
 (loading step, crew, wear, ammunition); the missions list. Keys: Tab next mission, Enter take it,
 Space fire, G guns (1 GUN, SECTION, BATTERY), arrows correct (up/down add/drop, left/right line), Q/E charge, R rounds, Z fuze, A mode
-(auto/manual), S SOS. Main owns 1 to 5, C, F, M, H, F3, `[` and `]`. The Panel itself owns Shift+A and the ALL AUTO / ALL
+(auto/manual; not in the German open battles), S SOS. Main owns 1 to 5, C, F, M, H, F3, `[` and `]`. The Panel itself owns Shift+A and the ALL AUTO / ALL
 MANUAL pair under the status block of the battery tabs (`.tall`): every battery the player commands (`isUnlocked`) and
 alive to one mode through `onCommand(id, 'mode')`, a battery on HOLD too; lit when every one is in that mode; Shift+A sets
-manual when all are on auto, else auto; hidden on the lesson range (`sim.scripted`) and with a single battery.
+manual when all are on auto, else auto; hidden on the lesson range (`sim.scripted`), with a single battery and in the
+German open battles (`TH.noAuto`).
+
+**The German pages' console** (`TH.lean`, since 2026-11-25, the Godot demo's of 2026-11-20 and 2026-11-24): main.js
+sets it on every WW1 and WW2 German page but the campaign missions (`setUiTheatre({ lean: true, noAuto: NO_AUTO })`):
+the open battles, the special missions, the lessons and the test range. The British game and the campaign missions keep
+the console above. What changes (`console.js`, `orderCard.js`, `gunsCard.js`, `board.js`, `panel.js`):
+- **No header.** The callsign plate (the tab says it), the status line, AUTO / MANUAL / HOLD and the four S.O.S. keys are
+  gone; S still calls the Sperrfeuer. A (auto or manual) still works where there is an auto mode (the special missions); in the open battles (`TH.noAuto`) `KeyA` returns false. The gun's note (`cfg.note`) is the guns
+  card's hover text.
+- **The status slip** (`.statslip`, the `status` tut name): under the fire order's target, or atop the right column when a
+  special card takes the fire order's place (the Paris Gun's SCHUSSWERTE), shown only when it has something to say, in
+  this order: a Sperrfeuer call no battery answers (flashing, below), BATTERY SILENCED, the console's answer to the last
+  key (3.2 s), HOLDING, WITH ITS CREW (a battery handed over while the player serves a gun: its work, and that any order
+  takes it back), NOT READY with the controller's gate and the card to see, CANNOT FIRE with the short reason (the whole
+  on hover). Hidden with no target laid or nothing wrong (how to fire is on the FIRE key).
+- **The fire order** keeps what the player acts on: the target's name large with its range and grid square under it
+  (the observers' and the Arko's slips give targets by the square), the charge ("of N · auto" or "set by you", from
+  `order.chargeAuto`), rounds, fuze, guns and the corrections made. The line, the elevation, the time of flight and the
+  F.O. stamp go (the battery works them out). The correction keys carry bold drawn arrows (SVG `.karrow`; the key and
+  the Shift step on hover), the step key a dot for each of its five sizes (`.kdots`), FIRE "n of m ready · Space".
+- **No range table** (`rtab` is neither mounted nor updated). The guns card stands under the fire order in its place and
+  the missions and the messages share the bottom row; a special card keeps its places (the Paris Gun's four, the Gustav's
+  and the Karl's procedure card with the guns in the bottom row).
+- **The guns card** (`buildLean`, `updateLean`): one line a gun: a lamp (green ready and laid, amber loading or laying,
+  red knocked out, dark idle), No. N (· YOU while manned), what it is doing (`stateText`, as before), the crew only when
+  short, WORN and the wear bar only from 0.5 wear, health, MAN or LEAVE. The bed and move rows are unchanged.
+- **The board's bar** is one line (`.bbar.one`): how the board is worked while the pointer is off it (`TH.boardHint` or a
+  short default), under it the grid square, the range and the target, no bearing; the scale bar sits lower.
+- **The battery tabs** (`LEAN_LETTER`): nothing in the ring at the player's orders, C with its crew (the player at a
+  gun), H holding; no ALL pair and no Shift+A (all three only with `TH.noAuto`; the special missions keep A, M, the
+  ALL pair and Shift+A). Hold's reason (`guns.js` `problem` on a `metric` gun) no longer names A
+  or MANUAL.
+- The V-1 and V-2 launch console (`launch.js`) keeps its own header with AUTO / MANUAL / HOLD and A.
+
+**No auto mode in the German open battles** (`TH.noAuto`, main.js `NO_AUTO`: a theatre, no campaign mission, not the
+range, op kind 'battle': the 1918 ridge and the WW2 Flanders battle). The sim's units still start on auto (the
+crews-only tests, the attract bombardment), so main's `start()` commands every one to manual after `newBattle`. Every
+battery then waits for the player's orders: its crew loads and lays but takes no mission and fires no round by itself.
+Only while the player serves a gun do the other batteries fight on under their own crews (`othersAuto`, "The gunner"),
+back at the player's orders on leaving. The special missions keep their starting modes and the A key (the lean console has no mode switch to click, but
+A, Shift+A and the ALL pair work there as before), so a supporting battery or the Paris Gun can still go to its crew.
+The lessons set their own modes.
+
+**The Sperrfeuer call nobody answers** (`common.js` `unanswered(sim)`, only with `TH.noAuto`): a live `sos` mission with
+no live battery on it (`missionId`) laid (`order.ok`) and firing, as `{ m, sector, name }`; the Panel keeps it each frame in
+`panel.call`. The console's slip says "SPERRFEUER B, name: NO BATTERY ANSWERS! Press S" and flashes (`.statslip.alarm`),
+with the bell (`snd('bell')`) every 4 s, at most 12 a call, only while sim time runs (the count starts again if the
+batteries leave the line with the call still up); its sector chip over the tabs blinks red (`.fchip.call`) with the
+call on hover; and main puts a red banner over the 3D view (`hud.js` `sosCall(call, atGun)`, `#sos-call`, while the
+battle is playing) whose second line, at a gun, says P comes first (the gunner's `keysOff` keeps S from the console).
+S puts every gun that can reach on the line; a Sperrfeuer no battery could lay on says so on the slip.
 
 ### Audio (`src/audio.js`, audio agent)
 
@@ -438,7 +491,8 @@ Conventions as implemented:
   loaded piece is `state: 'laying'` with `job.step 'lay'`. `piece.loaded` turns true when the round is rammed. `recoil` 0..1 (kick in
   0.18 s, run out over `GUNS.runout`), `breech` 0..1. `piece.rounds` is the rounds left in the series.
 - Commands: besides the table above, any of mission/lay/correct/charge/fuze/rounds/fire from the player switches an 'auto' unit to
-  'manual' (the AI would otherwise undo it). `fire` returns false when the order is not laid-able. `sos` ignores the unit id; a
+  'manual' (the AI would otherwise undo it); in the German theatres `sos` also takes back a battery the gunner handed
+  to its crew ("The gunner"). `fire` returns false when the order is not laid-able. `sos` ignores the unit id; a
   unit that cannot reach the line (range or arc) is left alone. Ranging: with `rounds 1` on a mission in state 'ranging' and no `guns`,
   only the lead piece fires; `rounds > 1` fires every piece (and moves the mission to 'ffe'). The console always sends `guns` for units
   with more than one piece (selector `memo.guns`: '1', '2' or 'all'). On auto it sits on 1 GUN while ranging or with no task and goes to
@@ -943,14 +997,16 @@ load, and the career battle opened straight from a link, until the lesson is fin
 which stores `'never'` in localStorage `drumfire.invite`; Not now and Start ask again next load; never under
 `navigator.webdriver`). The Gruppe lends a battery above a new career's: the ridge's WW2 21 cm Mörser 18 pair "Julius"
 (ops.js `RIDGE_WW2`, unit 11) with every upgrade, so the career's first battle with its one K 17 feels the difference.
-Steps: the view, the console a section at a time (the battery's header, the board, the fire order, the range table, the
-guns, the calls, the messages), take a call (a tank laager: hard, so the fire for effect has work to do), watch No. 1
+Steps: the view, the console a section at a time (the battery: its tab, the slip that says why it cannot fire, that it
+waits for orders and S for the Sperrfeuer; the board, the fire order, the guns, the calls, the messages; since
+2026-11-25 the lean console's, `TH.lean`, so the range table's step and the header's are gone), take a call (a tank laager: hard, so the fire for effect has work to do), watch No. 1
 gun lay and load (main's `host.closeUp(i)` puts the camera on that gun), one ranging round once it is ready, ride the
 shell, the VB's report, apply the correction, bracket, fire for effect until three of the four tanks are wrecked; then
 at the gun (an ammunition dump, soft, its call laid only once the laager's last shells are down; its first round lands
 160 m over, so there is always a correction: not a battery, whose aim point carries the 70 to 200 m `cbErr`): man it
 (P), lay and fire with crew help on, read back the corrected command at post 1, then with crew help off the barrel
-down, load, prime, lay and fire, watch it land, crew help on (C), leave (P); `finish` only if the dump still stands. Lesson fields it adds (any lesson may use them): `kinds` (main builds the ridge's theatre with
+down, load, prime, lay and fire, watch it land, crew help on (C), leave (P; the card says that in a battle the other
+batteries fight on under their crews while the player is at a gun); `finish` only if the dump still stands. Lesson fields it adds (any lesson may use them): `kinds` (main builds the ridge's theatre with
 them and fields only them: key 1 is the first), `levels` (the lent battery's look, models/looks.js), `loadout`
 (`sim.newGame`'s), `gunnerFrom` (the step from which P and MAN work: `tutorial.canMan`; the sim allows the gunner in this
 scripted game through `newGame({ manning: true })`, `sim.manning`), `spotlight`, `noSkip` (no Skip step: every step is
@@ -1259,12 +1315,30 @@ lies over the 3D view, and the console beside it still commands the Group.
   commander gives the fire orders (guns.js `fire`). The gun keeps the order's time and `p.fireAt` stays at Infinity
   until a pull starts, so the crew covers its ears with the pull. A manual battery is the player's from the console,
   and a pull with no fire order fires this gun alone on the battery's order, its rounds per gun (`fire(u, [i])`). An auto battery does not wait: rounds
-  ordered that the gun has not moved on for 40 s lapse, with a radio message.
-- **Other batteries** (`othersAuto`, the gear menu, default on): those on manual go to auto while the player is at a
-  gun and back to manual on leaving, if still on auto.
+  ordered that the gun has not moved on for 40 s lapse, with a radio message. In the German open battles (no auto
+  mode, main.js `NO_AUTO`) the manned gun's battery is always the player's: arriving at a handed-over battery's gun
+  takes it back (below).
+- **Other batteries** (`othersAuto`, the gear menu "At a gun: other batteries to auto", default on; since 2026-11-25
+  the German open battles' only auto). On the first gun manned every other live battery on manual goes to its crew
+  (`Gunner.hand(v)`: mode auto, its id in `st.others`, `sim.crews.handOver(v)`); from a gun of one battery to a gun of
+  another, the battery left goes to its crew and the one arrived at comes back to the player's orders (out of
+  `st.others`, auto to manual). The radio says which. On leaving (`unman`) those still on auto come back to manual,
+  laid where they stand ("2 batteries are back at your orders, laid where they stand"); a series begun is fired out and
+  nothing more is fired without an order. A battery the player gives an order (`TAKE_MANUAL`) stays the player's, and
+  so does one put on the Sperrfeuer (`ww1/theatre.js` and `ww2/theatre.js` `sos`: a battery `handedOver` goes to
+  manual, else its crew would leave the line for the work it had). `handedOver(u)`: on auto only because the player is
+  at a gun.
+- **Taking over** (`sim/crews.js` `Crews.handOver(u)`, 2026-11-25; until then the gunner only set the mode and a crew
+  given a battery mid-mission dropped the mission to pick afresh). The crew takes 3 to 8 s to take the battery over
+  (`ai.wait`), then carries on its live mission from where it stands: the Sperrfeuer kept up, the Feuerwalze laid on its
+  line as a lift that is due, fire for effect (the mission in 'ffe', on target, or the last report ok), or ranging (a
+  round in flight waited for, `await`, else a ranging round); a bed out of arc is relaid onto the mission. While
+  `ai.own` the player's last order comes first (a series on a map point fired out, a gate cleared). A battery with no
+  mission picks its own work after that, and answers a Sperrfeuer call still up 8 to 36 s later. Crews-only battles
+  never come here.
 - **Shape.** `sim.gunner` (`Gunner`, made by `SpecialWW2`), and `sim.gunner.st`: null, or `{ unitId, pi, kind, post,
   assist, order { az, el, charge, fuze, ok, why, n, acked }, ack, hold { what, t, dur }, next { post, key, text, wait },
-  why, others, drive { az, el } }`. `piece.manned`: `sim/guns.js` `updatePiece` hands such a piece to `sim.gunner.updatePiece`. The piece
+  why, others, drive { az, el } }`, plus `hand(v)` and `handedOver(u)` (above). `piece.manned`: `sim/guns.js` `updatePiece` hands such a piece to `sim.gunner.updatePiece`. The piece
   keeps the cycle's fields, so the console, the crew's choreography and leaving the gun mid-cycle work unchanged.
   Commands `man { piece, post, assist, othersAuto }`, `post { post }`, `unman`, `assist { on }`, `drive { axis, dir }` go through
   `sim.command` and `SpecialWW2.command`; they are not in TAKE_MANUAL, so manning keeps the battery's mode.
@@ -1417,7 +1491,8 @@ shells; 30 degrees each way on its racer; not `ready`: it starts in pieces on it
 (Feuerstellung), clock 06:00 to 18:00 over 2700 s (`timeLimit` 2700). First the Stellungsbau (work gangs the player
 sends to the tasks), then each round's Feuerablauf (gauge and charge, firing data, load and lay, the firing key);
 the Armee's orders (`op.paris`) come once the gun stands. No British gun reaches it, only Camel raids (enemy.js
-`HUNT`). The board draws the plain grid (no salient, no lines). The gun starts on manual (A hands it to the crew).
+`HUNT`). The board draws the plain grid (no salient, no lines). The gun starts on manual (A handed it to the crew
+until 2026-11-25; the German pages' console has no mode switch, UI).
 Controller `src/ww1/paris.js` (below).
 
 The British side (`src/ww1/ops.js` sites, `src/ww1/targets.js`; models in `models/t/ww1/`):
@@ -1585,8 +1660,8 @@ left, BARREL (Y), the agents' reports on the last five rounds) and its targets c
 table's place: one row per target, its range and line, the open order with its rounds and time left; a click, or Tab
 and L, lays on it). Every label, row and key has an English `title` saying what it is and what to do (the task rows
 also what they wait for and how long is left; the big key what pressing it does now). Keys that mean nothing on this
-gun (R, Z, G, X, Backspace) say so. The status line names the card (STELLUNGSBAU or FEUERABLAUF) while the gate holds
-the gun. The map: `src/ui/consoles/parisMap.js` on the artillery board through the theatre (`src/ww1/ui.js` sets
+gun (R, Z, G, X, Backspace) say so. The status line (the lean console's slip atop the right column, UI) names the card
+(STELLUNGSBAU or FEUERABLAUF) while the gate holds the gun. The map: `src/ui/consoles/parisMap.js` on the artillery board through the theatre (`src/ww1/ui.js` sets
 `TH.overlay`, `TH.hoverText`, `TH.mppMax` 450, `TH.boardHint`, `TH.fitTip`, `TH.aimTip` for the mission; shared
 changes in `board.js`: it calls `TH.overlay(board, g, sim, unit, T)` after the units and shows `TH.hoverText(board, x,
 z, sim, unit)` in the readout when it returns text, reads the hint and the FIT and AIM tips from TH, and its metric grid
@@ -2646,3 +2721,4 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (render: the warm-up draws the empty meshes, 2026-11-15) At the user's request (lag early in a level 6 ridge battle, read from `perf/`: 267 to 574 ms stalls outside the frame on the first look at the K 38 and the K 12 and on the K 38's first round): three.js skips a draw with no instances, so the warm-up never drew the meshes that start empty, and their first real draw (the first shell of each kind in flight, the first smoke, glow, debris, clods, flares, infantry, crater decals) was the browser's first too. `warmUp` now gives each one instance (or its whole draw range) for its draw and puts the count back: 216 instanced meshes and 7 instanced geometries in that battle. Not yet measured on the user's machine; the stalls on the first look at a battery came with nothing new on screen and may have another cause.
 - (render: the K 38's crew without the garbage, 2026-11-15) At the user's request ("what lag do you see in the logs", then "yes to both"): the 30 to 130 ms frames in the render layer, every one with the K 38 selected, were garbage collections landing in its crew's code, which made about half of the battle's garbage (11.4 MB a second allocated in all, measured headless with V8's sampling heap profiler over the same battle). `GunCrew.snapPair` searched up to 3,600 places a call, four calls a frame, though the answer seldom changed (the tray's end is always 0.75 m out for the two-man carry): the answer is now kept per call site and given back while its inputs and the blockers within its reach are the same (`sameNear`), the same place as a new search (checked against the old search over 57,600 calls: no difference). `crewfield.js` uses `hyp` (a square root) for `Math.hypot` in its hot loops (`free`, `rAt`, the route's cell test, `closest`): V8 allocates an array per `Math.hypot` call. The K 38's crew went from 638 to 159 MB of garbage in two minutes of the battle, the battle from 11.4 to 8.9 MB a second. Left: the terrain's height lookups (`terrainHeight.js` `surface`, `natural`, about 2.4 MB a second) and `fx.update` (about 2.8 MB a second) make most of the rest.
 - (render: the loading screen waits for the GPU, the recorder logs freezes, less garbage, 2026-11-15) At the user's request ("theres some more lags in my most recent playthrough", `perf/20261115-132100-3af3`: a 1.5 s frame as the battle opened; stalls of 1.5 s, about 3 s and 4.3 s in the battle with the page idle; two 40 to 54 ms frames in the render layer with the K 38 selected). The battle's first frame waited on the warm-up that `newBattle` had just drawn (the browser draws it later, in its GPU process; the atmosphere's readback in that frame waited for it): main now awaits `warmup.js` `gpuSettled` (a fence) between the battle's `start()` and `hideLoading()`. The stalls in the battle are not explained: nothing new was drawn in the frames before them and the page's own work was small. To tell them from the player switching windows, the recorder now writes a `gap` line for every gap over 0.5 s it leaves out of the frame times (`hidden`, `blur`, `focus`, the browser's long-animation-frame report), and a freeze with the window showing is also captured as a spike with the frames before it; `perfreport` lists the gaps (for older sessions, the seconds missing), `perfwatch` prints them. Garbage, measured headless as before (two minutes of the same battle, the K 38 selected): 7.0 to 5.9 MB a second. A regex literal is a new object each time it runs: `/^pair/` tested per man (`crews.js` `PAIR`), the ramp rammers' and heavy crews' role tests and the thousands separators (`common.js`, `board.js`) are made once. `GunCrew.blockers` fills its list in place and reads each field once (the crews' many object shapes send V8's reads through its generic path, which boxes each number: 780 to 408 bytes a call). `Level.setHole` compares the last hole number by number (it built a key string per level per frame), the crew voices count their lines once, the shell renderer walks an array of kinds, a dust puff that rides the ground looks it up again only after drifting 0.3 m (`fx.js` `hx`, `hz`), the Gustav site's works keep each point's ground height until a crater lands or the site moves, and `terrainHeight.js` `natural` calls `Math.hypot` only past 15,999 m, where its far hills start (the heights checked identical at 800,000 points, so the sim is unchanged). The crew audit for the K 38 and the Mörser 18 is byte-identical to before. Left: a terrain height lookup allocates about 456 bytes (the sampler's numbers boxed between its functions); most of the rest is the fx update, the board and the panel.
+- (German console: the Godot demo's, and no auto mode, 2026-11-25) The German pages take the Godot demo's console (its commits of 2026-11-20 and 2026-11-24); the British game and the campaign missions are unchanged (UI, "The German pages' console"). **No auto mode in the German open battles** (main.js `NO_AUTO`: a theatre, no campaign mission, not the range, op kind 'battle'): `start()` puts every battery on manual and each waits for the player's orders. Only while the player serves a gun do the others fight on under their own crews, and they come back to the player's orders on leaving, laid where they stand; moving to a gun of another battery hands over the one left and takes back the one arrived at; any order, the Sperrfeuer included (`ww1/theatre.js`, `ww2/theatre.js` `sos`), takes a handed-over battery back. The gunner now hands a battery over through `sim/crews.js` `Crews.handOver(u)`, whose crew carries on the live mission (the Sperrfeuer, the Feuerwalze's line, fire for effect, ranging) where it used to drop it and pick afresh; `Gunner.hand`, `handedOver`, the radio lines on manning and leaving ("The gunner"). **The Sperrfeuer call nobody answers** (`common.js` `unanswered`, only with `TH.noAuto`): a red banner over the 3D view (`hud.js` `sosCall`, `#sos-call` in index.html, style.css), the console's slip flashing with a bell every 4 s (at most 12 a call), the sector chip blinking (`.fchip.call`); S answers it. **The lean console** (`TH.lean`, every German page but the campaign missions): no header (callsign plate, status line, mode switch, S.O.S. keys; S still calls the Sperrfeuer; A only where there is an auto mode); the status is a slip in the fire order shown only when it has something to say; the fire order keeps the target (name large, range and grid square), the charge (auto or set by you), rounds, fuze, guns and corrections, without the line, elevation, time of flight and the range table; the guns card is one line a gun under the fire order (lamp, state, the crew only when short, the wear only when worn, health, MAN/LEAVE); missions and messages share the bottom row; the correction keys have bold drawn arrows and the step key five dots; the board's bar is one line with no bearing; the tabs' ring shows nothing at the player's orders, C with its crew, H holding; no ALL AUTO / ALL MANUAL and no Shift+A (these three only in the open battles, `TH.noAuto`; the special missions keep A). The hold reason on a `metric` gun (`guns.js` `problem`) no longer names A or MANUAL, and the gun card at a gun says "at your orders" for manual. Basic training (`ww1/tutorial.js`): the header step is now about the tabs and the battery waiting for orders, the range table step is gone, the fire order and guns steps describe the new cards, and the leave step says the other batteries fight on while the player is at a gun. The special missions keep their starting modes and A (and Shift+A and the ALL pair), so a supporting battery or the Paris Gun can still be handed to its crew; the V-1 and V-2 launch console keeps its own header and A.

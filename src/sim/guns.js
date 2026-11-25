@@ -188,7 +188,9 @@ export class Guns {
     // firing position), and an arc may change with the gate (the bed). A launch site's console walks the drill itself.
     const unreachable = o.why === 'out of range' || o.why === 'inside minimum range';
     if (u.gate && (g.launcher || !unreachable || g.special === 'karl')) return g.launcher ? '' : u.gate;
-    if (u.mode === 'hold') return short ? 'holding (A or MANUAL to go on)' : 'the battery is holding (cease fire): press A or MANUAL to go on';
+    // (the German console has no mode switch since 2026-11-25: no A, MANUAL or HOLD to name)
+    if (u.mode === 'hold') return g.metric ? (short ? 'holding its fire' : 'the battery is holding its fire')
+      : short ? 'holding (A or MANUAL to go on)' : 'the battery is holding (cease fire): press A or MANUAL to go on';
     const live = u.pieces.filter((p) => p.state !== 'dead');
     const len = (m) => (g.metric ? `${commas(m)} m` : `${commas(m / YARD)} yards`);
     const deg = (r) => `${+(Math.abs(r) / DEG).toFixed(1)}`;

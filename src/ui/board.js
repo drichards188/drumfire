@@ -100,6 +100,11 @@ export class Board {
     // (a second line of the bar, so neither it nor the grid reference above it is cut short; its gaps as dots)
     this.hint = el('span', 'bhint', (TH.boardHint ?? 'click: lay the guns here   click a target: take its mission   drag: pan   wheel: zoom').replace(/ {2,}/g, '  ·  '));
     this.bar.append(this.refEl, this.hint);
+    // the German pages' console (TH.lean, 2026-11-25): one line, what is under the pointer or how the board is worked
+    if (TH.lean) {
+      this.bar.classList.add('one');
+      this.idleText = (TH.boardHint ?? 'click: lay   click a target: take it   drag: pan   wheel: zoom').replace(/ {2,}/g, '  ·  ');
+    }
     const tools = this.tools = el('div', 'btools');
     const mk = (t, tip, fn) => { const b = new Btn({ main: t, cls: 'mini', onClick: fn, tip }); tools.append(b.el); return b; };
     mk('+', 'Zoom in', () => this.zoom(1 / 1.4));
@@ -517,7 +522,7 @@ export class Board {
     g.drawImage(this.layer, 0, 0, this.W, this.H);
     // (and what lies over the map: the tool keys, the north arrow, the scale and the bar along the foot)
     const W = this.W, H = this.H, bh = this.bar.offsetHeight + 2;
-    this.boxes = [...(this.placeBoxes ?? []), [0, 0, this.tools.offsetWidth + 8, this.tools.offsetHeight + 8], [W - 64, 18, W, 82], [10, H - 58, 168, H - 37], [0, H - bh, W, H]];
+    this.boxes = [...(this.placeBoxes ?? []), [0, 0, this.tools.offsetWidth + 8, this.tools.offsetHeight + 8], [W - 64, 18, W, 82], TH.lean ? [10, H - 44, 168, H - 23] : [10, H - 58, 168, H - 37], [0, H - bh, W, H]];
     // the targets' symbols too (drawn after the range rings, which would have their labels under them)
     for (const t of sim.targets || []) {
       if (!t.known || t.alive === false) continue;
@@ -549,9 +554,14 @@ export class Board {
       const x = this.wx(h.px), z = this.wz(h.py);
       const range = Math.hypot(x - unit.pos.x, z - unit.pos.z), br = bearingOf(x - unit.pos.x, z - unit.pos.z);
       const t = this.pickTarget(h.px, h.py), own = TH.hoverText?.(this, x, z, sim, unit);
-      setText(this.refEl, own ?? `${TH.ref(x, z)}   ${yd(range)} ${lenShort()}   ${dm(br)}${t ? '   ' + t.name : ''}`);
+      // (the lean bar: no bearing, a number the battery works out and the player never acts on)
+      setText(this.refEl, own ?? `${TH.ref(x, z)}   ${yd(range)} ${lenShort()}${TH.lean ? '' : `   ${dm(br)}`}${t ? '   ' + t.name : ''}`);
       this.cv.classList.toggle('pick', !!t);
-    } else { setText(this.refEl, TH.refHint); this.cv.classList.remove('pick'); }
+      if (this.idleText) this.refEl.classList.remove('idle');
+    } else {
+      setText(this.refEl, this.idleText ?? TH.refHint); this.cv.classList.remove('pick');
+      if (this.idleText) this.refEl.classList.add('idle');
+    }
   }
 
   drawSos(g, sim, missions, T) {
@@ -939,7 +949,7 @@ export class Board {
     // scale bar in thousands of yards
     const yardPx = lenU() / this.view.mpp;
     let bar = 1000; while (bar * yardPx > 150) bar /= 2; while (bar * yardPx < 60) bar *= 2;
-    const bx = 14, bz = H - 44; // (above the two lines of the bar)
+    const bx = 14, bz = TH.lean ? H - 30 : H - 44; // (above the bar: two lines, or the lean console's one)
     g.fillStyle = INK; g.fillRect(bx, bz, bar * yardPx, 3);
     g.fillRect(bx, bz - 3, 1.2, 9); g.fillRect(bx + bar * yardPx - 1, bz - 3, 1.2, 9);
     g.font = `9px ${TYPE}`; g.textAlign = 'left'; g.textBaseline = 'bottom'; this.halo(g, `${commasInt(bar)} ${lenShort()}`, bx, bz - 4);

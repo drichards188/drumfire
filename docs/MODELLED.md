@@ -33,7 +33,8 @@ In `src/sim/`, headless and deterministic per seed. The German modes plug their 
 - **Errors.** The fall of shot moves with a hidden map error on every fresh lay, each gun's calibration error, barrel wear, the day's wind and random dispersion; ranging finds them.
 - **Damage** comes from a game table of shell against target hardness, scaled by the fuze: instant for men and wire, delay against concrete and dumps, shrapnel against men in the open. Every part of a target has its own hit points.
 - **Counter-battery** runs on each unit's signature (step 5 of [a fire mission](PLAYING.md#how-a-fire-mission-works)), which the enemy's batteries answer.
-- **AI crews** run every unit you are not operating and are deliberately imperfect. On Normal the all-auto Group loses most 1917 battles and a competent player wins most (checked over 72 seeds with `tools/simtest.mjs`).
+- **AI crews** are deliberately imperfect. On Normal the all-auto Group loses most 1917 battles and a competent player wins most (checked over 72 seeds with `tools/simtest.mjs`).
+- **Who fights a battery.** In the 1917 game the crews run every unit you are not operating. In the German open battles every battery waits for your orders, and the crews take over the others only while you serve a gun in person, carrying on the missions they had.
 
 ## Sound
 

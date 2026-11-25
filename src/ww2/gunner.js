@@ -147,16 +147,28 @@ export class Gunner {
       };
       // a fire order already standing: its time is the crew's to keep (the firer pulls when the gun is laid)
       if (p.rounds > 0) { this.st.sched = p.fireAt; p.fireAt = Infinity; }
+      // othersAuto: the batteries the player is not with fight on under their own crews, each from where it stands
+      // (sim/crews.js handOver). On the first gun manned, every other battery on the player's orders; from a gun of
+      // one battery to a gun of another, the battery left, while the one arrived at comes back to the player's orders.
+      // A battery the player took back with an order (sim.js TAKE_MANUAL) stays the player's.
+      let handed = 0, back = false, moved = false;
       if (a.othersAuto && !this.st.others) {
         this.st.others = [];
-        for (const v of sim.units) if (v !== u && v.alive && v.mode === 'manual') { v.mode = 'auto'; this.st.others.push(v.id); }
+        for (const v of sim.units) if (v !== u && v.alive && v.mode === 'manual') { this.hand(v); handed++; }
+      } else if (a.othersAuto && was && was.unitId !== u.id) {
+        moved = true; // (the one handed over here is the battery left, whether or not the one arrived at was its crew's)
+        const i = this.st.others.indexOf(u.id);
+        if (i >= 0) { this.st.others.splice(i, 1); if (u.mode === 'auto') { u.mode = 'manual'; back = true; } }
+        const left = sim.unitById(was.unitId);
+        if (left?.alive && left.mode === 'manual') { this.hand(left); handed++; }
       }
       this.track(u, p, true);
       // the command in hand when the player arrives counts as read back (the gun commander had it)
       if (this.st.order?.ok) this.acknowledge();
-      const post = POSTS.find((q) => q.id === this.st.post), handed = !was && this.st.others?.length;
+      const post = POSTS.find((q) => q.id === this.st.post);
       sim.radio(`You take your place at No. ${p.i + 1} gun of ${u.callsign} as the ${post.name} (${post.en}). Crew help ${this.st.assist ? 'on' : 'off'}.`
-        + (handed ? ` ${handed} batter${handed > 1 ? 'ies go' : 'y goes'} to auto until you leave the gun.` : ''), 'info');
+        + (back ? ` ${u.callsign} is back at your orders.` : '')
+        + (handed ? ` ${handed > 1 ? `The other ${handed} batteries fight on under their own crews` : moved ? 'The battery you left fights on under its own crew' : 'The other battery fights on under its own crew'} until you leave the gun.` : ''), 'info');
       this.emit('man', u, p);
       return true;
     }
@@ -196,10 +208,24 @@ export class Gunner {
       p.manned = false;
       if (p.rounds > 0 && !(p.fireAt < Infinity)) p.fireAt = Math.max(st.sched ?? sim.time, sim.time);
     }
-    if (restore && st.others) for (const id of st.others) { const v = sim.unitById(id); if (v?.alive && v.mode === 'auto') v.mode = 'manual'; }
+    let n = 0;
+    if (restore && st.others) for (const id of st.others) { const v = sim.unitById(id); if (v?.alive && v.mode === 'auto') { v.mode = 'manual'; n++; } }
     this.st = null;
+    // (the batteries come back as they stand: laid, on their missions, a series begun fired out; nothing more is fired
+    // without the player's order)
+    if (n) sim.radio(`${n > 1 ? `${n} batteries are` : 'One battery is'} back at your orders, laid where ${n > 1 ? 'they stand' : 'it stands'}.`, 'info');
     this.emit('unman', u, p);
   }
+
+  // a battery goes to its crew while the player serves a gun (othersAuto), carrying on where it stands
+  hand(v) {
+    v.mode = 'auto';
+    if (!this.st.others.includes(v.id)) this.st.others.push(v.id);
+    this.sim.crews?.handOver?.(v);
+  }
+
+  // the battery is with its crew only because the player is at a gun (othersAuto)
+  handedOver(u) { return u.mode === 'auto' && !!this.st?.others?.includes(u.id); }
 
   // ------------------------------------------------------------------ the command for this gun
   // The unit's order laid for this piece: a new one (a new target, a correction, another charge or fuze) rings at the

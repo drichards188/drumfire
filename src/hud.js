@@ -150,6 +150,21 @@ export class HUD {
     this.toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
 
+  // A Sperrfeuer call no battery answers (ui/consoles/common.js unanswered), red at the top of the view until one is
+  // firing on its line: in the German open battles no crew answers by itself (main.js NO_AUTO), and the player may be
+  // riding a shell or at a gun. `call` { sector, name } or null; `atGun` the player serves a gun
+  sosCall(call, atGun = false) {
+    const el = $('sos-call');
+    if (!el) return;
+    const key = call ? `${call.sector}|${atGun}` : '';
+    if (key === this.sosKey) return;
+    this.sosKey = key;
+    el.hidden = !call;
+    if (!call) return;
+    $('sos-head').textContent = `SPERRFEUER ${call.sector} · ${call.name.toUpperCase()}: NO BATTERY ANSWERS`;
+    $('sos-hint').textContent = atGun ? 'P leaves the gun; then S puts every gun on the Sperrfeuer line' : 'Press S: every gun to the Sperrfeuer line';
+  }
+
   hint(msg, ms = 4000) {
     const el = $('hint');
     el.textContent = msg;

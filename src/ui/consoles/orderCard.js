@@ -2,6 +2,10 @@
 // range, elevation from the range table, charge, fuze, rounds, the corrections made so far, and the
 // brass keys (corrections, Fire, Cease). Values are typed in; the keys act on the sim's `correct` command
 // in yards (converted to metres here).
+// The German pages (TH.lean, 2026-11-25, the Godot demo's cut of 2026-11-24) keep what the player acts on: the target
+// with its range and grid square, the charge (the crew's or set by hand), rounds, fuze, guns and the corrections. The
+// line, the elevation and the time of flight go (numbers the battery works out and the player never acts on); the
+// correction keys get bold drawn arrows and the step key a dot for each of its five sizes.
 import { el, setText, setCls, card, label, Btn, Seg } from '../widgets.js';
 import { tut } from '../highlight.js';
 import { ref, dm, elev, yd, FUZE, fromYd, commas, gunChoices } from './common.js';
@@ -17,6 +21,23 @@ function field(title, cls = '') {
   f.append(el('i', 'ftitle', title), v, s);
   return { el: f, v, s };
 }
+// a bold arrow for a correction key (a glyph at this size is a hairline): up, down, left or right
+// (a 3-unit shaft and a wide head, drawn for each direction: up and down 12 by 13, left and right 18 by 12)
+const ARROW = {
+  up: ['0 0 12 13', 'M6 0 L11.5 6 L7.6 6 L7.6 13 L4.4 13 L4.4 6 L0.5 6 Z'],
+  down: ['0 0 12 13', 'M6 13 L0.5 7 L4.4 7 L4.4 0 L7.6 0 L7.6 7 L11.5 7 Z'],
+  left: ['0 0 18 12', 'M0 6 L6 0.5 L6 4.4 L18 4.4 L18 7.6 L6 7.6 L6 11.5 Z'],
+  right: ['0 0 18 12', 'M18 6 L12 0.5 L12 4.4 L0 4.4 L0 7.6 L12 7.6 L12 11.5 Z'],
+};
+function arrow(dir) {
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'), path = document.createElementNS(ns, 'path');
+  svg.setAttribute('viewBox', ARROW[dir][0]);
+  svg.setAttribute('class', `karrow ${dir}`);
+  path.setAttribute('d', ARROW[dir][1]);
+  svg.append(path);
+  return svg;
+}
+
 function stepper(title, onDec, onInc) {
   const f = el('div', 'fld stp');
   const row = el('div', 'srow');
@@ -40,7 +61,11 @@ export class OrderCard {
     this.tRef = el('div', 'tref', '--');
     this.tName = el('div', 'tname', 'No target laid');
     const stamp = el('div', 'tstamp', TH.orderStamp);
-    this.target.append(el('i', 'ftitle', 'TARGET'), this.tRef, this.tName, stamp);
+    const lean = this.lean = !!TH.lean;
+    // (the lean card: the target's name large, its range and grid square under it; the square stays because the
+    // observers' and the Arko's slips give their targets by it)
+    if (lean) { this.target.classList.add('lean'); this.target.append(el('i', 'ftitle', 'TARGET'), this.tName, this.tRef); }
+    else this.target.append(el('i', 'ftitle', 'TARGET'), this.tRef, this.tName, stamp);
     // (the range's figures are short; the line and the elevation have the long notes: "Strich, on the line")
     this.line = field('LINE'); this.range = field('RANGE', 'narrow'); this.el_ = field('ELEVATION');
     const r2 = el('div', 'frow3');
@@ -49,7 +74,8 @@ export class OrderCard {
     this.tof = field('TIME OF FLIGHT');
     this.rounds = stepper('ROUNDS / PIECE', () => this.act('rounds', -1), () => this.act('rounds', 1));
     const r3 = el('div', 'frow3');
-    r3.append(this.charge.el, this.tof.el, this.rounds.el);
+    if (lean) r3.append(this.charge.el, this.rounds.el);
+    else r3.append(this.charge.el, this.tof.el, this.rounds.el);
     this.fuze = new Seg({
       cls: 'fuze', items: cfg.fuzes.map((f) => ({ v: f, main: FUZE[f].main, sub: FUZE[f].sub })),
       onChange: (v) => this.act('fuze', v),
@@ -69,12 +95,25 @@ export class OrderCard {
     this.corr.append(el('i', null, 'CORRECTIONS MADE'), this.corrVal);
     // brass keys: add and drop (range) up and down, left and right (line)
     const kp = el('div', 'keypad');
-    const k = (name, sub, fn, cls) => { const x = new Btn({ main: name, sub, cls: 'key ' + cls, onClick: fn }); return x; };
-    this.bAdd = k('ADD', '↑', () => this.act('corr', 'add'), 'ka');
-    this.bDrop = k('DROP', '↓', () => this.act('corr', 'drop'), 'kd');
-    this.bLeft = k('LEFT', '←', () => this.act('corr', 'left'), 'kl');
-    this.bRight = k('RIGHT', '→', () => this.act('corr', 'right'), 'kr');
-    this.bStep = new Btn({ main: TH.metric ? '50 m' : '50 yd', sub: 'X step', cls: 'key kstep', onClick: () => this.act('step') });
+    const k = (name, sub, fn, cls, dir, tip) => {
+      const x = new Btn({ main: name, sub: lean ? '' : sub, cls: 'key ' + cls + (lean ? ' arrowkey' : ''), onClick: fn, tip: lean ? tip : '' });
+      if (lean) x.face.firstChild.append(arrow(dir)); // (after the word in the label, drawn above it: Btn.text reads the word first)
+      return x;
+    };
+    const sh = `Shift ${TH.metric ? '10 m' : '10 yards'}`;
+    this.bAdd = k('ADD', '↑', () => this.act('corr', 'add'), 'ka', 'up', `Add: further (Up arrow; ${sh})`);
+    this.bDrop = k('DROP', '↓', () => this.act('corr', 'drop'), 'kd', 'down', `Drop: shorter (Down arrow; ${sh})`);
+    this.bLeft = k('LEFT', '←', () => this.act('corr', 'left'), 'kl', 'left', `Left (Left arrow; ${sh})`);
+    this.bRight = k('RIGHT', '→', () => this.act('corr', 'right'), 'kr', 'right', `Right (Right arrow; ${sh})`);
+    this.bStep = new Btn({ main: TH.metric ? '50 m' : '50 yd', sub: lean ? '' : 'X step', cls: 'key kstep' + (lean ? ' dotkey' : ''), onClick: () => this.act('step'),
+      tip: lean ? 'The correction step: click for the next size (X)' : '' });
+    // (the lean step key cycles through its five sizes: the dots say which)
+    if (lean) {
+      this.dots = el('span', 'kdots');
+      for (let i = 0; i < STEPS_YD.length; i++) this.dots.append(el('i'));
+      this.bStep.face.firstChild.append(this.dots);
+      this.dotI = -1;
+    }
     for (const [b, n] of [[this.bAdd, 'add'], [this.bDrop, 'drop'], [this.bLeft, 'left'], [this.bRight, 'right'], [this.bStep, 'step']]) tut(b.el, `${n} keypad`);
     kp.append(this.bAdd.el, this.bLeft.el, this.bStep.el, this.bRight.el, this.bDrop.el);
     this.bFire = new Btn({ main: 'FIRE', sub: 'Space', cls: 'fire', hold: true, onDown: () => this.act('fire'), onUp: () => {} });
@@ -86,7 +125,8 @@ export class OrderCard {
     bottom.append(kp, fc);
     tut(this.target, 'target'); tut(this.line.el, 'line'); tut(this.range.el, 'range'); tut(this.el_.el, 'elevation'); tut(this.charge.el, 'charge');
     tut(this.tof.el, 'tof'); tut(this.rounds.el, 'rounds'); tut(fz, 'fuze'); tut(this.corr, 'corrections'); tut(c.el, 'order');
-    b.append(this.target, r2, r3, fz, this.gunsRow, this.corr, bottom);
+    if (lean) b.append(this.target, r3, fz, this.gunsRow, this.corr, bottom);
+    else b.append(this.target, r2, r3, fz, this.gunsRow, this.corr, bottom);
   }
 
   // the GUNS buttons for n guns in the field (the battery's own, which a lineup may bring fewer of): built again when it changes
@@ -104,9 +144,14 @@ export class OrderCard {
     this.setPieces(unit.pieces?.length || 1);
     const o = unit.order || {};
     const t = o.target;
-    setText(this.tRef, t ? ref(t.x, t.z) : '-- . -- . -');
-    setText(this.tName, missionName || (t ? 'Map point' : 'Click the board, or take a mission (Tab, Enter)'));
     setCls(this.target, 'none', !t);
+    if (this.lean) {
+      setText(this.tName, missionName || (t ? 'Map point' : 'None. Click the board, or take a mission (Tab, Enter)'));
+      setText(this.tRef, t ? `${yd(o.range)} ${lenShort()}   ·   ${ref(t.x, t.z)}` : '');
+    } else {
+      setText(this.tRef, t ? ref(t.x, t.z) : '-- . -- . -');
+      setText(this.tName, missionName || (t ? 'Map point' : 'Click the board, or take a mission (Tab, Enter)'));
+    }
     setText(this.line.v, t ? dm(o.line) : TH.metric ? '--‑--' : '---°--′');
     setText(this.line.s, o.adj && Math.abs(o.adj.right) > 0.5 ? `${o.adj.right > 0 ? 'right' : 'left'} ${commas(Math.abs(o.adj.right) / lenU())}` : TH.metric ? 'Strich, on the line' : 'on the line');
     setText(this.range.v, t ? yd(o.range) : '----');
@@ -114,7 +159,7 @@ export class OrderCard {
     setText(this.el_.v, t ? elev(o.el) : TH.metric ? '---' : '--°--′');
     setText(this.el_.s, t ? (TH.metric ? 'Strich, range table' : 'from the range table') : '');
     setText(this.charge.v, String((o.charge || 0) + 1));
-    setText(this.charge.s, `of ${nCharges}`);
+    setText(this.charge.s, this.lean ? `of ${nCharges} · ${o.chargeAuto === false ? 'set by you' : 'auto'}` : `of ${nCharges}`);
     this.charge.dec.enable((o.charge || 0) > 0);
     this.charge.inc.enable((o.charge || 0) < nCharges - 1);
     setText(this.tof.v, t ? `${Math.round(o.tof)} sec` : '--');
@@ -131,6 +176,10 @@ export class OrderCard {
     if (rY) parts.push(`${rY > 0 ? 'RIGHT' : 'LEFT'} ${Math.abs(rY)}`);
     setText(this.corrVal, parts.length ? parts.join('  ·  ') : 'none');
     this.bStep.text(`${stepYd} ${TH.metric ? 'm' : 'yd'}`);
+    if (this.dots) {
+      const i = STEPS_YD.indexOf(stepYd);
+      if (i !== this.dotI) { this.dotI = i; [...this.dots.children].forEach((d, j) => d.classList.toggle('on', j === i)); }
+    }
     // the FIRE key says what it will fire
     const sel = x.gunsSel, multi = this.guns.btns.size > 0;
     let main = 'FIRE', sub = ready > 0 ? `${ready} of ${alive} ready` : 'Space', go = ready > 0;
@@ -145,7 +194,7 @@ export class OrderCard {
     // an order the guns cannot carry out (x.problem, the reason on the status line): the key says so
     if (x.problem) { sub = 'cannot fire'; go = false; }
     this.bFire.set(go && !!t);
-    this.bFire.text(main, sub);
+    this.bFire.text(main, this.lean && go && !x.problem ? `${sub} · Space` : sub);
     setCls(this.bFire.el, 'long', main.length > 6);
     setCls(this.bFire.el, 'armed', go && !!t);
   }

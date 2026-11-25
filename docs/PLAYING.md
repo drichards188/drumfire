@@ -20,7 +20,7 @@ This page covers the menu, research, every era's units and operations, the speci
 - **Keys.** Enter, To battle or a double-click starts the choice; arrows walk the levels or the cards; Esc closes the chooser. The battlefield loads only then, behind a loading screen with the orders. The game's "Main menu" button comes back, and the end card's Research button goes straight to Research.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
-- **AI crews.** Units you are not operating fight on their own with an AI crew, in whatever mode you left them.
+- **Your orders only.** In the German open battles every battery waits for your orders: its crew loads and lays, but takes no mission and fires no round by itself. Only while you serve a gun in person do the other batteries fight on under their own crews ([Serving a gun in person](#serving-a-gun-in-person)). In the special missions a supporting battery starts with its crew and is yours from your first order to it; in the 1917 game, units you are not operating fight on with an AI crew in whatever mode you left them.
 
 ## Research and upgrades
 
@@ -29,7 +29,7 @@ This page covers the menu, research, every era's units and operations, the speci
 - **Research.** The Research screen (top bar) shows the tree in seven lines (field artillery, long-range guns, mortars, siege guns, railway guns, off-map support, rockets), each running from the guns of 1914 to 1918 to those of the Second World War. A line is researched in order. Ranks are eras, as in War Thunder: I and II are 1914 to 1918, III and IV 1939 to 1945; the price is a battery's power, whatever its era. Rank I is open from the start; each rank above opens once you have enough of the rank before (3 of rank I, then 3 of rank II, then 4 of rank III). The tree is drawn as War Thunder's: a band per rank (I at the top), a column per line, and an arrow from each battery to the ones it opens. Click a battery, then "Research this battery": every battle's RP go to it until it is done, and the rest goes on to the next one in its line. See docs/PROGRESSION.md for the lines and costs.
 - **Your lineup.** At most 5 batteries on the map and 1 off-map support take the field. The slot bar along the bottom of the Hangar and of Research holds them, numbered as the battle's keys 1 to 5 and its tabs. On Research, a battery's **Take into battle** lights the slots it can take (an empty one, or one whose battery it replaces): click one. **Change slot** swaps it with another; you can also drag a battery from the tree, or a slot onto another slot. Esc cancels. Each slot's ⇄ opens the bench of batteries outside the lineup. Dev mode opens every battery to the lineup but keeps the 5 slots.
 - **Threat levels and missions.** The career's open battle is played at a level from 1 to 10, picked in the battle chooser; all ten are open from the start. Each battle deals one mission: main objectives and optional secondaries, each a named target, listed under the unit's name in the 3D view (squares the mains, diamonds the secondaries) and ringed on the board. During the battle come moments (△): a duel with a British battery that has found one of yours, counter-preparation on an attack massing in their trench, a relief column halted on a road. Some missions add the kite balloon (shell its winch on the ground: near misses haul it down, the winch wrecked brings it down) or a hunt for their railway gun. Finish a mission and the next comes after a three second beat; with nothing left in hand the day runs on to the next thing ("Ahead of time"). When every main is done, finish what you will and press **K** (or the button) to end the battle, or to call X-Zeit, our assault behind the Feuerwalze, when the mission has it; their fire grows each minute you wait. Too many failed fire missions on the mains lose, as do two sectors lost. With X-Zeit from level 6, concrete strongpoints stand in its lanes that only a super-heavy (28 cm and up) can break. See docs/PROGRESSION.md "Missions".
-- **IDLE** on a battery's tab means it has no mission: take one for it from the missions list (Tab, Enter) or click a target on the board. A battery on a mission whose guns are not yet at work reads STANDBY.
+- **IDLE** on a battery's tab means it has no mission: take one for it from the missions list (Tab, Enter) or click a target on the board. A battery on a mission whose guns are not yet at work reads STANDBY. The ring on the tab is empty while the battery is at your orders, C while its crew has it (you are at a gun), H while it holds its fire.
 - **Off-map support.** The Gotha strike, the V-1, the V-2 and the Paris Gun fight in the open battle from off the map. Their tiles sit under the battery tabs, marked OFF-MAP SUPPORT. Click a ready tile, then click the board where it is to fall (a point, or a target's symbol). It prepares (PREP), flies (AIR) and strikes in its own time, then reloads for a long time (RLD; about 9 to 13 minutes, less with its breech and relief crews upgraded).
   - **Changing or stopping it.** Click a preparing tile, then the board, to give it a new point; its × stands it down with no reload.
   - **On the board.** Each weapon's aim shows as a ring two spreads across with its countdown, and the last strike stays marked for a minute and a half.
@@ -121,7 +121,7 @@ The Flanders roster:
 6. 80 cm Gustav (assembled on its railway firing curve with eight shells)
 7. 60 cm Karl-Gerät (set up, hull down in the first of its two prepared positions)
 
-**The console** works the same way in metres and Strich (6400 to the circle), German grid references (r and h in km) and German words: the VB (forward observer) telephones "weiter 150, links 50", the Storch radios in metres, Gegenbatterie, Sperrfeuer (S), Feuerwalze. The Gustav, the Karl-Gerät and the V-weapons are worked from the procedure cards and launch drills below.
+**The console** is [the German console](#the-german-console), in metres and Strich (6400 to the circle), German grid references (r and h in km) and German words: the VB (forward observer) telephones "weiter 150, links 50", the Storch radios in metres, Gegenbatterie, Sperrfeuer (S), Feuerwalze. The Gustav, the Karl-Gerät and the V-weapons are worked from the procedure cards and launch drills below.
 
 ### The procedure cards
 
@@ -161,8 +161,11 @@ Press **P**, or **MAN** on a gun's row of the guns card, to take a place in the 
 - **The Nebelwerfer** has its own drill: the loader loads the six rockets and connects the igniters, and the firer takes the crew into cover (hold E at post 4) and fires the ripple from the firing box (hold E); you watch the launcher from the slit trench.
 - **The Gustav, the Karl-Gerät, the Gamma and the Langer Max** lay by power, slowly (the Gustav takes about two minutes from 40 degrees to its loading angle). Tap A, D, W or S at post 2 to start the drive: it runs on by itself and stops on the commanded figure, even if you go to another post meanwhile; tap the other way to stop it, hold Shift for the hand wheel. The card counts the drive down; **]** speeds time. Their long steps (the Gustav's shell hoist, the Karl's crane) take at most 8 s of holding E when you work them yourself. The Karl's turn of the whole vehicle stays on the KARL card, which keeps its keys at the gun: L raises or lowers the hull, T turns, Y sends the carrier. The Gustav at the siege can be manned once it stands on its curve.
 - **Crew help (C).** On, the men at the other posts do their work; off, nothing at another post moves until you go there, as in the Big Bertha demo. Remembered between games; also in the gear menu.
-- **Fire orders.** On AUTO the battery's own commander takes the missions and orders Feuer; your gun fires when you pull. An auto battery does not wait for ever: a fire order your gun has not moved on for 40 s lapses. On MANUAL you give the orders from the console, and a pull with no fire order fires your gun alone, the rounds per gun set on the console (R).
-- **The other batteries** on manual go to auto while you are at a gun and back to manual when you leave (gear menu: "At a gun: other batteries to auto").
+- **Fire orders.** In the open battles your gun's battery is yours: you give the orders from the console, and a pull with no fire order fires your gun alone, the rounds per gun set on the console (R). A battery with its crew (a special mission's supporting battery before your first order to it) has its own commander take the missions and order Feuer; your gun fires when you pull, and a fire order your gun has not moved on for 40 s lapses.
+- **The other batteries** fight on under their own crews while you are at a gun, each carrying on the mission it had: a Sperrfeuer kept up, fire for effect, ranging. When you leave the gun they come back to your orders, laid where they stand; a series already begun is fired out, nothing more.
+  - **Another battery's gun.** Going to it hands the battery you left to its crew and takes back the one you join. The radio says which.
+  - **Taking one back.** Any order you give a battery with its crew takes it back, the Sperrfeuer too.
+  - **Off.** The gear menu's "At a gun: other batteries to auto" (on by default) keeps them all at your orders instead.
 
 The Nebelwerfer (fired from cover) and the V-1 and V-2 launch sites (drills of their own) cannot be served this way.
 
@@ -202,6 +205,23 @@ The battle's roster, smallest calibre first (keys 1 to 6):
 - **The day** runs like the WW2 Flanders battle: Einschießen at dawn, the Artilleriekampf, the British attack (Sperrfeuer, S), night and Störungsfeuer.
 - **X-Zeit.** A three-minute Feuervorbereitung and the Feuerwalze for our own assault, which needs the barrage kept dense on every lane.
 
+### The German console
+
+Every German page (both eras' battles, the special missions, the lessons and the test range) has the same lean console. The V-1 and V-2 keep their own launch console.
+
+- **No header.** The battery you command is its lit tab on the right. A slip under the target appears only when something needs saying: why the battery cannot fire, NOT READY (with the card to see), HOLDING, a battery with its crew while you serve a gun, or the answer to your last key.
+- **The fire order** keeps what you act on: the target (its name, range and grid square), the charge (the crew's, marked auto, or yours with Q and E, marked set by you), rounds per gun, the fuze, the guns and the corrections made. The crews work out the line and elevation; there is no range table.
+- **The keys.** The correction keys show bold arrows (hover for the key and the Shift step). The step key's five dots show the step; X or a click takes the next.
+- **The guns** stand under the fire order (in the bottom row for the Gustav and the Karl), a line each: a lamp (green ready, amber loading or laying, red knocked out), what the gun is doing, its health, the crew only when short, the wear only when worn, and MAN.
+- **The rest.** Missions and messages share the bottom row. The map's bar is one line: the square, range and target under the pointer.
+
+**Your orders only.** In the open battles every battery waits for your orders. There is no auto mode, no A key and no ALL AUTO / ALL MANUAL. The crews fight on by themselves only while you serve a gun ([The other batteries](#serving-a-gun-in-person)).
+
+**Sperrfeuer nobody answers.** When red flares go up, no battery fires on the Sperrfeuer line until you order it.
+
+- **The alarm.** A red banner over the 3D view names the sector, the slip in the fire order flashes with a bell every 4 seconds (a dozen times at most), and the sector's chip over the tabs blinks.
+- **The answer.** Press S: every gun that can reach lays on the line and fires. At a gun, P first (S is the layer's key there).
+
 ### The Paris Gun's mission (work in progress)
 
 The mission plays like the WW2 Gustav and V-weapon missions, in two stages. First the **Stellungsbau**: the gun arrives by rail at an empty site, and the three work gangs you send to the tasks build the position. Then the **Feuerablauf**, round by round: gauge the bore and raise the charge with its wear, lay the firing data for the Earth's turning and the wind aloft, load the numbered shell, fire, and correct from the agents' fall reports.
@@ -227,7 +247,7 @@ The mission plays like the WW2 Gustav and V-weapon missions, in two stages. Firs
 - **The flight.** The camera rides each shell up out of sight by itself (F leaves the ride). The agents' report comes about two minutes later (`.` applies it).
 - **Wear.** After 65 rounds the barrel is changed (Y); the mission opens on a barrel already well worn.
 - **Air raids.** British Camels come looking for the site by day. While they attack, the crew is in cover; the camouflage and rounds on their aerodrome keep some of them away.
-- **Auto.** The gun starts on manual; A hands it to the crew.
+- **Auto.** The gun is yours from the start; A hands it to the crew and back (the console has no mode switch to click, but the key works here).
 
 The mission's keys:
 
@@ -245,7 +265,6 @@ The mission's keys:
 | | O, I | a fault: fix it, or carry on through it |
 | | Y | change the barrel |
 | | Tab, then L | pick a target on the ZIELE card, then lay on it (or click it) |
-| | A | hand the gun to the crew (auto) or take it back |
 
 ## Big Bertha (demo, work in progress)
 
@@ -264,7 +283,7 @@ A separate first-person demo (`/bertha.html`, in the Battles tab of the WW1 Germ
 | Key | Action |
 |---|---|
 | 1 to 9 | select a unit (the number on its tab; a battery not yet researched says so) |
-| P | WW2 German: man the selected battery's gun in person, or leave it ([At a gun](#at-a-gun-ww2-german)) |
+| P | German modes: man the selected battery's gun in person, or leave it ([At a gun](#at-a-gun-ww2-german)); in the open battles the other batteries fight on under their crews meanwhile |
 | Mouse drag, wheel | orbit and zoom the camera |
 | F | ride the selected unit's newest shell to its burst; F again returns to the gun |
 | K | a threat level's mission accomplished (every main objective done): end the battle, or call X-Zeit when the mission has it (also the button under the objectives) |
@@ -287,21 +306,21 @@ For the selected unit; clicking the buttons does the same.
 | Tab, Shift+Tab | move the mission cursor |
 | Enter | take the mission under the cursor |
 | Space | fire the guns chosen by the GUNS selector |
-| G | GUNS selector: 1 GUN (the directing gun, for ranging), SECTION, BATTERY (hidden for one-piece units). On auto it sits on 1 GUN while ranging and goes to all guns for effect; on manual it stays where you put it (G or a click) |
+| G | GUNS selector: 1 GUN (the directing gun, for ranging), SECTION, BATTERY (hidden for one-piece units). A battery with its crew has it set for each mission (1 GUN while ranging, all guns for effect); at your orders it stays where you put it (G or a click) |
 | Arrow keys | correct the aim: up adds range, down drops, left and right shift the line (Shift = 10 yards, otherwise the current step; metres in the German modes) |
-| X | cycle the correction step (10, 25, 50, 100, 200 yards) |
-| Q, E | charge down, up |
+| X | cycle the correction step (10, 25, 50, 100, 200 yards; the German console's step key shows it as five dots) |
+| Q, E | charge down, up (the German console shows the crew's charge as auto until you set one) |
 | R | rounds per piece for the next series |
 | Z | fuze (instant, delay, and shrapnel or airburst on the guns that have it) |
-| A | toggle auto and manual (the header also has a HOLD button, which ceases fire) |
-| Shift+A | every battery to auto, or every battery to manual when all are on auto already (also ALL AUTO and ALL MANUAL under the clock, at the top of the battery tabs) |
-| S | SOS: every gun that can reach it lays on the alarmed sector's line |
+| A | Toggle auto and manual: the 1917 British game (its header also has a HOLD button, which ceases fire), the German special missions and the V-1 and V-2 launch console. The German open battles have no auto mode |
+| Shift+A | 1917 British and the German special missions: every battery to auto, or every battery to manual when all are on auto already (also ALL AUTO and ALL MANUAL under the clock, at the top of the battery tabs) |
+| S | SOS (Sperrfeuer): every gun that can reach it lays on the alarmed sector's line, else the weakest sector's; it takes back a battery with its crew |
 | Backspace, Delete | cease fire |
 | `.` | apply the pencilled correction of the newest observer report |
 | T | WW1 German: relay the bed of Bertha, the Gamma or the Beta-Gerät onto the ordered target's line; drive the Wespe or the Hummel to its other position |
 
 - **The artillery board.** Clicking the board lays the guns on that point; clicking a known target takes its mission; dragging pans and the wheel zooms the board.
-- **Manual first.** Any control the AI crew would undo (laying, firing, charge) switches the unit to manual first.
+- **Your order takes the battery.** Any control a crew would undo (laying, firing, charge) given to a battery with its crew switches it to your orders first.
 - **Special weapons.** The Gustav, Karl-Gerät, V-1 and V-2 keys are under [The procedure cards](#the-procedure-cards); the Paris Gun's under [The Paris Gun's mission](#the-paris-guns-mission-work-in-progress).
 
 ### At a gun (WW2 German)

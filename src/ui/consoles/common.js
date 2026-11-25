@@ -110,6 +110,21 @@ export function sectorAt(z) {
 }
 export const SOS_X = (z) => TH.sosX(z);
 
+// The Sperrfeuer call nobody answers: a live call with no battery of ours firing on its line, as { m, sector, name },
+// or null. In the German open battles no crew answers a call by itself (main.js noAuto; only while the player serves
+// a gun do the others fight on their own), so the console, the tabs and the view keep such a call in front of the
+// player until a battery is on it. Elsewhere (TH.noAuto unset) the crews answer, and nothing is flagged.
+export function unanswered(sim) {
+  if (!TH.noAuto || !TH.sectors.length) return null;
+  for (const m of sim.missions || []) {
+    if (m.kind !== 'sos' || m.state === 'done' || m.state === 'failed') continue;
+    if ((sim.units || []).some((u) => u.alive && u.missionId === m.id && u.order?.ok && u.firing)) continue;
+    const s = TH.sectors.find((q) => q.id === m.sector) ?? sectorAt(m.z);
+    if (s?.id && s.id !== '-') return { m, sector: s.id, name: s.name };
+  }
+  return null;
+}
+
 // open missions in the order the Tab key walks them: priority first, then the nearest deadline
 export function liveMissions(sim) {
   return (sim.missions || []).filter((m) => m.state === 'open' || m.state === 'ranging' || m.state === 'ffe')

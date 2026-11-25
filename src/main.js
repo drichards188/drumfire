@@ -84,6 +84,11 @@ const requestedMission = missionById(query.get('campaign'));
 const CAMPAIGN_MISSION = requestedMission?.era === (WW2 ? 'ww2' : '1917') && career.canPlay(requestedMission.id) ? requestedMission : null;
 const TH = CAMPAIGN_MISSION ? campaignTheatre(CAMPAIGN_MISSION) : WW2 ? sandboxTheatre(OPS[query.get('op')] ? query.get('op') : 'flanders') : WW1_TH;
 const UNITS = TH ? TH.units : UNITS_1917;
+// No auto mode (the Godot demo's rule, 2026-11-20): in the German open battles every battery waits for the player's
+// orders; only while the player serves a gun in person do the others fight on under their own crews (the gunner's
+// othersAuto, sim/crews.js handOver), and they come back to the player's orders on leaving it. The sim's units still
+// start on auto (the crews-only tests and the demonstration bombardment), so start() puts them on manual
+const NO_AUTO = !!TH && !CAMPAIGN_MISSION && !RANGE && TH.op?.kind === 'battle';
 // the WW2 batteries on a WW1 page (the career's ridge): their models, pictures and sounds load beside the 1918 ones
 const WW2_GUNS = new Set(['lefh18', 'sfh18', 'nbw41', 'k18', 'mrs18', 'karl', 'gustav', 'k38', 'hm1', 'bruno', 'k5', 'k12', 'wespe', 'hummel', 'nbw42', 'swg40']);
 const WW2_ON_RIDGE = WW1 && UNITS.some((u) => WW2_GUNS.has(u.kind));
@@ -384,6 +389,10 @@ async function init() {
       const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
       return { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0 + 1500, h: Math.max(3000, z1 - z0 + 1500) };
     } });
+  // the German pages' console (2026-11-25, the Godot demo's of 2026-11-24): no header, the status a slip in the fire
+  // order, no line, elevation, time of flight or range table, the guns a line each under the fire order. And no auto
+  // mode in their open battles (the demo's of 2026-11-20): see start()
+  if (TH && !CAMPAIGN_MISSION) setUiTheatre({ lean: true, noAuto: NO_AUTO });
   try {
     if (mods.panel?.Panel) {
       panelEl.replaceChildren();
@@ -782,6 +791,7 @@ async function init() {
     newBattle({ difficulty: LEVEL ? 'Normal' : params.difficulty, attract: false, seed: (Math.random() * 1e9) | 0,
       ...(RESEARCH_ERA ? { ...career.battle(RESEARCH_ERA), level: LEVEL.n, modifiers: MODS, opSeed: OP_SEED ?? ((Math.random() * 1e9) | 0) } : { allowedKinds: CAMPAIGN_MISSION ? CAMPAIGN_MISSION.roster : null }) });
     OP_SEED = null; // (the briefing's mission once; Fight again deals a new one)
+    if (NO_AUTO) for (const u of sim.units) sim.command(u.id, 'mode', { mode: 'manual' });
     if (CAMPAIGN_MISSION) {
       sim.director.update(0);
       selected = UNITS.findIndex(u => u.kind === CAMPAIGN_MISSION.reward);
@@ -1688,6 +1698,7 @@ async function init() {
       const view2 = { sim, selectedId: UNITS[selected].id, dt: rawDt, time: sim.time };
       if (panel.update.length >= 2) panel.update(rawDt, view2);
       else panel.update(view2);
+      hud.sosCall(state === 'playing' && NO_AUTO ? panel.call : null, gview?.active);
     }
     if (gview) {
       gview.update(sim);

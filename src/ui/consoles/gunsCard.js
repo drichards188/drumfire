@@ -3,6 +3,10 @@
 // the enemy has located the battery. The WW1 mode's 42 cm guns add their bed (src/ww1/special.js): its line, the arc
 // the handwheels give, and the key that relays it onto the ordered target's line (T), with its progress. In the WW2
 // mode a gun that can be served in person has MAN on its row (LEAVE while the player is at it: src/ww2/gunner.js).
+// The German pages (TH.lean, 2026-11-25, the Godot demo's of 2026-11-24): one line a gun, its number, one lamp (green
+// ready, amber loading or laying, red knocked out), what it is doing, the crew only when short, the wear only when the
+// barrel is worn, its health and MAN (three lamps, the drill as seven cells and both bars always told the same state
+// three times); the card stands under the fire order.
 import { el, setText, setCls, setStyle, card, Lamp, Bar, Btn } from '../widgets.js';
 import { STEPS, stepIndex } from './common.js';
 import { TH } from '../theatre.js';
@@ -35,7 +39,7 @@ export class GunsCard {
     this.bedBtn = new Btn({ main: 'BETTUNG UMLEGEN', sub: 'T: relay the bed', cls: 'bedbtn', onClick: () => onBed?.() });
     this.bed.append(this.bedText, this.bedBar.el, this.bedBtn.el);
     // the self-propelled guns' positions (src/ww1/special.js MoveCtl): where they stand, and the move to the other one
-    this.mv = el('div', 'gbed');
+    this.mv = el('div', 'gbed gmove'); // (gmove: the lean console gives its top row more height for it, panel.css)
     this.mvText = el('i', null, '');
     this.mvBar = new Bar({ cls: 'bedbar' });
     this.mvBtn = new Btn({ main: 'STELLUNGSWECHSEL', sub: 'T: move to the other position', cls: 'bedbtn', onClick: () => onMove?.() });
@@ -47,6 +51,7 @@ export class GunsCard {
   build(n) {
     this.list.replaceChildren();
     this.rows = [];
+    if (TH.lean) return this.buildLean(n);
     for (let i = 0; i < n; i++) {
       const r = el('div', 'grow');
       const head = el('div', 'ghead');
@@ -80,12 +85,34 @@ export class GunsCard {
     }
     this.n = n;
   }
+  buildLean(n) {
+    for (let i = 0; i < n; i++) {
+      const r = el('div', 'grow lean');
+      const lamp = el('i', 'glamp');
+      const no = el('b', 'gno', `No. ${i + 1}`);
+      const state = el('div', 'gstate', '');
+      const crew = el('i', 'gshort', '');
+      const wl = el('span', 'gworn', 'WORN');
+      const wear = new Bar({ invert: true }), hp = new Bar();
+      wear.el.title = 'Barrel wear'; hp.el.title = 'The gun\'s health';
+      wear.el.classList.add('gwear');
+      const man = el('button', 'gman', 'MAN');
+      man.type = 'button';
+      man.addEventListener('click', () => this.onMan?.(i, man.dataset.on === '1'));
+      r.append(lamp, no, state, crew, wl, wear.el, hp.el, man);
+      this.list.append(r);
+      this.rows.push({ r, lamp, lampC: '', no, crew, man, wl, wear, hp, state });
+    }
+    this.n = n;
+  }
   update({ unit }) {
     const ps = unit.pieces || [];
     if (ps.length !== this.n) this.build(ps.length);
     setCls(this.el, 'few', ps.length <= 2);
+    setCls(this.el, 'lean', !!TH.lean);
     ps.forEach((p, i) => {
       const w = this.rows[i];
+      if (TH.lean) return this.updateLean(unit, p, i, w);
       const dead = p.state === 'dead';
       const idx = stepIndex(p);
       setCls(w.r, 'dead', dead);
@@ -115,22 +142,62 @@ export class GunsCard {
       else { setStyle(w.prog, 'width', '0%'); }
       w.hp.set(p.maxHp ? p.hp / p.maxHp : 1);
       w.wear.set(p.wear || 0);
-      let st;
-      if (dead) st = 'KNOCKED OUT';
-      else if (p.state === 'recoil') st = 'in recoil';
-      // (the commonest states in few words: the lamps beside them say laid and loaded)
-      else if (p.state === 'ready') st = laid ? 'ready to fire' : 'loaded; laying';
-      else if (p.state === 'laying') st = 'laying on the line';
-      else if (p.job) st = (p.job.step === 'depress' ? 'to the loading angle' : p.job.step === 'open' ? 'opening the breech' : p.job.step === 'lay' && unit.gate ? `loaded; waiting: ${unit.gate}` : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
-      // a special weapon's controller holding the unit (the Karl's hull turning): say what it is doing, not idle
-      else if (unit.gate && unit.special) st = (p.loaded ? `loaded; ${unit.gate}` : unit.gate).toLowerCase();
-      // a gun that cannot carry out the order says why (the status line has the whole reason)
-      else if (unit.order?.target && p.blocked) st = p.cmd?.why === 'inside minimum range' ? 'too close' : p.cmd?.why || 'cannot lay';
-      else if (unit.order?.target && !p.loaded && p.crew < Math.ceil(p.crewMax * 0.3)) st = 'too few men to serve it';
-      else if (unit.order?.target && !p.loaded && unit.mode !== 'hold' && (unit.ammo?.[unit.order.fuze === 'shrapnel' ? 'shrapnel' : 'he'] ?? 1) <= 0) st = 'no shells';
-      else st = p.loaded ? 'loaded' : 'idle';
-      setText(w.state, st);
+      setText(w.state, this.stateText(unit, p, laid));
     });
+    this.updateRest(unit);
+  }
+
+  // what the gun is doing, or why it cannot (the status slip has the whole reason)
+  stateText(unit, p, laid) {
+    const dead = p.state === 'dead';
+    let st;
+    if (dead) st = 'KNOCKED OUT';
+    else if (p.state === 'recoil') st = 'in recoil';
+    // (the commonest states in few words: the lamps beside them say laid and loaded)
+    else if (p.state === 'ready') st = laid ? 'ready to fire' : 'loaded; laying';
+    else if (p.state === 'laying') st = 'laying on the line';
+    else if (p.job) st = (p.job.step === 'depress' ? 'to the loading angle' : p.job.step === 'open' ? 'opening the breech' : p.job.step === 'lay' && unit.gate ? `loaded; waiting: ${unit.gate}` : `loading: ${SHORT[p.job.step] || p.job.step}`).toLowerCase();
+    // a special weapon's controller holding the unit (the Karl's hull turning): say what it is doing, not idle
+    else if (unit.gate && unit.special) st = (p.loaded ? `loaded; ${unit.gate}` : unit.gate).toLowerCase();
+    // a gun that cannot carry out the order says why (the status line has the whole reason)
+    else if (unit.order?.target && p.blocked) st = p.cmd?.why === 'inside minimum range' ? 'too close' : p.cmd?.why || 'cannot lay';
+    else if (unit.order?.target && !p.loaded && p.crew < Math.ceil(p.crewMax * 0.3)) st = 'too few men to serve it';
+    else if (unit.order?.target && !p.loaded && unit.mode !== 'hold' && (unit.ammo?.[unit.order.fuze === 'shrapnel' ? 'shrapnel' : 'he'] ?? 1) <= 0) st = 'no shells';
+    else st = p.loaded ? 'loaded' : 'idle';
+    return st;
+  }
+
+  updateLean(unit, p, i, w) {
+    const dead = p.state === 'dead';
+    setCls(w.r, 'dead', dead);
+    const cs = menShown(p.kind, p.crew, p.crewMax, GUNS[p.kind]?.crew ?? p.crewMax);
+    const short = !dead && p.crew < p.crewMax;
+    setText(w.crew, short ? `crew ${cs.men}/${cs.of}` : '');
+    setCls(w.crew, 'show', short);
+    const can = !!TH.mannable?.has(unit.kind) && !dead && !!this.onMan;
+    setCls(w.man, 'show', can);
+    setCls(w.r, 'manned', !!p.manned);
+    setText(w.no, p.manned ? `No. ${i + 1} · YOU` : `No. ${i + 1}`);
+    if (can) {
+      const on = p.manned ? '1' : '0';
+      if (w.man.dataset.on !== on) {
+        w.man.dataset.on = on;
+        setText(w.man, p.manned ? 'LEAVE' : 'MAN');
+        w.man.title = p.manned ? 'Leave the gun: its crew carries on by itself (P)' : `Man No. ${i + 1} gun in person: first person, the drill at the posts (P mans the first gun)`;
+      }
+    }
+    const laid = !dead && p.cmd && Math.abs(p.az - p.cmd.az) < LAID_TOL && Math.abs(p.el - p.cmd.el) < LAID_TOL;
+    const rdy = !dead && p.state === 'ready' && laid, busy = !dead && !rdy && (!!p.job || p.state === 'laying' || p.state === 'loading' || p.state === 'ready');
+    const c = dead ? 'r' : rdy ? 'g' : busy ? 'a' : '';
+    if (c !== w.lampC) { w.lampC = c; w.lamp.className = `glamp ${c}`; w.lamp.title = { r: 'Knocked out', g: 'Ready to fire', a: 'Loading or laying', '': 'Idle' }[c]; }
+    w.hp.set(p.maxHp ? p.hp / p.maxHp : 1);
+    w.wear.set(p.wear || 0);
+    const worn = !dead && (p.wear || 0) >= 0.5;
+    setCls(w.wear.el, 'show', worn); setCls(w.wl, 'show', worn);
+    setText(w.state, this.stateText(unit, p, laid));
+  }
+
+  updateRest(unit) {
     // the bed (WW1 Bertha and Gamma): where it lies, and relaying it onto the target's line
     const bed = unit.special?.bed;
     setCls(this.bed, 'on', !!bed);

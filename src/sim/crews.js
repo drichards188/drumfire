@@ -70,6 +70,47 @@ export class Crews {
     }
   }
 
+  // The gunner hands a battery to its crew (ww2/gunner.js 'man' with othersAuto, the German open battles' one way to
+  // auto: main.js noAuto). The crew carries on the battery's live mission from where it stands: the Sperrfeuer kept
+  // up, the Feuerwalze laid on its line, fire for effect, or ranging (a round on its way is waited for, else a ranging
+  // round is fired); a bed out of arc is relaid onto the mission. A battery with no mission picks its own work, after
+  // the series it is firing on a map point, and answers a Sperrfeuer call still up. (Until 2026-11-25 the gunner only
+  // set the mode, and a crew given a battery mid-mission picked afresh, dropping the player's mission.) Crews-only
+  // battles never come here.
+  handOver(u) {
+    const sim = this.sim, ai = this.state(u), over = (q) => q.state === 'done' || q.state === 'failed';
+    let m = u.missionId != null ? sim.missionById(u.missionId) : null;
+    if (m && (over(m) || !m.units.includes(u.id))) m = null;
+    Object.assign(ai, { m, seen: 0, ranged: 0, series: 0, sosM: null, prepM: null, holdUntil: 0, liftAt: 0, deadline: null, seriesAt: null, own: true });
+    // (the crew takes a moment to take the battery over)
+    ai.wait = sim.time + 3 + sim.rng() * 5;
+    if (!m) {
+      ai.st = 'idle';
+      let call = null;
+      for (const q of sim.missions) if (q.kind === 'sos' && !over(q)) call = q;
+      if (call) { ai.sosM = call; ai.sosAt = sim.time + 8 + sim.rng() * 28; }
+      return;
+    }
+    const mine = m.reports.filter((r) => r.unitId === u.id && !r.wild);
+    ai.seen = mine.length;
+    ai.lift = m.lift;
+    const bed = u.special?.bed;
+    if (bed && bed.state !== 'moving' && !u.order.ok && u.order.why === 'out of arc') sim.special?.of?.(u)?.rebed(bearingOf(m.x - u.pos.x, m.z - u.pos.z), true);
+    if (m.kind === 'sos') ai.st = 'sos';
+    else if (m.kind === 'barrage') {
+      // (as a lift that is due: laid on the line as it stands now, and fired)
+      ai.st = 'barrage';
+      ai.lift = m.lift - 1;
+      ai.liftAt = sim.time;
+    } else if (m.state === 'ffe' || m.onTarget || mine.at(-1)?.ok) ai.st = u.firing ? 'firing' : 'ffe';
+    else if (u.firing || sim.shells.some((s) => s.own && s.alive && s.unitId === u.id)) {
+      ai.st = 'await';
+      ai.ranged = 1;
+      ai.fireT = sim.time;
+      ai.deadline = sim.time + (u.order.tof || 30) + 40;
+    } else ai.st = 'ranging';
+  }
+
   update(dt) {
     const sim = this.sim, now = sim.time;
     for (const u of sim.units) {
@@ -102,6 +143,12 @@ export class Crews {
         if (!ai.m || ai.m.state === 'done' || ai.m.state === 'failed') this.toIdle(u, ai, 6);
         else if (!u.firing) sim.guns.fire(u);
         continue;
+      }
+      if (ai.own) {
+        // a battery handed over by the gunner (handOver): the player's last order first (the series on a map point
+        // fired out, the bed relaid or the move made for the mission it carries on)
+        if ((u.missionId == null && u.firing) || (ai.m && u.gate)) continue;
+        ai.own = false;
       }
       if (now < ai.wait) continue;
       const m = ai.m;

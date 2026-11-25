@@ -191,6 +191,13 @@ body.tutorial #objectives { display: none; }
 #bracket.off span { left: 50%; top: 100%; translate: -50% 4px; margin: 0; }
 #bracket.off i { display: block; position: absolute; inset: 0; margin: auto; width: 0; height: 0; border: 9px solid transparent; border-bottom: 16px solid rgba(232, 181, 90, 0.95); rotate: var(--a, 0deg); transform-origin: 50% 70%; }
 
+/* a Sperrfeuer call no battery answers (hud.js sosCall): red at the top of the view, pulsing; centred in the gap between
+   the unit's name (at most 30% wide) and the score, wrapping there, so it covers neither */
+#sos-call { position: absolute; top: 16px; left: calc(30% + 48px); right: 112px; width: fit-content; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 10px; background: rgba(128,20,13,.9); border: 2px solid #ff8a70; border-radius: 3px; pointer-events: none; animation: sospulse 1.05s ease-in-out infinite; text-align: center; }
+#sos-call[hidden] { display: none; }
+#sos-head { font: 700 12px/1.2 var(--mono); letter-spacing: .1em; color: #fff1e6; }
+#sos-hint { font: 700 9px/1.2 var(--mono); font-style: normal; letter-spacing: .04em; color: #ffd7c8; }
+@keyframes sospulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
 #hint { position: absolute; bottom: 8%; left: 50%; translate: -50% 0; font-size: 14px; font-style: italic; letter-spacing: 0.04em; padding: 8px 16px; background: var(--plate); opacity: 0; transition: opacity 0.5s; }
 #hint.show { opacity: 1; }
 

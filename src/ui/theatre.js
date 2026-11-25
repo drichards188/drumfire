@@ -23,6 +23,10 @@ export const TH = {
   // battles. Otherwise IDLE is the guns' state, as in the British game and the special missions' drills (the Paris
   // Gun, the V-weapons, the Gustav siege), whose guns take no fire missions
   idleMission: false,
+  // the German pages' console (main.js, 2026-11-25): lean is the cut console (no header, range table, line or elevation),
+  // noAuto the open battles where every battery waits for the player's orders (set by main.js; the British game has neither)
+  lean: false,
+  noAuto: false,
 };
 
 export function setUiTheatre(t) {

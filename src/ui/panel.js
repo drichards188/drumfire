@@ -6,11 +6,11 @@
 // sos(sectorId) from sim.events.sos, reset() on a new game.
 import './panel.css';
 import { el, hw, snd, setText, setCls, Bar } from './widgets.js';
-import { applyHighlight } from './highlight.js';
+import { applyHighlight, tut } from './highlight.js';
 import { Tracker } from './tracker.js';
 import { Mail } from './messages.js';
 import { mountConsole } from './consoles/console.js';
-import { KIND_SHORT, clockStr, KINDS } from './consoles/common.js';
+import { KIND_SHORT, clockStr, KINDS, unanswered } from './consoles/common.js';
 import { TH } from './theatre.js';
 import { GUNS } from '../sim/tables.js';
 import { SupportTiles } from './support.js';
@@ -25,6 +25,9 @@ const DESIGN_W = 800; // the console's design box
 const DESIGN_H = 840;
 const TABS_W = 160;   // the tab column's design width, scaled with the console
 const MODE_LETTER = { auto: 'A', manual: 'M', hold: 'H' };
+// the German open battles (no auto mode, TH.noAuto): nothing at the player's orders, C with its crew while the player serves a
+// gun, H holding its fire
+const LEAN_LETTER = { auto: 'C', manual: '', hold: 'H' };
 
 // Loading progress of one piece, 0 to 1, weighted by the nominal step durations of GUNS[kind].load
 // (the step index plus job.t / job.dur when the list does not match job.n). Cumulative weights are cached per kind.
@@ -64,6 +67,9 @@ export class Panel {
     root.classList.add('pn-root');
     this.scaleEl = el('div', 'pn-scale');
     this.tabsEl = el('div', 'tabs');
+    // (the German pages' lessons point at the battery tabs: the training's 'The battery' step; the British lessons that
+    // name them keep their old, unlit tabs)
+    if (TH.lean) tut(this.tabsEl, 'tabs');
     this.host = el('div', 'conhost');
     this.scaleEl.append(this.host);
     root.append(this.scaleEl, this.tabsEl);
@@ -111,7 +117,7 @@ export class Panel {
 
   // new game: forget slips, fall of shot and per-unit view memory
   reset() {
-    this.tracker.reset(); this.mail.reset(); this.memo = {}; this.shared.cursor = null; this.support.reset();
+    this.tracker.reset(); this.mail.reset(); this.memo = {}; this.shared.cursor = null; this.shared.bell = null; this.support.reset(); this.call = null;
     if (this.mounted) { this.mounted.con.dispose && this.mounted.con.dispose(); this.mounted = null; this.host.replaceChildren(); }
   }
   radio(text, kind) { if (this.view) this.mail.radio(text, kind, this.view.sim); }
@@ -126,7 +132,8 @@ export class Panel {
     if (window.__drumfirePanel === this) window.__drumfirePanel = null;
   }
 
-  _send(id, name, args) { if (this.opts.onCommand) this.opts.onCommand(id, name, args); }
+  // (the command's result: the lean console's Sperrfeuer says when no battery could lay on the line)
+  _send(id, name, args) { return this.opts.onCommand?.(id, name, args); }
 
   // Keys are ignored while a text field or the settings GUI has focus, but releases always get through
   // so a held Fire key can never stick. Console keys are listed in DESIGN.md (UI section).
@@ -185,7 +192,8 @@ export class Panel {
       am.el.title = 'Shells left';
       line.append(hp.el, am.el);
       main.append(top, kind, line);
-      t.title = `${u.name}: the guns' state, shells left, mode (A: auto or manual; HOLD on the console)`;
+      t.title = TH.noAuto ? `${u.name}: the guns' state and the shells left. C in the ring: with its crew while you serve a gun; H: holding its fire`
+        : `${u.name}: the guns' state, shells left, mode (A: auto or manual; HOLD on the console)`;
       const lamp = el('i', 'tlamp');
       // loading state: one pip per piece, filling toward READY, and a short summary
       const lrow = el('div', 'tload');
@@ -249,7 +257,9 @@ export class Panel {
       const locked = this.opts.isUnlocked && !this.opts.isUnlocked(u);
       setCls(t.el, 'locked', locked);
       setText(t.el.querySelector('.tkey'), locked ? 'LOCK' : String(this.opts.keyFor?.(u.id) ?? units.indexOf(u) + 1));
-      setText(t.mode, locked ? 'AI' : MODE_LETTER[u.mode] || '?');
+      const letter = locked ? 'AI' : TH.noAuto ? LEAN_LETTER[u.mode] ?? '?' : MODE_LETTER[u.mode] || '?';
+      setText(t.mode, letter);
+      setCls(t.mode, 'off', !letter);
       const dead = u.alive === false;
       // lamp: amber when a piece fired in the last two seconds; red flashing when enemy shells burst on the battery
       let fired = false, hit = false;
@@ -305,18 +315,23 @@ export class Panel {
       setCls(t.el, 'dead', dead);
       setCls(t.el, 'warn', hit);
     }
-    // the ALL pair: lit on the mode every battery is in; not on the lesson range, nor with a single battery
-    this.allEl.hidden = !!sim.scripted || this._allUnits().length < 2;
+    // the ALL pair: lit on the mode every battery is in; not on the lesson range, nor with a single battery, nor in the
+    // German open battles, which have no auto mode to switch to
+    this.allEl.hidden = !!TH.noAuto || !!sim.scripted || this._allUnits().length < 2;
     this.support.update(sim);
     if (!this.allEl.hidden) for (const [mode, b] of Object.entries(this.allBtns)) setCls(b, 'on', this._allIn(mode));
     setText(this.stClock, `${clockStr(sim.clock)} hrs`);
     setText(this.stState, sim.state ? String(sim.state).toUpperCase() : '');
     const sc = sim.score;
     setText(this.stScore, sc == null ? '' : typeof sc === 'object' ? `${sc.points != null ? sc.points : sc.score != null ? sc.score : sc.total != null ? sc.total : 0}` : String(Math.round(sc)));
+    // a Sperrfeuer call no battery answers (common.js unanswered): its sector's chip blinks, the console's slip and the
+    // view's banner (main.js) say so
+    const call = this.call = unanswered(sim);
     TH.sectors.forEach((s, i) => {
-      const f = sim.front ? sim.front[s.id] : 1;
-      setCls(this.fronts[i], 'lost', f === 0); setCls(this.fronts[i], 'weak', f > 0 && f < 0.5);
-      this.fronts[i].title = `${s.name}: ${f === 0 ? 'LOST' : Math.round(f * 100) + '% holding'}`;
+      const f = sim.front ? sim.front[s.id] : 1, on = call?.sector === s.id;
+      setCls(this.fronts[i], 'lost', f === 0); setCls(this.fronts[i], 'weak', f > 0 && f < 0.5); setCls(this.fronts[i], 'call', on);
+      const tip = `${s.name}: ${f === 0 ? 'LOST' : Math.round(f * 100) + '% holding'}${on ? `. ${TH.sos} called, no battery answers` : ''}`;
+      if (this.fronts[i].title !== tip) this.fronts[i].title = tip;
     });
 
     const sel = units.find((u) => u.id === view.selectedId) || units[0];

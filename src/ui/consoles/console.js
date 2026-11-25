@@ -1,6 +1,11 @@
 // One fire control console for every unit kind: header (call sign, status line, mode, S.O.S. keys), the
 // artillery board, the fire order card, the range table, the guns, the missions and the message pad. Each
 // kind differs only through KINDS (common.js): rounds offered, fuzes, charges, the note under the header.
+// The German pages (TH.lean, 2026-11-25, the Godot demo's console of 2026-11-20 and 2026-11-24) have no header: the
+// callsign plate repeated the battery's tab, the mode switch went with the auto mode (main.js NO_AUTO) and the four
+// S.O.S. keys with it (S still calls the Sperrfeuer); the status is a slip in the fire order shown only for alarms,
+// problems, holding, the crew and the answer to the last key. No range table; the guns stand under the fire order and
+// the missions and the messages share the bottom row.
 import { el, setText, setCls, label, Seg, Btn, Bar, snd } from '../widgets.js';
 import { TH, lenU, lenShort } from '../theatre.js';
 import { Board } from '../board.js';
@@ -9,7 +14,7 @@ import { RangeTable } from './rangeTable.js';
 import { GunsCard } from './gunsCard.js';
 import { MissionList } from './missionList.js';
 import { MessagePad } from './messagePad.js';
-import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault, taskNo } from './common.js';
+import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault, taskNo, unanswered } from './common.js';
 import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
 import { slipCorr, corrText } from '../messages.js';
@@ -73,7 +78,10 @@ export function mountConsole(ctx) {
         break;
       case 'cease': send('cease', {}); say('Cease fire.'); break;
       case 'mode': send('mode', { mode: arg }); break;
-      case 'sos': send('sos', { sector: arg }); say(`${TH.sos} ${arg}: all guns to the ${TH.sos} line.`); break;
+      case 'sos': {
+        const any = send('sos', { sector: arg });
+        say(TH.lean && any === false ? `${TH.sos} ${arg}: no battery can lay on the line.` : `${TH.sos} ${arg}: all guns to the ${TH.sos} line.`);
+        break; }
       case 'apply': {
         // only this unit's newest report on its present target; read against the lay of now
         const s = arg || mail.slips.find((x) => !x.applied && slipCorr(x, U));
@@ -135,8 +143,14 @@ export function mountConsole(ctx) {
     sosBox.append(w);
     return { b, w, strength, id: s.id };
   });
-  hdr.append(hid, hstat, mode.el, sosBox);
-  tut(hdr, 'header'); tut(statEl, 'status'); tut(mode.el, 'mode'); tut(sosBox, 'sos');
+  const lean = !!TH.lean;
+  // (the lean console's status: a slip under the target, hidden while it has nothing to say)
+  const slip = el('div', 'statslip hide');
+  if (lean) slip.append(statEl);
+  else hdr.append(hid, hstat, mode.el, sosBox);
+  tut(hdr, 'header'); tut(lean ? slip : statEl, 'status'); tut(mode.el, 'mode'); tut(sosBox, 'sos');
+  // (the bell's count belongs to the panel, not to this console: it is rebuilt on every change of battery)
+  const bell = shared ? (shared.bell ??= { for: null, n: 0, at: -1e9, sim: -1e9 }) : { for: null, n: 0, at: -1e9, sim: -1e9 };
 
   const board = new Board({
     memo,
@@ -174,13 +188,22 @@ export function mountConsole(ctx) {
   // `aside` (the Paris Gun's targets) in the range table's, its `left` (the Paris Gun's drill) in the guns card's and
   // its `top` (the Paris Gun's firing data) in the fire order card's
   if (special && !special.bottom) right.append(order.el, special.el);
+  // (the lean console: the guns under the fire order where the range table was)
+  else if (lean && !special) right.append(order.el, guns.el);
   else right.append(special?.top ?? order.el, special?.aside ?? rtab.el);
   // (the plain console: the fire order keeps its height and the range table takes any room to spare, panel.css)
   if (!special) right.classList.add('plain');
   top.append(board.el, right);
   const bot = el('div', 'botrow');
-  bot.append(special?.left ?? guns.el, special?.bottom ? special.el : missions.el, pad.el);
-  root.append(hdr, top, bot);
+  if (lean && !special) bot.append(missions.el, pad.el);
+  else bot.append(special?.left ?? guns.el, special?.bottom ? special.el : missions.el, pad.el);
+  if (lean) {
+    // the slip under the target, or (the Paris Gun: its own firing data card in the fire order's place) atop the column
+    if (special?.top) right.prepend(slip); else order.target.after(slip);
+    root.classList.add('lean');
+    if (!special) root.classList.add('plainrows'); // (the missions and the messages share the bottom row; a special card keeps the old rows)
+    root.append(top, bot);
+  } else root.append(hdr, top, bot);
   callEl.textContent = '';
 
   // ----- per frame -----
@@ -203,6 +226,44 @@ export function mountConsole(ctx) {
     const prob = !dead && o.target ? (sim.guns?.problem?.(unit, true) ?? '') : '';
     let st, cannot = false;
     const alarmSet = board.alarm || new Set();
+    if (lean) {
+      // a Sperrfeuer call no battery is firing on (common.js unanswered) comes before everything but the console's own
+      // passing line; a battery with its crew says what it is on
+      const call = unanswered(sim), fresh = now - toastT < 3200, crew = unit.mode === 'auto', hold = unit.mode === 'hold';
+      const work = m ? `on ${taskNo(m.id)}, ${m.state === 'ffe' ? 'for effect' : m.state}` : o.target ? 'finishing your last order' : 'choosing its own work';
+      let routine = false;
+      if (call && !fresh) st = `${TH.sos} ${call.sector}, ${call.name}: NO BATTERY ANSWERS! Press S: every gun to the ${TH.sos} line.`;
+      else if (dead) st = 'BATTERY SILENCED: every piece knocked out';
+      else if (fresh) st = toast;
+      else if (hold) st = 'HOLDING: cease fire.';
+      else if (crew) st = sim.gunner?.handedOver?.(unit) ? `WITH ITS CREW while you serve a gun: ${work}. Any order from you takes it back.` : `WITH ITS CREW: ${work}. Any order from you takes it over.`;
+      else if (unit.gate && (!prob || prob === unit.gate)) {
+        const cardName = { gustav: 'PREPARATION', karl: 'KARL', paris: unit.special?.ready === false ? 'STELLUNGSBAU' : 'FEUERABLAUF' }[unit.kind] ?? (unit.special?.bed || unit.special?.kind === 'move' ? null : 'PROCEDURE');
+        st = `NOT READY: ${unit.gate}.${cardName ? ` See the ${cardName} card.` : ''}`;
+      }
+      else if (!o.target) { st = ''; routine = true; } // (the target box says "None")
+      else if (prob) { st = `CANNOT FIRE: ${prob}.`; cannot = true; }
+      else {
+        // (how to fire is on the FIRE key, the guns' state on the guns card: nothing for the slip)
+        routine = true;
+        st = '';
+      }
+      setCls(slip, 'hide', routine);
+      setCls(slip, 'alarm', !!call);
+      setText(statEl, st);
+      const tip = cannot ? `${sim.guns?.problem?.(unit) ?? prob}.` : '';
+      if (statEl.title !== tip) statEl.title = tip;
+      setCls(statEl, 'bad', dead || !!call || cannot);
+      setCls(statEl, 'go', false);
+      // the bell for the call nobody answers: every 4 s while the battle runs, a dozen times a call (again if the
+      // batteries leave the line with the call still up)
+      if (!call) bell.for = null;
+      else {
+        if (bell.for !== call.m.id) { bell.for = call.m.id; bell.n = 0; bell.at = -1e9; }
+        if (bell.n < 12 && now - bell.at >= 4000 && sim.time > bell.sim) { bell.at = now; bell.sim = sim.time; bell.n++; snd('bell'); }
+      }
+      guns.el.title = cfg.note; // (the gun's note, on the brass plate before the header went)
+    } else {
     if (dead) st = 'BATTERY SILENCED: every piece knocked out';
     else if (alarmSet.size) { const a = [...alarmSet][0]; st = `${TH.sos} ${a}, ${TH.sectors.find((s) => s.id === a)?.name ?? ''}! Press S: every gun to the ${TH.sos} line.`; }
     else if (now - toastT < 3200) st = toast;
@@ -235,6 +296,7 @@ export function mountConsole(ctx) {
       c.strength.set(s == null ? 1 : s);
     }
     setCls(hdr, 'alarm', alarm.size > 0);
+    }
 
     const nCharges = chargeCount(sim, unit, cfg);
     const tgtM = m || (o.target ? liveMissions(sim).find((q) => Math.hypot(q.x - o.target.x, q.z - o.target.z) < 90) : null);
@@ -252,7 +314,7 @@ export function mountConsole(ctx) {
     if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
     order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU(), problem: prob });
     if (special) special.update(unit, sim);
-    if (!special || (special.bottom && !special.aside)) rtab.update({ sim, unit });
+    if (!lean && (!special || (special.bottom && !special.aside))) rtab.update({ sim, unit });
     guns.update({ unit });
     missions.update({ sim, unit });
     pad.update({ mail, unit, sim });
@@ -279,7 +341,8 @@ export function mountConsole(ctx) {
       case 'KeyR': { const o = U.order || {}, l = cfgOf(U).rounds; const i = l.findIndex((v) => v >= (o.rounds || 1)); cmd('rounds', { n: l[(i + 1) % l.length] }); return true; }
       case 'KeyZ': act('fuzecycle'); return true;
       case 'KeyG': act('gunscycle'); return true;
-      case 'KeyA': send('mode', { mode: U.mode === 'auto' ? 'manual' : 'auto' }); return true;
+      // (the German open battles have no auto mode to switch to: main.js NO_AUTO; the special missions keep A)
+      case 'KeyA': if (TH.noAuto) return false; send('mode', { mode: U.mode === 'auto' ? 'manual' : 'auto' }); return true;
       case 'KeyS': { const al = board.alarm && [...board.alarm][0]; const weak = al || TH.sectors.filter((s) => (SIM.front ? SIM.front[s.id] : 1) > 0).sort((a, b) => (SIM.front ? SIM.front[a.id] : 1) - (SIM.front ? SIM.front[b.id] : 1))[0]?.id; if (weak) act('sos', weak); return true; }
       case 'KeyX': act('step'); return true;
       case 'Backspace': case 'Delete': act('cease'); return true;

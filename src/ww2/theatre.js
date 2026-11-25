@@ -53,7 +53,9 @@ export function ww2Theatre(opId = 'flanders') {
           ok = u.order.ok;
         }
         if (ok && u.order.ok) {
-          if (u.mode === 'hold') u.mode = 'manual';
+          // (a battery with its crew while the player serves a gun: the player's Sperrfeuer is an order like any other and
+          // takes it back, else its crew would drop the line for the work it had)
+          if (u.mode === 'hold' || sim.gunner?.handedOver?.(u)) u.mode = 'manual';
           sim.guns.fire(u);
           n++;
         }

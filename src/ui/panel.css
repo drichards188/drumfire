@@ -99,6 +99,8 @@
 .fchip { flex: 1; font: 700 8px/11px var(--type); font-style: normal; text-align: center; background: #3d5a2a; color: #e8e3c0; border-radius: 1px; }
 .fchip.weak { background: #a87a1c; }
 .fchip.lost { background: #7d1f16; text-decoration: line-through; }
+.fchip.call { background: #f0502e; animation: blink .35s steps(2, jump-none) infinite; } /* a Sperrfeuer call no battery answers */
+.tmode.off { visibility: hidden; } /* the German pages: no letter at the player's orders */
 @keyframes blink { 0% { opacity: 1; } 100% { opacity: .2; } }
 
 /* ---------- layout ---------- */
@@ -235,6 +237,8 @@
 .bbar { position: absolute; left: 7px; right: 7px; bottom: 7px; display: flex; flex-direction: column; gap: 2px; padding: 3px 8px 3px; background: rgba(40,28,12,.82); color: #f1e4b4; border-top: 1px solid rgba(255,230,150,.3); }
 .bref { font: 700 10px/1.15 var(--type); white-space: pre-wrap; color: #ffe08a; min-height: 11.5px; }
 .bhint { font: italic 9px/1.15 var(--serif); color: #c8b988; }
+.bbar.one .bhint { display: none; }
+.bbar.one .bref.idle { font: italic 9.5px/1.15 var(--serif); color: #c8b988; }
 
 /* ---------- fire order ---------- */
 .card.order { flex: 1 1 auto; min-height: 0; }
@@ -541,3 +545,76 @@
 .lr-row.wait { opacity: .55; }
 .lr-odds { flex: none; font: 8.5px/1.25 var(--type); color: var(--muted); }
 .lr-hint { flex: none; font: italic 9.5px/1.2 var(--serif); color: var(--blue); min-height: 11px; }
+
+/* ---------- the German pages' console (TH.lean, 2026-11-25: the Godot demo's cut of 2026-11-24) ---------- */
+/* no header: the top row as tall as the fire order and the guns need (or half the height), the missions and the
+   messages share the bottom row */
+/* (measured: four guns under a two-line target and a three-line Sperrfeuer slip need 536; with the self-propelled
+   guns' move card, on the move and with that slip, 611. The height only changes with the battery, as the console is
+   built again for each, so the board never resizes under the player) */
+.con.lean.plainrows > .toprow { flex: 1 1 0; min-height: 540px; }
+.con.lean.plainrows:has(.gmove.on) > .toprow { min-height: 612px; }
+/* the Paris Gun's top row: the slip stands atop its firing data card (and is up through the whole Stellungsbau), so the
+   row is taller by the slip, or the card's TABLE, REPORT and LAY keys and its note fall off the foot */
+.con.lean:has(> .botrow > .sp-paris) > .toprow { height: 500px; }
+.con.lean.plainrows > .botrow { flex: 1 1 0; min-height: 200px; }
+.con.lean .rightcol.plain > .card.order { flex: none; }
+.con.lean .rightcol.plain .orderbot { height: 96px; }
+.con.lean .rightcol.plain > .card.guns { flex: 1 1 auto; min-height: 0; overflow: hidden auto; }
+.con.lean.plainrows .botrow > .missions { width: auto; flex: .75 1 0; min-width: 0; }
+.con.lean.plainrows .botrow > .pad { flex: 1 1 0; }
+/* the target: its name large, the range and the grid square under it */
+.tgt.lean { display: flex; flex-direction: column; gap: 1px; }
+.tgt.lean .tname { font: 700 15px/1.15 var(--serif); color: var(--ink); white-space: normal; }
+.tgt.lean .tref { font: 700 11px/1.2 var(--type); color: var(--blue); letter-spacing: 0; }
+.tgt.lean.none .tname { font: italic 12px/1.2 var(--serif); color: var(--muted); }
+.tgt.lean.none .tref { display: none; }
+/* the status slip: only when it has something to say; it flashes for a Sperrfeuer call nobody answers */
+.statslip { flex: none; padding: 3px 6px; background: rgba(242,217,184,.9); border: 1px solid #a0522d; }
+.statslip.hide { display: none; }
+.statslip .stat { max-height: none; }
+.statslip.alarm { animation: slipalarm .7s steps(2, jump-none) infinite; }
+@keyframes slipalarm { 0% { background: #f3b9a4; box-shadow: inset 0 0 0 1px var(--red); } 100% { background: rgba(242,217,184,.9); box-shadow: none; } }
+/* the correction keys: a bold drawn arrow over the word; the step key: a dot for each of its five sizes */
+.btn.key.arrowkey .lbl { flex-direction: column; align-items: center; gap: 2px; }
+.btn.key.arrowkey .lbl b { font-size: 10px; letter-spacing: .04em; }
+.karrow { order: -1; width: 12px; height: 13px; fill: #2b1d06; flex: none; }
+.karrow.left, .karrow.right { width: 18px; height: 12px; }
+.btn.dis .karrow { opacity: .5; }
+.kdots { display: flex; gap: 3px; margin-top: 4px; }
+.kdots i { width: 5px; height: 5px; border-radius: 50%; border: 1.2px solid rgba(43,29,6,.7); }
+.kdots i.on { background: #2b1d06; border-color: #2b1d06; }
+/* a gun's line: its lamp, number, what it is doing, the crew when short, the wear when worn, health, MAN */
+.card.guns.lean .grow.lean { flex-direction: row; align-items: center; gap: 6px; padding: 3px; max-height: none; }
+.card.guns.few.lean .grow.lean { padding: 6px 4px; }
+.glamp { flex: none; width: 10px; height: 10px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #5a5446, #1f1b12); box-shadow: 0 0 0 1.5px #8d6c26, 0 0 0 2.5px #3b2a0a; }
+.glamp.g { background: radial-gradient(circle at 35% 30%, #c8ffd0, #2ec04e); box-shadow: 0 0 0 1.5px #8d6c26, 0 0 0 2.5px #3b2a0a, 0 0 8px #3be060; }
+.glamp.a { background: radial-gradient(circle at 35% 30%, #fff0b8, #f0a21c); box-shadow: 0 0 0 1.5px #8d6c26, 0 0 0 2.5px #3b2a0a, 0 0 8px #ffb62b; }
+.glamp.r { background: radial-gradient(circle at 35% 30%, #ffc0b0, #e02a14); box-shadow: 0 0 0 1.5px #8d6c26, 0 0 0 2.5px #3b2a0a, 0 0 9px #ff3b25; }
+.gno { flex: none; font: 700 12px/1 var(--serif); letter-spacing: .08em; white-space: nowrap; }
+.card.guns.few.lean .gno { font-size: 14px; }
+.card.guns.lean .grow.lean .gstate { flex: 1 1 auto; min-width: 0; min-height: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.guns.few.lean .grow.lean .gstate { font-size: 12px; }
+.gshort { display: none; flex: none; font: italic 9px/1 var(--serif); color: var(--red); white-space: nowrap; }
+.gworn { display: none; flex: none; font: normal 7px/1 var(--serif); letter-spacing: .1em; color: var(--muted); }
+.gshort.show, .gworn.show { display: inline; }
+.grow.lean .bar { flex: none; width: 34px; }
+.card.guns.few.lean .grow.lean .bar { width: 44px; height: 9px; }
+.grow.lean .bar.gwear { display: none; width: 24px; }
+.grow.lean .bar.gwear.show { display: block; }
+.grow.lean.dead .gno { text-decoration: line-through; }
+.grow.lean.manned .gno { color: #6b4a0c; }
+/* under the fire order the card is tight (the fire order grows with a two-line target and the slip): the shells and
+   how well the enemy has us located share one line, and the bed's or the move's key is a size smaller */
+.rightcol.plain > .card.guns.lean .cbody { flex-flow: row wrap; align-content: flex-start; column-gap: 0; }
+.rightcol.plain > .card.guns.lean .cbody > * { flex: 1 1 100%; min-width: 0; }
+.rightcol.plain > .card.guns.lean .cbody > .gammo { flex: none; align-items: center; }
+.rightcol.plain > .card.guns.lean .cbody > .gsig { flex: 1 1 0; margin-top: 4px; padding: 4px 4px 0 10px; border-top: 1px solid var(--rule); }
+/* the Gustav's and the Karl's guns card stands in the bottom row, 250 wide: room below, not beside, so the gun's state
+   goes on a line of its own under the number and the bars instead of shrinking to a few letters */
+.botrow > .card.guns.lean .grow.lean { flex-wrap: wrap; row-gap: 3px; }
+.botrow > .card.guns.lean .grow.lean .gno { margin-right: auto; }
+.botrow > .card.guns.lean .grow.lean .gstate { order: 1; flex: 1 1 100%; padding-left: 16px; white-space: normal; }
+.card.guns.lean .gbed { margin-top: 2px; padding: 4px 2px 2px; gap: 3px; }
+.card.guns.lean .gbed > i { font-size: 10.5px; line-height: 1.25; }
+.card.guns.lean .gbed .bedbtn { height: 28px; }

@@ -2,9 +2,9 @@
 
 ![Drumfire](docs/screenshot.jpg)
 
-**Command heavy artillery from a fire control console: British guns at Ypres in 1917, a German Gruppe on the same ridge in 1918, and German guns and special weapons of the Second World War.**
+**Command the biggest guns of both World Wars.** From a fire control console: British guns at Ypres in 1917, a German Gruppe on the same ridge in 1918, and German guns and special weapons of the Second World War.
 
-**Why it's different:** you lay the guns from a map and a range table and correct from the observers' reports while the enemy's guns hunt yours. History gives the guns, places, words and procedures; ranges, loading times and damage are game rules.
+**Why it's different:** you lay the guns from a map and correct from the observers' reports while the enemy's guns hunt yours. History gives the guns, places, words and procedures; ranges, loading times and damage are game rules.
 
 ## What you do
 

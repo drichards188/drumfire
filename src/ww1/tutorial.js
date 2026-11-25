@@ -103,8 +103,8 @@ const steps = [
   // the console, one section at a time
   {
     id: 'header', title: 'The battery',
-    text: 'The top of the console: the battery you command, its status line (what it is doing, or why it cannot fire), and AUTO, MANUAL and HOLD. On AUTO the battery\'s own commander fights it; any order you give puts it on MANUAL. A to D call Sperrfeuer, the barrage that stops an attack, on a sector of the front.',
-    spot: ['header', 'status', 'mode'],
+    text: 'The column on the right: the battery you command is the lit tab, with its guns\' state. When the battery cannot fire, a slip in the fire order says why. The battery waits for your orders: its crew loads and lays, but takes no mission and fires no round by itself. When our infantry sends up red flares for the Sperrfeuer, S puts every gun on the barrage line, and no battery answers until you do. In a battle, the number keys choose a battery.',
+    spot: ['tabs'],
   },
   {
     id: 'board', title: 'The map board',
@@ -113,17 +113,12 @@ const steps = [
   },
   {
     id: 'order', title: 'The fire order',
-    text: 'What the guns are laid to: the target, line, range and elevation. Below them the charge (Q and E), the rounds per gun (R), the fuze (Z), how many guns fire (G), the corrections (the arrow keys), FIRE (Space) and CEASE (Backspace).',
+    text: 'Feuerbefehl, the orders the guns are laid to: the target and how far it is, the charge (the crew picks it; Q and E to choose your own), rounds per gun (R), the fuze (Z), how many guns fire (G) and the corrections (the arrow keys). The crews work out the line and elevation themselves. Space fires; Backspace ceases fire.',
     spot: ['order'],
   },
   {
-    id: 'rtab', title: 'The range table',
-    text: 'The elevation and the time of flight for each range at the chosen charge. The row of the present target is lit.',
-    spot: ['rtab'],
-  },
-  {
     id: 'gunscard', title: 'The guns',
-    text: 'Each gun of the battery: its crew, its lamps (LAID, LOADED, READY), its loading drill ticked off step by step, its health and barrel wear, and MAN to serve it in person.',
+    text: 'Each gun on a line under the fire order: its lamp (green ready, amber loading or laying, red knocked out), what it is doing, its health, the crew and the barrel wear only when short or worn, and MAN to serve it in person.',
     spot: ['guns'],
   },
   {
@@ -149,7 +144,7 @@ const steps = [
     text: (T) => {
       const p = T.u?.pieces[0], s = p?.state === 'loading' ? p.job?.step : null;
       const now = p?.state === 'ready' ? 'READY' : p?.state === 'laying' ? 'laying on the target' : s ? DOING[s] ?? s : 'waiting';
-      return `Taking the call lays the battery on the target. The crews load (the barrel comes down level, the shell and the cartridge go in, the breech closes, the primer is fitted) and lay the guns: the barrel swings onto the line and rises to the elevation. Watch No. 1 gun in the view; the guns card ticks off each step. ] speeds time.\n\nNo. 1 gun: ${now}.`;
+      return `Taking the call lays the battery on the target. The crews load (the barrel comes down level, the shell and the cartridge go in, the breech closes, the primer is fitted) and lay the guns: the barrel swings onto the line and rises to the elevation. Watch No. 1 gun in the view; the guns card says what each gun is doing. ] speeds time.\n\nNo. 1 gun: ${now}.`;
     },
     goal: 'Wait until a gun is READY', spot: ['#view', 'guns'],
     enter: (T) => T.host.closeUp?.(0), // (the camera in close on No. 1 gun)
@@ -362,7 +357,7 @@ const steps = [
   },
   {
     id: 'leave', title: 'Back to the console',
-    text: 'The crew carries on without you. Press P to leave the gun (or LEAVE on the guns card): the camera goes back to the battery.',
+    text: 'The crew carries on without you. In a battle your other batteries fight on under their own crews while you are at a gun, and wait for your orders again when you leave it. Press P to leave the gun (or LEAVE on the guns card): the camera goes back to the battery.',
     goal: 'Press P', spot: ['#view', 'guns'],
     skipIf: (T) => !G(T),
     done: (T) => !G(T),
