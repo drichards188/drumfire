@@ -359,7 +359,9 @@ export class GunCrew {
     rig.root.position.set(0, 0, 0); rig.root.rotation.set(0, 0, 0); rig.root.updateMatrixWorld(true);
     const at = rig.root.userData.crewAt ?? { x: keep[0].x, z: keep[0].z };
     const F = this.field = new CrewField(rig, this.kind, GUNS[this.kind], floors, at, this.workY);
-    rig.root.position.copy(keep[0]); rig.root.rotation.copy(keep[1]); rig.root.updateMatrixWorld(true);
+    // (the rig stays at rest at the origin through the men's places too: gripPost reads the grips' world matrices as
+    // root space; with the rig put back first, a layer at a named wheel took the wheel's place on the map for his home
+    // and walked kilometres off whenever he laid, the gunner's eye with him)
     const out = { x: 0, z: 0 };
     F.blk.length = 0;
     for (const m of this.men) {
@@ -378,6 +380,7 @@ export class GunCrew {
       m.sx = out.x; m.sz = out.z;
       if (!m.world) F.blk.push([out.x, out.z, 0.32]); // the next man keeps his distance
     }
+    rig.root.position.copy(keep[0]); rig.root.rotation.copy(keep[1]); rig.root.updateMatrixWorld(true);
     F.blk.length = 0;
     this.lw = F.level(this.workY); this.l0 = F.level(0);
     this.pairLead = this.men.find((q) => PAIR.test(q.beh)) ?? null;
