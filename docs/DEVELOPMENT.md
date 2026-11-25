@@ -44,8 +44,26 @@ node tools/perfreport.mjs [session]                           # sums a recorded 
 
 - **`simtest`** runs whole games on worker threads and prints win rates and per-game figures. Run it after changing the gun, shell, target or difficulty tables, the AI crews, the enemy or the director.
 - **`shot.mjs`** launches its own headless Chromium through `playwright-core` (Chromium from `~/.cache/ms-playwright`). Its other flags are `--size WxH`, `--until "expr"` (wait for a condition), `--eval "expr"` (run after the wait, result printed) and `--dev` (dev mode on, every battery open).
-- **The frame recorder** (`src/perfrec.js`) runs on every game page the dev server serves (`?perf=0` turns it off; the build never has it). It times each stage of the frame and writes the spikes, with the 2 seconds before them and what was happening, to `perf/<session>.jsonl` through the dev server; F3 shows the file. A gap of over half a second that is not a frame (a freeze over 2.5 s, or the window hidden) gets its own line saying which, so a freeze can be told from switching windows. Play, then run `perfreport` (or `perfwatch` while playing).
+- **The frame recorder** (`src/perfrec.js`) runs on every game page the dev server serves (`?perf=0` turns it off; in the build it runs only for the players' lag reports, below, and writes nothing). It times each stage of the frame and writes the spikes, with the 2 seconds before them and what was happening, to `perf/<session>.jsonl` through the dev server; F3 shows the file. A gap of over half a second that is not a frame (a freeze over 2.5 s, or the window hidden) gets its own line saying which, so a freeze can be told from switching windows. Play, then run `perfreport` (or `perfwatch` while playing).
 - **`menushots.mjs`** takes the main menu's background stills from the game itself: for each gun it opens the game page with every battery open, hides the console, puts the gun on auto, runs the battle on until it fires and captures the blast (`--size WxH`, `--quality`, `--out`). Each run plays a new battle, so look at the pictures before keeping them.
+
+## Crash and lag reports
+
+Players' browsers send errors, lag spikes and frame-time metrics to Sentry (project `drumfire` in the `enveloperty` organization). How it works: DESIGN.md, "Crash and lag reports".
+
+- **Settings.** `.env.local` (gitignored) holds `VITE_SENTRY_DSN` (without it a build sends nothing and shows no switch) and `SENTRY_AUTH_TOKEN` (an org token; with it `npm run build` uploads source maps and deletes them from `dist/`).
+- **Not from here.** The dev server and the headless tools send nothing unless the URL has `?sentry=1`; `?sentry=0` stops reports anywhere.
+- **Players' switch.** The menu footer's **Reports** button and the gear menu's "Send crash and lag reports".
+- **Reading them.** With the Sentry CLI (`curl -fsSL https://cli.sentry.dev/install | bash`, then `sentry auth login`):
+
+```bash
+sentry issue list enveloperty/drumfire                    # errors and "Lag spike: <cause>" issues, most players first
+sentry issue view DRUMFIRE-2 --json                       # one issue with its latest event (contexts lag, battle, events)
+sentry explore enveloperty/drumfire --dataset metrics -m frame.p95 --agg avg -F gpu.name --period 7d   # frame times by GPU
+sentry explore enveloperty/drumfire --dataset metrics -m session.start --period 7d                     # page loads
+```
+
+- **A spike's frames.** Each lag event carries `spike.jsonl`; download it from the issue and run `node tools/perfreport.mjs spike.jsonl`.
 
 ## URL parameters
 

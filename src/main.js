@@ -27,6 +27,7 @@ import { hideLoading } from './ui/loading.js';
 import { menuHref, DIFFICULTIES, WIP_KINDS, WIP_LINE } from './menuItems.js';
 import { Tutorials } from './tutorial.js';
 import { shouldInvite, showInvite } from './ui/invite.js';
+import { available as reportsAvailable, reportsOn, setReports, telemetry } from './reports.js';
 import { ChaseCamera } from './camera.js';
 import { UNITS as UNITS_1917, piecePlacements, headingFor, DEG, YARD } from './sector.js';
 import { ww2Theatre, OPS } from './ww2/theatre.js';
@@ -484,6 +485,7 @@ async function init() {
     trees: true,
     // the WW2 gunner (P or MAN on the guns card): the crew works the posts the player is not at, and the batteries on
     // manual go to their crews while the player is at a gun (back to manual on leaving it)
+    reports: reportsOn(), // the crash and lag reports (src/reports.js)
     gunnerAssist: (() => { try { return localStorage.getItem(GUNNER_ASSIST) !== '0'; } catch { return true; } })(),
     othersAuto: true,
   };
@@ -559,6 +561,8 @@ async function init() {
     });
     fPlay.add(params, 'othersAuto').name('At a gun: other batteries to auto');
   }
+  // the crash and lag reports' switch (src/reports.js), only in a build that sends them; off stops them at once
+  if (reportsAvailable()) fPlay.add(params, 'reports').name('Send crash and lag reports').onChange(setReports);
   const fWorld = gui.addFolder('Time & weather');
   fWorld.add(params, 'hour', 0, 24, 0.05).name('Hour (fixes the clock)').listen().onChange(() => (params.lockHour = true));
   fWorld.add(params, 'lockHour').name('Fixed time of day').listen();
@@ -1106,7 +1110,7 @@ async function init() {
   const asVec = (p, out) => out.set(p.x, p.y ?? 0, p.z);
   const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _dir = new THREE.Vector3();
   const seenShells = new WeakSet();
-  let perf = null; // the frame recorder (src/perfrec.js, dev server only), made before the loop
+  let perf = null; // the frame recorder (src/perfrec.js: the dev server's, or the build's for the lag reports), made before the loop
   const handlers = {
     // a gun fired: muzzle blast, light, recoil, sound, shake
     fire(unit, piece, shell) {
@@ -1552,22 +1556,27 @@ async function init() {
   let frameAvg = 16;
   const bracketPt = new THREE.Vector3();
 
-  // The frame recorder on the dev server (src/perfrec.js, tools/perfwatch.mjs, tools/perfreport.mjs): every stage of the
-  // frame timed, the spikes written to perf/<session>.jsonl with what was happening. ?perf=0 turns it off; the headless
-  // tools (navigator.webdriver) have it only with ?perf=1. The build never loads it.
-  if (import.meta.env.DEV && query.get('perf') !== '0' && (!navigator.webdriver || query.get('perf') === '1')) {
+  // The frame recorder (src/perfrec.js): every stage of the frame timed, and the spikes with what was happening. On the
+  // dev server it writes perf/<session>.jsonl (tools/perfwatch.mjs, tools/perfreport.mjs); ?perf=0 turns that off and
+  // the headless tools (navigator.webdriver) have it only with ?perf=1. In the build it runs only for the players' lag
+  // reports (src/telemetry.js, when they are on) and posts nothing itself.
+  const devRec = import.meta.env.DEV && query.get('perf') !== '0' && (!navigator.webdriver || query.get('perf') === '1');
+  const tele = await telemetry().catch(() => null);
+  if (devRec || tele) {
     try {
       const { createPerfRecorder } = await import('./perfrec.js');
       const brief = () => ({ st: state, sim: sim ? Math.round(sim.time) : null, ph: sim?.phase ?? null, ts: params.timeScale,
         unit: UNITS[selected]?.kind ?? null, cam: following ? 'shell' : gview?.active ? 'gun' : freeCam ? 'free' : chase.mode });
-      perf = createPerfRecorder({ renderer, dynRes, fx, flares, sim, context: {
+      const settings = () => ({ quality: params.quality, dynamicRes: params.dynamicRes, weather: params.weather, mode: WW2 ? 'ww2' : WW1 ? 'ww1' : 'ww1917' });
+      perf = createPerfRecorder({ renderer, dynRes, fx, flares, sim, post: devRec, onLine: tele ? tele.perfLine : null, context: {
         camera,
         timeScale: () => params.timeScale,
-        settings: () => ({ quality: params.quality, dynamicRes: params.dynamicRes, weather: params.weather, mode: WW2 ? 'ww2' : WW1 ? 'ww1' : 'ww1917' }),
+        settings,
         brief,
         full: () => ({ ...brief(), quality: params.quality, dist: Math.round(chase.dist), at: [camera.position.x, camera.position.y, camera.position.z].map(Math.round),
           flares: flares.items.length, flashes: flares.flashes.length, hidden: renderLayer?.detail?.hidden ?? null }),
       } });
+      tele?.attach(perf, { settings });
       drumfire.perf = perf;
     } catch (e) {
       console.warn(`frame recorder: ${e.message}`);

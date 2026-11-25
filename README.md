@@ -74,7 +74,7 @@ Full list: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#not-done-yet).
 
 ## Credits
 
-- **Libraries:** [three.js](https://threejs.org) and [lil-gui](https://lil-gui.georgealways.com); [Vite](https://vite.dev) and [playwright-core](https://playwright.dev) for development.
+- **Libraries:** [three.js](https://threejs.org), [lil-gui](https://lil-gui.georgealways.com) and the [Sentry JavaScript SDK](https://github.com/getsentry/sentry-javascript) (MIT; crash and lag reports); [Vite](https://vite.dev), [playwright-core](https://playwright.dev) and Sentry's bundler plugins for development.
 - **Recordings:** eight recordings from Freesound, seven CC0 and one CC BY 4.0: ["Tykki, laukaus / Big gun, cannon, 76 mm, single shots, gunshots"](https://freesound.org/s/332935/) by YleArkisto ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)); sources in [public/audio/CREDITS.md](public/audio/CREDITS.md).
 - **Voices:** the WW2 and WW1 German crews' callouts are synthetic speech made with [Piper](https://github.com/OHF-Voice/piper1-gpl): the `de_DE-mls-medium` voice, trained on Multilingual LibriSpeech by Pratap et al. ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)), and `de_DE-thorsten_emotional-medium` (Thorsten-Voice, CC0); details and a licence note in [public/audio/CREDITS.md](public/audio/CREDITS.md).
 - **Crewmen:** crew motion: the data used in this project was obtained from [mocap.cs.cmu.edu](http://mocap.cs.cmu.edu). The database was created with funding from NSF EIA-0196217. Bodies: [MakeHuman](http://www.makehumancommunity.org) assets (CC0), made with MPFB; cloth and leather textures from [Poly Haven](https://polyhaven.com) and [ambientCG](https://ambientcg.com) (CC0).

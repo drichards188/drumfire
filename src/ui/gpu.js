@@ -78,12 +78,17 @@ function showNotice(state, renderer, onPlay) {
   root.querySelector('button').focus();
 }
 
+// what the check found, for the crash and lag reports (src/telemetry.js): 'gpu', 'software' or 'none', and the renderer
+export const gpuInfo = { state: null, renderer: '' };
+
 // Checks the browser and, unless the game will be drawn on the graphics card, puts up the card: for 'none' one that
 // stays (the game cannot start), for 'software' one with Play anyway, asked again on every page load so no menu, lesson
 // or battle starts behind it. Headless tools draw with SwiftShader on purpose and never see the latter. Resolves with
 // the state once the page may go on: at once on a GPU, on Play anyway for 'software', never for 'none'.
 export function checkGpu() {
   const [state, renderer] = status();
+  gpuInfo.state = state;
+  gpuInfo.renderer = renderer ?? '';
   if (state === 'gpu' || (state === 'software' && navigator.webdriver)) return Promise.resolve(state);
   return new Promise((resolve) => showNotice(state, renderer, () => resolve(state)));
 }

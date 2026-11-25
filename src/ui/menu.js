@@ -1,5 +1,6 @@
 import { Progression } from '../progression.js';
 import { exportSave, importSave } from '../saves.js';
+import { available as reportsAvailable, reportsOn, setReports } from '../reports.js';
 import { BATTERIES } from '../campaign-data.js';
 import { TREES, LINES, RANK_ERA, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
 import { menuItems, hrefOf, GUIDE, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
@@ -33,7 +34,11 @@ const SWITCHES = '<div class="mn-switches"><div class="mn-sw-stack">'
 // the save as a file, beside the "Saved in this browser" line (src/saves.js): kept by the player, it survives cleared
 // browser data and a browser that will not store anything in itch.io's frame
 const SAVE_FILE = '<span class="mn-files"><button type="button" class="mn-file" data-file="export" title="Download your career (research, upgrades, points, lessons, menu choices) as a small file. Keep it to carry the career to another browser or computer, or to get it back if this browser\'s data is cleared.">Export save</button>'
-  + '<button type="button" class="mn-file" data-file="import" title="Load a career from a saved file. It replaces the career in this browser.">Import save</button></span>';
+  + '<button type="button" class="mn-file" data-file="import" title="Load a career from a saved file. It replaces the career in this browser.">Import save</button>'
+  // the crash and lag reports' switch (src/reports.js), only in a build that sends them
+  + (reportsAvailable() ? '<button type="button" class="mn-file" data-file="reports" title="Crash and lag reports: when the game breaks or stutters, a report goes to the developer with what happened, the graphics card and the settings. No IP address, no account. Click to switch."></button>' : '')
+  + '</span>';
+const reportsLabel = () => (reportsOn() ? 'Reports on' : 'Reports off');
 
 const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -1127,8 +1132,15 @@ export function mountMenu(root = document.getElementById('menu')) {
   // the save file: Export downloads it; Import reads one back and reloads the page, so everything reads it afresh
   const saveNote = (t) => { for (const s of $$('.mn-save')) s.textContent = t; clearTimeout(saveNote.t); saveNote.t = setTimeout(render, 4000); };
   const fileIn = $('.mn-file-in');
+  for (const b of $$('[data-file="reports"]')) b.textContent = reportsLabel();
   for (const b of $$('[data-file]')) b.addEventListener('click', () => {
     if (b.dataset.file === 'import') { fileIn.value = ''; fileIn.click(); return; }
+    if (b.dataset.file === 'reports') {
+      setReports(!reportsOn());
+      for (const r of $$('[data-file="reports"]')) r.textContent = reportsLabel();
+      saveNote(reportsOn() ? 'Crash and lag reports on' : 'Crash and lag reports off');
+      return;
+    }
     saveNote(exportSave() ? 'Save file downloaded' : 'Nothing saved yet to export');
   });
   fileIn.addEventListener('change', async () => {

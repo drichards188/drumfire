@@ -6,3 +6,4 @@ refs
 CLAUDE.md
 .claude
 perf
+.env.local

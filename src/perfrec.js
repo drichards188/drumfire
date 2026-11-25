@@ -1,12 +1,14 @@
-// The frame recorder (dev server only: main imports it under import.meta.env.DEV, so the build never holds it). It
-// times every stage of main's frame, keeps the last frames in a ring, and when a frame runs long (a spike) it writes
-// the two seconds before and half a second after, the sim events of that window with what their handlers cost, the
-// browser's long-animation-frame reports (the scripts that ran outside the frame, Chrome) and the battle's state.
-// Once a second it writes a summary line. Lines go to the dev server (vite.config.js perfLog: POST /__perf), which
-// appends them to perf/<session>.jsonl; tools/perfwatch.mjs follows the newest session, tools/perfreport.mjs sums one.
-//   const perf = createPerfRecorder({ renderer, dynRes, fx, flares, sim, context });
+// The frame recorder. It times every stage of main's frame, keeps the last frames in a ring, and when a frame runs long
+// (a spike) it writes the two seconds before and half a second after, the sim events of that window with what their
+// handlers cost, the browser's long-animation-frame reports (the scripts that ran outside the frame, Chrome) and the
+// battle's state. Once a second it writes a summary line. On the dev server (`post`) lines go to vite.config.js
+// perfLog (POST /__perf), which appends them to perf/<session>.jsonl; tools/perfwatch.mjs follows the newest session,
+// tools/perfreport.mjs sums one. In the build it runs only for the players' lag reports (src/telemetry.js, `onLine`
+// gets every line as an object) and posts nothing.
+//   const perf = createPerfRecorder({ renderer, dynRes, fx, flares, sim, context, post, onLine });
 //   perf.frameStart() at the top of a drawn frame (false: not recorded), perf.mark('sim') between stages,
-//   perf.frameEnd() at its end, perf.event(name, args, ms) from each sim event, perf.dispose()
+//   perf.frameEnd() at its end, perf.event(name, args, ms) from each sim event, perf.drain() writes a spike still
+//   filling, perf.hist the frame times counted in 1 ms bins (the reader resets it), perf.dispose()
 // A row is one frame: `dur` is the time from its start to the next frame's start (what the player sees), `cpu` the time
 // inside main's frame function; dur - cpu is the rest (waiting on the GPU, garbage collection, other tasks, vsync).
 
@@ -23,11 +25,13 @@ const BEFORE = 2000, AFTER = 500; // ms of frames written round a spike
 const SPIKE_MIN = 25; // ms: a frame this long (and twice the usual) is a spike
 const HUGE = 2500; // ms: a gap this long is a hidden tab or a breakpoint, not a frame
 const SEND = 2000; // ms between posts
+export const HIST = 1000; // the frame time histogram's 1 ms bins (to 1 s); the last holds every longer frame
 
 const r1 = (v) => Math.round(v * 10) / 10;
 
-export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context }) {
+export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context, post = true, onLine = null }) {
   const rows = new Float32Array(RING * W);
+  const hist = new Uint32Array(HIST);
   const starts = new Float64Array(RING); // each row's start (performance.now)
   const ids = new Int32Array(RING).fill(-1); // each row's frame number
   const events = []; // { t, n, c, d, ms } of the last seconds
@@ -45,7 +49,10 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
   let secEv = {}; // this second's sim events by name
   let secN = 0, secAt = t0, sentAt = t0, gpuSum = 0, gpuN = 0, maxShells = 0, maxSmoke = 0, maxCalls = 0, maxTris = 0, maxSteps = 0;
 
-  const line = (o) => out.push(JSON.stringify(o));
+  const line = (o) => {
+    if (onLine) try { onLine(o); } catch (e) { console.warn(`frame recorder: ${e.message}`); }
+    if (post) out.push(JSON.stringify(o));
+  };
   const cam = () => context?.camera?.position;
 
   // the GPU's time for a frame arrives a few frames later (dynres.js timer queries): into that frame's row
@@ -200,6 +207,7 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
 
   function account(i, dur) {
     durs.push(dur);
+    hist[Math.min(HIST - 1, dur | 0)]++;
     const o = i * W;
     for (let s = 0; s < NS; s++) stageSum[s] += rows[o + s];
     stageSum[NS] += rows[o + C.cpu];
@@ -286,16 +294,20 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
 
   function send(now) {
     sentAt = now;
-    if (!out.length) return;
+    if (!post || !out.length) return;
     const body = out.join('\n') + '\n';
     out.length = 0;
     fetch(`/__perf?s=${session}`, { method: 'POST', body, keepalive: body.length < 60000 }).catch(() => {});
   }
 
-  const onHide = () => {
+  // the spike window still filling and the gaps waiting for their second, written now
+  const drain = () => {
     if (capture) flushCapture();
     flushGaps(Infinity);
-    if (out.length) navigator.sendBeacon?.(`/__perf?s=${session}`, new Blob([out.join('\n') + '\n'], { type: 'text/plain' }));
+  };
+  const onHide = () => {
+    drain();
+    if (post && out.length) navigator.sendBeacon?.(`/__perf?s=${session}`, new Blob([out.join('\n') + '\n'], { type: 'text/plain' }));
     out.length = 0;
   };
   addEventListener('pagehide', onHide);
@@ -309,5 +321,5 @@ export function createPerfRecorder({ renderer, dynRes, fx, flares, sim, context 
     if (dynRes) dynRes.onGpu = null;
   }
 
-  return { session, frameStart, mark, frameEnd, event, dispose, get recording() { return true; } };
+  return { session, frameStart, mark, frameEnd, event, drain, hist, dispose, get recording() { return true; } };
 }

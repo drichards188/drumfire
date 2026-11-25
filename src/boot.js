@@ -5,9 +5,12 @@ import { checkGpu } from './ui/gpu.js';
 // comes first and is the only static import, so nothing of the menu, a lesson or a battle runs before it answers:
 // without WebGL (graphics acceleration off) its card stays and nothing loads; drawn on the CPU, nothing loads until
 // Play anyway. Then the saves (src/saves.js: the IndexedDB mirror, and its copy put back if localStorage lost them),
-// before anything reads one.
+// before anything reads one. The crash and lag reports (src/reports.js, src/telemetry.js) start beside all that,
+// never in its way: Sentry loads only when the build has a DSN and the player has not turned reports off.
 const q = new URLSearchParams(location.search);
-checkGpu()
+const gpu = checkGpu();
+import('./reports.js').then((r) => r.telemetry()).catch(() => {});
+gpu
   .then(() => import('./saves.js').then((m) => m.startSaves()).catch((e) => console.warn('saves:', e)))
   .then(() => import('./menuItems.js')).then(({ isGame }) => {
   if (!isGame(q)) {
