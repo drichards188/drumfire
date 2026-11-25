@@ -56,6 +56,7 @@ A URL with `play`, `tutorial`, `sandbox` or `range` is a game page; anything els
 - **`?unit=N`:** start on the page's Nth unit (its key).
 - **`?hour=H`:** fix the time of day (for example `5.25`); without it the sim's clock drives the sun.
 - **`?weather=Clear|Overcast|Drizzle|Rain|Mist`** (default Overcast).
+- **`?crew2=0`** keeps the old crew figures on a German page; **`?crew2=1`** asks for the lifelike crewmen on any page.
 - **`?range=1`:** the test range (with `mode=ww2|ww1` for the German eras): the era's map on the scripted range with one gun of one battery, nothing else in the sim or drawn. `&kind=<kind>` chooses the battery, `&lv=shells3.barrel1` sets its levels, `&perfect=1` no errors, `&endless=0` and `&invuln=0` turn those off, `&tab=targets|battery|debug` opens a tab. The card's Copy link writes these.
 - **`?sandbox=1`:** test keys over the battle. B fires a blast of the selected unit's calibre and a fake shell that bursts 300 m ahead, N a 15-inch burst 300 m ahead, K a star shell, L a Very light, J an SOS rocket over the selected unit's front.
 - **On the menu,** `?mode=ww1|ww2` opens that era, and `?sel=<key>`, `?op=<id>`, `?campaign=<id>` or `?lessons=1` select an entry or the Tutorials tab. The menu passes `quality`, `hour` and `weather` on to the game it opens.
@@ -99,7 +100,19 @@ Page-local viewers (dev server only):
     - **Into other men, the steel or the pit:** every part, the arms and hands too (the older clearance lines leave them out); a hand counts in the steel only when the whole fist is inside it. The carried shell into the steel counts here too.
   - **Reading it:** seconds and worst per thing, with the part anyone sees at a glance counted apart: a gap over 15 cm, an overlap over 8 cm, a joint 20 degrees past its limit; `--brief` leaves out the older lines.
   - **Pictures:** `--auto 10` draws each gun's ten worst moments, taken in turn from each kind of fault, from two sides, each ringed in red, into `shots/crewaudit-<kind>.png` (joints and limbs through the man's own body from 1.5 m, the rest from 2.6 m); a shot `t<seconds>:<x>:<y>:<z>[:<dist>]` looks at a given point.
-  - **Baseline:** `node tools/crewaudit.mjs <every German kind> --scn 0 --json` takes about two minutes for all 27 drills.
+  - **Baseline:** `node tools/crewaudit.mjs <every German kind> --scn 0 --json --brief > shots/crewaudit-new.json` takes about two minutes for all 27 drills (`lefh18,sfh18,k18,mrs18,nbw41,bertha,karl,k38,hm1,bruno,k5,k12,wespe,hummel,nbw42,swg40,sfh13,m16,k17,max38,gamma,fk16,k16,m99,rk92,sfh93,beta`).
+  - **After a crew change** (`src/render/crews*.js`, `crewspace.js`): compare with `shots/crewaudit-godotport.json` (local; `shots/` is gitignored), taken on 2026-11-25 with the spaced German drill. Seconds past a glance over all 27 drills: grip 205.1, props 7.7, hit 22.7, self 8.4, joints 6.5.
+  - **Known regressions** of the spaced drill: props 0.8 s worse (loads shown a frame or three before the hands reach them); the Hummel layer's left hand reaches neither handwheel from his post (the post or the grips need moving in the model); Bertha's rammers 1.3 s worse.
+- **The spaced German crews** (`src/render/crewspace.js`): `Man.hand` only asks; each man's place, gait and grips are settled after his drill. Read `m.sp.rawX`, `rawZ` and `rawH` for the drill's own place; `m.x` is where he is shown. DESIGN.md, "Crews".
+
+## The lifelike crewmen
+
+The German pages' crews are the Godot version's crew2 bodies, riding on the procedural drill (DESIGN.md, "Lifelike crewmen (crew2)").
+
+- **Files.** `public/crew2/` is the Godot game's `assets/models/crew2`: six outfits (`crew2_<outfit>.glb`, each with its `.check.json`), the skeleton (`crew2.json`), the clips (`clips.json`) and three skin pictures. They are built by the Godot game's Blender scripts, and its `tools/blender/crew/README.md` is the contract for them.
+- **Code.** `src/render/crew2/`: `index.js` (`Crew2`, loading, levels of detail, the per-frame sync), `animator.js`, `clips.js`, `limits.js`, `settle.js`, `feet.js`, `skeleton.js`, `pose.js`, `math.js`, each a port of the Godot class it names. Hooks: `models/v/crew.js` (`outfitName`, `armIk`, `reached`, `_poseT`), `render/guns.js` (`GunViews.crew2`) and `main.js` (the loading step and the gear switch).
+- **Size.** About 41 MB in `public/crew2/`, which goes into `dist/`; a page loads only the outfits its crews wear (about 24 MB on a 1917 page).
+- **Cost.** `__drumfire.renderLayer.guns.crew2.stats` gives the mean and worst milliseconds a frame and the men animated. Measured on 2026-11-25: +0.35 ms CPU a frame with a battery's crews in view (worst 1.5 ms).
 
 ## Reference method
 
@@ -128,6 +141,7 @@ Page-local viewers (dev server only):
 - **The test range on the ridge.** It offers only the 1918 guns, not the WW2 ones the career can field there.
 - **The consoles.** The Karl's and the Gustav's fire order card is squeezed under the procedure card at the smallest height, and the line-of-fire label on the board is not part of the label avoidance.
 - **The hangar's dress.** On the battle page every crew dresses by its own gun's era; the hangar should be checked against the same rule.
+- **Lifelike crewmen.** The hangar's parade still shows the old figures, and the gunner's eye at a gun is still the old figure's head, not the animator's.
 - **Headless Chromium.** On 2026-10-28 the chromium-1247 build stopped drawing 2D canvases (a plain `fillRect` hangs), so every page looked frozen in the headless tools. Run them with `CHROME=chromium-1217` until it is reinstalled or the cause is found.
 - **Planned for the WW2 mode**, not built yet ([WW2.md, "Planned improvements"](WW2.md#d-planned-improvements-not-built-yet)): short skill moments at the key steps of the V-1 and V-2 launches; shoot and scoot for the A4 (several firing points, the convoy driving between them); and the Karl's crew, who slide along in their standing poses while it drives between positions.
 - **The Paris Gun's target effects.** Its effects on the railway junction, the tank depot and the reserve camp are written but inactive: they need the gun in the open battle, which no operation has. Only the aerodrome's (fewer raids on the gun) works.
@@ -149,7 +163,8 @@ src/tutorial.js      the 1917 lessons and the lesson runner
 src/ww2/             the WW2 German mode: operations, its sim modules, the special weapons, pictures, console words, lessons
 src/ww1/             the WW1 German mode: operations, its sim modules, the 42 cm beds, the Paris Gun, pictures, console words
 src/bertha/          the Big Bertha demo: game logic, gun, position, crew, overlay, tutorial, English and German text
-src/render/          gun rigs posed from the sim, loading crews (British, German, V-weapons, 1918), shells, targets, infantry
+src/render/          gun rigs posed from the sim, loading crews (British, German, V-weapons, 1918), shells, targets, infantry;
+                     crewspace.js the German crews' spacing, crew2/ the lifelike crewmen
 src/models/          procedural models: British guns (v/), German guns and sites (v/de/), targets (t/, t/ww2/, t/ww1/), infantry (inf/), shells, rig helpers
 src/world/           trenches, wire, gun pits, rails, roads, ruins, built in tiles
 src/terrain*.js, craters.js, trenchlines.js, vegetation.js, grass.js   ground
@@ -163,6 +178,7 @@ src/dev/             scripts behind the dev pages
 tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, rangetest, hangarsheet, audiotest, shot, menushots, voicetest;
                      make-voices.py and pick-voice-takes.py (the WW2 crew voices, docs/VOICES.md)
 public/menu/         the main menu's background stills (tools/menushots.mjs)
+public/crew2/        the lifelike crewmen's outfits, skeleton, clips and skin pictures (from the Godot version)
 docs/                PLAYING.md (how to play, every key), MODELLED.md (rendering, simulation, sound), HISTORY.md (what is real), DEVELOPMENT.md (this page),
                      WW1.md and WW2.md (history, sources, departures), PROGRESSION.md (the campaign), VOICES.md (the crew voices), screenshot.jpg
 refs/                local reference sheets and photographs (gitignored)

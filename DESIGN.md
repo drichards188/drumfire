@@ -152,6 +152,24 @@ distance), and `chase.followShell(shell, { onBurst })` (rides behind and above t
 its velocity, lets the player orbit, on burst holds a wide shot of the burst for ~4 s, then returns).
 `shell` is a sim shell object (fields below); it can be read every frame, its `alive` drops at burst.
 
+**Choosing a battery** (main.js `selectUnit`). The British pages orbit the battery's anchor (`unitRoot[id]`, at
+`unitDist[id]`, a low three-quarter view from behind the right shoulder). The German pages (`FRAME_GUN`: a WW1 or WW2
+theatre; since 2026-11-25, the Godot battle's `FocusUnit` and `NextGun`) frame the gun that fires next (`frameGun`):
+- **Which gun** (`nextGun`): the first live gun that is ready, else one laying or loaded, else the one furthest
+  through its loading cycle, else No. 1. A gun that cannot make the order (`piece.blocked`, which `pickGuns` never
+  fires) is passed over while another can.
+- **The view:** from the front-left quarter (`QUARTER` 0.9 rad round from the barrel's line as laid, read from the
+  traverse pivot, or the whole rig when it turns on its bed), pitch 0.18, the focus (`gunEye`) 1.3·k above the gun's
+  ground and 10·k away. k (`GUN_SIZE[kind].k`) is the model's size corner to corner over the sFH 13's 7.5 m, measured
+  once per kind from its first rig as built (barrel level, visible meshes only), with its footprint in the gun's frame;
+  the distance grows when that footprint seen from the quarter would not fit nine tenths of the view's half-width
+  (long barrels, wide beds).
+- **When:** only when a battery is chosen (a number key, a tab, C back from the free camera, leaving a gun, the
+  battle's start, `fastForward`'s `unit`). In between the player's orbit and zoom stand; from an orbit the zoom glides
+  on from where it was. The focus follows a gun that drives (the Wespe, the Hummel, the Karl).
+- **Not** on the title screen (its drift keeps the anchor) or at the V-1 and V-2 sites (their layer frames each step);
+  a mode layer's own framing (`modeR.framing`, the Gustav's tasks) puts the target back on the unit's anchor.
+
 ### Models (`src/models/`, heavy models and field models agents)
 
 ```js
@@ -204,7 +222,76 @@ All procedural, detailed enough for a close third-person view of the gun and its
 the stars: get the silhouettes, proportions, and the big distinctive parts right from `refs/`).
 Materials from `MeshStandardMaterial` (camo, wear and mud via canvas textures and `surfaceFinish`).
 British guns are painted in a dull grey-green or khaki; many 1917 guns carried a disruptive camouflage
-of earth colours. Nets and brushwood screens are the world agent's (gun pit dressing).
+of earth colours. Nets and brushwood screens are the world agent's (gun pit dressing). The one exception to
+"all procedural" is the German pages' lifelike crewmen (below), model files from the Godot version.
+
+### Crews (`src/render/crews.js`, `crews_*.js`, `render/de/`, `render/ww1/`, `src/render/crewspace.js`)
+
+`GunCrew` drills a rig's men (`Man`, one per `rig.anchors.crew` spot, each a `models/v/crew.js` figure) as a pure
+function of `piece.job`, the time since `firedAt` and `piece.fireAt`. A man's behaviour calls `Man.put(x, y, z, h,
+pose, t)` (root frame) and `Man.hand(side, x, y, z, w)`; `Man.reach(side, x, y, z, w, far)` is the arm IK itself, the
+call `crewcheck.js` hooks for the audit.
+
+**The German crews are spaced** (`GunCrew.spacing`: every kind but the British five, which are parked as they stand,
+unchanged; `crewspace.js`, since 2026-11-25, the Godot version's DrillSpacing, DrillStance and DrillGait). The drill is
+untouched and stays a pure function of the job; what it puts out is settled each frame:
+- **The place.** `Man.put` goes through `spacePut`, which keeps the drill's own place in `m.sp` (`rawX rawZ rawH`,
+  `drillPose`) and shows him there plus `sep` (clear of the others and the steel; `spaceStep` works it out for the
+  next frame once every man has been put), `off` (a jump taken up as a short slide or turn), the stance's turn and
+  step (`StX StZ StH`: his grips before him) and the turn to face his way (`FaceH`). A walking pose's phase follows
+  the ground he is shown to cover. Read `m.sp.rawX/rawZ/rawH`, not `m.x`, for where the drill put him
+  (`de/wespe.js` `spLoader` does).
+- **The hands.** `Man.hand` only asks (`ask`). After the man's act `hands(crew, m)` gives each hand its grip:
+  uncrossed (the right hand takes the grip further round to his right), a grip that jumps let go and retaken in a
+  hand's time, following the drill's own eased weights. A behaviour that walks a man names the walk's ends with
+  `way(crew, m, ax, az, bx, bz)`, so the spacing lets him as near the steel as they are.
+- **At work.** A man with a hand on something fixed (a handle, the staff, the gun; not a load in his arms) is at work:
+  two men at work are not pushed apart, and he moves with what he holds.
+- **Props.** What a man gone from the gun carried goes with him (`GunCrew.dropped`). The staff is the first rammer's
+  at the gun (none there, no staff), stood on its butt beside him on the side towards the bore (`carrySideOf`), and
+  swung into and out of the bore over `staffSwing(L)`, max(1.05 s, 0.4 s a metre), starting that long before the
+  stroke. The lanyard is drawn from his hand and falls free at the shot (the pull 0.16 s, `pullT`).
+- **Loader and handwheels.** The light guns' loader reaches the block as the barrel comes home (`loaderAt`); on a handwheel each hand
+  keeps its own grip and its half of the rim (`workGrip`, `rimNear`).
+
+After touching `render/crews*.js` or `crewspace.js`, run `node tools/crewaudit.mjs <the 27 German kinds> --scn 0
+--json --brief` and compare with `shots/crewaudit-godotport.json` (seconds past a glance over all 27 drills: grip
+205.1, props 7.7, hit 22.7, self 8.4, joint 6.5; changelog 2026-11-25 for the figures before and the known
+regressions).
+
+### Lifelike crewmen (crew2) (`src/render/crew2/`, `public/crew2/`)
+
+German pages only (`crew2Wanted()`: `?mode=ww1|ww2`); `?crew2=0` keeps the old figures there, `?crew2=1` asks for the
+lifelike ones on any page, and the gear menu's "Lifelike crewmen" (`GunViews.crew2.enabled`) switches them live.
+Ported on 2026-11-25 from the Godot game; its `tools/blender/crew/README.md` is the contract for the files.
+- **Files** (`public/crew2/`, the Godot game's `assets/models/crew2`): six outfits `crew2_<outfit>.glb` (1917
+  `german`, `german-cap`, `german-drill`; 1944 `german44`, `german44-cap`, `german44-gaiters`), each with three lod
+  meshes (`body_lod0` to `2`: about 20k, 5k and 1.2k triangles) and a `crew2_<outfit>.check.json` (only an outfit
+  whose check is `ok` is worn); `crew2.json` (the 56-joint skeleton, its zero pose, the faces); `clips.json` (clips by
+  drill pose, from motion capture and keyed work); `skin_b.jpg` to `skin_d.jpg` (the faces' skin pictures).
+- **Modules**, ports of the Godot C#: `index.js` (`Crew2`; Crew2.cs and CrewFigure.cs), `animator.js` (CrewAnimator),
+  `clips.js` (CrewClips), `limits.js` (PoseLimits), `settle.js` (PoseSettle), `feet.js` (FootPlant), `skeleton.js`
+  (CrewSkeleton), `pose.js` (CrewPose), `math.js`.
+- **On top of the drill.** crew.js's figure is still posed by the drill every frame (its bones, its anchors and the
+  props in its hands stay); its mesh is hidden and the lifelike body under the same root is posed from it: the clip
+  for the figure's pose and phase on the live solver pose, the hands put back on the solver's grips by IK, the arms
+  kept inside a body's limits, no joint turning faster than a body can, the feet planted. `GunViews` calls
+  `crew2.begin(camera)`, `crew2.sync(crew, piece, now, camera, dt, level)` after each crew's drill, then
+  `crew2.end()`. The figure gained `outfitName`, `armIk` and `reached` (which arms the solver or a `reach()` put on a
+  grip) and `_poseT` (the phase it was posed at).
+- **Loading.** `GunViews` starts `crew2.load(crews)` when it is built, for the outfits the page's crews wear only (a
+  1917 page needs three: about 24 MB of files and about 415 MiB of textures; 720 MiB with all six); main awaits
+  `crew2.ready(onProgress)` behind the loading screen ("Dressing the crews") before compiling the shaders. An outfit
+  missing, failing its check or not standing in crew2.json's zero pose keeps the old figure, as does every man if
+  anything fails to load.
+- **Cost rules.** LOD0 to 30 m, LOD1 to 110 m, LOD2 beyond, with no shadow; fingers, toes and faces within 54 m. Full
+  animation (hands, limits, net, feet) within 110 m at crew level 2, every second frame beyond 54 m; LOD2 every second
+  frame without the hands; at crew level 1 without the hands; a man out of the camera's view is not posed. Bones are
+  kept out of the scene graph (their matrices and bone texture made only when the man is posed). While they are on, a
+  gun served in person keeps them instead of the close tier (`CrewHD`). Measured: +0.35 ms CPU a frame with a
+  battery's crews in view (worst 1.5 ms), the same draw calls in the usual view and 3 to 4 % fewer triangles there;
+  `crew2.stats` reads the cost.
+- **Not yet:** the hangar's parade (still the old figures) and the gunner's eye from the animator's head.
 
 ### Simulation (`src/sim/`, simulation agent)
 
@@ -1181,7 +1268,8 @@ Extras by kind:
   anchors `rocket` (the rocket's base on the table), `bunker` (the firing control vehicle).
 
 Crews: German WW2 outfit `german44` (M35 helmet, field grey) in `models/v/crew.js`; `render/crews.js` takes the
-German kinds' roles from `render/crews_de.js` (`ROLES_DE`) and `render/crews_heavy.js` (`ROLES_HEAVY`).
+German kinds' roles from `render/crews_de.js` (`ROLES_DE`) and `render/crews_heavy.js` (`ROLES_HEAVY`). The German
+crews are spaced and drawn as lifelike crewmen (Module contracts, "Crews" and "Lifelike crewmen (crew2)").
 
 ### FX and audio additions
 
@@ -2722,3 +2810,6 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (render: the K 38's crew without the garbage, 2026-11-15) At the user's request ("what lag do you see in the logs", then "yes to both"): the 30 to 130 ms frames in the render layer, every one with the K 38 selected, were garbage collections landing in its crew's code, which made about half of the battle's garbage (11.4 MB a second allocated in all, measured headless with V8's sampling heap profiler over the same battle). `GunCrew.snapPair` searched up to 3,600 places a call, four calls a frame, though the answer seldom changed (the tray's end is always 0.75 m out for the two-man carry): the answer is now kept per call site and given back while its inputs and the blockers within its reach are the same (`sameNear`), the same place as a new search (checked against the old search over 57,600 calls: no difference). `crewfield.js` uses `hyp` (a square root) for `Math.hypot` in its hot loops (`free`, `rAt`, the route's cell test, `closest`): V8 allocates an array per `Math.hypot` call. The K 38's crew went from 638 to 159 MB of garbage in two minutes of the battle, the battle from 11.4 to 8.9 MB a second. Left: the terrain's height lookups (`terrainHeight.js` `surface`, `natural`, about 2.4 MB a second) and `fx.update` (about 2.8 MB a second) make most of the rest.
 - (render: the loading screen waits for the GPU, the recorder logs freezes, less garbage, 2026-11-15) At the user's request ("theres some more lags in my most recent playthrough", `perf/20261115-132100-3af3`: a 1.5 s frame as the battle opened; stalls of 1.5 s, about 3 s and 4.3 s in the battle with the page idle; two 40 to 54 ms frames in the render layer with the K 38 selected). The battle's first frame waited on the warm-up that `newBattle` had just drawn (the browser draws it later, in its GPU process; the atmosphere's readback in that frame waited for it): main now awaits `warmup.js` `gpuSettled` (a fence) between the battle's `start()` and `hideLoading()`. The stalls in the battle are not explained: nothing new was drawn in the frames before them and the page's own work was small. To tell them from the player switching windows, the recorder now writes a `gap` line for every gap over 0.5 s it leaves out of the frame times (`hidden`, `blur`, `focus`, the browser's long-animation-frame report), and a freeze with the window showing is also captured as a spike with the frames before it; `perfreport` lists the gaps (for older sessions, the seconds missing), `perfwatch` prints them. Garbage, measured headless as before (two minutes of the same battle, the K 38 selected): 7.0 to 5.9 MB a second. A regex literal is a new object each time it runs: `/^pair/` tested per man (`crews.js` `PAIR`), the ramp rammers' and heavy crews' role tests and the thousands separators (`common.js`, `board.js`) are made once. `GunCrew.blockers` fills its list in place and reads each field once (the crews' many object shapes send V8's reads through its generic path, which boxes each number: 780 to 408 bytes a call). `Level.setHole` compares the last hole number by number (it built a key string per level per frame), the crew voices count their lines once, the shell renderer walks an array of kinds, a dust puff that rides the ground looks it up again only after drifting 0.3 m (`fx.js` `hx`, `hz`), the Gustav site's works keep each point's ground height until a crater lands or the site moves, and `terrainHeight.js` `natural` calls `Math.hypot` only past 15,999 m, where its far hills start (the heights checked identical at 800,000 points, so the sim is unchanged). The crew audit for the K 38 and the Mörser 18 is byte-identical to before. Left: a terrain height lookup allocates about 456 bytes (the sampler's numbers boxed between its functions); most of the rest is the fx update, the board and the panel.
 - (German console: the Godot demo's, and no auto mode, 2026-11-25) The German pages take the Godot demo's console (its commits of 2026-11-20 and 2026-11-24); the British game and the campaign missions are unchanged (UI, "The German pages' console"). **No auto mode in the German open battles** (main.js `NO_AUTO`: a theatre, no campaign mission, not the range, op kind 'battle'): `start()` puts every battery on manual and each waits for the player's orders. Only while the player serves a gun do the others fight on under their own crews, and they come back to the player's orders on leaving, laid where they stand; moving to a gun of another battery hands over the one left and takes back the one arrived at; any order, the Sperrfeuer included (`ww1/theatre.js`, `ww2/theatre.js` `sos`), takes a handed-over battery back. The gunner now hands a battery over through `sim/crews.js` `Crews.handOver(u)`, whose crew carries on the live mission (the Sperrfeuer, the Feuerwalze's line, fire for effect, ranging) where it used to drop it and pick afresh; `Gunner.hand`, `handedOver`, the radio lines on manning and leaving ("The gunner"). **The Sperrfeuer call nobody answers** (`common.js` `unanswered`, only with `TH.noAuto`): a red banner over the 3D view (`hud.js` `sosCall`, `#sos-call` in index.html, style.css), the console's slip flashing with a bell every 4 s (at most 12 a call), the sector chip blinking (`.fchip.call`); S answers it. **The lean console** (`TH.lean`, every German page but the campaign missions): no header (callsign plate, status line, mode switch, S.O.S. keys; S still calls the Sperrfeuer; A only where there is an auto mode); the status is a slip in the fire order shown only when it has something to say; the fire order keeps the target (name large, range and grid square), the charge (auto or set by you), rounds, fuze, guns and corrections, without the line, elevation, time of flight and the range table; the guns card is one line a gun under the fire order (lamp, state, the crew only when short, the wear only when worn, health, MAN/LEAVE); missions and messages share the bottom row; the correction keys have bold drawn arrows and the step key five dots; the board's bar is one line with no bearing; the tabs' ring shows nothing at the player's orders, C with its crew, H holding; no ALL AUTO / ALL MANUAL and no Shift+A (these three only in the open battles, `TH.noAuto`; the special missions keep A). The hold reason on a `metric` gun (`guns.js` `problem`) no longer names A or MANUAL, and the gun card at a gun says "at your orders" for manual. Basic training (`ww1/tutorial.js`): the header step is now about the tabs and the battery waiting for orders, the range table step is gone, the fire order and guns steps describe the new cards, and the leave step says the other batteries fight on while the player is at a gun. The special missions keep their starting modes and A (and Shift+A and the ALL pair), so a supporting battery or the Paris Gun can still be handed to its crew; the V-1 and V-2 launch console keeps its own header and A.
+- (camera: the gun that fires next, 2026-11-25) Ported from the Godot battle (its `FocusUnit` and `NextGun`): on the German pages choosing a battery frames its gun that fires next instead of the battery's anchor (main.js `frameGun`, `nextGun`, `GUN_SIZE`, `gunSize`, `FRAME_GUN`; Camera, "Choosing a battery"). `nextGun` takes the first live gun that is ready, else one laying or loaded, else the one furthest through its loading cycle (`loadedBy`: `ji` plus the step's fraction), else No. 1, passing over a `blocked` gun while another can fire. The view is from the front-left quarter (0.9 rad round from the barrel's line as laid), pitch 0.18, the focus 1.3·k above the gun's ground and 10·k away, k the model's size corner to corner over the sFH 13's 7.5 m (the gun the Godot framing was set on), measured from each kind's first rig at barrel level (`GUN_SIZE`, visible meshes, instanced ones by their own boxes); further when the footprint seen from that quarter would not fit nine tenths of the half-width. It frames only on a choice (key, tab, C back, leaving a gun, battle start); the player's orbit and zoom stand between, the zoom glides on from an orbit's distance (`d0`), and `placeEye` keeps the focus on a gun that drives. Not on the title screen or at the V-1 and V-2 sites; when a mode layer frames (`modeR.framing`, the Gustav's tasks) the target goes back to the unit's anchor. The British game keeps its battery view.
+- (crews: spaced, 2026-11-25) Ported from the Godot version's DrillSpacing, DrillStance and DrillGait (2026-11-24, measured there on the sFH 13, the Mörser 18, the Hummel and Bertha): the German crews are spaced (`src/render/crewspace.js`, `GunCrew.spacing`, never the British; Module contracts, "Crews"). After the drill puts each man, `Man.put` settles his place (`m.sp`: the drill's `rawX..rawH`, `sep` clear of the others and the steel, `off` taking up jumps, the stance's turn and step, the face-his-way turn) and fits his gait to the ground he covers. `Man.hand` only asks; `hands()` gives each hand its grip after the man's drill (uncrossed, let go and retaken in a hand's time, following the drill's eased weights); `Man.reach` is the IK call, which `crewcheck.js` now hooks instead of `Man.hand`. Departures from the Godot version, for this game's thirty-odd drills with teams on one staff, handle or roller: men with a hand on something fixed are at work (not pushed apart from each other, moving with what they hold, a jump only above 6 m/s), the hands follow the drill's eased weights, and the lost-grip rule is not ported (it left the railway guns' rammers with their hands in the air through the stroke). Also, spaced: props of a man gone from the gun are hidden (`dropped`); the staff is the first rammer's at the gun (none there, no staff, `crews_heavy.js` too), stood on its butt beside him on his side towards the bore, swung over max(1.05 s, 0.4 s a metre) starting before the stroke (`staffSwing`), the rammer going back only once it is up; the lanyard is drawn from the hand and falls free at the shot (`pullT`: the pull 0.16 s, was 0.06 s); the light guns' loader arrives as the barrel comes home (`loaderAt`); handwheel hands stay on their half of the rim (`rimNear`), and a layer with two wheels and one out of reach puts both hands on the other; the lay wheel stays where the laying left it. `de/wespe.js` `spLoader` reads `m.sp.rawX/rawZ/rawH`, not `m.x`, for the drill's own place. Measured with `node tools/crewaudit.mjs <the 27 German kinds> --scn 0 --json --brief`, seconds past a glance over all 27 drills, `shots/crewaudit-before-godotport.json` against `shots/crewaudit-godotport.json`: grip 222.2 to 205.1, props 6.9 to 7.7, hit 52.3 to 22.7, self 25.9 to 8.4, joint 22.7 to 6.5. Known regressions: props +0.8 s (loads shown a frame or three before the hands reach them); the Hummel layer's left hand cannot reach either handwheel from his post (20.5 s, needs the post or the grips moved in the model); Bertha's rammers 1.3 s worse under the uncross by angle.
+- (render: lifelike crewmen, 2026-11-25) Ported from the Godot game's crew2 (Module contracts, "Lifelike crewmen (crew2)"), German pages only: `public/crew2/` holds its `assets/models/crew2` outfits (six .glb with their checks, `crew2.json`, `clips.json`, three skin pictures); `src/render/crew2/` ports its Clips (CrewAnimator, PoseLimits, PoseSettle, FootPlant) and Crew2/CrewFigure; the contract is the Godot `tools/blender/crew/README.md`. crew.js's figure is still posed by the drill; its mesh is hidden and `GunViews.crew2.sync` drives the lifelike body after each crew's drill. The figure gained `outfitName`, `armIk`, `reached` and `_poseT`. LOD0 to 30 m, LOD1 to 110 m, fine detail within 54 m; full animation within 110 m at crew level 2, every second frame beyond 54 m; LOD2 posed every second frame without hands and casting no shadow; men off-screen not posed; bones kept out of the scene graph. While they are on, `CrewHD` (the close tier at a gun served in person) is not used. main awaits `crew2.ready()` ("Dressing the crews") before compiling. `?crew2=0` gives the old figures, `?crew2=1` forces the lifelike ones; gear menu "Lifelike crewmen". A page loads its crews' outfits only: about 24 MB and about 415 MiB of textures on a 1917 page (720 MiB with all six). Measured cost: +0.35 ms CPU a frame with a battery's crews in view (worst 1.5 ms), draw calls the same in the usual view, triangles 3 to 4 % fewer there. Credits (README): the CMU motion capture acknowledgement, MakeHuman bodies (CC0, made with MPFB), cloth and leather from Poly Haven and ambientCG (CC0; the Godot project's `tools/blender/crew_src/SOURCES.md`). Not yet: the hangar's parade (still the old figures), the gunner's eye from the animator's head.

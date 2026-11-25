@@ -20,6 +20,7 @@ This page covers the menu, research, every era's units and operations, the speci
 - **Keys.** Enter, To battle or a double-click starts the choice; arrows walk the levels or the cards; Esc closes the chooser. The battlefield loads only then, behind a loading screen with the orders. The game's "Main menu" button comes back, and the end card's Research button goes straight to Research.
 - **Memory and sound.** The menu remembers its choices in the browser. Sound starts on the first click or key press.
 - **The screen.** In the game, the left half of the screen is a third-person view of the unit you have selected; the right half is its fire control console.
+- **The camera on a battery.** On the German pages, choosing a battery (its key or tab, C back from the free camera, leaving a gun, the battle's start) frames the gun that will fire next: low from the front-left, across the muzzle to the breech and the crew, further back for a long barrel or a wide bed. Your orbit and zoom then stay until you choose a battery again, and the camera follows a gun that drives. The 1917 game shows the whole battery.
 - **Your orders only.** In the German open battles every battery waits for your orders: its crew loads and lays, but takes no mission and fires no round by itself. Only while you serve a gun in person do the other batteries fight on under their own crews ([Serving a gun in person](#serving-a-gun-in-person)). In the special missions a supporting battery starts with its crew and is yours from your first order to it; in the 1917 game, units you are not operating fight on with an AI crew in whatever mode you left them.
 
 ## Research and upgrades
@@ -295,7 +296,7 @@ A separate first-person demo (`/bertha.html`, in the Battles tab of the WW1 Germ
 | F3 | statistics (frame time, draw calls, particles, lights) |
 | Esc | leave a lesson for the menu |
 
-The gear button opens a settings panel (quality, colour grade, bloom, fog, exposure and so on).
+The gear button opens a settings panel (quality, colour grade, bloom, fog, exposure and so on). On the German pages its **Lifelike crewmen** switch (on by default) puts the old crew figures back.
 
 ### Console keys
 

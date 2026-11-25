@@ -2,11 +2,11 @@
 
 Back to the [README](../README.md).
 
-Everything is procedural: terrain, guns, crews, targets, shells, the consoles and most of the sound are generated in code. The only asset files are eight recordings in `public/audio`.
+Almost everything is procedural: terrain, guns, targets, shells, the consoles and most of the sound are generated in code. The asset files are eight recordings and the German crews' synthetic voices in `public/audio`, and the German pages' lifelike crewmen in `public/crew2`.
 
 ## Rendering
 
-All in `src/`, with no model or texture files.
+All in `src/`; the only model and texture files are the lifelike crewmen's.
 
 - **Terrain.** A camera-centred geometry clipmap from a pure height function shared with the simulation. Flat British ground turns into a cratered, flooded, mud-filled devastated zone, with ridges on the German side, trenches cut into the ground, and plank roads.
 - **Craters.** Runtime craters from this battle stay, sized by calibre: 1.5 m radius for a field gun shell, 8 m for the 15-inch, 10 m for the 18-inch, 16 m for the Gustav, larger with the delay fuze. They fill with water on wet ground. The WW2 operations other than Flanders stand in open country west of the salient, away from its craters.
@@ -14,7 +14,9 @@ All in `src/`, with no model or texture files.
 - **No man's land** in 1917 carries shattered trees, broken limbers, fallen timber and torn wire among the shell holes.
 - **Guns.** Models for the five British kinds and for the German guns and launch sites of both German modes (from the 10.5 cm leFH 18 to the 80 cm Gustav, the Karl-Gerät, the V-1 catapult, the A4 on its Meillerwagen, the Langer Max, the Gamma and the Paris Gun with their positions), with their loading machinery.
 - **Crews** in several poses: carrying, hauling, ramming, laying, lanyard, covering ears.
-- **Close crews.** When you serve a German gun in person, its crew switches to a far more detailed figure: faces, fists with fingers, cloth folds, pockets and buttons, belt kit, helmets with liners and chin straps, boots with heels. Away from the gun everyone uses the light figure, and while you are at the gun, small far-off detail and the other batteries' crews are not drawn.
+- **Spaced German crews.** The German crews keep clear of each other and of the gun, never jump from place to place, step to the ground they really cover and take and let go of their grips in a hand's time. Men working one handle or staff together move with it. The 1917 British crews are as before.
+- **Lifelike crewmen.** On the German pages the crews are MakeHuman bodies in German uniform of 1917 or 1944, with three levels of detail. Clips from motion capture and keyed work ride on the drill's poses; the hands stay on their grips, the arms within what a body can do, the feet planted. The settings panel's Lifelike crewmen switch brings back the old figures.
+- **Close crews.** With the lifelike crewmen switched off, a German gun you serve in person switches its crew to a far more detailed figure: faces, fists with fingers, cloth folds, pockets and buttons, belt kit, helmets with liners and chin straps, boots with heels. While you are at a gun, small far-off detail and the other batteries' crews are not drawn.
 - **Targets:** German guns, pillboxes, dumps, the kite balloon with its winch, the chateau HQ; Allied and Soviet batteries, tanks and forts; British 18-pounders and Mark IV tanks.
 - **Traffic and aircraft:** crossroads traffic and trains, and the enemy's aircraft (Typhoons and Il-2s, RE8s and Camels).
 - **Infantry:** British and German infantry as instanced soldiers who fall and are thrown by bursts.
