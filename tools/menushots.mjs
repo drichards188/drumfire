@@ -54,7 +54,8 @@ export const SHOTS = [
   { id: 'mrs18', url: BWW2, hour: 11, kind: 'mrs18', ff: 30, cam: [0.8, 0.32, 21] },
   { id: 'nbw41', url: BWW2, hour: 11, weather: 'Clear', kind: 'nbw41', ff: 30, cam: [1.2, 0.26, 11], after: 4 },
   { id: 'gustav', url: '/?mode=ww2&op=sevastopol&play=1', hour: 10, kind: 'gustav', ff: 600, wait: 1500, cam: [0.9, 0.22, 100], after: 10 },
-  { id: 'karl', url: '/?mode=ww2&op=karl&play=1', hour: 14, kind: 'karl', ff: 60, wait: 900, cam: [1.3, 0.3, 55], after: 6 },
+  // (the Karl before its shot: its 60 cm blast buries the whole gun in dust from the first frame, 2026-11-26)
+  { id: 'karl', url: '/?mode=ww2&op=karl&play=1', hour: 14, kind: 'karl', ff: 60, wait: 900, cam: [1.1, 0.2, 30], after: 3, before: true },
   { id: 'v1', url: '/?mode=ww2&op=v1&play=1', hour: 9, kind: 'v1', ff: 30, wait: 900, cam: [1.3, 0.14, 45], after: 2 },
   { id: 'v2', url: '/?mode=ww2&op=v2&play=1', hour: 11, kind: 'v2', ff: 30, wait: 900, cam: [-1.4, 0.06, 75], after: 60 },
 ];
@@ -92,7 +93,7 @@ async function gothaShot(page, s) {
 // in the page: the gun on auto, the battle run on, frames until it fires, then the blast developing. The camera orbits
 // the piece about to fire (a battery's centre would leave each gun small)
 async function gunShot(page, s) {
-  return page.evaluate(({ kind, ff, wait = 1200, cam, after = 5 }) => {
+  return page.evaluate(({ kind, ff, wait = 1200, cam, after = 5, before = false }) => {
     const D = window.__drumfire, sim = D.sim;
     D.post.shockwave = () => {};
     D.post.heat = () => {};
@@ -121,6 +122,11 @@ async function gunShot(page, s) {
     while (!fired() && n++ < wait * 8) {
       const p = u.pieces.find((q) => q.state === 'ready' && q.fireAt != null && q.fireAt - sim.time < 2);
       if (p) aim(p);
+      // (`before`: the first moment the gun stands laid and ready, before the shot (it can go from ready to fired in one
+      // step, so the fire time is no guide): a blast that buries the gun, the Karl's, makes a
+      // poor still; the clock is paused for the screenshot below)
+      const laid = before && u.pieces.find((q) => q.state === 'ready');
+      if (laid) { aim(laid); for (let k = 0; k < after; k++) { hold(); D.frame(1 / 30, k >= after - 2); } return { fired: false, before: true, time: Math.round(sim.time), frames: n }; }
       D.params.timeScale = p ? 1 : 4;
       hold();
       D.frame(1 / 30, false);
@@ -177,6 +183,10 @@ for (const s of SHOTS.filter((x) => !want.length || want.includes(x.id))) {
       await page.waitForTimeout(300);
       r = s.gotha ? await gothaShot(page, s) : await gunShot(page, s);
     }
+    // (fastForward switches the render loop off and the frames drawn by hand above are gone by the time the screenshot
+    // composites: every still came out black. The loop back on with the battle's clock paused redraws the moment)
+    await page.evaluate(() => { const D = window.__drumfire ?? window.__bertha; if (D?.params && D.renderer && D.frame) { D.params.timeScale = 0; D.renderer.setAnimationLoop(() => D.frame()); } }).catch(() => {});
+    await page.waitForTimeout(1500);
     await page.evaluate(() => document.querySelector('canvas')?.getContext('webgl2')?.finish?.()).catch(() => {});
     const file = `${OUT}/${s.id}.jpg`;
     await page.screenshot({ path: file, type: 'jpeg', quality: 80, timeout: 180000 });
