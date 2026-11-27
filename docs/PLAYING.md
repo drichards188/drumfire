@@ -114,7 +114,7 @@ In the menu, **WW2 German** switches to a second mode (`/?mode=ww2`): German art
 | Operation (menu name) | URL | What you do |
 |---|---|---|
 | Flanders, autumn 1944 ("Open battle") | `/?mode=ww2&op=flanders` | The backbone battle on the game's Ypres map, sides turned round: up to seven units (keys 1 to 7) against the Allied gun line, tanks, dumps, the AOP strip, the HQ and the railhead; Sperrfeuer when their infantry attacks, Störungsfeuer at night, a Feuerwalze for our counter-attack |
-| Sevastopol, June 1942 ("Gustav siege", WIP) | `/?mode=ww2&op=sevastopol` | Build the 80 cm Gustav on its firing curve (work gangs on survey, track, gantry cranes, assembly, ammunition train, flak, camouflage), then spend its few 4.8 t shells on the coastal turrets, the forts and the cliff magazine; a 21 cm Mörser battery supports |
+| Sevastopol, June 1942 ("Gustav siege") | `/?mode=ww2&op=sevastopol` | Build the 80 cm Gustav on its firing curve (work gangs on survey, track, gantry cranes, assembly, ammunition train, flak, camouflage), then spend its few 4.8 t shells on the coastal turrets, the forts and the cliff magazine; a 21 cm Mörser battery supports |
 | Brest-Litovsk, 22 June 1941 ("Karl-Gerät") | `/?mode=ww2&op=karl` | The 60 cm Karl-Gerät: drive to a firing position, turn the whole vehicle onto the target (4 degrees of traverse), lower the hull, load 2.2 t shells from the Munitionsschlepper's crane, fire, fetch more shells, displace; an sFH 18 battery supports |
 | V-1 launch site ("V-1 (Fi 103)") | `/?mode=ww2&op=v1` | The launch drill at the Walter catapult: missile, wings, compass in the Richthaus, air log, sled, fuel, steam generator, fuzes, clear, fire; faults, air raids (take cover), the flight and its report |
 | V-2 mobile battery ("V-2 (A4)") | `/?mode=ww2&op=v2` | Erect the A4 on its firing table, align it, set the Brennschluss, checks, alcohol, T-Stoff and Z-Stoff, liquid oxygen (it boils off: launch or top up), withdraw, Vorstufe, Hauptstufe |
@@ -133,7 +133,7 @@ The Flanders roster:
 
 ### The procedure cards
 
-The special weapons have a procedure card instead of the range table (the Gustav is work in progress):
+The special weapons have a procedure card instead of the range table:
 
 - **The Gustav's preparation tasks:** + and - put work gangs on them, J all hands.
 - **The Karl's positions:** T turn, L lower or raise, Y fetch shells.

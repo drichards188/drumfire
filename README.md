@@ -47,7 +47,7 @@ Every key, including the special weapons': [docs/PLAYING.md](docs/PLAYING.md#con
 
 ## Status
 
-**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels, each battle a generated mission of objectives), five special missions and the basic training; the British 1917 game is hidden from the menu for now. The Gustav and the Paris Gun are work in progress (marked WIP).
+**Playable:** the German career (one tree, the open battle of 1918 at ten threat levels, each battle a generated mission of objectives), five special missions and the basic training; the British 1917 game is hidden from the menu for now. The Paris Gun is work in progress (marked WIP).
 
 **Not done yet:**
 

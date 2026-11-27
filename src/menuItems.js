@@ -29,9 +29,10 @@ export const eraOf = (q) => (q.get('mode') === 'ww1' || q.get('mode') === 'ww2' 
 // the WW1 German era's roster (the open battle's and the Paris Gun's): every battery is the player's from the start
 export const ROSTER_WW1 = Object.values(OPS_WW1).flatMap((op) => op.units).map((u) => ({ kind: u.kind, name: u.name, role: u.role }));
 export const isGame = (q) => ['play', 'tutorial', 'sandbox', 'range'].some((k) => q.has(k));
-// Still being built (the user's call): the Paris Gun and the Gustav, wherever they are the entry's gun. Their entries carry `wip` (the menu and the loading screen badge them) and lead with WIP_LINE; main
-// badges the unit's name in the game (hud.setUnit).
-export const WIP_KINDS = new Set(['paris', 'gustav']);
+// Still being built (the user's call): the Paris Gun, wherever it is the entry's gun (the Gustav's mark taken off on
+// 2026-11-26, the user's word). Its entries carry `wip` (the menu and the loading screen badge them) and lead with
+// WIP_LINE; main badges the unit's name in the game (hud.setUnit).
+export const WIP_KINDS = new Set(['paris']);
 export const WIP_LINE = 'Work in progress: still being built, so expect rough edges and changes.';
 const wip = (item, on = true) => (on ? { ...item, wip: true, lines: [WIP_LINE, ...item.lines] } : item);
 // The menu's background stills (public/menu/<id>.jpg, captured from the game by tools/menushots.mjs: a gun of each kind
