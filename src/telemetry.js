@@ -11,6 +11,11 @@
 // - Metrics: session.start on every page (with the GPU state, so a page without WebGL counts too); on game pages,
 //   once a minute and when the page is hidden, frame.p50/p95/p99, fps, frames and lag.spikes by cause, and once
 //   load.to_play, the time from opening the page to the first second of play.
+// - The first-run funnel and the battles (main.js, src/firstrun.js; `count`, `distribution` below): once per browser
+//   funnel.first_battle, funnel.first_shot, funnel.first_hit (a round of ours bursting near its mission's target),
+//   funnel.first_mission (a fire mission done), funnel.first_win and funnel.second_battle, with funnel.to_first_shot
+//   (ms from opening the page to the first shot); for each career battle that ends, battle.end with its level, won,
+//   how it ended (victory, defeat, left), its minutes (the battle's clock, and the player's) and whether it was the first.
 // Nothing personal: no IP address (the project is set to drop it and the SDK collects no user info), a random id per
 // browser (localStorage drumfire.telemetry.id) so issues count players, and the URL's own game settings.
 import * as Sentry from '@sentry/browser';
@@ -197,6 +202,14 @@ export function start(dsn) {
       else if (o.k === 'spike') onSpike(o);
     },
     flush,
+    /** a game event (the first-run funnel, battle.end): a count of one, with its attributes (no personal data) */
+    count(name, attributes = {}) {
+      if (reportsOn()) Sentry.metrics.count(name, 1, { attributes });
+    },
+    /** a game measure (funnel.to_first_shot) */
+    distribution(name, value, { unit = 'millisecond', attributes = {} } = {}) {
+      if (reportsOn()) Sentry.metrics.distribution(name, value, { unit, attributes });
+    },
     get stats() { return { errors, spikes: spikesSent, causes: [...causesSent] }; },
   };
   window.__drumfireTelemetry = api;

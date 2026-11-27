@@ -30,11 +30,13 @@ node tools/ww1test.mjs 1 2 3 --difficulty all --quiet         # the WW1 German b
 node tools/berthatest.mjs 1 2 3 --difficulty all              # Big Bertha demo games played by the crew logic; --log, --limit
 node tools/progressiontest.mjs                                # research, upgrades, pay, saves, and the campaigns: any order, rosters, targets, every victory path
 node tools/researchtest.mjs 1 2 3 --lineup all                # open battles with a career's lineups (start..max): wins, RP, battery points; --era, --jobs N
+node tools/leveltest.mjs $(seq 1 72) --jobs 8                 # the ten threat levels, all auto, reference lineups: wins, the human length proxy beside each level's minutes, holds, two-step mains; --levels, --lineup below, --mods roll, --cb old, --games
+node tools/cbtest.mjs --levels 1,5,10 --seeds 12 --jobs 8     # the British counter-battery fire on the levels: guns and men lost, engagements, fires for effect, the opening's timing; --cb old, --policy auto|none|cover, --lineup kind:guns
 node tools/hangarsheet.mjs --era all --jobs 3                 # the menu hangar's contact sheets: each battery's parade and each upgrade's hover view, levels 0 to 3 (shots/sheets)
 node tools/rangetest.mjs                                      # the test range: every WW2 gun served in person fires, alone in the field; exits 1 on a failure
 node tools/audiotest.mjs                                      # renders every sound bank offline and checks levels; exits 1 on a failure
 node tools/shot.mjs "/?play=1&unit=1&quality=Low" shots/x.png --wait 4000   # headless capture (dev server must be running)
-node tools/shot.mjs "/?mode=ww1&play=1" shots/x.png --lineup k5,wespe,m99   # the same in a career battle with that lineup (dev mode)
+node tools/shot.mjs "/?mode=ww1&play=1" shots/x.png --lineup k38,hummel,m16   # the same in a career battle with that lineup (dev mode)
 node tools/researchtest.mjs 1 2 3 --era de --lineup set:k38+hummel+wespe+nbw42+k5   # career battles with a named lineup (@3: every part at its top)
 node tools/menushots.mjs [id ...]                               # the main menu's background stills, a gun of each kind firing (public/menu)
 node tools/voicetest.mjs --op flanders --unit 1 --seconds 200  # the German crew voices in a battle (--op ridge: WW1), headless: the lines in order and their rules
@@ -43,6 +45,8 @@ node tools/perfreport.mjs [session]                           # sums a recorded 
 ```
 
 - **`simtest`** runs whole games on worker threads and prints win rates and per-game figures. Run it after changing the gun, shell, target or difficulty tables, the AI crews, the enemy or the director.
+- **`leveltest`** measures length as a human would play it: `human` is the time to the main objectives done, plus X-Zeit's run when the mission has it (the all-auto crews wait two minutes before they end a battle). Run it after changing `threat.js`, `operation.js`, `sim/objectives.js`, the ridge's director, enemy or crews.
+- **`cbtest`**'s `--policy`: `auto` (the default) the crews take cover by their own rule, `none` never, `cover` the old prototype's scripted rule.
 - **`shot.mjs`** launches its own headless Chromium through `playwright-core` (Chromium from `~/.cache/ms-playwright`). Its other flags are `--size WxH`, `--until "expr"` (wait for a condition), `--eval "expr"` (run after the wait, result printed) and `--dev` (dev mode on, every battery open).
 - **The frame recorder** (`src/perfrec.js`) runs on every game page the dev server serves (`?perf=0` turns it off; in the build it runs only for the players' lag reports, below, and writes nothing). It times each stage of the frame and writes the spikes, with the 2 seconds before them and what was happening, to `perf/<session>.jsonl` through the dev server; F3 shows the file. A gap of over half a second that is not a frame (a freeze over 2.5 s, or the window hidden) gets its own line saying which, so a freeze can be told from switching windows. Play, then run `perfreport` (or `perfwatch` while playing).
 - **`menushots.mjs`** takes the main menu's background stills from the game itself: for each gun it opens the game page with every battery open, hides the console, puts the gun on auto, runs the battle on until it fires and captures the blast (`--size WxH`, `--quality`, `--out`). Each run plays a new battle, so look at the pictures before keeping them.
@@ -61,6 +65,8 @@ sentry issue list enveloperty/drumfire                    # errors and "Lag spik
 sentry issue view DRUMFIRE-2 --json                       # one issue with its latest event (contexts lag, battle, events)
 sentry explore enveloperty/drumfire --dataset metrics -m frame.p95 --agg avg -F gpu.name --period 7d   # frame times by GPU
 sentry explore enveloperty/drumfire --dataset metrics -m session.start --period 7d                     # page loads
+sentry explore enveloperty/drumfire --dataset metrics -m funnel.first_win --agg sum --period 7d        # the first run's funnel (first_battle, first_shot, first_hit, first_mission, first_win, second_battle)
+sentry explore enveloperty/drumfire --dataset metrics -m battle.end --agg sum -F level --period 7d     # battles ended, by level (also won, end, minutes, first)
 ```
 
 - **A spike's frames.** Each lag event carries `spike.jsonl`; download it from the issue and run `node tools/perfreport.mjs spike.jsonl`.
@@ -77,6 +83,7 @@ A URL with `play`, `tutorial`, `sandbox` or `range` is a game page; anything els
 - **`?hour=H`:** fix the time of day (for example `5.25`); without it the sim's clock drives the sun.
 - **`?weather=Clear|Overcast|Drizzle|Rain|Mist`** (default Overcast).
 - **`?crew2=0`** keeps the old crew figures on a German page; **`?crew2=1`** asks for the lifelike crewmen on any page.
+- **The career's open battle** (`?mode=ww1&play=1`): `&level=1` to `10` (default 1), `&seed=` (the mission's, as the menu deals it), `&mods=mist,air` (the modifiers), `&cb=old` (the old British counter-battery fire; the ranging model, their guns ranging in and U to take cover, is the default). A new career's first battle (level 1) has its guns standing loaded, and the coach on unless the basic training is finished.
 - **`?range=1`:** the test range (with `mode=ww2|ww1` for the German eras): the era's map on the scripted range with one gun of one battery, nothing else in the sim or drawn. `&kind=<kind>` chooses the battery, `&lv=shells3.barrel1` sets its levels, `&perfect=1` no errors, `&endless=0` and `&invuln=0` turn those off, `&tab=targets|battery|debug` opens a tab. The card's Copy link writes these.
 - **`?sandbox=1`:** test keys over the battle. B fires a blast of the selected unit's calibre and a fake shell that bursts 300 m ahead, N a 15-inch burst 300 m ahead, K a star shell, L a Very light, J an SOS rocket over the selected unit's front.
 - **On the menu,** `?mode=ww1|ww2` opens that era, and `?sel=<key>`, `?op=<id>`, `?campaign=<id>` or `?lessons=1` select an entry or the Tutorials tab. The menu passes `quality`, `hour` and `weather` on to the game it opens.
@@ -120,7 +127,7 @@ Page-local viewers (dev server only):
     - **Into other men, the steel or the pit:** every part, the arms and hands too (the older clearance lines leave them out); a hand counts in the steel only when the whole fist is inside it. The carried shell into the steel counts here too.
   - **Reading it:** seconds and worst per thing, with the part anyone sees at a glance counted apart: a gap over 15 cm, an overlap over 8 cm, a joint 20 degrees past its limit; `--brief` leaves out the older lines.
   - **Pictures:** `--auto 10` draws each gun's ten worst moments, taken in turn from each kind of fault, from two sides, each ringed in red, into `shots/crewaudit-<kind>.png` (joints and limbs through the man's own body from 1.5 m, the rest from 2.6 m); a shot `t<seconds>:<x>:<y>:<z>[:<dist>]` looks at a given point.
-  - **Baseline:** `node tools/crewaudit.mjs <every German kind> --scn 0 --json --brief > shots/crewaudit-new.json` takes about two minutes for all 27 drills (`lefh18,sfh18,k18,mrs18,nbw41,bertha,karl,k38,hm1,bruno,k5,k12,wespe,hummel,nbw42,swg40,sfh13,m16,k17,max38,gamma,fk16,k16,m99,rk92,sfh93,beta`).
+  - **Baseline:** `node tools/crewaudit.mjs <every German kind> --scn 0 --json --brief > shots/crewaudit-new.json` takes about two minutes for all 18 drills (`lefh18,sfh18,k18,mrs18,nbw41,bertha,karl,k38,hummel,nbw42,sfh13,m16,k17,max38,gamma,fk16,k16,beta`; the cut batteries' `m99,rk92,sfh93,hm1,bruno,k5,k12,wespe,swg40` are dormant since 2026-11-26).
   - **After a crew change** (`src/render/crews*.js`, `crewspace.js`): compare with `shots/crewaudit-godotport.json` (local; `shots/` is gitignored), taken on 2026-11-25 with the spaced German drill. Seconds past a glance over all 27 drills: grip 205.1, props 7.7, hit 22.7, self 8.4, joints 6.5.
   - **Known regressions** of the spaced drill: props 0.8 s worse (loads shown a frame or three before the hands reach them); the Hummel layer's left hand reaches neither handwheel from his post (the post or the grips need moving in the model); Bertha's rammers 1.3 s worse.
 - **The spaced German crews** (`src/render/crewspace.js`): `Man.hand` only asks; each man's place, gait and grips are settled after his drill. Read `m.sp.rawX`, `rawZ` and `rawH` for the drill's own place; `m.x` is where he is shown. DESIGN.md, "Crews".
@@ -176,6 +183,7 @@ models.html, ui.html, audio.html, world.html, fx.html   dev pages
 src/boot.js          the WebGL check (src/ui/gpu.js) before anything else loads, then menu or game: a URL with play, tutorial or sandbox is a game
 src/menuItems.js     the menu's entries; src/ui/menu.js the menu (hangar, research, the mission dropdown), src/ui/hangar.js its 3D gun view, src/ui/loading.js the loading screen
 src/progression.js, campaign-data.js, campaign.js   the career, the batteries and missions, the mission scenarios
+src/threat.js, operation.js, capability.js, firstrun.js   the threat levels, the generated missions, what a lineup can do, the first run (the first battle, coach, funnel)
 src/main.js          orchestration, settings (lil-gui), keys, frame order
 src/sector.js        the world frame: units, trench lines, sectors, sites, places, grid references
 src/sim/             the headless simulation (Node-safe, deterministic per seed); tables_ww2.js and tables_ww1.js hold the German rows
@@ -195,7 +203,7 @@ src/ui/              the fire control console (consoles/: the cards, the procedu
 src/audio.js         the sound engine; public/audio holds the eight recordings (and voice-de/, the WW2 crew voices: src/ww2/voices.js)
 src/camera.js, hud.js, presets.js, style.css
 src/dev/             scripts behind the dev pages
-tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, rangetest, hangarsheet, audiotest, shot, menushots, voicetest;
+tools/               simtest, ww2test, ww1test, berthatest, progressiontest, researchtest, leveltest, cbtest, rangetest, hangarsheet, audiotest, shot, menushots, voicetest;
                      make-voices.py and pick-voice-takes.py (the WW2 crew voices, docs/VOICES.md)
 public/menu/         the main menu's background stills (tools/menushots.mjs)
 public/crew2/        the lifelike crewmen's outfits, skeleton, clips and skin pictures (from the Godot version)

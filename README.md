@@ -9,11 +9,11 @@
 ## What you do
 
 - **Fire missions.** Observers, aircraft and sound rangers call in targets. Lay the guns from the map, fire a ranging round, correct, then fire for effect.
-- **Counter-battery and SOS.** Firing gives your guns away and enemy fire walks onto them. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
+- **Counter-battery and SOS.** Firing gives your guns away and enemy fire ranges in on them: take cover, switch batteries or hit back. When the enemy's infantry attack, SOS puts every gun that can reach on their line.
 - **Missions.** Each battle deals main objectives and optional secondaries on named targets. Finish the mains, then end the battle or call X-Zeit when you are ready.
-- **One German career.** 32 batteries in one research tree, seven lines that each run from 1914 to 1918 to the Second World War: field guns to the Hummel, the Mörser 99 to the Karl-Gerät, the Langer Max to the Gustav, the Nebelwerfer 41 to the 42, and Gotha bombers, the V-1, the V-2 and the Paris Gun off the map.
-- **Research and upgrades.** You start with one gun. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
-- **Tutorials.** A basic training offered on first launch, and guided lessons for the special weapons.
+- **One German career.** 20 batteries in one research tree, seven lines that each run from 1914 to 1918 to the Second World War: field guns to the Hummel, the Beta-Gerät to the Karl-Gerät, the Langer Max to the Gustav, the Nebelwerfer 41 to the 42, and Gotha bombers and the V-2 off the map.
+- **Research and upgrades.** You start with two batteries, two guns each. Every battle pays research points to the battery you are researching, and battery points for more guns and better shells, barrels, breeches and sights.
+- **Tutorials.** A basic training with borrowed late-war guns first, a coached first battle for those who skip it, and guided lessons for the special weapons.
 - **Serve a gun in person.** Take each man's place in turn at a WW2 gun, from the field howitzers to the Gustav and the Karl-Gerät, or the 1918 guns of the career.
 
 ## Play it
@@ -38,6 +38,7 @@ The lifelike crewmen are kept in [Git LFS](https://git-lfs.com); cloned without 
 | Arrow keys | correct the aim: up adds range, down drops, left and right shift the line |
 | `.` | apply the correction from the newest observer report |
 | S | SOS: every gun that can reach lays on the threatened sector |
+| U | take cover from their counter-battery fire, or back to the guns |
 | F | ride the newest shell to its burst; F again returns to the gun |
 | K | main objectives done: end the battle, or call X-Zeit |
 | `[` and `]` | slow down or speed up time (x0.25 to x8) |

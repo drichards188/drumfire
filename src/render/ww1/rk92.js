@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 15 cm Ringkanone C/92 was cut from the game at the user's word (DESIGN.md changelog);
+// kept here unreachable. Commit 1dd259b has it in play: restore from it.
 import { rampDrill } from '../ramp_drill.js';
 
 // The 15 cm Ringkanone C/92's drill for render/crews.js (see render/crews_ww1.js for what this module may export).

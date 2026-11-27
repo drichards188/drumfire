@@ -98,7 +98,9 @@ export const GUNS_WW2 = {
     // (src/bertha/ballistics.js): the 810 kg schwere Granate to about 9.3 km, here on four charges to about 12 km.
     name: '42 cm M-Gerät (Big Bertha)', short: '42 cm', calibre: 16.5, mass: 810, shell: 'bertha',
     charges: [{ name: '1 Vorkartusche', v: 300 }, { name: '2 Vorkartuschen', v: 330 }, { name: '3 Vorkartuschen', v: 360 }, { name: '4 Vorkartuschen', v: 390 }],
-    elMin: D(20), elMax: D(65), restEl: D(40), loadEl: D(2), traverse: D(11.5),
+    // (elMin 13 degrees since 2026-11-26, 20 before: the first charge's minimum range 3.75 km, 5.3 before, so the
+    // strongpoints in lane B, 4.3 and 4.7 km from its bed on the ridge, are in reach)
+    elMin: D(13), elMax: D(65), restEl: D(40), loadEl: D(2), traverse: D(11.5),
     azRate: D(0.9), elRate: D(2.2),
     load: seq(['depress', 8], ['open', 3], ['shell', 14], ['ram', 5], ['cartridge', 8], ['close', 3], ['prime', 2], ['lay', 12]),
     crew: 12, hp: 200, recoil: 1.1, runout: 6, sheaf: 0,
@@ -135,6 +137,8 @@ export const GUNS_WW2 = {
     ammo: { he: 70, shrapnel: 0 }, sig: 0.07, cd: 0.162,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', rowStep: 100,
   },
+  // (dormant since 2026-11-26: the 35.5 cm H M1 was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   hm1: {
     // 35.5 cm Haubitze M1 (Rheinmetall, 1939): 575 kg HE (926 kg concrete-piercing) at 570 m/s, 20.8 km; +45 to +75
     // degrees, the shell swung up by the crane on its firing platform. A siege gun of the Maginot line and Sevastopol.
@@ -148,6 +152,8 @@ export const GUNS_WW2 = {
     ammo: { he: 22, shrapnel: 0 }, sig: 0.12, cd: 0.242,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', rowStep: 100,
   },
+  // (dormant since 2026-11-26: the 28 cm Kurze Bruno was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   bruno: {
     // 28 cm Kurze Bruno K (E): the first of the 1930s railway guns, 240 kg shell at 820 m/s, 29.5 km. Barely any
     // traverse on its mount: it is laid for line by where it stands on a curved firing spur, so the game swings it
@@ -162,6 +168,8 @@ export const GUNS_WW2 = {
     ammo: { he: 30, shrapnel: 0 }, sig: 0.1, cd: 0.195,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', rowStep: 100,
   },
+  // (dormant since 2026-11-26: the 28 cm K5 was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   k5: {
     // 28 cm K5 (E) (Krupp, 1937): 255 kg shell at 1,120 m/s, 62 km; the best railway gun of the war. The mount turns
     // only a degree or so; laid for line on a Vögele turntable, a ring of track the whole gun is run onto and turned on
@@ -176,6 +184,8 @@ export const GUNS_WW2 = {
     ammo: { he: 24, shrapnel: 0 }, sig: 0.12, cd: 0.086,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', rowStep: 100,
   },
+  // (dormant since 2026-11-26: the 21 cm K 12 was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   k12: {
     // 21 cm K 12 (E) (Krupp, 1939): the longest-ranged gun of the war, 107.5 kg shell at 1,500 m/s, 115 km, fired
     // across the Channel. The longest barrel on rails (33.3 m), its mount raised on jacks to clear the breech at full
@@ -191,6 +201,8 @@ export const GUNS_WW2 = {
     ammo: { he: 20, shrapnel: 0 }, sig: 0.12, cd: 0.034,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', rowStep: 100,
   },
+  // (dormant since 2026-11-26: the 10.5 cm Wespe was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   wespe: {
     // 10.5 cm leFH 18/2 auf Fgst. Panzerkampfwagen II "Wespe" (1943): the leFH 18 on a tank chassis, 32 rounds aboard.
     // The gun turns 17 degrees either way in its open fighting compartment; past that the driver turns the vehicle
@@ -233,6 +245,8 @@ export const GUNS_WW2 = {
     fuzes: ['instant'], metric: true, side: 'german', rowStep: 100,
     salvo: { n: 5, dt: 1.8 }, rocket: { burn: 1.8 },
   },
+  // (dormant since 2026-11-26: the schweres Wurfgerät 40 was cut from the German tree, its row kept unreachable with its SHELLS
+  // and FFE rows; commit 1dd259b has it in play)
   swg40: {
     // schweres Wurfgerät 40: four 28 cm Wurfkörper (82 kg, 50 kg of explosive) fired from their own wooden packing
     // crates laid on a frame, 145 m/s, 750 m to 1.9 km; an area drenched at short range. The crates are lifted onto

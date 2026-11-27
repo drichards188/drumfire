@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 35.5 cm Haubitze M1 was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import * as THREE from 'three';
 import { V, box, rbox, sphere, xTube, yTube, zTube, rod, sideProfile, gearArc, zLathe, rivets, rivetRow, rivetPoly, handwheel, shellGeometry, DEG } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, L90, R90, ring, TAU } from '../../t/fieldkit.js';

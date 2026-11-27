@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 28 cm K5 (E) was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import * as THREE from 'three';
 import { smooth, lerp, headingOf } from '../anim.js';
 import { CREW_GAITS } from '../../models/v/crew.js';

@@ -1,5 +1,5 @@
 // Off-map support (src/sim/support.js), headless: node tools/supporttest.mjs [seeds] [--difficulty Easy|Normal|Hard]
-//   [--lineup dev|start] [--kinds v1,v2,paris]
+//   [--lineup dev|start] [--kinds gotha,v2]
 // The career's open battle on the 1918 ridge with every crew on auto and a scripted player who orders each weapon off
 // the map onto the nearest British target standing whenever it is ready. Prints per weapon the orders, the strikes, the
 // mean miss and what they destroyed, and checks the controller is deterministic (each game twice) and explains a
@@ -15,7 +15,7 @@ const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] :
 const seeds = args.filter((a, i) => /^\d+$/.test(a) && !/^--/.test(args[i - 1] ?? '')).map(Number);
 if (!seeds.length) seeds.push(1, 2, 3);
 const difficulty = opt('--difficulty', 'Normal');
-const kinds = opt('--kinds', 'v1,v2,paris').split(',');
+const kinds = opt('--kinds', 'gotha,v2').split(',');
 const lineup = opt('--lineup', 'dev');
 let fails = 0;
 
@@ -71,7 +71,7 @@ for (const seed of seeds) {
   const ok = det && r.told && r.refusedOk && Object.values(r.st).every((s) => s.strikes > 0);
   if (!ok) fails++;
   console.log(`seed ${seed} ${difficulty} ${lineup}: ${r.won ? 'won' : 'lost'} ${r.min.toFixed(1)} min | ${line} | deterministic ${det}, refusal told ${r.told}, retarget ${r.refusedOk}${ok ? '' : '  FAIL'}`);
-  if (!ok) console.log('   ' + r.log.filter((l) => /V-1|V-2|Paris/.test(l)).slice(0, 12).join('\n   '));
+  if (!ok) console.log('   ' + r.log.filter((l) => /Gotha|V-1|V-2|Paris/.test(l)).slice(0, 12).join('\n   '));
 }
 console.log(fails ? `${fails} failed` : 'all good');
 if (fails) process.exit(1);

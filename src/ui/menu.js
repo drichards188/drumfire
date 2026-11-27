@@ -2,7 +2,7 @@ import { Progression } from '../progression.js';
 import { exportSave, importSave } from '../saves.js';
 import { available as reportsAvailable, reportsOn, setReports } from '../reports.js';
 import { BATTERIES } from '../campaign-data.js';
-import { TREES, LINES, RANK_ERA, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap } from '../research.js';
+import { TREES, LINES, RANK_ERA, PARTS, LEVELS, maxGuns, partEffect, nodeOf, eraOfKind, levelOf, modsOf, crewOf, detachmentOf, DETACHMENT, gunEraOf, isOffmap, TOP_PART_WIN } from '../research.js';
 import { menuItems, hrefOf, GUIDE, itemForQuery, DIFFICULTIES, LESSONS_KEY, NATIONS, NATION_OF, ROSTER_WW1, WIP_KINDS, WIP_LINE, STILLS, stillsOf, stillUrl, stillOf, TABS } from '../menuItems.js';
 import { GUNS } from '../sim/tables.js';
 import { rangeTable } from '../sim/shells.js';
@@ -15,13 +15,16 @@ import { showSummary, loadSummary, markSeen } from './summary.js';
 import { shouldInvite, showInvite } from './invite.js';
 import './menu.css';
 
+// the lineup's rating for the overmatch cut and the level the menu opens on (progression.js rating)
+Progression.rater = recommendedLevel;
+
 // The main menu, laid out as a tank game's garage: a top bar with the nation tabs (Germany: the 1918 and the WW2
 // entries and one tree; Britain is hidden for now), the two screens (the Hangar: a battery's gun in 3D, its details, its
 // modifications and the lineup's batteries along the bottom; Research: the tree in its lines) and the mission chooser
 // with To battle beside it. Choosing a mission, a battery or a screen never reloads the
 // page; To battle opens the mission's game page, which loads the world behind its own loading screen (ui/loading.js).
 // Only the hangar's 3D view loads three.js (ui/hangar.js), the first time it shows a gun.
-const STORE = 'drumfire.menu'; // { view, era (the nation), sel: { era: key }, tab, difficulty, rs: { era: kind }, level, guided: { key: bool } }: the viewer's last choices
+const STORE = 'drumfire.menu'; // { view, era (the nation), sel: { era: key }, tab, difficulty, rs: { era: kind }, level (the player's pick), guided: { key: bool } }: the viewer's last choices
 const VIEWS = [['hangar', 'Hangar'], ['research', 'Research']];
 const SHOWN = NATIONS.filter((n) => !n.hidden);
 // the testing switches in the top bar's right corner: dev mode and unlimited points, and beside them the career reset
@@ -149,8 +152,11 @@ function modsBlock(career, kind, onChange, onHover = null) {
     l.append(el('b', null, label), el('small', null, stat));
     const fx = el('div', 'rs-part-fx');
     fx.append(pips(have, of), el('small', null, now || 'Standard'));
-    const cost = career.upgradeCost(kind, part), why = career.upgradeBlock(kind, part);
-    const a = cost == null ? el('span', 'rs-top', 'At its best') : actBtn(`${part === 'guns' ? 'Add a gun' : 'Upgrade'} · ${num(cost)}`, `up:${kind}:${part}`, why, () => { career.upgrade(kind, part); onChange(); });
+    const cost = career.upgradeCost(kind, part), why = career.upgradeBlock(kind, part), gate = career.partGate(kind, part);
+    // (the top level waits for a hard battle won, progression.js partGate: said on the row, not only on hover)
+    const a = cost == null ? el('span', 'rs-top', 'At its best') : gate ? el('span', 'rs-lock', gate[0].toUpperCase() + gate.slice(1))
+      : actBtn(`${part === 'guns' ? 'Add a gun' : 'Upgrade'} · ${num(cost)}`, `up:${kind}:${part}`, why, () => { career.upgrade(kind, part); onChange(); });
+    if (gate) a.title = `The top level of every part opens after a win at threat level ${TOP_PART_WIN} or higher. It costs ${num(cost)} battery points.`;
     if (cost != null && next) a.title = (a.title ? a.title + ' ' : '') + `Next: ${next}.`;
     r.append(l, fx, a);
     if (onHover) {
@@ -610,10 +616,15 @@ export function mountMenu(root = document.getElementById('menu')) {
   // ?view=research (the end card's Research button) opens that screen; otherwise the last one
   let view = VIEWS.some(([v]) => v === query.get('view')) ? query.get('view') : VIEWS.some(([v]) => v === memo.view) ? memo.view : 'hangar';
   let difficulty = DIFFICULTIES.includes(memo.difficulty) ? memo.difficulty : 'Normal';
-  // the career battle's threat level (threat.js) and the seed its modifiers are rolled from (a new one after each battle)
-  let level = Math.max(1, Math.min(MAX_LEVEL, memo.level | 0 || 1));
+  // the career battle's threat level (threat.js) and the seed its modifiers are rolled from (a new one after each battle):
+  // the player's last pick, else the level the lineup suits (its rating, so a new career opens on level 1 and the menu
+  // follows the lineup until a level is picked)
+  let level = memo.level | 0 ? Math.max(1, Math.min(MAX_LEVEL, memo.level | 0)) : null;
   memo.modSeed ??= (Math.random() * 1e9) | 0;
-  const levelNow = () => (career.levelUnlocked(era, level) ? level : Math.max(1, ...THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n)));
+  const levelNow = () => {
+    const n = level ?? (TREES[era] ? career.rating(era) ?? 1 : 1);
+    return career.levelUnlocked(era, n) ? n : Math.max(1, ...THREAT.filter((t) => career.levelUnlocked(era, t.n)).map((t) => t.n));
+  };
   const modsNow = () => rollModifiers(levelNow(), memo.modSeed);
   // the mission the level deals the lineup (src/operation.js: the same seed as the modifiers, passed to the game page,
   // so the briefing and the battle agree)
@@ -694,7 +705,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   });
   window.__menuHangar = hangar; // the headless tools look at the hangar through it
 
-  const save = () => { try { localStorage.setItem(STORE, JSON.stringify({ view, era, sel: memo.sel, tab, difficulty, rs: memo.rs, level, modSeed: memo.modSeed })); } catch { /* private mode */ } };
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify({ view, era, sel: memo.sel, tab, difficulty, rs: memo.rs, level: level ?? undefined, modSeed: memo.modSeed })); } catch { /* private mode */ } };
   const playable = (i) => i && NATION_OF[i.era] === era && !i.locked;
   const firstOf = (t) => items.find((i) => i.tab === t && playable(i));
   const RESEARCH_HELP = {
@@ -890,7 +901,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   let capKey = '', capMemo = null;
   const lineupCaps = () => {
     const lv = career.lineupLevels(era), key = JSON.stringify(lv);
-    if (key !== capKey) { capKey = key; capMemo = { caps: capabilities(lv), rec: recommendedLevel(lv) }; }
+    if (key !== capKey) { capKey = key; capMemo = { caps: capabilities(lv), rec: career.rating(era) ?? recommendedLevel(lv) }; }
     return capMemo;
   };
   const chip = (text, cls = '', title = '') => { const c = el('span', `mn-chip${cls ? ` ${cls}` : ''}`, text); if (title) c.title = title; return c; };
@@ -942,32 +953,35 @@ export function mountMenu(root = document.getElementById('menu')) {
   // a special mission's first-win RP (from its line in menuItems.js, which says it in words)
   const specialRP = (i) => +(/\+([\d,]+)/.exec(i.lines.find((l) => l.startsWith('First win')) ?? '')?.[1]?.replace(/,/g, '') ?? 0);
 
-  // the threat level: ten steps, the chosen one and those under it lit, the lineup's own marked; the chosen level's
-  // name and line, four facts, the threats it brings, the lineup's fit and the modifiers rolled
+  // the threat level: ten steps, the chosen one and those under it lit, the lineup's own marked, those won ticked; the
+  // chosen level's name and what is new there, four facts (its length and its pay with the first win's bonus), the
+  // threats it brings, the lineup's fit (or the overmatch cut) and the modifiers rolled
   function renderLevel() {
-    const n = levelNow(), t = threatOf(n), { caps, rec } = lineupCaps();
+    const n = levelNow(), t = threatOf(n), { caps, rec } = lineupCaps(), won = new Set(career.levelWins(era));
     const meter = el('div', 'lv-meter');
     meter.setAttribute('role', 'radiogroup');
     meter.setAttribute('aria-label', 'Threat level');
     for (const q of THREAT) {
       const open1 = career.levelUnlocked(era, q.n);
-      const b = el('button', `lv-seg${q.n <= n ? ' lit' : ''}${q.n === n ? ' on' : ''}${q.n === rec ? ' rec' : ''}`);
+      const b = el('button', `lv-seg${q.n <= n ? ' lit' : ''}${q.n === n ? ' on' : ''}${q.n === rec ? ' rec' : ''}${won.has(q.n) ? ' won' : ''}`);
       b.type = 'button';
       b.dataset.lv = q.n;
       b.style.setProperty('--k', String((q.n - 1) / 9));
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(q.n === n));
       b.disabled = !open1;
-      b.title = open1 ? `Level ${q.n}: ${q.name} (${q.en})` : `Locked: play level ${q.n - 1} to its end`;
+      b.title = open1 ? `Level ${q.n}: ${q.name} (${q.en})${won.has(q.n) ? ' · won' : ` · first win +${num(career.firstWinBonus(era, q.n))} RP`}` : `Locked: play level ${q.n - 1} to its end`;
       b.append(el('b', null, String(q.n)));
       if (q.n === rec) b.append(el('small', null, 'your lineup'));
       b.addEventListener('click', () => setLevel(q.n));
       b.addEventListener('dblclick', () => { setLevel(q.n); go(); });
       meter.append(b);
     }
-    const head = el('div', 'lv-head');
-    head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name), el('p', null, t.sub));
-    head.title = t.lines.join('\n');
+    // (what this level brings that the one below did not, threat.js `fresh`; the summary line on hover with the rest)
+    const head = el('div', 'lv-head'), line = el('p', t.fresh ? 'lv-new' : null);
+    if (t.fresh) line.append(el('b', null, 'New'), ` ${t.fresh}`); else line.textContent = t.sub;
+    head.append(el('small', null, `Level ${n} · ${t.en}`), el('h3', null, t.name), line);
+    head.title = (t.fresh ? [t.sub, ...t.lines] : t.lines).join('\n');
     const fact = (k, v, title = '') => { const f = el('div', 'lv-fact'); f.append(el('small', null, k), el('b', null, v)); if (title) f.title = title; return f; };
     const facts = el('div', 'lv-facts');
     // the mission dealt (src/operation.js): its shape, its objectives (the mains, the secondaries known now, the
@@ -975,9 +989,15 @@ export function mountMenu(root = document.getElementById('menu')) {
     const op = missionNow(), mains = op.objectives.filter((o) => o.main), known = op.objectives.filter((o) => !o.main && !o.reveal);
     const mf = fact('Mission', op.title, `${op.name}: ${op.line}`);
     mf.append(el('em', 'lv-en', op.en));
-    facts.append(mf,
-      fact('Fails allowed', String(t.fails), 'How many of the main objectives\' fire missions may fail; one more loses the battle'),
-      fact('Attacks', t.attacks ? String(t.attacks) : 'None'), fact('Pay', `×${t.pay}`));
+    const fails = `Up to ${t.fails} of the main objectives' fire missions may fail; one more loses the battle.`;
+    // (the length: threat.js `minutes`, the battle of a player who ends it when the mains are done; without it, as
+    // before, the failures allowed)
+    const len = t.minutes ? fact('Length', `about ${t.minutes} min`, `How long the battle takes when you end it with the main objectives done. ${fails}`)
+      : fact('Fails allowed', String(t.fails), fails);
+    // (the pay: the level's, and the first win's one-off bonus until it is won, research.js firstWinRP)
+    const bonus = career.firstWinBonus(era, n), pay = fact('Pay', `×${t.pay}`, bonus ? `The first win of this level pays ${num(bonus)} research points more, once.` : 'This level is won: its first-win bonus is paid.');
+    if (bonus) pay.append(el('em', 'lv-en lv-bonus', `First win: +${num(bonus)} RP`));
+    facts.append(mf, len, fact('Attacks', t.attacks ? String(t.attacks) : 'None'), pay);
     const obj = el('ul', 'lv-obj');
     obj.setAttribute('aria-label', 'Objectives');
     for (const o of [...mains, ...known]) {
@@ -988,7 +1008,7 @@ export function mountMenu(root = document.getElementById('menu')) {
     }
     const hidden = op.objectives.filter((o) => !o.main && o.reveal).length;
     if (hidden) obj.append(el('li', 'more', `+${hidden} secondar${hidden > 1 ? 'ies' : 'y'} reported in battle`));
-    obj.title = `${op.name}. ${op.line} The main objectives done, you end the battle when ready${op.xzeit ? ', calling X-Zeit as the finale' : ''}.`;
+    obj.title = `${op.name}. ${op.line} The main objectives done, you end the battle when ready${op.xzeit ? ', calling X-Zeit as the finale' : ''}. ${fails}`;
     const threats = el('div', 'lv-chips');
     if (t.cb >= 0.5) threats.append(chip(t.cb >= 0.7 ? 'Counter-battery' : 'Some counter-battery'));
     if (t.spotters || t.raids) threats.append(chip(t.raids ? 'Air raids' : 'Spotter aircraft'));
@@ -997,8 +1017,11 @@ export function mountMenu(root = document.getElementById('menu')) {
     if (t.forts) threats.append(chip(`${t.forts} strongpoints`, '', 'Concrete in the lanes of our assault: only 28 cm shells and heavier break it'));
     for (const m of modsNow().map(modifierOf)) threats.append(chip(m.name, 'mod', m.line));
     if (!threats.children.length) threats.append(chip('Little to fear', 'calm'));
-    const fit = el('p', `lv-fit${rec < n ? ' over' : ''}`, rec >= n ? '✓ Your lineup is ready for this level' : `Above your lineup: it suits level ${rec}`);
-    fit.title = `Your lineup against this level's targets: ${t.sites.map((k) => `${CAP_NAME[k] ?? k} ${CAP_SAY[caps[k] ?? 'no']}`).join('; ')}. Fits: ${t.fits}.${rec < n ? ' What it cannot do goes to the neighbouring Gruppe, unpaid.' : ''}`;
+    // (the lineup's fit: above it, ready for it, or so far over it that the pay is cut, progression.js overmatch)
+    const cut = career.overmatch(era, n);
+    const fit = el('p', `lv-fit${rec < n ? ' over' : cut < 1 ? ' cut' : ''}`, rec < n ? `Above your lineup: it suits level ${rec}` : cut < 1 ? `Your lineup outclasses this front: pay ×${cut}` : '✓ Your lineup is ready for this level');
+    fit.title = `Your lineup against this level's targets: ${t.sites.map((k) => `${CAP_NAME[k] ?? k} ${CAP_SAY[caps[k] ?? 'no']}`).join('; ')}. Fits: ${t.fits}.${rec < n ? ' What it cannot do goes to the neighbouring Gruppe, unpaid.' : ''}`
+      + (cut < 1 ? ` Your lineup suits level ${rec}: the battle pays ×${cut} here (its research points and battery points), in full from level ${rec - 2} up.` : '');
     body.replaceChildren(meter, head, facts, obj, threats, fit);
   }
 
@@ -1073,7 +1096,7 @@ export function mountMenu(root = document.getElementById('menu')) {
   }
 
   // (the test range opens with the battery shown in the hangar)
-  const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'rk92' : inHangar());
+  const onMap = () => (isOffmap(inHangar()) ? hangarKinds(career, era).find((k) => !isOffmap(k)) ?? 'sfh13' : inHangar());
   const go = () => {
     if (!playable(sel)) return;
     const lesson = guided() ? lessonOf(sel) : null;

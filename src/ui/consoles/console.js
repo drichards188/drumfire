@@ -14,13 +14,17 @@ import { RangeTable } from './rangeTable.js';
 import { GunsCard } from './gunsCard.js';
 import { MissionList } from './missionList.js';
 import { MessagePad } from './messagePad.js';
-import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault, taskNo, unanswered } from './common.js';
+import { KINDS, chargeCount, liveMissions, MISSION_NAME, gunChoices, gunsDefault, taskNo, unanswered, threatTip } from './common.js';
 import { rangeSpan } from '../board.js';
 import { tut } from '../highlight.js';
 import { slipCorr, corrText } from '../messages.js';
 import { SpecialCard } from './special.js';
 import { ParisCard } from './paris.js';
 import { mountLaunchConsole } from './launch.js';
+
+// a British battery's name on the slip, short enough for one line: "British 18-pounder battery (Zouave Wood)" reads
+// "18-pounder battery" (the whole name on hover)
+const SLIP_NAME = /^British\s+|\s*\(.*\)$/g;
 
 export function mountConsole(ctx) {
   // a launch site (the V-1 ramp, the A4's firing table) has no fire orders: its own console (launch.js)
@@ -50,6 +54,7 @@ export function mountConsole(ctx) {
     if (special?.route?.(name, arg, e)) return;
     switch (name) {
       case 'charge': {
+        if (lean) break; // (no charge control on the German pages: the crews pick it; the Paris Gun's LADUNG is routed above)
         const n = chargeCount(SIM, U, cfg), c = Math.max(0, Math.min(n - 1, (o.charge || 0) + arg));
         if (c !== (o.charge || 0)) cmd('charge', { charge: c });
         break; }
@@ -77,6 +82,14 @@ export function mountConsole(ctx) {
         cmd('fire', (cfg.pieces || 1) > 1 ? { guns: memo.guns === 'all' ? 'all' : +memo.guns } : {});
         break;
       case 'cease': send('cease', {}); say('Cease fire.'); break;
+      // the ranging counter-battery (?cb=ranging): the crew to its shelters or back to the guns (U, the DECKUNG key). Not
+      // a fire order, so the battery keeps its mode; the sim says no for a battery that cannot (a crew of its own)
+      case 'cover': {
+        if (!SIM?.cbModel) break;
+        const on = !U.cover;
+        if (send('cover', { on }) === false) { say(on ? 'The crew cannot take cover now.' : 'The crew cannot leave its shelters now.'); break; }
+        say(on ? 'DECKUNG: the crew goes to its shelters. The guns are silent.' : 'TO THE GUNS: the crews run back, about 10 s.');
+        break; }
       case 'mode': send('mode', { mode: arg }); break;
       case 'sos': {
         const any = send('sos', { sector: arg });
@@ -224,6 +237,11 @@ export function mountConsole(ctx) {
     const m = unit.missionId != null ? (sim.missions || []).find((q) => q.id === unit.missionId) : null;
     // what stops the order, if anything (sim/guns.js problem): the status line, the FIRE key, the guns card show it
     const prob = !dead && o.target ? (sim.guns?.problem?.(unit, true) ?? '') : '';
+    // the ranging counter-battery (?cb=ranging, the sim's cbModel): the worst British engagement on this battery, and the
+    // seconds left while its crews run back to the guns
+    const cb = !!sim.cbModel && !dead;
+    const threat = cb ? sim.enemyAI?.threatOn?.(unit) ?? null : null;
+    const manIn = cb && !unit.cover && unit.manAt != null && unit.manAt > sim.time ? Math.ceil(unit.manAt - sim.time) : 0;
     let st, cannot = false;
     const alarmSet = board.alarm || new Set();
     if (lean) {
@@ -231,10 +249,18 @@ export function mountConsole(ctx) {
       // passing line; a battery with its crew says what it is on
       const call = unanswered(sim), fresh = now - toastT < 3200, crew = unit.mode === 'auto', hold = unit.mode === 'hold';
       const work = m ? `on ${taskNo(m.id)}, ${m.state === 'ffe' ? 'for effect' : m.state}` : o.target ? 'finishing your last order' : 'choosing its own work';
-      let routine = false;
+      let routine = false, hot = false, tip = '';
+      // (the ranging counter-battery, ?cb=ranging: in cover, running back to the guns, or a British battery ranging on it)
       if (call && !fresh) st = `${TH.sos} ${call.sector}, ${call.name}: NO BATTERY ANSWERS! Press S: every gun to the ${TH.sos} line.`;
       else if (dead) st = 'BATTERY SILENCED: every piece knocked out';
       else if (fresh) st = toast;
+      else if (cb && unit.cover) { st = 'IN COVER: the guns are silent. U or TO THE GUNS to man them.'; tip = threat ? `${threatTip(threat)} They lose you sooner while you are in cover.` : 'The crew is in its shelters: the men are spared and near misses do the guns half the damage.'; }
+      else if (manIn) st = `MANNING THE GUNS: ${manIn} s`;
+      else if (threat) {
+        st = `RANGED ON: ${threat.name.replace(SLIP_NAME, '')}, about ${threat.miss} m`; // (which and where: on hover)
+        hot = threat.stage === 'bracketed' || threat.stage === 'ffe';
+        tip = threatTip(threat);
+      }
       else if (hold) st = 'HOLDING: cease fire.';
       else if (crew) st = sim.gunner?.handedOver?.(unit) ? `WITH ITS CREW while you serve a gun: ${work}. Any order from you takes it back.` : `WITH ITS CREW: ${work}. Any order from you takes it over.`;
       else if (unit.gate && (!prob || prob === unit.gate)) {
@@ -250,10 +276,11 @@ export function mountConsole(ctx) {
       }
       setCls(slip, 'hide', routine);
       setCls(slip, 'alarm', !!call);
+      setCls(slip, 'cover', cb && !!unit.cover && !fresh && !call);
       setText(statEl, st);
-      const tip = cannot ? `${sim.guns?.problem?.(unit) ?? prob}.` : '';
+      if (cannot) tip = `${sim.guns?.problem?.(unit) ?? prob}.`;
       if (statEl.title !== tip) statEl.title = tip;
-      setCls(statEl, 'bad', dead || !!call || cannot);
+      setCls(statEl, 'bad', dead || !!call || cannot || hot);
       setCls(statEl, 'go', false);
       // the bell for the call nobody answers: every 4 s while the battle runs, a dozen times a call (again if the
       // batteries leave the line with the call still up)
@@ -312,7 +339,7 @@ export function mountConsole(ctx) {
     if (memo.guns == null || (unit.mode === 'auto' && memo.gunsKey !== gkey)) memo.guns = gunsDefault(m, o);
     memo.gunsKey = gkey;
     if (memo.guns === '2' && (cfg.pieces || 1) < 3) memo.guns = 'all';
-    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU(), problem: prob });
+    order.update({ gunsSel: memo.guns, unit, sim, nCharges, missionName: tname, ready, alive, stepYd: stepYd(), apexYd: apex / lenU(), problem: prob, threat });
     if (special) special.update(unit, sim);
     if (!lean && (!special || (special.bottom && !special.aside))) rtab.update({ sim, unit });
     guns.update({ unit });
@@ -348,6 +375,8 @@ export function mountConsole(ctx) {
       case 'Backspace': case 'Delete': act('cease'); return true;
       case 'Period': act('apply'); return true;
       case 'KeyT': return bed();
+      // (the ranging counter-battery, ?cb=ranging: U, Unterstand, the crew to its shelters and back)
+      case 'KeyU': if (!lean || !SIM?.cbModel) return false; act('cover'); return true;
     }
     return false;
   }

@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 10.5 cm Wespe was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import * as THREE from 'three';
 import { V, DEG, box, xTube, yTube, zTube, rod, sideProfile, loft, rivets, rivetRow } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, ring, L90 } from '../../t/fieldkit.js';

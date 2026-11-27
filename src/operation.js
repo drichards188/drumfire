@@ -15,9 +15,11 @@
 //   - a mission has a shape (an archetype), not a random mix; and only what a battery of the lineup can finish is dealt
 //     (capability.js siteVerdict): the same seed always deals the same mission
 import { threatOf } from './threat.js';
+import { SECTORS, LINES, lineX } from './sector.js';
 import { OPS, RIDGE_ROLE_SITES, RIDGE_FORTS, RIDGE_BALLOON } from './ww1/ops.js';
-import { siteVerdict } from './capability.js';
+import { siteVerdict, batteryVerdict } from './capability.js';
 import { mulberry32 } from './noise.js';
+import { autoCharge } from './sim/shells.js';
 
 const SITES = Object.fromEntries([...OPS.ridge.sites, ...RIDGE_ROLE_SITES, ...RIDGE_FORTS, ...RIDGE_BALLOON].map((s) => [s.id, s]));
 const NAMES = ['Lerche', 'Hagel', 'Distel', 'Kranich', 'Eiche', 'Falke', 'Reiher', 'Wetterleuchten', 'Nebelkrähe', 'Wacholder',
@@ -29,6 +31,7 @@ export const LAAGER = { A: 'T1', B: 'T1', C: 'T2', D: 'T2' }; // the tank laager
 // missions). `title(ts, n)` the order in the player's words (ts the sites), `short` the HUD's, `why` what it does to
 // the battle (the briefing), `done` the radio's word on it done, `effect` what the director does then ('supply': the
 // dumps' own rule, ww1/enemy.js supply; 'attacks': the attacks to come thinner; 'traffic': their supply held up)
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, '0')}`;
 const place = (t) => t.name.split(', ')[1] ?? t.name;
 const and = (a) => (a.length < 2 ? a[0] ?? '' : `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`);
 const BATTERY_NAME = (t) => t.name.replace(/^British /, '').replace(/^18-pounder battery, /, '18-pounders on the ');
@@ -60,6 +63,17 @@ export const OBJECTIVES = {
     title: () => 'Hunt down the British 18-inch railway howitzer', short: () => 'The railway gun',
     why: 'It comes up to fire a few rounds, then withdraws out of sight. Each round it fires firms the sound rangers\' fix on its firing point: lay on the fix, and catch it when it fires again.',
     done: 'their railway gun is wrecked' },
+  // a hold: keep a place under fire (`c.hold`: the place, `need` s of it; ww1/director.js holdUpdate). Never failed by the clock
+  hold: { w: () => 1,
+    title: (_, __, c) => `Keep ${c.hold.name} under fire for ${mmss(c.hold.need)}`, short: (_, __, c) => `Hold ${c.hold.short}`,
+    why: (c) => `Bursts within ${c.hold.r} m of it, at least one every ${c.hold.g} s: the clock runs while your shells keep landing and waits when they stop. Rotate your batteries and keep your heads down while theirs range in.`,
+    done: (c) => c.hold.done },
+  // a two-step main (levels 7 to 10): a British battery not yet located, whose fire mission is offered once our rangers'
+  // fix on it is good enough (ww1/director.js traceUpdate), then, when it is silenced, its ammunition dump is reported
+  trace: { w: () => 2, effect: 'supply',
+    title: (ts) => `Find and silence ${and(ts.map((t) => `the ${BATTERY_NAME(t)}`))}, then burn its ammunition dump`, short: (ts) => `Trace: ${BATTERY_NAME(ts[0]).replace(/^18-pounders on the /, '18-pdrs, ')}`,
+    why: 'It is shelling our guns and our rangers have not placed it yet: its rounds give it away. Silence it and its dump is reported; burn that too.',
+    done: 'their guns are short of shells' },
   xzeit: { title: () => 'X-Zeit: put our assault into their line', short: () => 'X-Zeit',
     why: 'The finale, when you call it: the Feuervorbereitung, then the Feuerwalze lifted on the timetable ahead of our men.' },
   // secondaries only
@@ -73,6 +87,15 @@ export const OBJECTIVES = {
   forts: { title: (_, n) => `Break the ${n} strongpoints in the X-Zeit lanes`, short: () => 'Strongpoints',
     why: 'Each left standing fires on our assault. Only 28 cm shells and heavier break them.', done: 'the lanes are clear' },
 };
+// where a hold may be dealt (the level's `hold`): the crossroads and the railhead (the sites X1 and R1), and the assembly
+// areas behind the British support line, the attacks' own places (a hold there thins the attacks). `effect` what the hold
+// done does: 'traffic' (their supply held up, ww1/director.js HOLD_CUT), 'attacks' (the attacks to come thinner)
+const assembly = (sec) => { const z = (sec.from + sec.to) / 2; return { id: `assembly${sec.id}`, name: `the assembly area behind ${sec.name}`, short: `assembly, ${sec.name}`, pos: { x: lineX(LINES.britishSupport, z) - 350, z }, effect: 'attacks', done: 'their attacks will come thinner' }; };
+export const HOLD_PLACES = [
+  { id: 'X1', name: 'Hellfire Corner', short: 'Hellfire Corner', pos: SITES.X1.pos, effect: 'traffic', done: 'their supply is held up' },
+  { id: 'R1', name: 'the railhead at Vlamertinghe', short: 'the railhead', pos: SITES.R1.pos, effect: 'traffic', done: 'their supply is held up' },
+  ...SECTORS.map(assembly),
+];
 // the deep sites by what they are (the corps HQ thins the attacks, the depots slow their fire)
 const DEEP_EFFECT = { W1: 'supply', W2: 'supply', W3: 'attacks' };
 
@@ -95,12 +118,19 @@ export const OBJECTIVE_PAY = { main: 100, side: 40, clear: 80, medal: 25 };
 // the latest an attack goes over on the day's clock: X-Zeit is at 1850 s (ww1/director.js ZERO_T), and an attack takes a
 // while to cross and be decided
 const LAST_ATTACK = 1780;
+const MASS = 180; // s: an attack's men mass in their front line before they go over (ww1/director.js MASS_T)
 // the medals on the end card (not objectives: failed early, they would nag the rest of the battle)
 export const MEDALS = {
   nogun: { title: 'No gun lost', why: 'Every gun of the Gruppe in action to the end.' },
   nobreach: { title: 'Not one of theirs in our trenches', why: 'Every attack stopped short of our front line.' },
 };
 
+// a gun's longest range (shells.js autoCharge), m
+const REACH = new Map();
+const maxReach = (kind) => {
+  if (!REACH.has(kind)) { let mx = 0; for (let D = 500; D < 40000; D += 250) if (autoCharge(kind, D) >= 0) mx = D; REACH.set(kind, mx); }
+  return REACH.get(kind);
+};
 const verdictOf = (bats, s, L) => siteVerdict(bats, { kind: s.kind, pos: s.pos, role: s.role ?? null, minHard: s.minHard, partHp: s.partHp }, { deadlineK: L.deadline });
 const TIER = { railgun: () => 'heavy', battery: (s) => (s.kind === 'bfield' ? 'soft' : 'heavy'), dump: () => 'soft', hq: () => 'soft', laager: () => 'armour', deep: () => 'deep', concrete: () => 'hard' };
 
@@ -117,31 +147,40 @@ export function generateOperation(level, seed, batteries) {
   const verdict = (id) => { if (!verdicts.has(id)) verdicts.set(id, SITES[id] ? verdictOf(batteries, SITES[id], L) : 'no'); return verdicts.get(id); };
   // (a main only where the lineup is 'ready' for it: a main it can only just finish fails over and over; a secondary
   // may be a stretch)
-  const can = (id, main = false) => (main ? verdict(id) === 'ready' : verdict(id) !== 'no');
+  // (levels 1 to 3: a main only where the lineup is quick: a new player's first battle is short, `quick` s of work at most)
+  const fastest = (id) => Math.min(...batteries.map((b) => batteryVerdict(b, SITES[id], { deadlineK: L.deadline }).time), Infinity);
+  // (and not the brigade HQ at level 1: its dugout took the lent Langer Max 5 to 26 minutes in the first battle's probes)
+  const can = (id, main = false) => (main ? verdict(id) === 'ready' && (!L.quick || fastest(id) <= L.quick) && !(L.n === 1 && SITES[id]?.kind === 'hq') : verdict(id) !== 'no');
   // the sites of a kind the level offers and the lineup can finish, in a rolled order
   const sitesFor = (kind, main = false) => shuffle((OBJECTIVES[kind].sites ?? []).filter((id) => L.sites.includes(TIER[kind]?.(SITES[id]) ?? 'soft') && can(id, main)));
   const name = `Unternehmen ${pick(NAMES)}`;
 
-  // the attacks: the level's count, spread over the mission's likely length, each in a rolled sector (never the same
-  // twice running); pressure, not an objective
-  const attacks = [];
-  let at = 480 + rnd() * 140;
-  for (let i = 0; i < L.attacks; i++) {
-    let sec = pick(['A', 'B', 'C', 'D']);
-    if (attacks.length && sec === attacks[attacks.length - 1].sector) sec = pick(['A', 'B', 'C', 'D'].filter((s) => s !== sec));
-    attacks.push({ t: Math.round(at), sector: sec, size: [0.6, 0.6, 0.5, 0.5, 0.55][i] ?? 0.5 });
-    at += 230 + rnd() * 110;
+  // the attacks: the level's count, spread over the level's length (`minutes`: the first no sooner than its men's massing
+  // allows, the last by three quarters of it, never closer than 220 s so none piles on another), each in a rolled sector
+  // (never the same twice running); pressure, not an objective
+  const attacks = [], len = (L.minutes ?? 20) * 60;
+  if (L.attacks) {
+    const first = Math.max(MASS + 60, len * 0.3) + rnd() * len * 0.05;
+    const gap = L.attacks > 1 ? Math.max(220, (len * 0.78 - first) / (L.attacks - 1)) : 0;
+    for (let i = 0; i < L.attacks; i++) {
+      let sec = pick(['A', 'B', 'C', 'D']);
+      if (attacks.length && sec === attacks[attacks.length - 1].sector) sec = pick(['A', 'B', 'C', 'D'].filter((s) => s !== sec));
+      attacks.push({ t: Math.round(first + i * gap + (i ? (rnd() - 0.5) * 0.2 * gap : 0)), sector: sec, size: [0.6, 0.6, 0.5, 0.5, 0.55][i] ?? 0.5 });
+    }
   }
   // (all of them over before X-Zeit, 1850 s on the day's clock, which waits at 1849 s until it is called: an attack
   // due later massed and never went over, an attack under way for ever, and no X-Zeit for a lineup all on auto. The
   // gaps squeezed to fit, the count kept)
   const last = attacks.at(-1)?.t ?? 0, t0 = attacks[0]?.t ?? 0;
-  if (last > LAST_ATTACK) for (const a of attacks) a.t = Math.round(t0 + ((a.t - t0) * (LAST_ATTACK - t0)) / (last - t0));
+  if (last > LAST_ATTACK && last > t0) for (const a of attacks) a.t = Math.round(t0 + ((a.t - t0) * (LAST_ATTACK - t0)) / (last - t0));
   const xzeit = rnd() < (L.xzeit ?? 0);
 
-  // the archetype: one whose main kinds the lineup can serve at this level, rolled
-  const fits = ARCHETYPES.filter((a) => a.mains.some((k) => sitesFor(k, true).length));
-  const arch = fits.length ? pick(fits) : ARCHETYPES[0];
+  // the archetype: one whose defining main kind (its first) the lineup can serve at this level, rolled; else one whose
+  // other main kinds it can (a mission named for their tanks once dealt only an 18-pounder battery on level 1, which has
+  // no laagers: the user, 2026-11-26)
+  const defining = ARCHETYPES.filter((a) => sitesFor(a.mains[0], true).length);
+  const fits = defining.length ? defining : ARCHETYPES.filter((a) => a.mains.some((k) => sitesFor(k, true).length));
+  let arch = fits.length ? pick(fits) : ARCHETYPES[0];
   const used = new Set(), mains = [];
   // a main's targets of one kind, up to the share of the level's work (`work`, in fire missions) it should carry
   const share = (L.work ?? L.mains ?? 1) / Math.max(1, L.mains ?? 1);
@@ -160,6 +199,29 @@ export function generateOperation(level, seed, batteries) {
     for (const id of got) used.add(id);
     return { kind, targets: got };
   };
+  // the hold and the two-step main, where the level deals them (a hold: keep a place under fire, the place one of
+  // HOLD_PLACES the lineup reaches; a two-step main: a battery to find, then its dump)
+  const H = L.hold;
+  // (a place well within a battery's reach: at the edge of its range the rounds fall too wide to keep a clock running;
+  // the level's own places first, `at`, else any)
+  const reached = (p) => batteries.some((b) => Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z) <= 0.72 * maxReach(b.kind)
+    && batteryVerdict(b, { kind: 'bdump', pos: p.pos }, { deadlineK: L.deadline }).verdict === 'ready');
+  const holdPlace = () => { const ok = HOLD_PLACES.filter(reached), own = ok.filter((p) => H.at?.includes(p.id)); return shuffle(own.length ? own : ok)[0] ?? null; };
+  const holdOf = () => { const p = holdPlace(); return p ? { kind: 'hold', targets: [], n: 1, hold: { ...p, x: p.pos.x, z: p.pos.z, need: H.need, r: H.r, g: H.g, k: H.k ?? 1 } } : null; };
+  const traceOf = () => {
+    const b = sitesFor('battery', true).find((id) => !used.has(id) && id !== 'G5'); // (the railway gun has its own hunt)
+    if (!b) return null;
+    used.add(b);
+    const d = sitesFor('dump', true).find((id) => !used.has(id));
+    if (!d) { used.delete(b); return null; }
+    used.add(d);
+    return { kind: 'trace', targets: [b], then: d, n: 2 };
+  };
+  const wantHold = H && ((H.main ?? 0) >= 1 || (H.main > 0 && rnd() < H.main));
+  const specials = [];
+  for (let i = 0; i < (L.trace ?? 0) && specials.length < (L.mains ?? 1); i++) { const c = traceOf(); if (c) specials.push(c); }
+  if (wantHold && specials.length < (L.mains ?? 1)) { const c = holdOf(); if (c) specials.push(c); }
+  mains.push(...specials);
   // its mains, from its kinds in turn; topped up from the others' if it runs short
   const mainKinds = [...arch.mains, ...ARCHETYPES.flatMap((a) => a.mains).filter((k) => !arch.mains.includes(k))];
   for (let i = 0; mains.length < (L.mains ?? 1) && i < 12; i++) {
@@ -169,11 +231,19 @@ export function generateOperation(level, seed, batteries) {
     if (!got) break;
     mains.push(got);
   }
+  // (the hold and the two-step main fill every main: the mission is named for them, and its secondaries follow: a battery
+  // to find is counter-battery, a road or the railhead held their supply, an assembly area their command)
+  if (specials.length && mains.length === specials.length) {
+    const c = specials[0], id = c.kind === 'trace' ? 'cb' : c.hold.effect === 'traffic' ? 'supply' : 'command';
+    arch = ARCHETYPES.find((a) => a.id === id) ?? arch;
+  }
   // its secondaries: the archetype's kinds first, then whatever fits; the laager in time only before an attack on its
   // side (and not a laager that is a main), the trains and convoys only while they run (a timed one each, at most)
   const sides = [];
   const forts = xzeit ? L.forts ?? 0 : 0;
   if (forts) sides.push({ kind: 'forts', targets: RIDGE_FORTS.slice(0, forts).map((s) => s.id), n: forts });
+  // (levels 1 and 2: a short hold, the one secondary)
+  if (H?.side) { const c = holdOf(); if (c) sides.push(c); }
   const sideOf = (kind) => {
     if (kind === 'traffic') return sides.some((s) => s.kind === 'traffic') || !(can('X1') || can('R1')) ? null : { kind, targets: ['X1', 'R1'], n: L.attacks >= 2 ? 2 : 1, timed: true };
     // (the balloon from level 3: its winch on the ground, a target any battery that reaches it can shell)
@@ -199,13 +269,16 @@ export function generateOperation(level, seed, batteries) {
   const objectives = [];
   const add = (c, main, reveal = 0) => {
     const O = OBJECTIVES[c.kind], ts = (c.targets ?? []).map((id) => SITES[id]).filter(Boolean), n = c.n ?? Math.max(1, ts.length);
-    objectives.push({ id: `o${objectives.length + 1}`, kind: c.kind, main, title: O.title(ts, n), short: O.short(ts, n), why: O.why, doneLine: O.done ?? '',
-      effect: c.kind === 'deep' ? DEEP_EFFECT[c.targets[0]] ?? null : O.effect ?? null, role: O.role ?? null,
-      targets: c.targets ?? [], n, timed: !!c.timed, before: c.before ?? null, reveal, value: O.value ?? 1 });
+    const text = (v) => (typeof v === 'function' ? v(c) : v ?? '');
+    objectives.push({ id: `o${objectives.length + 1}`, kind: c.kind, main, title: O.title(ts, n, c), short: O.short(ts, n, c), why: text(O.why), doneLine: text(O.done),
+      effect: c.kind === 'deep' ? DEEP_EFFECT[c.targets[0]] ?? null : c.hold ? c.hold.effect : O.effect ?? null, role: O.role ?? null,
+      targets: c.targets ?? [], n, timed: !!c.timed, before: c.before ?? null, reveal, value: O.value ?? 1,
+      ...(c.hold ? { hold: c.hold } : {}), ...(c.then ? { then: c.then } : {}) });
   };
   // the mains in the briefing, and from level 4 the last `later` of them reported during the battle, about the first
   // attack (so the work runs into the attacks, and the report is a moment of its own)
-  const later = Math.min(L.later ?? 0, mains.length - 1), t1 = attacks[0]?.t ?? 420;
+  // (the reports go to plain mains only: the two-step main and the hold are on from the start)
+  const later = Math.min(L.later ?? 0, mains.length - specials.length, mains.length - 1), t1 = attacks[0]?.t ?? 420;
   mains.forEach((c, i) => add(c, true, i >= mains.length - later ? Math.round(t1 - 60 + rnd() * 160) : 0));
   if (xzeit) add({ kind: 'xzeit' }, true);
   // two secondaries in the briefing; the rest reported during the battle

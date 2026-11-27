@@ -28,13 +28,15 @@ const out = opt('--out', auto ? 'shots/crewaudit-<kind>.png' : 'shots/crewaudit.
 const brief = args.includes('--brief');
 const exe = [...(process.env.CHROME ? [process.env.CHROME] : []), 'chromium-1217', 'chromium-1247']
   .map((d) => `${process.env.HOME}/.cache/ms-playwright/${d}/chrome-linux64/chrome`).find((p) => fs.existsSync(p));
+// (DRUMFIRE_PORT: another dev server than the usual 5201, a worktree's own)
+const PORT = process.env.DRUMFIRE_PORT ?? '5201';
 const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1800, height: 1200 } });
-await page.addInitScript(() => { const O = window.WebSocket; window.WebSocket = function (u, p) { if (String(u).includes('5201')) return { close() {}, send() {}, addEventListener() {} }; return new O(u, p); }; });
+await page.addInitScript((port) => { const O = window.WebSocket; window.WebSocket = function (u, p) { if (String(u).includes(port)) return { close() {}, send() {}, addEventListener() {} }; return new O(u, p); }; }, PORT);
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 // (a model whose builder throws is replaced by a stand-in with only a warning: the audit would measure the wrong gun)
 page.on('console', (m) => { if (m.type() === 'error' || /builder threw/.test(m.text())) console.log(`[console.${m.type()}]`, m.text()); });
-await page.goto(`http://localhost:5201/src/render/crewcheck.html?${qs}`);
+await page.goto(`http://localhost:${PORT}/src/render/crewcheck.html?${qs}`);
 await page.waitForFunction(() => window.__crew?.done || window.__crew?.error, null, { timeout: 600000, polling: 500 });
 const r = await page.evaluate(() => window.__crew);
 if (r.error) { console.log(r.error); process.exit(1); }
@@ -73,8 +75,8 @@ if (auto) for (const [key, b] of Object.entries(r.brief)) {
   if (!ms.length) { console.log(`${kind}: no contact moments`); continue; }
   const q2 = new URLSearchParams({ gun: kind, scn, speed: opt('--speed', '1'), shots: ms.map((m) => m.split(' ')[0]).join(','), cams: opt('--cams', '35,22,2.6;215,22,2.6'), tile: opt('--tile', '420x340') });
   const p2 = await browser.newPage({ viewport: { width: 1800, height: 1200 } });
-  await p2.addInitScript(() => { const O = window.WebSocket; window.WebSocket = function (u, p) { if (String(u).includes('5201')) return { close() {}, send() {}, addEventListener() {} }; return new O(u, p); }; });
-  await p2.goto(`http://localhost:5201/src/render/crewcheck.html?${q2}`);
+  await p2.addInitScript((port) => { const O = window.WebSocket; window.WebSocket = function (u, p) { if (String(u).includes(port)) return { close() {}, send() {}, addEventListener() {} }; return new O(u, p); }; }, PORT);
+  await p2.goto(`http://localhost:${PORT}/src/render/crewcheck.html?${q2}`);
   await p2.waitForFunction(() => window.__crew?.done || window.__crew?.error, null, { timeout: 600000, polling: 500 });
   const box = await p2.evaluate(() => { const c = document.querySelector('canvas'); return c ? [c.width, c.height] : null; });
   if (box) {

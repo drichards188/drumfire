@@ -67,6 +67,38 @@ PITS.m99 = { front: 3.6, side: 5.1, rear: 7.4, a1: 50, a2: 135, gate: 11, wall: 
   net: { x: 4.9, z0: 1.4, z1: 6.2, hBack: 3.15, hFront: 2.95 }, pile: { phi: 64.1, r: 3.67, y: 0.08, bask: [-106, -113, 4.3], crate: [-121, 4.3] }, niche: 118, dug: 1, shell: { r: 0.106, len: 0.8, cols: 3, tiers: 2 } };
 const PAINT = 0x5a5e55, BAND = 0xc8a82a, BRASS = 0x8a7236;
 
+// Where the crew's dugout opens in a 1918 position (the pits and the 42 cm emplacement below): { x, z, yaw } in the
+// piece frame, the doorway's middle and its turn (dugout(): 0 opens toward -Z, the steps go down toward +Z). Null for a
+// kind without one. The crews run to it when they take cover (render/shelters.js, render/cover.js).
+export function dugoutOf1918(kind) {
+  if (kind === 'bertha') return { x: -5.4, z: 12.6 + 4.2, yaw: -Math.PI / 2 };
+  const K = PITS[kind];
+  if (!K) return null;
+  return { x: K.dug * 3.2, z: K.rear + 3.4 + 0.35, yaw: K.dug > 0 ? Math.PI / 2 : -Math.PI / 2 };
+}
+
+// A crew's Unterstand on its own, for a gun whose position has none (render/shelters.js places it from the position's
+// measured footprint): the dugout's timbered and sandbagged mouth with its steps going down, a gas curtain rolled up
+// under the lintel and a duckboard to the door. Its frame is dugout()'s: the door at the origin opening toward -Z.
+// `need` is the plan it takes up with the approach, in that frame.
+export const UNTERSTAND_NEED = { x0: -2.3, x1: 2.3, z0: -2.7, z1: 3.4 };
+export function buildUnterstand(seed = 1) {
+  const root = new THREE.Group();
+  root.name = 'unterstand';
+  const m = new Mesher();
+  dugout(m, 0, 0, 0, seed);
+  duckboard(m, [0, -2.4], [0, -0.2], seed + 3);
+  // the gas curtain (a blanket on a batten, let down over the doorway against gas) rolled up under the lintel
+  m.tube('canvas', [-0.46, 1.4, -0.04], [0.46, 1.4, -0.04], 0.075, 0.075, 8, rgbk(0.5, 0.47, 0.38), { capA: true, capB: true });
+  for (const sx of [-1, 1]) m.tube('timber', [sx * 0.3, 1.47, -0.05], [sx * 0.3, 1.33, -0.1], 0.008, 0.008, 3, grey(0.4), { capA: false, capB: false });
+  // a stovepipe through the cover and a few sandbags either side of the duckboard
+  m.cyl('iron', 0.7, 0.9, 1.9, 0.06, 0.06, 0.9, 7, grey(0.45));
+  for (const sx of [-1, 1]) sandWall(m, () => 0, [sx * 0.85, -1.9], [sx * 0.85, -0.7], { hh: 0.45, th: 0.45, seed: seed + 80 + sx });
+  m.build(root, worldMats(), { name: 'unterstand-' });
+  root.traverse((o) => { if (o.isMesh && /mud|water/.test(o.name)) o.castShadow = false; });
+  return { root, need: UNTERSTAND_NEED };
+}
+
 export function buildGunSite1918(kind, seed = 1) {
   const root = new THREE.Group();
   root.name = `${kind}-position-1918`;

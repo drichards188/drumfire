@@ -10,7 +10,7 @@ import { applyHighlight, tut } from './highlight.js';
 import { Tracker } from './tracker.js';
 import { Mail } from './messages.js';
 import { mountConsole } from './consoles/console.js';
-import { KIND_SHORT, clockStr, KINDS, unanswered } from './consoles/common.js';
+import { KIND_SHORT, clockStr, KINDS, unanswered, threatTip } from './consoles/common.js';
 import { TH } from './theatre.js';
 import { GUNS } from '../sim/tables.js';
 import { SupportTiles } from './support.js';
@@ -28,6 +28,9 @@ const MODE_LETTER = { auto: 'A', manual: 'M', hold: 'H' };
 // the German open battles (no auto mode, TH.noAuto): nothing at the player's orders, C with its crew while the player serves a
 // gun, H holding its fire
 const LEAN_LETTER = { auto: 'C', manual: '', hold: 'H' };
+// (and D, Deckung, while its crew is in cover: the ranging counter-battery, ?cb=ranging)
+// the tab's crosshair: a British battery ranging on it (amber ranging, red closing, pulsing bracketed, flashing for effect)
+const CROSS_SVG = '<svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="4.6"/><path d="M7 0.5V4.2M7 9.8V13.5M0.5 7H4.2M9.8 7H13.5"/><circle class="dot" cx="7" cy="7" r="1.1"/></svg>';
 
 // Loading progress of one piece, 0 to 1, weighted by the nominal step durations of GUNS[kind].load
 // (the step index plus job.t / job.dur when the list does not match job.n). Cumulative weights are cached per kind.
@@ -181,10 +184,12 @@ export class Panel {
       const call = el('b', 'tcall');
       const hp = new Bar({ cls: 'mini' }), am = new Bar({ cls: 'mini ammo' });
       const mode = el('span', 'tmode', 'A');
+      const cross = el('i', 'tcross');
+      cross.innerHTML = CROSS_SVG;
       // one thing to a line: the callsign with the mode, the gun's type in full, the guns' state and the shells left
       // (the type used to share a line with the bars and ran under them once the German types grew long)
       const top = el('div', 'ttop');
-      top.append(call, mode);
+      top.append(call, cross, mode);
       const kind = el('i', TH.metric ? 'ttype metric' : 'ttype', KIND_SHORT[u.kind] || u.kind);
       kind.title = GUNS[u.kind]?.name ?? kind.textContent;
       const line = el('div', 'tline');
@@ -206,7 +211,7 @@ export class Panel {
       t.dataset.tut = `tabs tab-${u.id}`;
       t.addEventListener('pointerdown', (e) => { e.preventDefault(); snd('click'); if (this.opts.onSelect) this.opts.onSelect(u.id); });
       this.tabsEl.append(t);
-      this.tabs.set(u.id, { el: t, call, hp, am, mode, lamp, ammoMax: 0, pips, ltxt, ltxtCls: '' });
+      this.tabs.set(u.id, { el: t, tip: t.title, cbT: false, call, hp, am, mode, cross, xs: '', lamp, ammoMax: 0, pips, ltxt, ltxtCls: '' });
     });
     this.status = el('div', 'tstatus');
     this.stClock = el('b', 'sclock');
@@ -257,10 +262,20 @@ export class Panel {
       const locked = this.opts.isUnlocked && !this.opts.isUnlocked(u);
       setCls(t.el, 'locked', locked);
       setText(t.el.querySelector('.tkey'), locked ? 'LOCK' : String(this.opts.keyFor?.(u.id) ?? units.indexOf(u) + 1));
-      const letter = locked ? 'AI' : TH.noAuto ? LEAN_LETTER[u.mode] ?? '?' : MODE_LETTER[u.mode] || '?';
+      const dead = u.alive === false;
+      // the ranging counter-battery (?cb=ranging): D in the ring in cover, the crosshair while a British battery ranges on it
+      const cb = !!sim.cbModel && !dead, cover = cb && !!u.cover;
+      if (t.cbT !== !!sim.cbModel) { t.cbT = !!sim.cbModel; t.el.title = t.tip + (t.cbT ? '; D: in cover. A crosshair: a British battery is ranging on it' : ''); }
+      const letter = locked ? 'AI' : TH.noAuto ? (cover ? 'D' : LEAN_LETTER[u.mode] ?? '?') : MODE_LETTER[u.mode] || '?';
       setText(t.mode, letter);
       setCls(t.mode, 'off', !letter);
-      const dead = u.alive === false;
+      setCls(t.mode, 'cover', cover);
+      const mtip = cover ? 'In cover: the guns are silent (U on its console takes the crew back to the guns)' : '';
+      if (t.mode.title !== mtip) t.mode.title = mtip;
+      const th = cb ? sim.enemyAI?.threatOn?.(u) ?? null : null, xs = th?.stage ?? '';
+      if (t.xs !== xs) { t.xs = xs; t.cross.className = xs ? `tcross on ${xs}` : 'tcross'; }
+      const xtip = th ? threatTip(th) : '';
+      if (t.cross.title !== xtip) t.cross.title = xtip;
       // lamp: amber when a piece fired in the last two seconds; red flashing when enemy shells burst on the battery
       let fired = false, hit = false;
       for (const p of u.pieces || []) if (p.firedAt != null && sim.time - p.firedAt < 1.5) fired = true;
@@ -288,7 +303,10 @@ export class Panel {
       // the guns' state: none loading, laid or firing)
       const free = !!TH.idleMission && u.missionId == null;
       let txt, tc;
+      const manIn = cb && !cover && u.manAt != null && u.manAt > sim.time ? Math.ceil(u.manAt - sim.time) : 0;
       if (np && nDead === np) { txt = 'DEAD'; tc = 'dead'; }
+      else if (cover) { txt = 'IN COVER'; tc = 'cover'; }
+      else if (manIn) { txt = `MANNING ${manIn}s`; tc = 'ldg'; }
       else if (bad) { txt = code; tc = 'bad'; }
       else if (free && !nFire) { const out = !nReady && !nLoad && code; txt = out || 'IDLE'; tc = out ? 'bad' : 'free'; }
       else if (nReady) { txt = np > 1 ? `${nReady}/${np - nDead} READY` : 'READY'; tc = 'rdy'; }
@@ -308,7 +326,8 @@ export class Panel {
       }
       setText(t.ltxt, txt);
       const tip = tc === 'free' ? 'IDLE: no mission. Take one from the missions list (Tab, Enter) or click a target on the board.'
-        : txt === 'STANDBY' ? 'STANDBY: on a mission, the guns not yet at work.' : '';
+        : txt === 'STANDBY' ? 'STANDBY: on a mission, the guns not yet at work.' : tc === 'cover' ? 'IN COVER: the crew is in its shelters and the guns are silent (U on its console: back to the guns).'
+          : manIn ? 'MANNING: the crews are running back to the guns.' : '';
       if (t.ltxt.title !== tip) t.ltxt.title = tip;
       if (t.ltxtCls !== tc) { t.ltxt.className = `tltxt st-${tc}`; t.ltxtCls = tc; }
       setCls(t.el, 'sel', u.id === view.selectedId);

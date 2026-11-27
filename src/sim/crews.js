@@ -116,6 +116,9 @@ export class Crews {
     for (const u of sim.units) {
       if (!u.alive || u.mode !== 'auto') continue;
       const ai = this.state(u);
+      // (a crew in its shelters or running back to the guns, the WW1 German levels' ranging counter-battery fire: its
+      // drill waits; ww1/crews.js takes it there and back. Never set elsewhere)
+      if (u.cover || u.manAt != null) continue;
       // too slow to shelter: only a unit that has been battered goes quiet, and late
       if (now < ai.holdUntil) continue;
       if (!sim.attract && u.signature > 0.97 && now - u.underFire < 15 && u.hits > 3) {

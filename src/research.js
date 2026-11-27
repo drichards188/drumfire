@@ -15,13 +15,16 @@
 // era (the user, 2026-11-14: a WW2 field howitzer is cheap, the WW1 siege guns are hard to get). A rank opens as War
 // Thunder's do: rank I from the start, each rank above once the career has RANK_GATE of the
 // rank before (any line). `weight` is the old weight class (I field to IV the giants), which scales the upgrade costs and
-// orders the lineup picked for you; a career owns only
-// the 15 cm Ringkanone C/92 (the line `guns`, cost 0; the K 17 until 2026-11-01, which older saves keep: progression.js). The off-map line (and the Paris Gun, whose targets are 120 km away) fight in the
-// open battle as off-map support: picked, given a target, they fire in their own time. The British 1917 tree is kept
+// orders the lineup picked for you; a career starts with the batteries of START_KINDS, the 7.7 cm FK 16 and the 15 cm
+// sFH 13 at the head of the field line (cost 0; since 2026-11-26: the 15 cm Ringkanone C/92 from 2026-11-01, the K 17
+// before, which older saves keep: progression.js). The off-map line fights in the open battle as off-map support: picked,
+// given a target, it fires in its own time. Since 2026-11-26 the tree has 20 batteries (OUT_OF_TREE below: what was cut,
+// and where it went). The British 1917 tree is kept
 // for when Britain comes back; the menu does not show it for now.
 import { UNITS } from './sector.js';
 import { OPS } from './ww2/ops.js';
 import { OPS as OPS_WW1, RIDGE_MORE } from './ww1/ops.js';
+import { threatOf } from './threat.js';
 
 export const LINES = {
   // in this order on the Research screen: a line that starts above rank I stands beside the line of its `via`
@@ -37,8 +40,9 @@ export const LINES = {
   ],
   '1917': [{ id: 'all', name: 'Heavy Artillery Group' }],
 };
-// the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: the starting battery);
-// `tier` the rank (the German tree: era and weight, RANK_GATE), `weight` the weight class where it differs from it
+// the batteries each tree researches; `after` must be researched first, `cost` is in RP (cost 0: a starting battery,
+// START_KINDS); `tier` the rank (the German tree: era and weight, RANK_GATE), `weight` the weight class where it
+// differs from it
 export const TREES = {
   '1917': [
     { kind: 'bl6', line: 'all', tier: 1, after: null, cost: 0 },
@@ -50,45 +54,64 @@ export const TREES = {
   de: [
     // each line runs from the guns of 1914 to 1918 (ranks I and II) to those of the second war (III and IV), heavier as
     // it goes (docs/PROGRESSION.md)
-    { kind: 'fk16', line: 'howitzers', tier: 1, after: null, cost: 300 },
-    { kind: 'sfh93', line: 'howitzers', tier: 1, after: 'fk16', cost: 350 },
-    { kind: 'sfh13', line: 'howitzers', tier: 1, after: 'sfh93', cost: 450 },
+    // (cut on 2026-11-26 at the user's word, each a step back or a sidegrade of the battery before it: the ramp guns, the
+    // schweres Wurfgerät 40, the H M1, the K 12, the Kurze Bruno, the K5 and the Wespe; the Gamma merged into Bertha;
+    // the Paris Gun and the V-1 out of the tree, their own missions as they were. Commit 1dd259b has them all in the
+    // tree and in play: OUT_OF_TREE below, the DESIGN.md changelog)
+    { kind: 'fk16', line: 'howitzers', tier: 1, after: null, cost: 0 },
+    { kind: 'sfh13', line: 'howitzers', tier: 1, after: 'fk16', cost: 0 },
     { kind: 'lefh18', line: 'howitzers', tier: 3, weight: 1, after: 'sfh13', cost: 600 },
     { kind: 'sfh18', line: 'howitzers', tier: 3, weight: 2, after: 'lefh18', cost: 1100 },
-    { kind: 'wespe', line: 'howitzers', tier: 3, weight: 2, after: 'sfh18', cost: 1500 },
-    { kind: 'hummel', line: 'howitzers', tier: 4, weight: 2, after: 'wespe', cost: 2000 },
-    { kind: 'rk92', line: 'guns', tier: 1, after: null, cost: 0 },
-    { kind: 'k17', line: 'guns', tier: 1, after: 'rk92', cost: 350 },
+    { kind: 'hummel', line: 'howitzers', tier: 4, weight: 2, after: 'sfh18', cost: 2000 },
+    { kind: 'k17', line: 'guns', tier: 1, after: null, cost: 350 },
     { kind: 'k16', line: 'guns', tier: 2, after: 'k17', cost: 700 },
     { kind: 'k18', line: 'guns', tier: 3, weight: 2, after: 'k16', cost: 1100 },
     { kind: 'k38', line: 'guns', tier: 4, weight: 3, after: 'k18', cost: 2000 },
     { kind: 'max38', line: 'railway', tier: 2, weight: 3, after: null, cost: 2400 },
-    { kind: 'paris', line: 'railway', tier: 2, weight: 4, after: 'max38', cost: 4000, offmap: true },
-    { kind: 'bruno', line: 'railway', tier: 4, weight: 3, after: 'paris', cost: 2800 },
-    { kind: 'k5', line: 'railway', tier: 4, weight: 3, after: 'bruno', cost: 3400 },
-    { kind: 'k12', line: 'railway', tier: 4, after: 'k5', cost: 4600 },
-    { kind: 'gustav', line: 'railway', tier: 4, after: 'k12', cost: 5000 },
-    { kind: 'm99', line: 'mortars', tier: 1, weight: 2, after: null, cost: 600 },
-    { kind: 'm16', line: 'mortars', tier: 2, after: 'm99', cost: 900 },
+    { kind: 'gustav', line: 'railway', tier: 4, after: 'max38', cost: 5000 },
+    { kind: 'm16', line: 'mortars', tier: 2, after: null, cost: 900 },
     { kind: 'mrs18', line: 'mortars', tier: 3, weight: 2, after: 'm16', cost: 1300 },
-    { kind: 'hm1', line: 'mortars', tier: 4, weight: 3, after: 'mrs18', cost: 2600 },
     { kind: 'beta', line: 'siege', tier: 2, weight: 3, after: null, cost: 2000 },
-    { kind: 'gamma', line: 'siege', tier: 2, weight: 3, after: 'beta', cost: 2400 },
-    { kind: 'bertha', line: 'siege', tier: 2, weight: 3, after: 'gamma', cost: 2800 },
+    // (Bertha at the Gamma's place and price since the merge, 2,800 RP before)
+    { kind: 'bertha', line: 'siege', tier: 2, weight: 3, after: 'beta', cost: 2400 },
     { kind: 'karl', line: 'siege', tier: 4, after: 'bertha', cost: 4000 },
     { kind: 'nbw41', line: 'rockets', tier: 3, weight: 1, after: null, cost: 450 },
-    { kind: 'swg40', line: 'rockets', tier: 3, weight: 2, after: 'nbw41', cost: 800 },
-    { kind: 'nbw42', line: 'rockets', tier: 3, weight: 2, after: 'swg40', cost: 1200 },
+    { kind: 'nbw42', line: 'rockets', tier: 3, weight: 2, after: 'nbw41', cost: 1200 },
     { kind: 'gotha', line: 'support', tier: 2, weight: 3, after: null, cost: 2000, offmap: true },
-    { kind: 'v1', line: 'support', tier: 4, after: 'gotha', cost: 3000, offmap: true },
-    { kind: 'v2', line: 'support', tier: 4, after: 'v1', cost: 4500, offmap: true },
+    { kind: 'v2', line: 'support', tier: 4, after: 'gotha', cost: 4500, offmap: true },
   ],
 };
 // War Thunder's rank rule (the German tree): a rank opens once the career has this many batteries of the rank before
-// it, in any line (rank I is open from the start; the starting C/92 counts). So a career fields the guns of 1914 to 1918
-// first, and the second war's open with three of the Great War's heavy batteries, the cheaper ones will do: the siege
-// guns stay a long goal (from threat level 6 the strongpoints want 28 cm shells and more).
+// it, in any line (rank I is open from the start; the starting batteries count). So a career fields the guns of 1914 to
+// 1918 first, and the second war's open with three of the Great War's heavy batteries, the cheaper ones will do: the
+// siege guns stay a long goal (from threat level 6 the strongpoints want 28 cm shells and more). Since the ramp guns'
+// cut (2026-11-26) rank I is the FK 16 and the sFH 13, both a career's from the start, and the K 17: rank II opens with
+// the K 17, 350 RP, about the first battle's pay, so the first battle buys a battery and opens a rank. After the tree's
+// cuts the ranks hold 3, 6, 6 and 5 batteries: rank III opens with half of rank II (the Mörser 16, the K 16 and the Beta
+// or the Gotha, 3,600 RP, as before), rank IV with two thirds of rank III.
 export const RANK_GATE = { de: { 2: 3, 3: 3, 4: 4 } };
+// The batteries taken out of the German tree, with what they were in it (their research cost, their weight class for
+// what their upgrades cost, their line) and the battery their battery points, guns and parts go to (`to`: the next up
+// its line, or the one before it at a line's end; progression.js carries a save over). Commit 1dd259b (2026-11-25) has
+// every one in the tree and in play. The Paris Gun and the V-1 keep their own missions (their first win still pays half
+// this cost, specialBonus) and stay off-map weapons (isOffmap); the Gamma stays in the 1918 sandbox battle; the rest are
+// dormant (their models, drills and tables kept unreachable)
+export const OUT_OF_TREE = {
+  sfh93: { cost: 350, weight: 1, line: 'howitzers', to: 'sfh13' }, rk92: { cost: 0, weight: 1, line: 'guns', to: 'sfh13' },
+  m99: { cost: 600, weight: 2, line: 'mortars', to: 'm16' },
+  wespe: { cost: 1500, weight: 2, line: 'howitzers', to: 'hummel' }, hm1: { cost: 2600, weight: 3, line: 'mortars', to: 'mrs18' },
+  paris: { cost: 4000, weight: 4, line: 'railway', to: 'gustav', offmap: true }, bruno: { cost: 2800, weight: 3, line: 'railway', to: 'gustav' },
+  k5: { cost: 3400, weight: 3, line: 'railway', to: 'gustav' }, k12: { cost: 4600, weight: 4, line: 'railway', to: 'gustav' },
+  gamma: { cost: 2400, weight: 3, line: 'siege', to: 'bertha' }, swg40: { cost: 800, weight: 2, line: 'rockets', to: 'nbw42' },
+  v1: { cost: 3000, weight: 4, line: 'support', to: 'v2', offmap: true },
+};
+// the batteries a career owns from the start, unresearched (cost 0 in TREES), per tree (the user, 2026-11-26: the FK 16
+// and the sFH 13 together, in the 15 cm Ringkanone C/92's place)
+export const START_KINDS = { '1917': ['bl6'], de: ['fk16', 'sfh13'] };
+// the guns a starting battery has from the first battle (the user, 2026-11-26: one gun alone made level 1 slow and
+// repetitive; each battery has four pits, so two are still to earn); progression.js brings a career up to them
+export const START_GUNS = { fk16: 2, sfh13: 2 };
+export const isStartKind = (kind) => Object.values(START_KINDS).some((ks) => ks.includes(kind));
 // the era of a German rank, for the Research screen
 export const RANK_ERA = { de: ['1914 to 1918', '1914 to 1918', '1939 to 1945', '1939 to 1945'] };
 export const RESEARCH_ERAS = Object.keys(TREES);
@@ -103,7 +126,7 @@ export const weightOf = (kind) => { const n = nodeOf(kind); return n ? n.weight 
 // the battery after this one in its line (null at the line's end)
 export const nextInLine = (kind) => TREES[eraOfKind(kind)]?.find((n) => n.after === kind) ?? null;
 // the batteries that fight from off the map (off-map support): never in a gun pit
-export const isOffmap = (kind) => !!nodeOf(kind)?.offmap;
+export const isOffmap = (kind) => !!(nodeOf(kind) ?? OUT_OF_TREE[kind])?.offmap;
 // the era a gun belongs to, for its look (models/looks.js camouflage, the crews' dress)
 const WW1_KINDS = new Set([...OPS_WW1.ridge.units, ...OPS_WW1.paris.units, ...RIDGE_MORE.filter((u) => u.era === 'ww1')].map((u) => u.kind).concat('gotha'));
 export const gunEraOf = (kind) => (TREES['1917'].some((n) => n.kind === kind) ? '1917' : WW1_KINDS.has(kind) ? 'ww1' : 'ww2');
@@ -147,11 +170,12 @@ const TIER_K = [1, 1.2, 1.4, 1.6];
 const PART_COST = [80, 170, 300];
 const GUN_COST = 120;
 const round10 = (v) => Math.round(v / 10) * 10;
+// what a part's next level costs a battery of weight class `weight` (guns: the next gun), uncapped
+export const levelCost = (weight, part, have) => round10((part === 'guns' ? GUN_COST * have : PART_COST[Math.min(have, LEVELS - 1)]) * TIER_K[weight - 1]);
 // the cost of the next level of a part (guns: the next gun), or null when it is at its top
 export function nextCost(kind, part, have) {
-  const k = TIER_K[weightOf(kind) - 1];
-  if (part === 'guns') return have < maxGuns(kind) ? round10(GUN_COST * have * k) : null;
-  return have < LEVELS ? round10(PART_COST[have] * k) : null;
+  if (part === 'guns') return have < maxGuns(kind) ? levelCost(weightOf(kind), part, have) : null;
+  return have < LEVELS ? levelCost(weightOf(kind), part, have) : null;
 }
 // every part at its top (dev mode's batteries)
 export const maxedLevels = (kind) => ({ guns: maxGuns(kind), ...Object.fromEntries(PARTS.map((p) => [p.id, LEVELS])) });
@@ -175,9 +199,8 @@ export const DETACHMENT = {
   lefh18: { men: 6 }, sfh18: { men: 7 }, k18: { men: 10 }, mrs18: { men: 10 }, nbw41: { men: 5 }, karl: { men: 21 }, gustav: { men: 250 },
   k17: { men: 8, est: true }, sfh13: { men: 8, est: true }, m16: { men: 10, est: true }, max38: { men: 40, est: true },
   bertha: { men: 120, est: true }, gamma: { men: 250, est: true }, paris: { men: 80 },
-  fk16: { men: 6 }, k16: { men: 9, est: true }, m99: { men: 10, est: true }, rk92: { men: 8, est: true }, sfh93: { men: 8, est: true }, beta: { men: 40, est: true },
-  k38: { men: 12, est: true }, hm1: { men: 30, est: true }, bruno: { men: 40, est: true }, k5: { men: 70, est: true }, k12: { men: 80, est: true },
-  wespe: { men: 5 }, hummel: { men: 6 }, nbw42: { men: 6 }, swg40: { men: 6, est: true }, gotha: { men: 3 },
+  fk16: { men: 6 }, k16: { men: 9, est: true }, beta: { men: 40, est: true },
+  k38: { men: 12, est: true }, hummel: { men: 6 }, nbw42: { men: 6 }, gotha: { men: 3 },
 };
 export const detachmentOf = (kind, drill = 8) => DETACHMENT[kind]?.men ?? drill;
 // the men of one gun for a battery's levels: its detachment and its relief crews
@@ -213,18 +236,28 @@ export function opposition(era, levelsByKind) {
 // What a battle paid. `sim.earned` (sim.js) holds each unit's credit: its share of every mission done (the mission's
 // points split by the rounds each unit fired on it), the effective damage it did and the score of what it destroyed.
 // The batteries keep their own credit as battery points; the RP are their credit together, plus a little for every
-// minute in action and a bonus for the day won (a lost battle still pays). The threat level (or the difficulty) scales it all.
+// minute in action and a bonus for the day won (a lost battle still pays). The threat level (or the difficulty) scales
+// it all, times the overmatch cut (below; `cut`, else `sim.payCut`, else 1).
+//
+// A battery lent for the battle (`u.lent`, or `lent` on its loadout entry; no battle lends one today) earns
+// research points but no battery points: its credit is kept under `lent:<kind>` in `batteries`, so it is in `fought`
+// and the RP (main.js sums the entries) while progression.js `gain` gives battery points only to a battery of the tree,
+// so the battle never upgrades it (nor researches it: the RP go to the player's own research target).
 export const PAY = { Easy: 0.8, Normal: 1, Hard: 1.35 };
 const PER_MINUTE = 4, WIN = 400;
 // a level's mission (src/operation.js): its objectives pay as they are done (OBJECTIVE_PAY, sim.objectivePay), so the
 // win itself pays less; a mission won with its mains and half its secondaries pays about what a battle won used to
 const WIN_MISSION = 250;
-export function battleReward(sim, { won = false } = {}) {
-  const k = sim.level?.pay ?? PAY[sim.difficultyName] ?? 1; // (a threat level's pay, threat.js; else the difficulty's)
+export const lentKey = (kind) => `lent:${kind}`;
+export function battleReward(sim, { won = false, cut = sim.payCut } = {}) {
+  // (a threat level's pay, threat.js; else the difficulty's; the cut never above 1: no bonus for a weaker lineup)
+  const k = (sim.level?.pay ?? PAY[sim.difficultyName] ?? 1) * (Number.isFinite(cut) ? Math.max(0, Math.min(1, cut)) : 1);
   const batteries = {};
-  for (const u of sim.units) batteries[u.kind] = (batteries[u.kind] ?? 0) + Math.round((sim.earned?.[u.id] ?? 0) * k);
+  const payee = (q) => (q.lent || sim.loadout?.[q.kind]?.lent ? lentKey(q.kind) : q.kind);
+  const add = (key, v) => { batteries[key] = (batteries[key] ?? 0) + Math.round(v * k); };
+  for (const u of sim.units) add(payee(u), sim.earned?.[u.id] ?? 0);
   // the weapons off the map (sim/support.js): their strikes' credit, kept under `support:<kind>`
-  for (const a of sim.support?.assets ?? []) batteries[a.kind] = (batteries[a.kind] ?? 0) + Math.round((sim.earned?.[`support:${a.kind}`] ?? 0) * k);
+  for (const a of sim.support?.assets ?? []) add(payee(a), sim.earned?.[`support:${a.kind}`] ?? 0);
   const fought = Object.values(batteries).reduce((a, b) => a + b, 0);
   const time = Math.round((Math.min(sim.time, 2700) / 60) * PER_MINUTE * k);
   const win = won ? Math.round((sim.objectives ? WIN_MISSION : WIN) * k) : 0;
@@ -232,7 +265,21 @@ export function battleReward(sim, { won = false } = {}) {
   return { rp: fought + time + win + objectives, fought, time, win, objectives, batteries };
 }
 
+// A threat level's first win (progression.js wonLevel, once a level) pays its victory again: WIN_MISSION times the
+// level's pay, to the nearest 50 (250 at levels 1 and 2, 300, 400, 450, 500, 650, 750, 900, 1,000 at level 10). A level 1
+// win already pays about 450 to 520 RP (the main objective 100, the medals 50, the victory 250, the kills, the minutes),
+// so the first, about 700 to 770, researches the K 17 and opens rank II. Never cut: a one-off award, not the battle's pay.
+export const firstWinRP = (n) => Math.round((WIN_MISSION * threatOf(n).pay) / 50) * 50;
+// The overmatch cut: a lineup that outclasses the level's front earns less, so the climb pays and farming the quiet
+// fronts does not. Full pay down to two levels below the lineup's rating (capability.js recommendedLevel on the career's
+// lineup, a lent battery not counted), x0.75 three below, x0.5 four or more below; never above 1.
+export const OVERMATCH = [[4, 0.5], [3, 0.75]];
+export const overmatchCut = (rating, n) => (rating == null ? 1 : OVERMATCH.find(([d]) => rating - n >= d)?.[1] ?? 1);
+// The top level of every part (LEVELS) opens with a win at this threat level or higher (Helldivers 2's super samples:
+// the best kit comes from the hard fronts); dev mode and unlimited points open it (progression.js partGate)
+export const TOP_PART_WIN = 6;
+
 // a campaign mission's first win: half the research cost of the battery it features (the V-weapons' missions a flat sum)
-export const missionBonus = (m) => Math.max(500, Math.round((nodeOf(m.reward)?.cost ?? 2000) / 2));
+export const missionBonus = (m) => Math.max(500, Math.round(((nodeOf(m.reward) ?? OUT_OF_TREE[m.reward])?.cost ?? 2000) / 2));
 // a special mission's first win (menuItems.js SPECIAL): half its weapon's research cost, 500 at least
-export const specialBonus = (kind) => Math.max(500, Math.round((nodeOf(kind)?.cost ?? 2000) / 2));
+export const specialBonus = (kind) => Math.max(500, Math.round(((nodeOf(kind) ?? OUT_OF_TREE[kind])?.cost ?? 2000) / 2));

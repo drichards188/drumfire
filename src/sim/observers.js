@@ -5,6 +5,7 @@
 // Reports arrive a few seconds after the burst; a volley (the shells of one fire order) gets one report, on its mean
 // point of impact.
 import { YARD, DEG } from '../sector.js';
+import { G } from './tables.js';
 
 const CIRCLES = [['Y', 10], ['Z', 25], ['A', 50], ['B', 100], ['C', 200], ['D', 300], ['E', 400], ['F', 500]];
 const q25 = (m) => Math.round(m / YARD / 25) * 25;
@@ -32,10 +33,15 @@ export class Observers {
     return { x: m.x, z: m.z };
   }
 
-  onBurst(shell, pos) {
+  onBurst(shell, pos, air = false) {
     const sim = this.sim;
     const u = sim.unitById(shell.unitId);
     if (!u) return;
+    // (a threat level: a time-fuze round that burst in the air is read by where it would have come down at the height
+    // it was laid for, as an observer reads its height of burst. Read where it burst, a round laid 300 m over burst over
+    // the target at its time and read "on target": a shrapnel round left in the breech from the Sperrfeuer, fired as
+    // the ranging round of a Gegenbatterie, sent the crews to fire for effect 300 m over, again and again)
+    if (air && sim.level) pos = fallPoint(shell, pos);
     // rounds are matched to a ranging mission whose point is within 400 m of the aim; a round that
     // matches none but comes from a unit laid on its own mission (the uncorrected aim is the mission
     // point, so a wild correction took it off) is still answered: in a battle with "not observed" (the
@@ -43,7 +49,13 @@ export class Observers {
     const watched = (m) => m && m.observer !== 'map' && m.observer !== 'sound' && m.kind !== 'sos' && m.kind !== 'barrage';
     const observed = (m) => watched(m) && m.state === 'ranging';
     let best = null, bd = 400;
-    for (const m of sim.missions) {
+    // (a threat level: a round laid as the unit's guns are now is its own mission's, however far the crew's corrections
+    // have taken the aim from the mission's point. A gun whose error wanted it laid 420 m short was matched to no
+    // mission, and its rounds 100 m from the target went "not observed" for the rest of the battle)
+    const near = (m) => Math.hypot(shell.aim.x - m.x, shell.aim.z - m.z) < 400 || (!!sim.level && u.order?.target != null && Math.hypot(shell.aim.x - u.order.x, shell.aim.z - u.order.z) < 400);
+    const mine = sim.level && u.missionId != null ? sim.missionById(u.missionId) : null;
+    if (observed(mine) && near(mine)) best = mine;
+    else for (const m of sim.missions) {
       if (!observed(m)) continue;
       const d = Math.hypot(shell.aim.x - m.x, shell.aim.z - m.z);
       if (d < bd) {
@@ -61,7 +73,7 @@ export class Observers {
       // effect since the round left (its series replaces it). Only a battery the player commands (shell.ranging,
       // guns.fire): the crews never range again on a task they fire for effect on, so their games are unchanged
       const ownSeen = observed(own) || (watched(own) && own.state === 'ffe' && shell.ranging && shell.volley > (u.ffeVolley ?? 0));
-      if (ownSeen && Math.hypot(shell.aim.x - own.x, shell.aim.z - own.z) < 400) best = own;
+      if (ownSeen && near(own)) best = own;
       else if (ownSeen && tg && Math.hypot(tg.x - own.x, tg.z - own.z) < 60) {
         best = own;
         wild = true;
@@ -115,6 +127,9 @@ export class Observers {
     const rep = {
       t: sim.time, missionId: m.id, unitId: u.id, shellId: shell.id, over: null, right: null, clock: null, text: '', ok: false,
       observed: true, corr: { add: 0, right: 0 }, n: (m.rounds = (m.rounds ?? 0) + 1), observer: m.observer,
+      // (the round's lay: when it left and the point it was laid on, so a crew can read a report on an earlier lay less
+      // what it has laid since: ww1/crews.js)
+      fired: shell.t0, aim: shell.aim ? { x: shell.aim.x, z: shell.aim.z } : null,
     };
     const d = Math.hypot(q.over, q.right);
     if (q.wild && !sim.scripted) {
@@ -173,4 +188,14 @@ export class Observers {
     sim.events.report?.(m, rep);
     if (rep.ok && m.state === 'ranging') m.onTarget = true;
   }
+}
+
+// where a round that burst in the air at p would have come down at the height it was laid for (shell.aimY): its path
+// carried on (or back, for one that burst below it) under gravity alone, the drag over the last few hundred metres
+// being small beside the error read
+function fallPoint(s, p) {
+  const vy = s.vel.y, dy = p.y - (s.aimY ?? p.y), disc = vy * vy + 2 * G * dy;
+  if (disc < 0) return p;
+  const t = (vy + Math.sqrt(disc)) / G;
+  return { x: p.x + s.vel.x * t, y: p.y + vy * t - 0.5 * G * t * t, z: p.z + s.vel.z * t };
 }

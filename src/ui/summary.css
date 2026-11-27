@@ -59,6 +59,8 @@
 .sm-btn:hover, .sm-btn:focus-visible { background: #bca16a; color: #171b16; outline: none; }
 .sm-btn.primary { background: #bca16a; color: #171b16; }
 .sm-btn.primary:hover { background: #d8bd7e; }
+/* a button's second line (the next level's English name, its first-win pay) */
+.sm-btn small { display: block; margin-top: 3px; font: 10px var(--mono); letter-spacing: 0.06em; text-transform: none; opacity: 0.8; }
 @media (max-width: 760px) {
   .sm-body { grid-template-columns: minmax(0, 1fr); }
   .sm-tally { grid-template-columns: repeat(2, minmax(0, 1fr)); }

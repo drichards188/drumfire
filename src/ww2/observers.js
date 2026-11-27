@@ -13,6 +13,7 @@ export class ObserversWW2 extends Observers {
     const rep = {
       t: sim.time, missionId: m.id, unitId: u.id, shellId: shell.id, over: null, right: null, clock: null, text: '', ok: false,
       observed: true, corr: { add: 0, right: 0 }, n: (m.rounds = (m.rounds ?? 0) + 1), observer: m.observer, metric: true,
+      fired: shell.t0, aim: shell.aim ? { x: shell.aim.x, z: shell.aim.z } : null, // (the round's lay, as the base's)
     };
     const d = Math.hypot(q.over, q.right);
     const air = m.observer === 'air';

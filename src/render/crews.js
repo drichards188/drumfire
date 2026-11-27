@@ -9,6 +9,7 @@ import { ROLES_DE, LIGHT_DE, WORLD_DE, STAFF_DE, DE_ACT, DE_PROPS } from './crew
 import { ROLES_HEAVY, heavyBuild, heavyState, heavyMechanisms, heavyAct, heavyProps } from './crews_heavy.js';
 import { ROLES_WW1, LIGHT_WW1, WORLD_WW1, STAFF_WW1, TIMED_WW1, BLOCK_MAN_WW1, BAG_SIDE_WW1, LOADER_AT_WW1, CREW_ERA, crewForRoleWW1, ww1State, ww1Mechanisms, ww1Act, ww1Props } from './crews_ww1.js';
 import { ManSpace, spaceClock, spaceReset, spacePut, spaceStep, ask, hands, holding, way, slide } from './crewspace.js';
+import { coverFrame, coverMen, coverProps } from './cover.js';
 // a node and every parent up to the rig's root are visible (an anchor whose part the rig has hidden is not)
 const shown = (node, root) => { for (let n = node; n && n !== root; n = n.parent) if (!n.visible) return false; return !!node; };
 
@@ -735,15 +736,26 @@ export class GunCrew {
     // Mechanisms and their contact points must belong to this frame before hands are solved.
     this.mechanisms(c);
     rig.root.updateMatrixWorld(true);
+    // the crew on its way to its shelter, in it or coming back (render/cover.js): every man's drill first, then the way
+    const cv = this.shelters ? coverFrame(this, p, sim, now) : null;
     for (let i = 0; i < this.men.length; i++) {
       const m = this.men[i];
       if (this.gone(i)) { m.hide(); if (this.spacing) this.dropped(m); continue; }
       m.root.visible = true;
       this.act(m, c);
-      if (this.spacing) hands(this, m);
+      if (this.spacing && !cv) hands(this, m);
+    }
+    // (the pair who carry a shell between them go to the shelter each his own way: the spacing does not hold them together)
+    const pair0 = this.pair0, pair1 = this.pair1;
+    if (cv) {
+      coverMen(this, cv);
+      if (this.spacing) for (let i = 0; i < this.men.length; i++) if (!this.gone(i) && this.men[i].root.visible) hands(this, this.men[i]);
+      this.pair0 = this.pair1 = null;
     }
     if (this.spacing) spaceStep(this);
+    this.pair0 = pair0; this.pair1 = pair1;
     this.props(c);
+    if (cv) coverProps(this, cv);
     // The props live in the rig's root, not in the parts they rest on: each is drawn only while its part is, so a
     // rig that hides a part (the Gustav's assembly) hides what lies on it. The next shell is the shell stack's; the
     // shell in hand, the cartridges, the staff and the rope are the gun's (its tray).

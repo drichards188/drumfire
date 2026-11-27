@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 21 cm Mörser 99 was cut from the game at the user's word (DESIGN.md changelog); kept
+// here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import * as THREE from 'three';
 import { V, DEG, box, rbox, xTube, yTube, zTube, rod, sphere, rivets, sideProfile, gearArc, zLathe, rivetRow, rivetPoly, mergeAll } from '../../kit.js';
 import { makeRig, finishRig, node, pivotAt, hb, trayShells, crew, L90, R90, TAU } from '../../t/fieldkit.js';

@@ -20,14 +20,11 @@ export const WW1_KINDS = {
   gamma: { pieces: 1, title: '42 CM GAMMA-MÖRSER', note: 'The fortress mortar on its concrete bed: 1,160 kg shells, high angle only, a narrow arc', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
   fk16: { pieces: 4, title: '7.7 CM FELDKANONE 16', note: 'Battery of four field guns, 7 kg shells, very quick: shrapnel over infantry, the Sperrfeuer and the Feuerwalze; nothing hard', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'shrapnel', 'delay'], charges: 2 },
   k16: { pieces: 2, title: '15 CM KANONE 16', note: 'Two long heavy guns, 51 kg shells to 22 km: the British heavies, the railhead, the depots', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3, deep: true },
-  m99: { pieces: 2, title: '21 CM MÖRSER 99', note: 'Two old mortars without a recoil system: they run back at every shot and are laid afresh, so every round falls like a ranging round. Slow; 119 kg shells', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3 },
-  rk92: { pieces: 2, title: '15 CM RINGKANONE C/92', note: 'Two old fortress guns without a recoil system: they run up their ramps at every shot and are levered back onto their line, so every round falls like a ranging round. 40 kg shells to 12 km', rounds: [1, 2, 4], fuzes: ['instant', 'delay', 'shrapnel'], charges: 2, deep: true },
-  sfh93: { pieces: 4, title: '15 CM sFH 93', note: 'Battery of four old heavy field howitzers without a recoil system: off their ramps and laid afresh every round. 42 kg shells to 6 km: the field batteries, the tanks, the Sperrfeuer', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 3 },
   beta: { pieces: 1, title: '30.5 CM BETA-GERÄT', note: 'The siege mortar on its steel bed: 410 kg shells to 12 km, high angle only; T relays the bed past its arc', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4 },
   paris: { pieces: 1, title: 'PARIS-GESCHÜTZ', note: 'The long-range gun: one shell at a time at military targets 120 km off the map, on the Armee\'s orders; every round wears the bore', rounds: [1], fuzes: ['instant'], charges: 1, deep: true },
 };
 const SHORT = { bertha: '42 cm Bertha', m16: '21 cm Mörser 16', sfh13: '15 cm sFH 13', k17: '10 cm K 17', max38: '38 cm Langer Max', gamma: '42 cm Gamma', paris: 'Paris-Geschütz',
-  fk16: '7.7 cm FK 16', k16: '15 cm K 16', m99: '21 cm Mörser 99', rk92: '15 cm Ringkanone', sfh93: '15 cm sFH 93', beta: '30.5 cm Beta' };
+  fk16: '7.7 cm FK 16', k16: '15 cm K 16', beta: '30.5 cm Beta' };
 
 export function ww1Ui(th) {
   const battle = (th.op?.kind ?? 'battle') === 'battle';
@@ -47,7 +44,7 @@ export function ww1Ui(th) {
     metric: true,
     mannable: MANNABLE, // the guns the player can serve in person (ww2/gunner.js): MAN on the guns card
     mppMax: 120,
-    unitName: (u) => u.callsign || u.name, // "Richard" on a report, not "15 cm Ringkanone C/92" (ui/theatre.js)
+    unitName: (u) => u.callsign || u.name, // "Franz" on a report, not "7.7 cm FK 16" (ui/theatre.js)
     salient: battle, // the Ypres map: the lines, places and roads (our front is the German line of 1917)
     idleMission: battle, // IDLE on a battery's tab: no mission (ui/panel.js)
     sectors: th.sectors ?? [],

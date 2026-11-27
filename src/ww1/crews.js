@@ -11,19 +11,30 @@
 // a target, as in the WW2 mode).
 import { TARGETS, SHELLS } from '../sim/tables.js';
 import { Crews } from '../sim/crews.js';
+import { COVER } from '../sim/guns.js';
 import { autoCharge } from '../sim/shells.js';
 import { bearingOf } from '../sector.js';
 import { FEUERWALZE, walzeMargin } from './director.js';
 
-export const SUPER = new Set(['bertha', 'gamma', 'max38', 'gustav', 'karl', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
-const HEAVY = new Set(['m16', 'bertha', 'gamma', 'max38', 'mrs18', 'gustav', 'karl', 'm99', 'beta', 'hm1', 'bruno', 'k5', 'k12']);
+// The crews' cover under the British counter-battery fire (sim.cbModel, ww1/enemy.js RANGING): a crew on auto goes to
+// its shelters when it knows their battery has it bracketed or fires for effect on it, and mans its guns again once
+// the salvos have fallen. Imperfect on purpose, as the rest of its drill: it reacts in `react` s, a time in five
+// (`late`) `lateBy` s later still, and a time in twelve (`stay`) serves on through the salvos; it waits `after` s past
+// the last before it comes out. On a Sperrfeuer or the Feuerwalze it stays at the guns while it is only bracketed,
+// ducks for the fire for effect itself and is back at the barrage `duty` s after the last salvo.
+export const CREW_COVER = { react: [2, 8], late: 0.2, lateBy: [10, 30], stay: 0.08, after: [15, 40], duty: [4, 10] };
+// a target's strength left: its standing parts' hp (t.hp runs ahead of it, a blow that knocks a part out counting in
+// full: an HQ read 0 with one of its three parts standing)
+const strength = (t) => t.parts.reduce((a, p) => a + (p.alive ? Math.max(0, p.hp) : 0), 0);
+export const SUPER = new Set(['bertha', 'gamma', 'max38', 'gustav', 'karl', 'beta']);
+const HEAVY = new Set(['m16', 'bertha', 'gamma', 'max38', 'mrs18', 'gustav', 'karl', 'beta']);
 const BIG = new Set(['bgun15', 'bgun92', 'bgunrail', 'bgun6', 'hq', 'railyard', 'bdump', 'btanks', 'mebu', 'bunker']); // (bunker: a level's strongpoint, ops.js RIDGE_FORTS)
-const LONG = new Set(['k17', 'k18', 'k16', 'k38', 'rk92']); // the long guns: counter-battery, the rear, the traffic
-const RAIL = new Set(['max38', 'gustav', 'bruno', 'k5', 'k12']); // the railway guns: the railhead and the HQ first
-const ROCKETS = new Set(['nbw41', 'nbw42', 'swg40']); // ripples that drench an area: batteries, tanks, traffic
-const TRAFFIC = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'k18', 'fk16', 'k16', 'wespe', 'hummel']); // the guns quick enough for the road
-const SOFT_ONLY = new Set(['k17', 'k18', 'lefh18', 'fk16', 'wespe']); // too light a shell for the tanks and concrete
-const FIELD = new Set(['sfh13', 'lefh18', 'sfh18', 'fk16', 'wespe', 'hummel', 'sfh93']); // the Sperrfeuer and the Feuerwalze
+const LONG = new Set(['k17', 'k18', 'k16', 'k38']); // the long guns: counter-battery, the rear, the traffic
+const RAIL = new Set(['max38', 'gustav']); // the railway guns: the railhead and the HQ first
+const ROCKETS = new Set(['nbw41', 'nbw42']); // ripples that drench an area: batteries, tanks, traffic
+const TRAFFIC = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'k18', 'fk16', 'k16', 'hummel']); // the guns quick enough for the road
+const SOFT_ONLY = new Set(['k17', 'k18', 'lefh18', 'fk16']); // too light a shell for the tanks and concrete
+const FIELD = new Set(['sfh13', 'lefh18', 'sfh18', 'fk16', 'hummel']); // the Sperrfeuer and the Feuerwalze
 
 export class CrewsWW1 extends Crews {
   // the red flares: every crew on auto turns to the Sperrfeuer in its own time, but on a level's mission a long gun or
@@ -65,6 +76,7 @@ export class CrewsWW1 extends Crews {
 
   update(dt) {
     const sim = this.sim;
+    if (sim.cbModel && this.cover !== false) this.coverUpdate();
     // (the railway-gun hunt: a crew on auto stops firing while the gun is withdrawn, and takes the hunt again when it
     // comes up: rounds on an empty firing point are wasted)
     if (sim.director.hunt) for (const u of sim.units) {
@@ -80,9 +92,66 @@ export class CrewsWW1 extends Crews {
       if (ai.m?.objMain || ai.st === 'sos' || ai.st === 'barrage') continue;
       if (ai.m) this.toIdle(u, ai, 0);
       if (!sim.director.assign(u, m)) continue;
-      Object.assign(ai, { m, seen: 0, ranged: 0, series: 0, wait: sim.time + 3, st: m.state === 'ffe' ? 'ffe' : 'ranging' });
+      Object.assign(ai, { m, seen: this.mine(u, m).length, ranged: 0, series: 0, chk: null, wait: sim.time + 3, st: m.state === 'ffe' ? 'ffe' : 'ranging' });
     }
+    if (sim.level) this.effectUpdate();
     super.update(dt);
+  }
+
+  // this unit's reports on a mission (the observer's, not the "not observed" said to the player)
+  mine(u, m) { return m.reports.filter((r) => r.unitId === u.id && !r.wild); }
+
+  // (a threat level: the crew waits for the player's round still in the air, the one it reads, not for one of its own)
+  handOver(u) {
+    super.handOver(u);
+    const sim = this.sim, ai = this.state(u);
+    if (!sim.level || ai.st !== 'await') return;
+    let t0 = Infinity;
+    for (const s of sim.shells) if (s.own && s.alive && s.unitId === u.id) t0 = Math.min(t0, s.t0);
+    if (t0 < Infinity) ai.fireT = t0;
+  }
+
+  // A threat level: a series that did nothing to its target fell wide of it (a lay passed on a round that burst in the
+  // air or on a report of an earlier lay, their battery's fix gone stale): once its last round has come down the crew
+  // stops the next series and ranges again, a round the observer reads, before it fires for effect once more. A crew that
+  // fired three series blind gave the mission up, the director (a main's) gave it back, and it fired three more on the
+  // same lay: a level battle that never ended (level 2 seed 35, 2026-11-26)
+  effectUpdate() {
+    const sim = this.sim;
+    for (const u of sim.units) {
+      const ai = u.ai, c = ai?.chk;
+      if (!c || c.t1 == null || u.mode !== 'auto') continue;
+      if (sim.shells.some((s) => s.own && s.alive && s.unitId === u.id && s.t0 <= c.t1)) continue;
+      ai.chk = null;
+      const m = ai.m, t = m?.targetId ? sim.targetById(m.targetId) : null;
+      if (!t || !t.alive || m.id !== c.m || strength(t) < c.hp - 0.01 || (ai.st !== 'ffe' && ai.st !== 'firing') || m.units.length !== 1) continue;
+      sim.guns.cease(u);
+      if (m.state === 'ffe') sim.setMissionState(m, 'ranging');
+      Object.assign(ai, { st: 'ranging', ranged: Math.min(ai.ranged, 2), wait: sim.time + 3 + sim.rng() * 5 });
+    }
+  }
+
+  // the crews' cover (CREW_COVER); `this.cover = false` keeps every crew at its guns (tools/cbtest.mjs --policy none).
+  // Not a battery the player serves a gun of (the gunner's own), nor one on the player's orders: those are the player's
+  coverUpdate() {
+    const sim = this.sim, now = sim.time, C = CREW_COVER, en = sim.enemyAI, rnd = (a) => a[0] + sim.rng() * (a[1] - a[0]);
+    for (const u of sim.units) {
+      if (!u.alive || u.mode !== 'auto' || u.pieces.some((p) => p.manned)) continue;
+      const ai = this.state(u);
+      const duty = ai.st === 'sos' || ai.st === 'barrage' || (ai.sosM && now >= ai.sosAt - COVER.run);
+      const danger = en.dangerOn?.(u, duty);
+      if (u.cover) {
+        ai.cvIn = null;
+        if (danger) { ai.cvOut = null; continue; }
+        ai.cvOut ??= now + rnd(duty ? C.duty : C.after);
+        if (now >= ai.cvOut) { ai.cvOut = null; sim.guns.setCover(u, false); }
+      } else {
+        ai.cvOut = null;
+        if (!danger) { ai.cvIn = null; continue; }
+        ai.cvIn ??= sim.rng() < C.stay ? Infinity : now + rnd(C.react) + (sim.rng() < C.late ? rnd(C.lateBy) : 0);
+        if (now >= ai.cvIn) { ai.cvIn = null; sim.guns.setCover(u, true); }
+      }
+    }
   }
 
   suits(u, m) {
@@ -94,7 +163,7 @@ export class CrewsWW1 extends Crews {
     if (m.kind === 'barrage' && this.sim.level && !FEUERWALZE.has(u.kind) && this.sim.units.some((q) => q.alive && FEUERWALZE.has(q.kind))) return false;
     if (m.kind === 'sos' || m.kind === 'barrage') return !SUPER.has(u.kind);
     if (SUPER.has(u.kind)) return !!t && BIG.has(t.kind);
-    if (m.alt > 0) return u.kind === 'k17' || u.kind === 'rk92'; // (a mission laid in the air: the long guns with shrapnel; the balloon's is on its winch)
+    if (m.alt > 0) return u.kind === 'k17'; // (a mission laid in the air: the long guns with shrapnel; the balloon's is on its winch)
     if (ROCKETS.has(u.kind)) return !t || t.battery || t.kind === 'btanks' || t.kind === 'bconvoy' || t.kind === 'mebu' || t.kind === 'bpost';
     if (t?.kind === 'bconvoy') return TRAFFIC.has(u.kind);
     if (t && TARGETS[t.kind]?.hardness === 'hard') return !SOFT_ONLY.has(u.kind);
@@ -124,23 +193,65 @@ export class CrewsWW1 extends Crews {
   }
 
   ffe(u, ai, m) {
-    if (u.gate && (u.kind === 'karl' || u.special?.kind === 'move')) { ai.wait = this.sim.time + 3; return; }
-    ai.seriesAt = this.sim.time;
+    const sim = this.sim;
+    if (u.gate && (u.kind === 'karl' || u.special?.kind === 'move')) { ai.wait = sim.time + 3; return; }
+    ai.seriesAt = sim.time;
+    const n = ai.series;
     super.ffe(u, ai, m);
+    // (a threat level: the series' effect is judged when its last round is down, effectUpdate; one check at a time, the
+    // next series fired while the last is still in the air)
+    const t = m.targetId ? sim.targetById(m.targetId) : null;
+    if (sim.level && t && ai.series > n) ai.chk ??= { m: m.id, hp: strength(t), t1: null };
+  }
+
+  // a report's correction for the lay as it stands: less what has been laid since its round left (a correction made
+  // while it was in the air, their battery's fix moved), so a report on an earlier lay is not corrected twice
+  since(u, r) {
+    const o = u.order, a = r.aim, c = { add: r.corr.add, right: r.corr.right, moved: 0 };
+    if (!a || !o.target) return c;
+    const L = Math.hypot(o.x - u.pos.x, o.z - u.pos.z) || 1, fx = (o.x - u.pos.x) / L, fz = (o.z - u.pos.z) / L;
+    const dx = o.x - a.x, dz = o.z - a.z;
+    c.add -= dx * fx + dz * fz;
+    c.right -= dz * fx - dx * fz;
+    c.moved = Math.hypot(dx, dz);
+    return c;
   }
 
   // On a threat level the crews adjust their fire for effect as a battery commander does: the observer's "on target"
   // allows 45 m each way, which a heavy shell forgives and a 10 cm one does not (its effect ends at about 22 m), so they
-  // take his last correction too, and correct between series from the series' mean fall
+  // take his last correction too, and correct between series from the series' mean fall. They read each report against
+  // the lay its round was fired on (since): with the crews' correction applied at once, the reports of rounds fired
+  // before it came in after it and were corrected again, and the lay ran 900 m off (level 2 seed 35, 2026-11-26)
   await(u, ai, m) {
     const sim = this.sim;
     if (!sim.level) return super.await(u, ai, m);
-    const mine = m.reports.filter((r) => r.unitId === u.id && !r.wild);
-    const r = mine[mine.length - 1];
-    if (mine.length > ai.seen && !u.firing && r?.ok && r.observed && r.over != null && Math.hypot(r.corr.add, r.corr.right) > 10) {
-      sim.guns.correct(u, r.corr.add * 0.85, r.corr.right * 0.85);
+    const mine = this.mine(u, m);
+    if (mine.length > ai.seen && !u.firing) {
+      const r = mine[mine.length - 1];
+      ai.seen = mine.length;
+      // (a report on a round fired before the one it waits for: news of an earlier lay, which its last report or the
+      // correction made since has already told it; the round it fired is still to come)
+      if (r.fired != null && r.fired < (ai.fireT ?? 0) - 0.01) return;
+      ai.wait = sim.time + 4 + sim.rng() * 6;
+      const c = r.observed && r.over != null ? this.since(u, r) : null;
+      // (on the lay as it stands, the observer's word; on an earlier one, the same 45 m each way of what is left)
+      const ok = c && c.moved > 5 ? Math.abs(c.add) <= 45 && Math.abs(c.right) <= 45 : r.ok;
+      if (ok) {
+        if (c && Math.hypot(c.add, c.right) > 10) sim.guns.correct(u, c.add * 0.85, c.right * 0.85);
+        ai.st = 'ffe';
+      } else if (c) {
+        // a crew's correction: usually right, sometimes too much, once in a while the wrong way round
+        let gain = 0.8 + sim.rng() * 0.35;
+        if (sim.rng() < 0.1) gain *= 1.6;
+        let right = c.right * gain;
+        if (sim.rng() < 0.05) right = -right;
+        sim.guns.correct(u, c.add * gain, right);
+        ai.st = ai.ranged >= 5 ? 'ffe' : 'ranging';
+      } else ai.st = ai.ranged >= 5 ? 'ffe' : 'ranging';
+    } else if (sim.time > ai.deadline) {
+      // no report came: fire another round, or give up on a silent observer
+      ai.st = ai.ranged >= 4 ? 'ffe' : 'ranging';
     }
-    return super.await(u, ai, m);
   }
 
   firing(u, ai, m) {
@@ -148,10 +259,12 @@ export class CrewsWW1 extends Crews {
     if (sim.level && !u.firing && ai.seriesAt != null) {
       const rs = m.reports.filter((r) => r.unitId === u.id && !r.wild && r.observed && r.over != null && r.t >= ai.seriesAt);
       if (rs.length) {
-        const add = rs.reduce((a, r) => a + r.corr.add, 0) / rs.length, right = rs.reduce((a, r) => a + r.corr.right, 0) / rs.length;
+        const cs = rs.map((r) => this.since(u, r));
+        const add = cs.reduce((a, c) => a + c.add, 0) / cs.length, right = cs.reduce((a, c) => a + c.right, 0) / cs.length;
         if (Math.hypot(add, right) > 10) sim.guns.correct(u, add * 0.8, right * 0.8);
       }
       ai.seriesAt = null;
+      if (ai.chk && ai.chk.t1 == null) ai.chk.t1 = sim.time;
     }
     return super.firing(u, ai, m);
   }
@@ -183,17 +296,16 @@ export class CrewsWW1 extends Crews {
     if (m.kind === 'cb') s += LONG.has(u.kind) ? 12 : HEAVY.has(u.kind) ? 6 : 0;
     if (k === 'bgun15' || k === 'bgunrail' || k === 'bgun92') s += SUPER.has(u.kind) ? 16 : 0;
     if (k === 'railyard' || k === 'hq') s += RAIL.has(u.kind) || LONG.has(u.kind) ? 18 : SUPER.has(u.kind) ? 8 : -4;
-    if (k === 'bdump') s += SUPER.has(u.kind) || u.kind === 'm16' || u.kind === 'mrs18' || u.kind === 'm99' ? 8 : 0;
-    if (k === 'btanks') s += u.kind === 'sfh13' || u.kind === 'm16' || u.kind === 'sfh18' || u.kind === 'mrs18' || u.kind === 'm99' || u.kind === 'sfh93' || u.kind === 'hummel' || ROCKETS.has(u.kind) ? 10 : 0;
-    if (k === 'bconvoy') s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' || u.kind === 'wespe' ? 8 : -4;
+    if (k === 'bdump') s += SUPER.has(u.kind) || u.kind === 'm16' || u.kind === 'mrs18' ? 8 : 0;
+    if (k === 'btanks') s += u.kind === 'sfh13' || u.kind === 'm16' || u.kind === 'sfh18' || u.kind === 'mrs18' || u.kind === 'hummel' || ROCKETS.has(u.kind) ? 10 : 0;
+    if (k === 'bconvoy') s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' ? 8 : -4;
     if (k === 'bballoon') s += 20;
     if (k === 'bfield') s += FIELD.has(u.kind) || ROCKETS.has(u.kind) ? 8 : SUPER.has(u.kind) ? -20 : 0;
-    if (k === 'mebu' || k === 'bpost') s += u.kind === 'swg40' ? 14 : 0; // (the posts and pillboxes opposite: the Wurfgerät's work)
     if (m.kind === 'barrage') s += FIELD.has(u.kind) ? 8 : 4;
     if (m.role) s += 10; // a deep or heavy target (sim/specialists.js): only the guns made for it can serve it
     if (m.role === 'fort') s += 30; // (a strongpoint in the X-Zeit lanes: our assault pays for each left standing, so before their heavies)
     if (m.prep) s += FIELD.has(u.kind) || ROCKETS.has(u.kind) ? 10 : 0; // (counter-preparation: men massing in a trench, the field guns' work)
-    if (m.column) s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' || u.kind === 'wespe' || u.kind === 'rk92' ? 10 : 0; // (a column in the open: shrapnel)
+    if (m.column) s += u.kind === 'k17' || u.kind === 'lefh18' || u.kind === 'fk16' ? 10 : 0; // (a column in the open: shrapnel)
     return s;
   }
 
@@ -205,7 +317,12 @@ export class CrewsWW1 extends Crews {
       const fort = p && sim.missions.find((m) => m.role === 'fort' && m.state !== 'done' && m.state !== 'failed' && !m.units.length && !this.canServe(u, m) && this.canTake(u, m));
       if (fort && sim.special?.of(u)?.rebed(bearingOf(fort.x - u.pos.x, fort.z - u.pos.z), true)) return;
     }
+    const was = ai.m;
     super.pick(u, ai);
+    // (a threat level: the reports on a mission it worked before are not news. A crew that gave a main up and took it
+    // again read its old "on target" as the answer to its new round, went straight to fire for effect on the lay that had
+    // missed, or corrected an old miss a second time)
+    if (sim.level && ai.m && ai.m !== was) { ai.seen = this.mine(u, ai.m).length; ai.chk = null; }
     if (!bed || ai.m || u.gate || u.mode !== 'auto' || sim.time < (ai.bedAt ?? 0)) return;
     ai.bedAt = sim.time + 30;
     const p = u.pieces.find((q) => q.state !== 'dead');

@@ -3,8 +3,8 @@
 // brass keys (corrections, Fire, Cease). Values are typed in; the keys act on the sim's `correct` command
 // in yards (converted to metres here).
 // The German pages (TH.lean, 2026-11-25, the Godot demo's cut of 2026-11-24) keep what the player acts on: the target
-// with its range and grid square, the charge (the crew's or set by hand), rounds, fuze, guns and the corrections. The
-// line, the elevation and the time of flight go (numbers the battery works out and the player never acts on); the
+// with its range and grid square, rounds, fuze, guns and the corrections. The line, the elevation, the time of flight
+// and (since 2026-11-26, the user's) the charge go (numbers the battery works out and the player never acts on); the
 // correction keys get bold drawn arrows and the step key a dot for each of its five sizes.
 import { el, setText, setCls, card, label, Btn, Seg } from '../widgets.js';
 import { tut } from '../highlight.js';
@@ -13,6 +13,13 @@ import { TH, lenU, lenName, lenShort } from '../theatre.js';
 import { pickGuns } from '../../sim/guns.js';   // pure: which pieces a `guns` choice fires, for the FIRE label
 
 export const STEPS_YD = [10, 25, 50, 100, 200];
+
+// the cover key's hover text in each of its states (the ranging counter-battery, ?cb=ranging)
+const COVER_TIP = {
+  off: 'Take cover (U): the crew goes to its shelters. The guns fall silent; the men are spared and near misses do the guns half the damage (a direct hit still wrecks one). Their fix on you fades faster.',
+  on: 'To the guns (U): the crew leaves its shelters and runs back to the guns, about 10 s before they can fire again.',
+  back: 'The crews are running back to the guns; they can fire in a few seconds. U takes them into cover again.',
+};
 
 function field(title, cls = '') {
   const f = el('div', 'fld ' + cls);
@@ -74,8 +81,18 @@ export class OrderCard {
     this.tof = field('TIME OF FLIGHT');
     this.rounds = stepper('ROUNDS / PIECE', () => this.act('rounds', -1), () => this.act('rounds', 1));
     const r3 = el('div', 'frow3');
-    if (lean) r3.append(this.charge.el, this.rounds.el);
+    // (the German pages have no charge control since 2026-11-26, the user's: the crews pick it, chargeAuto)
+    if (lean) { r3.classList.add('lean'); r3.append(this.rounds.el); }
     else r3.append(this.charge.el, this.tof.el, this.rounds.el);
+    // the ranging counter-battery (?cb=ranging, 2026-11-25): the crew to its shelters and back (U), in the row's third
+    // place that the lean card left empty, right under the slip that says they are ranged on; shown only while the sim
+    // runs that model (update), so the card is unchanged without it
+    if (lean) {
+      this.bCover = new Btn({ main: 'DECKUNG', sub: 'take cover · U', cls: 'cover hide', onClick: () => this.act('cover'), tip: COVER_TIP.off });
+      this.coverK = '';
+      r3.append(this.bCover.el);
+      tut(this.bCover.el, 'cover');
+    }
     this.fuze = new Seg({
       cls: 'fuze', items: cfg.fuzes.map((f) => ({ v: f, main: FUZE[f].main, sub: FUZE[f].sub })),
       onChange: (v) => this.act('fuze', v),
@@ -169,6 +186,27 @@ export class OrderCard {
     this.rounds.dec.enable((o.rounds || 1) > this.cfg.rounds[0]);
     this.rounds.inc.enable((o.rounds || 1) < this.cfg.rounds[this.cfg.rounds.length - 1]);
     this.fuze.set(o.fuze || 'instant');
+    // the cover key: DECKUNG, TO THE GUNS while in cover, the seconds left while the crews run back; it pulses red while
+    // the battery is bracketed or under fire for effect and out of cover
+    if (this.bCover) {
+      const cb = !!sim?.cbModel && unit.alive !== false;
+      const back = cb && !unit.cover && unit.manAt != null && unit.manAt > sim.time ? Math.ceil(unit.manAt - sim.time) : 0;
+      const hot = cb && !unit.cover && !back && (x.threat?.stage === 'bracketed' || x.threat?.stage === 'ffe');
+      const k = !cb ? '' : unit.cover ? 'on' : back ? `back${back}` : hot ? 'hot' : 'off';
+      if (k !== this.coverK) {
+        this.coverK = k;
+        setCls(this.bCover.el, 'hide', !cb);
+        if (cb) {
+          if (unit.cover) this.bCover.text('TO THE GUNS', 'U · guns silent');
+          else if (back) this.bCover.text('MANNING', `${back} s · U: cover`);
+          else this.bCover.text('DECKUNG', 'take cover · U');
+          this.bCover.set(!!unit.cover);
+          setCls(this.bCover.el, 'back', !!back);
+          setCls(this.bCover.el, 'hot', hot);
+          this.bCover.el.title = COVER_TIP[unit.cover ? 'on' : back ? 'back' : 'off'];
+        }
+      }
+    }
     const a = o.adj || { add: 0, right: 0 };
     const addY = Math.round(a.add / lenU()), rY = Math.round(a.right / lenU());
     const parts = [];

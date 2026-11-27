@@ -1,6 +1,6 @@
 // The career open battle's threat levels (Helldivers 2's difficulties: the player picks one before battle; docs/
-// PROGRESSION.md, DESIGN.md "Threat levels"). Node-safe data. Level 1 is comfortable for a new career's lone Ringkanone C/92; level
-// 10 challenges a full lineup at its best. A level sets the battle, never the player's own guns: its orders, the
+// PROGRESSION.md, DESIGN.md "Threat levels"). Node-safe data. Level 1 is comfortable for a new career's FK 16 and sFH 13,
+// two guns each; level 10 challenges a full lineup at its best. A level sets the battle, never the player's own guns: its orders, the
 // enemy's pressure, the kinds of target, the modifiers, the pay. Every level is open from the start: the player
 // picks any.
 //
@@ -21,52 +21,73 @@
 //            'deep', 'hard'; `forts` the concrete strongpoints in the X-Zeit lanes (levels 6 to 10, ww1/ops.js
 //            RIDGE_FORTS, with X-Zeit only): only shells of 28 cm and more break them, and each left standing fires on
 //            our assault (ww1/infantry.js)
+//   minutes  the level's target length for a human (the mains done), `fresh` what is new at it (the menu's "New: ...");
+//            `quick` (levels 1 to 3) the longest a main's estimated work may take its lineup, s (capability.js)
+//   hold     (`k` its fire missions at once, so more than one battery can serve it) a hold objective (src/operation.js, ww1/director.js holdUpdate): keep a place under fire, `need` s of it, our bursts
+//            within `r` m at least every `g` s (the clock pauses between); `main` the chance it is a main objective
+//            (1: always), `side` a secondary (levels 1 and 2), `at` the places it may be dealt (HOLD_PLACES ids; any
+//            the lineup reaches without). `trace` the two-step mains (find a battery by its rounds, then
+//            its dump), from level 7
 //   deadline the observers' windows, `dmg` the enemy's damage to the guns, `sig` how fast the guns are located; `zero`
 //            the share of our men that must reach the British line at X-Zeit, `cover` the Feuerwalze's bursts on each
 //            lane in 20 s that keep the garrison's heads down (ww1/infantry.js; 6 without a level). From level 6 a
 //            super-heavy takes one of the five slots a field battery had, so `zero` is lower there (tuned on 72 seeds
 //            with capability.js REFERENCE, 2026-11-02)
 export const THREAT = [
-  { n: 1, name: 'Ruhige Front', en: 'Quiet front', fits: 'Ringkanone C/92, one gun', pay: 1, modifiers: 0,
-    sub: 'One main objective on soft targets; no attacks, little to fear.',
-    lines: ['One main objective and one secondary. When the main is done, end the battle when you are ready.', 'Field batteries, dumps, the HQ and the traffic on their roads.', 'No attacks, almost no counter-battery fire, no aircraft.'],
-    day: 'morning', mains: 1, work: 1, later: 0, sides: 1, xzeit: 0, fails: 3, attacks: 0, assault: 0.4, cb: 0.25, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.4, dmg: 0.5, sig: 0.6, zero: 0.5, cover: 6 },
-  { n: 2, name: 'Stellungskrieg', en: 'Trench routine', fits: 'Ringkanone C/92, two guns', pay: 1, modifiers: 0,
-    sub: 'One main objective and two secondaries; one small attack.',
-    lines: ['One main objective and two secondaries.', 'One small British attack: answer the red rockets with Sperrfeuer.', 'Light counter-battery fire.'],
-    day: 'day', mains: 1, work: 1.3, later: 0, sides: 2, xzeit: 0, fails: 3, attacks: 1, assault: 0.45, cb: 0.4, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.3, dmg: 0.6, sig: 0.7, zero: 0.5, cover: 6 },
-  { n: 3, name: 'Störungsfeuer', en: 'Harassing fire', fits: 'Ringkanone C/92 and a battery of FK 16', pay: 1.25, modifiers: 0,
-    sub: 'Two main objectives; two attacks, and their field batteries answer.',
-    lines: ['Two main objectives and two secondaries.', 'Two attacks.', 'The British field batteries shoot back.'],
-    day: 'night', mains: 2, work: 2.6, later: 0, sides: 2, xzeit: 0, fails: 4, attacks: 2, assault: 0.55, cb: 0.55, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], deadline: 1.2, dmg: 0.7, sig: 0.8, zero: 0.5, cover: 6 },
-  { n: 4, name: 'Gegenbatterie', en: 'Counter-battery', fits: 'A K 17, a battery of sFH 13 and a Mörser 16', pay: 1.5, modifiers: 0,
-    sub: 'Their heavies hunt you, and their tanks gather in laagers.',
-    lines: ['Two main objectives and three secondaries.', 'The British heavies answer from their pits; spotter aircraft find your guns.', 'Tank laagers and the heavies among the targets; two attacks.'],
-    day: 'night', mains: 2, work: 4.6, later: 1, sides: 3, xzeit: 0, fails: 4, attacks: 2, assault: 0.65, cb: 0.7, raids: 0, spotters: true, heavies: true, tanks: false, sites: ['soft', 'armour', 'heavy'], deadline: 1.1, dmg: 0.8, sig: 0.9, zero: 0.55, cover: 6 },
-  { n: 5, name: 'Großkampftag', en: 'Day of battle', fits: 'K 17, sFH 13, leFH 18 and Mörser 16', pay: 1.75, modifiers: 1,
-    sub: 'Three attacks with their tanks; one mission in two ends with X-Zeit.',
-    lines: ['Two main objectives and three secondaries. One mission in two ends with X-Zeit, when you call it: our own attack behind the Feuerwalze.', 'Three attacks, bigger where their tank laagers still stand; Camels raid the loudest battery.', 'One modifier.'],
-    day: 'full', mains: 2, work: 5.6, later: 1, sides: 3, xzeit: 0.5, fails: 4, attacks: 3, assault: 0.75, cb: 0.85, raids: 0.7, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy'], deadline: 1, dmg: 0.9, sig: 1, zero: 0.675, cover: 7 },
-  { n: 6, name: 'Materialschlacht', en: 'Battle of materiel', fits: 'K 18, sFH 13, leFH 18, Mörser 16 and the Langer Max', pay: 2, modifiers: 1,
+  { n: 1, name: 'Ruhige Front', en: 'Quiet front', fits: 'FK 16 and sFH 13, two guns each', pay: 1, modifiers: 0, minutes: 4,
+    sub: 'One target near your guns, and a minute on Hellfire Corner for the field guns.',
+    fresh: 'Take a mission, correct the fall, destroy; the first "Deckung!"',
+    lines: ['One main objective, on a target near your guns. When it is done, end the battle when you are ready.', 'A secondary for the quick field guns: keep Hellfire Corner under fire for a minute.', 'No attacks, hardly any counter-battery fire, no aircraft.'],
+    // (the hold, since 2026-11-26: the FK 16, a starting battery, has a job of its own; Hellfire Corner, 5.3 km from its
+    // pits, about half its reach, a crossroads with its traffic)
+    day: 'morning', mains: 1, work: 1, later: 0, sides: 1, xzeit: 0, fails: 6, quick: 330, attacks: 0, assault: 0.4, cb: 0.25, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], hold: { need: 60, r: 220, g: 45, k: 1, main: 0, side: true, at: ['X1'] }, deadline: 1.4, dmg: 0.5, sig: 0.6, zero: 0.5, cover: 6 },
+  { n: 2, name: 'Stellungskrieg', en: 'Trench routine', fits: 'FK 16 and sFH 13, two guns each, and a K 17', pay: 1, modifiers: 0, minutes: 7,
+    sub: 'One main objective, a short hold, and their first small attack.',
+    fresh: 'Their first attack: answer the red rockets. A short hold',
+    lines: ['One main objective and a secondary: keep a place under fire for a minute and a quarter.', 'One small British attack: answer the red rockets with Sperrfeuer.', 'Light counter-battery fire from their 18-pounders.'],
+    day: 'day', mains: 1, work: 1.3, later: 0, sides: 1, xzeit: 0, fails: 5, quick: 420, attacks: 1, assault: 0.45, cb: 0.4, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], hold: { need: 75, r: 220, g: 45, k: 1, main: 0, side: true }, deadline: 1.3, dmg: 0.7, sig: 0.8, zero: 0.5, cover: 6 },
+  { n: 3, name: 'Störungsfeuer', en: 'Harassing fire', fits: 'FK 16 and sFH 13, two guns each, a K 17 and a K 16', pay: 1.25, modifiers: 0, minutes: 9,
+    sub: 'Hit back: their field batteries find you, and your rangers find them.',
+    fresh: 'Hit back: our rangers find their batteries by their rounds',
+    lines: ['One main objective (sometimes a hold: keep a place under fire for five minutes) and a secondary.', 'One attack.', 'Two British field batteries shoot back.'],
+    day: 'night', mains: 1, work: 3.6, later: 0, sides: 1, xzeit: 0, fails: 5, quick: 600, attacks: 1, assault: 0.55, cb: 0.55, raids: 0, spotters: false, heavies: false, tanks: false, sites: ['soft'], hold: { need: 300, r: 220, g: 40, k: 1, main: 0.5 }, deadline: 1.2, dmg: 0.75, sig: 0.85, zero: 0.5, cover: 6 },
+  { n: 4, name: 'Gegenbatterie', en: 'Counter-battery', fits: 'A K 17, a battery of sFH 13 and a Mörser 16', pay: 1.5, modifiers: 0, minutes: 11,
+    sub: 'Their heavies and spotter aircraft hunt you; heavy targets for heavy guns.',
+    fresh: 'Heavy targets for heavy guns; kill their eyes',
+    lines: ['Two main objectives and a secondary; one may be a hold.', 'The British heavies answer from their pits; spotter aircraft find your guns.', 'Tank laagers and the heavies among the targets; one attack.'],
+    day: 'night', mains: 2, work: 2.4, later: 1, sides: 1, xzeit: 0, fails: 4, attacks: 1, assault: 0.65, cb: 0.7, raids: 0, spotters: true, heavies: true, tanks: false, sites: ['soft', 'armour', 'heavy'], hold: { need: 100, r: 220, g: 40, k: 2, main: 0.5 }, deadline: 1.1, dmg: 0.8, sig: 0.9, zero: 0.55, cover: 6 },
+  // (levels 3 and 4 kept below level 5 on every knob: fails, attacks, counter-battery, damage, location. A harsher
+  // level 3 or 4 left the all-auto rates at 99 % and would only make a human's first loss come early, 2026-11-26)
+  { n: 5, name: 'Großkampftag', en: 'Day of battle', fits: 'K 17, sFH 13, leFH 18 and Mörser 16', pay: 1.75, modifiers: 1, minutes: 13,
+    sub: 'X-Zeit, our own attack, can end the day; two attacks with tanks.',
+    fresh: 'X-Zeit, our own attack, as the finale; one modifier',
+    lines: ['Two main objectives and two secondaries. One mission in two ends with X-Zeit, when you call it: our own attack behind the Feuerwalze.', 'Two attacks, bigger where their tank laagers still stand; Camels raid the loudest battery.', 'One modifier.'],
+    day: 'full', mains: 2, work: 2.6, later: 1, sides: 2, xzeit: 0.5, fails: 4, attacks: 2, assault: 0.75, cb: 0.85, raids: 0.7, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy'], hold: { need: 70, r: 210, g: 36, k: 2, main: 0.5 }, deadline: 1, dmg: 0.9, sig: 1, zero: 0.71, cover: 7 },
+  { n: 6, name: 'Materialschlacht', en: 'Battle of materiel', fits: 'K 18, sFH 13, leFH 18, Mörser 16 and the Langer Max', pay: 2, modifiers: 1, minutes: 15,
     sub: 'Concrete and deep targets: bring a super-heavy and a long gun.',
-    lines: ['Two main objectives and three secondaries. X-Zeit three missions in five, with two strongpoints in its lanes that only 28 cm shells and heavier break.', 'Deep targets and concrete shelters; three attacks.', 'One modifier.'],
-    day: 'full', mains: 2, work: 6.2, later: 1, sides: 3, xzeit: 0.6, fails: 4, attacks: 3, assault: 0.85, cb: 1, raids: 1, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, deadline: 1, dmg: 1, sig: 1, zero: 0.63, cover: 8 },
-  { n: 7, name: 'Abwehrschlacht', en: 'Defensive battle', fits: 'Five upgraded: K 18, sFH 18, sFH 13, leFH 18 and the Gamma', pay: 2.5, modifiers: 1,
-    sub: 'Four attacks, and the counter-battery fire comes quicker.',
-    lines: ['Three main objectives and three secondaries. X-Zeit three missions in five.', 'Four attacks; the counter-battery fire comes quicker; more raids by day.', 'One modifier.'],
-    day: 'full', mains: 3, work: 7.2, later: 1, sides: 3, xzeit: 0.6, fails: 4, attacks: 4, assault: 0.95, cb: 1.2, raids: 1.2, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, deadline: 0.95, dmg: 1.1, sig: 1.1, zero: 0.69, cover: 9 },
-  { n: 8, name: 'Trommelfeuer', en: 'Drumfire', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and the Beta-Gerät, upgraded, and the V-1', pay: 3, modifiers: 2,
-    sub: 'Two modifiers, concrete in numbers, the sky theirs.',
-    lines: ['Three main objectives and four secondaries. X-Zeit seven missions in ten, with three strongpoints.', 'Four bigger attacks; concrete and deep targets.', 'Two modifiers.'],
-    day: 'full', mains: 3, work: 8, later: 1, sides: 4, xzeit: 0.7, fails: 3, attacks: 4, assault: 1.05, cb: 1.45, raids: 1.4, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, deadline: 0.9, dmg: 1.2, sig: 1.2, zero: 0.61, cover: 10 },
-  { n: 9, name: 'Feuersturm', en: 'Firestorm', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and the Gamma, well upgraded, and the V-2', pay: 3.5, modifiers: 2,
-    sub: 'Bigger attacks, harder counter-battery fire, tighter windows.',
-    lines: ['Three main objectives and four secondaries. X-Zeit three missions in four, with three strongpoints.', 'Four big attacks; the observers\' windows close sooner.', 'The heaviest counter-battery fire yet; two modifiers.'],
-    day: 'full', mains: 3, work: 8.6, later: 1, sides: 4, xzeit: 0.75, fails: 3, attacks: 4, assault: 1.2, cb: 1.7, raids: 1.6, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, deadline: 0.8, dmg: 1.35, sig: 1.35, zero: 0.62, cover: 11 },
-  { n: 10, name: 'Stahlgewitter', en: 'Storm of steel', fits: 'K 38, sFH 18, Hummel, leFH 18 and the Gamma at their best, and the V-2', pay: 4, modifiers: 2,
-    sub: 'Everything at full strength, with nothing to spare.',
-    lines: ['Three main objectives and four secondaries. X-Zeit four missions in five, with four strongpoints.', 'Five attacks, the heaviest counter-battery fire, raids all day.', 'Two modifiers.'],
-    day: 'full', mains: 3, work: 9.5, later: 1, sides: 4, xzeit: 0.8, fails: 3, attacks: 5, assault: 1.35, cb: 2, raids: 1.8, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 4, deadline: 0.75, dmg: 1.5, sig: 1.5, zero: 0.58, cover: 12 },
+    fresh: 'Concrete that needs a super-heavy',
+    lines: ['Two main objectives and two secondaries. X-Zeit three missions in five, with two strongpoints in its lanes that only 28 cm shells and heavier break.', 'Deep targets and concrete shelters; two attacks.', 'One modifier.'],
+    day: 'full', mains: 2, work: 2.8, later: 1, sides: 2, xzeit: 0.6, fails: 4, attacks: 2, assault: 0.85, cb: 1, raids: 1, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, hold: { need: 90, r: 200, g: 34, k: 2, main: 0.5 }, deadline: 1, dmg: 1, sig: 1, zero: 0.7, cover: 8 },
+  { n: 7, name: 'Abwehrschlacht', en: 'Defensive battle', fits: 'Five upgraded: K 18, sFH 18, sFH 13, leFH 18 and Bertha', pay: 2.5, modifiers: 1, minutes: 16,
+    sub: 'Find the battery by its rounds, then burn its dump; their 15-inch joins in.',
+    fresh: 'Two-step objectives: find the battery by its rounds, then its dump',
+    lines: ['Two main objectives and two secondaries. One main has two steps: find the British battery that is shelling you, silence it, then its ammunition dump is reported. One mission in two has a hold as a main. X-Zeit three missions in five.', 'Two attacks; the counter-battery fire comes quicker; more raids by day.', 'One modifier.'],
+    day: 'full', mains: 2, work: 3.8, later: 1, sides: 2, xzeit: 0.6, fails: 4, attacks: 2, assault: 0.95, cb: 1.2, raids: 1.2, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 2, trace: 1, hold: { need: 110, r: 200, g: 32, k: 2, main: 0.5 }, deadline: 0.95, dmg: 1.1, sig: 1.1, zero: 0.74, cover: 9 },
+  { n: 8, name: 'Trommelfeuer', en: 'Drumfire', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and the Beta-Gerät, upgraded, and the Gotha strike', pay: 3, modifiers: 2, minutes: 18,
+    sub: 'A long hold under fire, a two-step hunt, two modifiers, the sky theirs.',
+    fresh: 'Two modifiers; long holds under fire',
+    lines: ['Two main objectives: a long hold (keep a place under fire for four minutes, rotating batteries as theirs range in) and a two-step hunt for a battery and its dump. Two secondaries. X-Zeit seven missions in ten, with three strongpoints.', 'Three attacks; the British railway gun joins their fire.', 'Two modifiers.'],
+    day: 'full', mains: 2, work: 4, later: 0, sides: 2, xzeit: 0.7, fails: 3, attacks: 3, assault: 1.05, cb: 1.45, raids: 1.4, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, trace: 1, hold: { need: 270, r: 190, g: 30, k: 3, main: 1 }, deadline: 0.9, dmg: 1.2, sig: 1.2, zero: 0.715, cover: 10 },
+  { n: 9, name: 'Feuersturm', en: 'Firestorm', fits: 'K 18, sFH 18, leFH 18, Mörser 18 and Bertha, well upgraded, and the V-2', pay: 3.5, modifiers: 2, minutes: 19,
+    sub: 'Three main objectives and a longer hold; their guns need two rounds to range, and shift after firing.',
+    fresh: 'They shift after firing',
+    lines: ['Three main objectives and three secondaries: a long hold (almost three minutes), a two-step hunt for a battery and its dump, and a target. X-Zeit three missions in four, with three strongpoints.', 'Three big attacks; the observers\' windows close sooner.', 'Their guns range in fast and shift after firing; two modifiers.'],
+    day: 'full', mains: 3, work: 4.2, later: 1, sides: 3, xzeit: 0.75, fails: 3, attacks: 3, assault: 1.2, cb: 1.7, raids: 1.6, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 3, trace: 1, hold: { need: 170, r: 180, g: 28, k: 3, main: 1 }, deadline: 0.8, dmg: 1.35, sig: 1.35, zero: 0.73, cover: 11 },
+  { n: 10, name: 'Stahlgewitter', en: 'Storm of steel', fits: 'K 38, sFH 18, Hummel, leFH 18 and Bertha at their best, and the V-2', pay: 4, modifiers: 2, minutes: 20,
+    sub: 'Everything at once, at full strength, with nothing to spare.',
+    fresh: 'Everything at once',
+    lines: ['Three main objectives and three secondaries: a hold of two and a half minutes, a two-step hunt and a target. X-Zeit four missions in five, with four strongpoints.', 'Three attacks, the heaviest counter-battery fire, raids all day.', 'Two modifiers.'],
+    day: 'full', mains: 3, work: 2.4, later: 1, sides: 3, xzeit: 0.8, fails: 3, attacks: 3, assault: 1.35, cb: 2, raids: 1.8, spotters: true, heavies: true, tanks: true, sites: ['soft', 'armour', 'heavy', 'deep', 'hard', 'fort'], forts: 4, trace: 1, hold: { need: 150, r: 170, g: 26, k: 3, main: 1 }, deadline: 0.75, dmg: 1.5, sig: 1.5, zero: 0.66, cover: 12 },
 ];
 export const MAX_LEVEL = THREAT.length;
 export const threatOf = (n) => THREAT[Math.max(1, Math.min(MAX_LEVEL, n | 0)) - 1];

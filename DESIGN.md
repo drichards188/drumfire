@@ -494,10 +494,13 @@ the console above. What changes (`console.js`, `orderCard.js`, `gunsCard.js`, `b
   takes it back), NOT READY with the controller's gate and the card to see, CANNOT FIRE with the short reason (the whole
   on hover). Hidden with no target laid or nothing wrong (how to fire is on the FIRE key).
 - **The fire order** keeps what the player acts on: the target's name large with its range and grid square under it
-  (the observers' and the Arko's slips give targets by the square), the charge ("of N · auto" or "set by you", from
-  `order.chargeAuto`), rounds, fuze, guns and the corrections made. The line, the elevation, the time of flight and the
-  F.O. stamp go (the battery works them out). The correction keys carry bold drawn arrows (SVG `.karrow`; the key and
+  (the observers' and the Arko's slips give targets by the square), rounds, fuze, guns and the corrections made. The
+  line, the elevation, the time of flight, the charge (since 2026-11-26, the user's: the crews pick it, `chargeAuto`;
+  Q and E do nothing there but on the Paris Gun's LADUNG, routed to its card) and the F.O. stamp go (the battery works
+  them out). The correction keys carry bold drawn arrows (SVG `.karrow`; the key and
   the Shift step on hover), the step key a dot for each of its five sizes (`.kdots`), FIRE "n of m ready · Space".
+  With the ranging counter-battery (`sim.cbModel`, a level battle) the rounds row ends in the DECKUNG key (U; "Ranging
+  counter-battery").
 - **No range table** (`rtab` is neither mounted nor updated). The guns card stands under the fire order in its place and
   the missions and the messages share the bottom row; a special card keeps its places (the Paris Gun's four, the Gustav's
   and the Karl's procedure card with the guns in the bottom row).
@@ -571,8 +574,14 @@ WW2 sandbox, the test range, the British entries, the Nebelwerfer lesson and the
 which is its mission's guided first run (`GUIDE`: op key to lesson id; the lesson item's `guideFor` points back, so a
 lesson left for the menu selects its mission; the lesson's `after: { label, op }` plays the mission from its end card,
 main.js `host.after`). The chooser (`ui/menu.js` `renderDrop`, `renderLevel`) keeps each view to a few short chunks
-and puts the long text on hover: the levels as ten steps (`.lv-seg`), the chosen level's name, `sub`, four facts and
-its threats as chips, the lineup's fit (`capability.js`); the special missions as picture cards (`stillOf`) with a
+and puts the long text on hover: the levels as ten steps (`.lv-seg`; the lineup's rating marked `.rec`, the levels won
+ticked `.won`, each step's hover its first-win bonus or "won"), the chosen level's name and "New <fresh>" (`sub` and
+`lines` on hover), four facts (Mission, Length "about N min" from `minutes` with the failures allowed on hover,
+Attacks, Pay with "First win: +N RP" until won), its threats as chips, the lineup's fit (`capability.js`: above it,
+ready, or "Your lineup outclasses this front: pay ×0.75", `.cut`, the overmatch cut); with no level picked the menu
+opens on the lineup's rating (`career.rating`, and follows it as the lineup grows; `drumfire.menu` `level` is written
+only once one is picked); its mission is dealt from the lineup's levels (`lineupLevels('de')`), as the loading screen's
+briefing is, so both match the battle; the special missions as picture cards (`stillOf`) with a
 tagline (`TAGLINE`), a guided or straight choice (`memo.guided[key]`, guided until the lesson is done) and the
 difficulty. The Paris Gun's run is `ww1/tutorial.js` `w-paris` (op `paris`): the lesson's `build: true` reaches
 `sim.newGame({ build })` as `sim.lessonBuild`, so `ParisCtl.reset` leaves the gun in pieces on the scripted range;
@@ -605,6 +614,14 @@ machines we never see show up ranked by how many players hit them.
   `frame.p99` (distributions, ms), `fps` (gauge), `frames` and `lag.spikes` (counts, by `cause`), each with `state`
   and `quality`; once `load.to_play` (ms from opening the page to the first second playing). Every event and metric
   carries `page`, `mode`, `op`, `gpu.state`, `gpu.name` (the renderer string shortened: "NVIDIA GeForce RTX 4070").
+- **Game events** (2026-11-26, the first run's funnel; "First run" below): the api's `count(name, attributes)` and
+  `distribution(name, value, { unit, attributes })`, sent only while `reportsOn()`. Once per browser (the milestone
+  is marked in `drumfire.firstrun` whether reports run or not, so a player who turns them on later never sends an old
+  one): `funnel.first_battle`, `funnel.first_shot` with `funnel.to_first_shot` (ms from opening the page),
+  `funnel.first_hit`, `funnel.first_mission`, `funnel.first_win`, `funnel.second_battle`. For each career battle that
+  ends (won, lost, or left by Main menu or `pagehide`, then `tele.flush()`): `battle.end` with `level`, `won`, `end`
+  (victory, defeat, left), `minutes` (the battle's clock), `real_minutes` (the player's) and `first` (the first
+  battle's page). Career battles only, never attract or scripted; nothing personal, the same tags as the rest.
 - **Privacy.** `dataCollection: { userInfo: false, cookies: false }`; the project drops IP addresses
   (`scrubIPAddresses`) and the city and region Sentry derives from them (a `relayPiiConfig` removal rule), so only the
   country stays; `setUser({ id })` is a random id per browser (localStorage `drumfire.telemetry.id`) so issues count
@@ -643,7 +660,8 @@ Conventions as implemented:
   all guns when the mission is 'ffe', a report says on target or ROUNDS is above 1. On manual or hold it stays where the player put it
   (since 2026-11-10; the fuze likewise: only a crew on auto has it picked for each mission, `Director.assign`).
 - Reports: `mission.reports[]` (also `sim.reports`): `{ t, missionId, unitId, shellId, n, observer, observed, over, right, clock, text,
-  ok, corr: { add, right } }`. `over`/`right` are the OBSERVER's estimate (m; air reports are quantised to the circle and hour),
+  ok, corr: { add, right }, fired, aim }` (`fired` the round's `shell.t0`, `aim` its lay's point `{ x, z }`: since
+  2026-11-26, in both report builders, the base's and `ObserversWW2`'s; only the level crews read them). `over`/`right` are the OBSERVER's estimate (m; air reports are quantised to the circle and hour),
   `corr` is what to apply with `correct`. Reports are sent while the mission is 'ranging', and on a mission in 'ffe' for the
   ranging rounds (`rounds 1`) of a unit not on auto fired since its own last fire for effect (`shell.ranging`, `unit.ffeVolley`):
   the player joining a task an auto battery fires for effect on, or ranging again after a series. Not observed: `observed false`, `over null`.
@@ -729,7 +747,9 @@ the screens; docs/PROGRESSION.md says it for players.
   its era (the WW1 siege guns 2,000 to 2,800 RP, the WW2 field howitzers 600 to 1,500). `weight` (`weightOf`, else
   `tier`) is the old weight class, which scales `nextCost` and orders the lineup picked for you. Lines of one type, researched in order
   along `after`, never crossing; a rank opens as War Thunder's do (`RANK_GATE.de`): rank I from the start, rank II
-  with 3 rank I batteries the career has (the C/92 counts), III with 3 of rank II, IV with 4 of rank III, in any line
+  with 3 rank I batteries the career has (the starting FK 16 and sFH 13 count, so since 2026-11-26 rank II opens with
+  the K 17, the one rank I battery to research: 350 RP, about the first battle's pay), III with 3 of rank II, IV with 4
+  of rank III, in any line
   (`Progression.rankGate(kind)`, `researchBlock`; `needsOf(kind)` and `blockerOf` are the line alone). Before, a
   line starting above rank I opened through a `via` in the column beside it, which tied the columns' order and made
   the Gotha wait on two WW2 rocket batteries. `LINES.de` is the Research screen's column order (field artillery,
@@ -738,20 +758,26 @@ the screens; docs/PROGRESSION.md says it for players.
   rank's era on hover), a band per
   rank (rows sized to the most batteries a line has at that rank), and `treeArrows`, an SVG over the grid drawn from the
   nodes' boxes (redrawn by a ResizeObserver) with an arrow along every `after` (lit when researched, amber
-  for the next that can be); the Ringkanone C/92 (cost 0; the K 17 until 2026-11-01) is the career's from the start.
-  Seven lines since 2026-11-01, each from 1914 to 1918 to the Second World War: howitzers (Field artillery): FK 16 ->
-  sFH 93 -> sFH 13 -> leFH 18 -> sFH 18 -> Wespe -> Hummel; guns: C/92 -> K 17 -> K 16 -> K 18 -> K 38; railway: Langer Max -> Paris Gun -> Kurze Bruno -> K5 -> K 12 ->
-  Gustav; mortars: Mörser 99 -> Mörser 16 -> Mörser 18 -> H M1; siege: Beta-Gerät -> Gamma -> Bertha -> Karl; rockets
-  (Rockets): Nebelwerfer 41 -> schweres Wurfgerät 40 -> Nebelwerfer 42 (the schwerer Minenwerfer was taken out on
-  2026-11-02; `progression.js` `REMOVED` gives a save the RP put into it);
-  support: Gotha strike -> V-1 -> V-2. `offmap` (`isOffmap`: the Gotha strike, the V-1, V-2, Paris Gun) fight in the
-  open battle as off-map support. `gunEraOf(kind)` gives a gun's era for its look and its crews' dress (`ww1`, `ww2`, `1917`).
+  for the next that can be); the starting batteries (`START_KINDS.de`: the FK 16 and the sFH 13, cost 0, since
+  2026-11-26; the Ringkanone C/92 from 2026-11-01, the K 17 before) are the career's from the start
+  (`Progression.isStart`, which follows `START_KINDS`, no longer "a root with cost 0"; `owns`, the lineup picked for
+  you, the hangar and the Research screen's marks follow it). Seven lines since 2026-11-01, each from 1914 to 1918 to
+  the Second World War, 20 batteries since the cuts of 2026-11-26 (34,000 RP to the end): howitzers (Field
+  artillery): FK 16 -> sFH 13 -> leFH 18 -> sFH 18 -> Hummel; guns: K 17 -> K 16 -> K 18 -> K 38; railway: Langer
+  Max -> Gustav; mortars: Mörser 16 -> Mörser 18; siege: Beta-Gerät -> Bertha (2,400 RP, the Gamma's place and price
+  since the merge) -> Karl; rockets (Rockets): Nebelwerfer 41 -> Nebelwerfer 42; support: Gotha strike -> V-2. Taken
+  out: the schwerer Minenwerfer on 2026-11-02; on 2026-11-26 the ramp guns (sFH 93, Ringkanone C/92, Mörser 99), the
+  schweres Wurfgerät 40, the H M1, the K 12, the Kurze Bruno, the K5 and the Wespe, the Gamma merged into Bertha, the
+  Paris Gun and the V-1 out of the tree with their own missions as they were (`research.js` `OUT_OF_TREE`: each one's
+  cost, weight, line and heir; `progression.js` carries a save over, Save below; commit 1dd259b has them all in the
+  tree). `offmap` (`isOffmap`: the Gotha strike and the V-2; the V-1 and the Paris Gun too, from `OUT_OF_TREE`) fight
+  in the open battle as off-map support. `gunEraOf(kind)` gives a gun's era for its look and its crews' dress (`ww1`, `ww2`, `1917`).
 - **Research** (`Progression`): `target[tree]` (`targetOf`, `setTarget`: any battery whose `after` and `via` are owned) receives
   every RP (`addRP`, `reward`, `complete`); `progress[kind]` the RP put in; `settle` researches what is paid for and
   carries the rest to the next in the target's line, else the cheapest open one (RP with nothing left wait in
   `rp[tree]`). `researchBlock(kind)` is '' when it can be researched, else why not; `research(kind)` at once only with
   unlimited points (`free`).
-- **Upgrades**: `levels = { guns, shells, barrel, breech, sights, camo, supply, crew }`. Every battery starts with one gun and
+- **Upgrades**: `levels = { guns, shells, barrel, breech, sights, camo, supply, crew }`. Every battery starts with one gun (the starting FK 16 and sFH 13 with two of their four pits each, `research.js` `START_GUNS`, re-exported by progression.js, since 2026-11-26) and
   earns the rest of its pits (`maxGuns(kind)`, its open battle definition); each part has three levels (`PARTS[].fx`).
   Bought with the battery's own points (`nextCost`). `modsOf(levels)` gives the sim's multipliers `{ dmg, disp, wear,
   load, bias, lay, sig, ammo }`, all 1 for none.
@@ -765,13 +791,60 @@ the screens; docs/PROGRESSION.md says it for players.
 - **Pay**: `sim.credit(unitId, pts)` (never in attract or scripted): a quarter point per point of damage that counted and
   the target's `TARGETS[kind].score` for a kill (`Targets.damagePart`), and a mission done shares its points among the
   units by the rounds each fired on it while assigned (`mission.fired`, counted in `fireShell`; `Director.finish`, with
-  `mission.points` over `POINTS`). `battleReward(sim, { won })`: each battery's credit times `PAY[difficulty]` (0.8 / 1 /
-  1.35) as its points; RP = their sum + 4 a minute in action (up to 45) + 400 for a win. main pays once (`payOut`): at the
-  end card, when the page is left (`pagehide`) or the battle is given up for another (no win bonus then).
+  `mission.points` over `POINTS`). `battleReward(sim, { won, cut })`: each battery's credit times `PAY[difficulty]` (0.8 / 1 /
+  1.35; a threat level's `pay` in its place) times the overmatch `cut` (below; default `sim.payCut`, else 1, clamped to
+  0..1) as its points; RP = their sum + 4 a minute in action (up to 45) + 400 for a win (`WIN_MISSION` 250 at a level).
+  main pays once (`payOut`): at the end card, when the page is left (`pagehide`) or the battle is given up for another
+  (no win bonus then).
+- **The climb's pay** (2026-11-26, the difficulty rework; docs/PROGRESSION.md says it for players):
+  - *First win* of each threat level (`firstWinRP(n)`): the level's victory paid again, `WIN_MISSION` times its `pay`
+    to the nearest 50 (250 at level 1, 1,000 at level 10, 5,450 for all ten), once, never cut. `Progression.wonLevel(era,
+    n)` counts the win and pays it to the research target (`addRP`, `settle`); main calls it on a won level battle
+    before `payOut`, so the summary's research line includes it (the record's `rp.first`, the row "First win of level N").
+  - *Overmatch cut* (`OVERMATCH = [[4, 0.5], [3, 0.75]]`, `overmatchCut(rating, n)`): full pay down to two levels below
+    the lineup's rating, ×0.75 three below, ×0.5 four or more; 1 without a rating, never above 1. main sets
+    `sim.payCut = career.overmatch(era, n)` after `newGame` and the reward feed's `payK` multiplies by it; the summary
+    notes it (the record's `cut`). The first-win bonus is never cut.
+  - *The top part gate* (`TOP_PART_WIN` 6): the third level of every part but guns opens with a win at level 6 or
+    higher (Helldivers 2's super samples), on the trees with threat levels only (`de`). `Progression.partGate(kind,
+    part)` ('' or 'win a level 6 battle', returned first by `upgradeBlock`), `topPartsOpen(era)`; dev mode and
+    unlimited points open it. No grandfathering: a part already at level 3 keeps it, a level 6 played but not won
+    opens nothing. The menu's modifications row says WIN A LEVEL 6 BATTLE (`.rs-lock`) in place of Upgrade.
+  - *A lent battery* (`u.lent`, or `lent` on its loadout entry; a generic rule, and no battle lends one today: the
+    first battle's lent Langer Max was taken out the same day, "First run", and the basic training's Mörser 18 pair is
+    a scripted lesson that pays nothing): its credit is filed under `lentKey(kind)` (`lent:<kind>`) in `r.batteries`,
+    so it is in `fought` and the RP while `gain` gives battery points only to tree kinds (`nodeOf`); it is never
+    upgraded or researched by the battle. main's `owed()` keeps it off the battery points either way, and the summary
+    would list it "(lent: its pay went to research)".
+  - *Helpers* (read only): `levelWins(era)` (ascending), `firstWinBonus(era, n)` (0 once won), `overmatch(era, n)`,
+    `rating(era)` (`Progression.rater`, capability.js `recommendedLevel` on `lineupLevels`, memoized; the menu sets it
+    and progression.js also loads it with a late dynamic import, so the loading screen never waits for capability.js;
+    a lent battery is not counted; null on a tree without levels).
 - **Campaign missions** pay a one-off RP bonus on the first win (`missionBonus`: half the featured battery's research
   cost, at least 500) and no longer grant a battery.
 - **Save** `drumfire.campaign.v4`: `{ completed, rp: { tree }, target: { tree }, progress: { kind }, researched, bp:
-  { kind }, levels: { kind }, battles: { tree }, dev, devSet, free }`; older saves are not read (a new career). Dev mode
+  { kind }, levels: { kind }, battles: { tree }, lineup: { tree }, threat: { tree }, wins: { tree: { level: times } },
+  dev, devSet, free, start }`; older saves are not read (a new career). `start` is the save's mark (`START`): 4 for the
+  20-battery tree (2026-11-26, after the cuts), 3 for a career begun with the FK 16 and the sFH 13 (the same day, before
+  them), 2 with the C/92 (2026-11-01), none with the K 17 (`OLD_START`: such a career keeps its K 17). Loading a save
+  from before the tree's cuts carries it over once: the RP put into every cut battery come back (`REMOVED`, built from
+  `OUT_OF_TREE` but the Gamma); its battery points and what its upgrades cost, at its own weight's prices
+  (`research.js` `levelCost`), go to its heir as battery points (the Wespe's to the Hummel, the H M1's to the Mörser 18,
+  the Paris Gun's, the Bruno's, the K5's and the K 12's to the Gustav, the Wurfgerät's to the Nebelwerfer 42, the
+  V-1's to the V-2); the two `MERGED` give their heir their guns and parts themselves and their lineup slot (the C/92
+  to the sFH 13; the Gamma to Bertha, whose research it also is: a save that had the Gamma has Bertha, its RP back only
+  when it had Bertha too, RP put into the Gamma go on into Bertha, a research target on it is Bertha); a battery whose
+  cost fell (`REPRICED`: Bertha, 2,800 before) gives back what a save marked below 4 paid over the new cost, and RP put
+  into any battery past its cost come back. Loading a save from before the ramp guns' cut (2026-11-26) carries it over once, so
+  nothing earned is lost: the RP put into the sFH 93 and the Mörser 99 (`REMOVED`) and, for a save marked below 3,
+  into the FK 16 (300) and the sFH 13 (450), now free (`NOW_FREE`), come back; a cut battery's battery points, and what
+  its upgrades cost at its heir's prices, go to its heir (`CUT`: the sFH 93's and the C/92's to the sFH 13, the Mörser
+  99's to the Mörser 16); the C/92's guns and parts go to the sFH 13 themselves (each the higher of the two where the
+  sFH 13 had levels, the lower one's cost as points), and its slot in a lineup too (a lineup left empty fields the
+  sFH 13, the sFH 93 and the Mörser 99 leave theirs); a starter's guns bought before `START_GUNS` gave them come back as
+  points. Only the starters' RP read the save mark, and nothing can pay twice: the cut kinds are not saved again. `wins` (2026-11-26) is optional: a save without it has every first win still to pay,
+  bad entries (a level outside 1 to 10, a count that is not a positive integer) are dropped, and `reset()` clears it.
+  `battles` and `threat` keep their meaning (`wonLevel` counts no battle). Dev mode
   (`DEV_DEFAULT`, off since 2026-10-29) lays every battery researched and at its top over the career in battle (`Progression.battle(era)`);
   the career underneath still earns and the menu's screens show it.
 - **Measure** with `node tools/researchtest.mjs [seeds] [--era] [--lineup start|early|mid|full|max|part:<id>|all]`.
@@ -822,10 +895,12 @@ never jumps. `sim.lapse` is true while it runs, and the radio says so once. With
 
 ## Off-map support (`src/sim/support.js`)
 
-The lineup's weapons that fire from beyond the map (research.js `offmap`: the V-1, the V-2, the Paris Gun) take no
+The lineup's weapons that fire from beyond the map (research.js `offmap`: the Gotha strike and the V-2) take no
 gun pit in the open battle: the player picks one, gives it a point, and it fires in its own time, then reloads for a
 long time. They keep their own launch missions (the WW2 V-1 and V-2 operations, the WW1 Paris Gun mission), which are
 untouched. Game values throughout (the real spreads are kilometres; these are sized to hit a battery on this map).
+Since the tree's cuts (2026-11-26) the career's line is the Gotha strike then the V-2; the V-1 and the Paris Gun keep
+their entries here, dormant (no lineup names them).
 
 - **Made by `sim.newGame`** when the loadout has off-map kinds (`supportKinds(loadout)`), never in the demonstration
   or on the scripted range: `sim.support = new Support(sim, kinds)`, else `null`, so every battle without them is
@@ -837,7 +912,10 @@ untouched. Game values throughout (the real spreads are kilometres; these are si
   `{ x, z, off, t, hit, destroyed }`. `mods` from the battery's upgrades: `load` (breech and reliefs) on the
   preparation and the reload, `disp` (barrel) on the spread, `dmg` (shells) on the burst (`shell.dmgK`).
 - **Values** (`SUPPORT`): prep, reload, off-map flight, spread (one sd per axis): V-1 110 s, 540 s, 45 s, 110 m; V-2
-  170 s, 780 s, 60 s, 80 m; Paris Gun 75 s, 600 s, 80 s, 60 m. Over the map (`V1`, `V2`, `PARIS`): the V-1 comes in
+  120 s, 480 s, 60 s, 35 m (since 2026-11-26, the line's step up on the Gotha: 170 s, 780 s, 80 m before, when it
+  silenced a field battery in two strikes and 22 min against the Gotha's one strike in 5.3; now one strike in 3.6 min,
+  12 of 12 field batteries and dumps, and a tank laager in two where the Gotha takes none, 12 seeds); Paris Gun 75 s,
+  600 s, 80 s, 60 m; Gotha 150 s, 720 s, 50 s, 50 m. Over the map (`V1`, `V2`, `PARIS`): the V-1 comes in
   from 9 km east of its fall point at 420 m and 175 m/s, its motor cuts 1.1 km out (`shell.engineOff`) and it steers
   down onto the point, speeding up to 240 m/s; the V-2 falls from 30 km on a line 10 degrees off the vertical at
   900 m/s; the Paris shell from 11 km at 55 degrees and 780 m/s. About two to five strikes each in a battle.
@@ -864,7 +942,7 @@ untouched. Game values throughout (the real spreads are kilometres; these are si
   motor runs. The audio engine's shell voices do the rest: the V-1's buzz until `engineOff` (silence d / 343 s
   later), the V-2 unheard until its arrival (`burst` with kind `v2`: the double crack, then the fall's roar), the Paris
   shell's freight train; main asks for the WW2 banks on the career's ridge when the lineup has the V-1 or the V-2.
-- **Test:** `node tools/supporttest.mjs [seeds] [--difficulty] [--lineup dev|start] [--kinds v1,v2,paris]`: the ridge
+- **Test:** `node tools/supporttest.mjs [seeds] [--difficulty] [--lineup dev|start] [--kinds gotha,v2]`: the ridge
   battle, auto crews, each weapon ordered onto a target whenever ready; prints strikes, misses and kills, and checks
   determinism, a refusal told and a retarget.
 
@@ -874,6 +952,47 @@ The career's open battle (the 1918 ridge, version 1: all ten levels there) takes
 Helldivers 2's difficulties: `sim.newGame({ loadout, level, modifiers })`. Without `level` nothing changes (every test
 bit-identical); with it the lineup's `opposition` is not used.
 
+**The shape** (2026-11-26, the difficulty rework for landing and keeping players). The game is to land players from
+social media on a browser page, where people decide within seconds and a session is 11 to 20 minutes (Poki and
+CrazyGames data); level 1 took about 13 minutes and levels 3 to 10 took 23 to 34, longer with workload. Now: quick
+early payoffs, the length roughly flat from the middle up, and the climb from danger (the British counter-battery
+fire, Helldivers 2 style: "Ranging counter-battery" below) and the objectives' complexity (simple, a certain gun, two
+steps, a hold), never from a flood of missions. What stays modest: the mains, the secondaries (optional, for pay)
+and the attacks (the peaks). X-Zeit's chance, the strongpoints, the modifiers and the pay (×1 to ×4) are as before.
+The first loss should come at level 5 or later and feel like the player's mistake (bracketed, and no cover taken).
+
+| Band | Levels | Its job | Length (a human) | Won (a human, the recommended lineup) |
+|---|---|---|---|---|
+| Hook | 1, 2 | the first session: a fast payoff, the loop taught in play | 4 to 7 min | 97 to 99 % |
+| Habit | 3, 4 | the first hour: survive and hit back | 9 to 11 min | 88 to 93 % |
+| Core | 5 to 7 | the full Helldivers tension | 13 to 16 min | 65 to 80 % |
+| Mastery | 8 to 10 | the player who owns the tree | 18 to 20 min | 35 to 55 % |
+
+| Lv | `minutes` | Mains / secondaries | Attacks | British guns answering (`RANGING.from`) | Hold (`hold`) | Two-step (`trace`) | New (`fresh`) | Aim, all auto | Won, all auto | Length, human proxy (median) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 4 | 1 / 1 | 0 | 18-pounders | a short secondary, Hellfire Corner | | Take a mission, correct the fall, destroy; the first "Deckung!" | 98 % | 100 % | 3.0 min |
+| 2 | 7 | 1 / 1 | 1 | 18-pounders | a short secondary | | Their first attack: answer the red rockets. A short hold | 96 % | 100 % | 4.0 min |
+| 3 | 9 | 1 / 1 | 1 | 18-pounders | main, 1 in 2 | | Hit back: our rangers find their batteries by their rounds | 90 % | 100 % | 5.6 min |
+| 4 | 11 | 2 / 1 | 1 | + 60-pounders, 6-inch | main, 1 in 2 | | Heavy targets for heavy guns; kill their eyes | 85 % | 100 % | 9.4 min |
+| 5 | 13 | 2 / 2 | 2 | + 9.2-inch | main, 1 in 2 | | X-Zeit, our own attack, as the finale; one modifier | 72 % | 72 % | 15.8 min |
+| 6 | 15 | 2 / 2 | 2 | as 5 | main, 1 in 2 | | Concrete that needs a super-heavy | 65 % | 56 % | 16.4 min |
+| 7 | 16 | 2 / 2 | 2 | + 15-inch | main, 1 in 2 | 1 | Two-step objectives: find the battery by its rounds, then its dump | 55 % | 67 % | 18.6 min |
+| 8 | 18 | 2 / 2 | 3 | + 18-inch railway | main, always (long) | 1 | Two modifiers; long holds under fire | 45 % | 43 % | 18.4 min |
+| 9 | 19 | 3 / 3 | 3 | all | main, always (long) | 1 | They shift after firing | 35 % | 49 % | 20.2 min |
+| 10 | 20 | 3 / 3 | 3 | all | main, always (long) | 1 | Everything at once | 25 % | 51 % | 21.5 min |
+
+(Levels 3, 7, 9 and 10 as measured after the tree's cuts, 2026-11-26: with Bertha in the Gamma's place 7, 9 and 10
+run above their aims, left for the user's call; Balance, below.)
+
+The tests are all-auto crews (taking cover by their own rule since this rework), a proxy for a human, aimed a little
+below the human rates; the length is measured as a human plays it (`tools/leveltest.mjs` `human`: the time to the
+mains done, plus X-Zeit's run when it is dealt; a human ends at once, the all-auto end waits `QUIET_END`).
+
+- **The fields** (threat.js, new on 2026-11-26): `minutes` (the target length, the level card's Length fact and the
+  attacks' schedule, below), `fresh` (one short line, what is new at the level: the card's "New ..."; `sub`, `lines`
+  and `fits` rewritten to match), `quick` (levels 1 to 3: a main only where the lineup's estimated work,
+  capability.js `batteryVerdict` time, is at most that many seconds, so a new player's first battles are short),
+  `hold: { need, r, g, k, main, side, at }` (Holds, under Missions) and `trace` (the two-step mains, from level 7).
 - **The difficulty.** `sim.level` is the THREAT row; `sim.difficulty` is Normal's for the player's own side (err, ammo
   before the modifiers) and the level's for the enemy's: `cb`, `dmg`, `assault`, `sig` (times 1.5 under the modifier
   `sound`), `zero`, and `time` from the level's `deadline`. `difficultyName` is 'Normal'. `sim.modifiers` is a Set of
@@ -882,8 +1001,11 @@ bit-identical); with it the lineup's `opposition` is not used.
   `generateOperation(level, seed, batteries)`, tracked by `src/sim/objectives.js`), dealt by `DirectorWW1.reset` from
   `sim.opSeed` (the menu's seed, `?seed=`, so the level card, the loading screen and the battle agree; the game's seed
   without one) and the lineup's batteries (`this.bats`). `sim.operation`, `sim.objectives`, `sim.objectivePay`.
-- **The day** (`levelScript`): only the attacks (`op.attacks`: the level's count, times from 480 to 620 s then 230 to
-  340 s apart, the gaps squeezed so the last goes over by 1780 s (`LAST_ATTACK`: the day's clock waits at 1849 s, and an
+- **The day** (`levelScript`): only the attacks (`op.attacks`: the level's count, spread over the level's length
+  `minutes` since 2026-11-26: the first no sooner than its men's massing allows, max(240 s, 0.30 of the length) plus up
+  to 0.05 of it, the rest evenly to 0.78 of the length with gaps of 220 s at least and a tenth of a gap's jitter either
+  way; before, 480 to 620 s then 230 to 340 s apart whatever the level; the gaps still squeezed so the last goes over
+  by 1780 s (`LAST_ATTACK`: the day's clock waits at 1849 s, and an
   attack due later massed and never went over), each in a rolled sector; marked `attack`; with `tanks`, `tanksMoving` four minutes before) and the
   traffic (`TRAFFIC`: convoys and trains, marked `order`). The objectives' fire missions are not on the clock
   (`objectiveMissions`, per step from `missionsUpdate`). The day's clock runs on through a lull to the next thing
@@ -891,8 +1013,8 @@ bit-identical); with it the lineup's `opposition` is not used.
 - **The beat and the early start** (the user's request of 2026-11-12: "so the user feels they accomplished something,
   and that the next is starting early"). A mission done holds everything new for `BEAT` (3 s, `director.beatAt`): the
   objectives' missions, the lineup's queue and its work (`sim/lineup.js`), a duel, a column; not an attack's
-  counter-preparation or a call on a British battery firing. An objective's mission done frees its place at once
-  (`objAt` no later than the beat's end, not `SPACING` after the last opened). With nothing in hand `LULL_LV` (3.5 s)
+  counter-preparation or a call on a British battery firing. Every open objective has its mission at once (since
+  2026-11-26; before, `objAt` and `SPACING` opened them one at a time). With nothing in hand `LULL_LV` (3.5 s)
   the day runs on (`pace`): each leg at an even rate, the first there in `LAPSE_LV` (1.25 s), each further one in
   0.25 s (the WW2 rule, worked out again each step from what is left, slows as it nears and took about 20 s); after a
   mission done the radio says "Ahead of time" and `events.ahead` puts it on the HUD (`hud.hint`); after one failed,
@@ -904,17 +1026,20 @@ bit-identical); with it the lineup's `opposition` is not used.
   many of the main objectives' fire missions failed"); a main whose target stands with no battery left able to serve
   it (in reach, heavy enough, shells at the guns or coming: the Gamma's sixteen) loses ("Nothing left in reach"). Every
   main target done: `accomplish()` (`lv.closing`), their counter-battery fire grows (`sim.difficulty.cb` from `lv.cb0`,
-  `PRESSURE` 20% a minute to ×3), and the player calls `callFinale()` (main: K, the HUD's button): without X-Zeit the
+  `PRESSURE` 20% a minute to ×3), and the player calls `callFinale()` (main: K, the HUD's button; `lv.calledAt` keeps the sim time, for the tests'
+  human-length proxy): without X-Zeit the
   battle is won at once ("Mission accomplished", `summary()`); with it the attacks and orders still to come are called
   off, the day runs on to 1850 and `zeroHour` runs, `zeroEnd` deciding the battle with `zero` of our men in. A lineup
   all on auto (no gunner) calls it `QUIET_END` (120 s) after the last objective moved (`ob.lastProgress`) with no
-  attack under way. Two sectors lost or every gun lost end any battle at once, as always; `levelEnd` settles the
+  attack under way. A main our fire cannot move is handed on to the neighbouring Gruppe (the safety net, under
+  Missions). Two sectors lost or every gun lost end any battle at once, as always; `levelEnd` settles the
   objectives (`settle`: X-Zeit, the medals) and sets `sim.over`. `goal()` is the HUD's objectives (main
   `hud.setObjectives`, `#objectives` under the unit's name).
 - **The sites** (`offers`): only the level's `sites` (capability.js `tierOf`: soft, armour, heavy, deep, hard, fort; the
   role sites by their role, specialists.js `allow`). A site no battery of the lineup can finish (`siteVerdict` 'no') goes to
   the neighbouring Gruppe: a radio line once, no mission, no pay, no penalty (the traffic is never handed on).
-  `heavies` off: only the British 18-pounders fire counter-battery, harassing fire and the Trommelfeuer; `spotters` off:
+  `heavies` off: only the British 18-pounders fire harassing fire and the Trommelfeuer (and counter-battery with the
+  old fire; the ranging model's kinds follow `RANGING.from`, which agrees); `spotters` off:
   no RE8; `raids` the Camel raids' rate in place of `cb` (`EnemyWW2.raidRate`, 0 none, twice under `air`).
 - **Fairer targets on a level.** A tank laager's guns are laid on one tank at a time (`m.aimPart`; the observer reads
   against it, `ObserversWW1.refPoint`; the next tank when it is out), and it is broken up, done, with half its tanks out;
@@ -923,6 +1048,21 @@ bit-identical); with it the lineup's `opposition` is not used.
   about fourteen free missions a game on level 3), and the lineup's work only gives sites the level offers
   (`canOffer`, the pure half of `offers`; it used to pick ones the level refused and idle the battery 80 s more). The crews adjust their fire for effect (`CrewsWW1.await`,
   `firing`): the observer's "on target" allows 45 m each way, which a 10 cm shell does not forgive.
+- **Reading the fall on a level** (2026-11-26, the stall fixes; only with `sim.level`, so every other test is
+  bit-identical). The observers (`sim/observers.js`): an airburst (`onBurst(shell, pos, air)`, `air` passed by
+  `sim.burst`) is read by `fallPoint`, where its path would have come down at the height it was laid for
+  (`shell.aimY`, gravity only), not where it burst (a shrapnel round left in the breech from a Sperrfeuer, fired as a
+  Gegenbatterie's ranging round, burst over the target at its time and read "on target" with the gun 330 m over); a
+  round of a unit on its own observed mission is that mission's when its aim is within 400 m of the mission's point
+  or of the unit's present aim (`near`), so a big correction no longer loses the observer (a gun whose error wanted
+  it laid 420 m short got "not observed" for the rest of the battle). The crews (`ww1/crews.js`): `pick` and the
+  counter-preparation set `ai.seen` to the mission's reports already there (old reports are not news); `await` skips
+  a report on a round fired before the one it waits for (`r.fired < ai.fireT`), reads each report's correction less
+  what has been laid since its round left (`since(u, r)`, the aim's move on add and right) and judges "ok" on that
+  remainder, and after 5 ranging rounds corrects and fires for effect; the mean correction between series uses
+  `since` too; `effectUpdate`: a series whose last round is down without the target's strength (its standing parts'
+  hp) falling puts the mission back to 'ranging' (the series count kept, so three still end it); `handOver` sets
+  `ai.fireT` to the player's round still in the air.
 - **The Feuerwalze on a level** (the friendly fire every lineup beyond a lone K 17 died of): fired by the field guns and
   howitzers only (`FEUERWALZE`: K 17, sFH 13, leFH 18, sFH 18; any but the super-heavies when the lineup has none), with
   HE, each gun laid `walzeMargin` beyond the line (two and a half spreads and its lethal radius less 40 m) and spread
@@ -936,7 +1076,10 @@ bit-identical); with it the lineup's `opposition` is not used.
   and K4 behind them; the director removes those past the mission's `forts` (and all of them without X-Zeit) from
   `sim.targets` at `reset`. Their missions are `sim/specialists.js` role 'fort': by day and by night (a map shoot), no
   deadline, opened after the registration, as many at once as there are batteries that can take one (`canTake`: in
-  reach and heavy enough, Bertha's and the Gamma's beds relaid first, `CrewsWW1.pick`); the auto crews put them first
+  reach and heavy enough, Bertha's and the Gamma's beds relaid first, `CrewsWW1.pick`; since 2026-11-26 Bertha reaches
+  every strongpoint, its lowest elevation 13 degrees, 20 before, its minimum range 3.75 km, 5.3 before, and the
+  career's Gustav stands 900 m further east than on the WW2 map, `RIDGE_WW2` P(14400, 600), so they lie past its
+  10.2 km minimum); the auto crews put them first
   (`score` +30). Each strongpoint still standing fires on our groups in its lane during the assault, `FORT_MG` 0.008
   men a second a group, whatever the Feuerwalze's cover (`ww1/infantry.js`; `sim.stats.lossBy.fort`).
 - **Modifiers:** mist (the observers' reports 1.7 times as slow), air (twice the raids and the RE8 spotters; a map shoot
@@ -948,13 +1091,35 @@ bit-identical); with it the lineup's `opposition` is not used.
   damage on each part (`partLayout`) under the gun's spread at that range (the upgrades' `disp`, `dmg`), the rounds to do
   what the mission needs and the minutes for the guns and drill (`load`), against the deadline and the shells carried:
   'ready', 'slow' or 'no' ('no' at once when the shell is lighter than the site's `minHard`, or `MIN_HARD` for a 'hard'
-  role site, the crews' rule). `capabilities(levels)` per kind of site, `firepower(levels)` the field guns' weight,
+  role site, the crews' rule, and since 2026-11-26 when the site is outside the arc the gun lays on from its pit,
+  `inArc`: its unit's zero and `arc` or GUNS `traverse`, as sim/guns.js checks a piece; no arc for a battery that turns
+  onto any line: the beds relaid, the Karl, a self-propelled hull; a rocket launcher's cycle counted per ripple of
+  `salvo.n` rockets, here and in `firepower`). `capabilities(levels)` per kind of site, `firepower(levels)` the field guns' weight,
   `recommendedLevel(levels)` the highest level whose sites are all at least 'slow' and whose firepower bar is matched
   (each level's bar the lowest reference firepower of it and the levels above: from level 6 a super-heavy takes a field
   battery's slot). `REFERENCE` is each level's reference lineup (at most five batteries and one off-map, `SLOTS`).
-- **Balance** (`node tools/leveltest.mjs [seeds] [--levels] [--lineup ref|below] [--mods roll] [--jobs] [--games]`, all
-  auto, each level's reference lineup; it prints the mission's mains and secondaries done, the failures, how each game
-  ended): with the missions' phase 2 (the objectives of the moment, the balloon, the hunt; 2026-11-12, 72 seeds) 97,
+- **Balance** (`node tools/leveltest.mjs [seeds] [--levels] [--lineup ref|below] [--mods roll] [--cb ranging|old] [--jobs]
+  [--games]`, all auto, each level's reference lineup, the ranging counter-battery by default; it prints the mission's
+  mains and secondaries done, the failures, how each game ended, the `human` length proxy's mean and median beside the
+  level's `minutes`, when the mains were done (mean and median), the holds and two-step mains done, the mains the
+  safety net handed on (`safety net N`); `--games` adds each game's holds, traces, proxy and handed-on mains). It stages
+  every career battery's pads (`RIDGE_WW2` and `RIDGE_MORE`) before the ground is sampled (`terrainHeight.js` reads
+  them once: with only the lineup's, a seed's result depended on the games run before it in that worker, level 10
+  seed 1 46.8 min alone and 43.8 after another game); `tools/cbtest.mjs` stages them the same way. With the difficulty rework (2026-11-26, the shape above, the ranging model and
+  the crews' own cover; 72 seeds): 100, 100, 100, 100, 72, 56, 56, 43, 36, 28 % won for levels 1 to 10, the human proxy's median 5.6, 4.2, 7.3, 9.4, 15.8, 16.4, 18.3, 18.4, 20.9, 20.9 min (the X-Zeit levels' medians include its flat 10 minutes after the call; level 6 sits under its aim of 65 %: `zero` acts on whole men, and from .66 to .70 it stays at 56 %).
+  After the ramp guns' cut (2026-11-26, levels 1 to 3 on the new references and level 1's hold; 72 seeds): 100, 100,
+  100 % won, the human proxy's median 3.0, 4.0, 5.7 min (mean 3.3, 6.5, 6.2) against the targets 4, 7 and 9, the
+  level 1 hold done in 72, level 2's in 71; with the richer references first tried (level 2 three guns each, level 3
+  four each and a K 17) 3.0, 4.5, 6.2 (mean 3.3, 8.2, 6.5). Levels 4 to 10 unchanged.
+  After the tree's cuts (2026-11-26: Bertha in the Gamma's place in levels 7, 9 and 10, the Gotha in the V-1's in 8,
+  the arc and ripple fixes, the K 16's reach, the career's Gustav moved; 72 seeds, all auto): 100, 100, 100, 100, 72,
+  57, 67, 40, 49, 51 % won (aims about 98, 96, 90, 85, 72, 65, 55, 45, 35, 25), the human proxy's median 3.0, 4.0, 5.6,
+  9.4, 15.8, 16.3, 18.6, 18.5, 20.2, 21.5 min, mean 3.3, 6.5, 6.0, 10.6, 14.9, 16.1, 17.5, 16.7, 19.7, 21.6 (targets 4,
+  7, 9, 11, 13, 15, 16, 18, 19, 20). Levels 1, 2, 4, 5, 6 and 8 as before to the game (the auto crews never call the
+  off-map weapons, so the Gotha for the V-1 changes nothing there); 7, 9 and 10 easier with Bertha (2.5 min a soft
+  target to the Gamma's 5.0, 24 shells to 16, and every strongpoint in reach): 7 from 56 to 67 %, 9 from 38 to 49 %, 10
+  from 25 to 51 %, left so for the user's call rather than retuned.
+  Before it, with the missions' phase 2 (the objectives of the moment, the balloon, the hunt; 2026-11-12, 72 seeds) 97,
   97, 92, 96, 79, 74, 56, 42, 35, 26 % won, the mean battle 13.1, 13.0, 22.7, 25.7, 32.9, 32.4, 33.8, 33.7, 31.7, 31.1
   min. With phase 1 (72 seeds) 99, 97, 93, 92, 82, 61, 57, 56, 36, 26 % won for levels 1 to 10,
   the mean battle 12.3, 12.8, 17.0, 22.3, 25.5, 29.1, 29.2, 26.0, 25.0, 25.3 min (the mains done at 9 to 17 min); with
@@ -981,23 +1146,94 @@ oatmeal", Sid Meier's interesting decisions) and the user's decisions:
   does to the battle (`why`) and most do it (`effect`): a dump or depot gone slows their counter-battery fire (the
   dumps' own rule, `EnemyWW1.supply`), the HQ, the corps HQ or a shelter gone thins every attack after it (`THIN` 0.85
   each, 0.6 at least, `levelAssault`), a laager broken up keeps its tanks out (`TANK_K`), a battery silenced stops
-  firing, a train or convoy wrecked holds their supply up (`TRAFFIC_CUT`: ×0.85 for 300 s).
-- **How many** (`threat.js`): `mains` 1, 1, 2, 2, 2, 2, 3, 3, 3, 3; a main's targets fill `work` (in fire missions:
-  1 to 9.5, each target weighed `w`, up to three of a kind: "Blow up both ammunition dumps"); `later` (1 from level 4)
-  of the mains reported during the battle near the first attack, so the work runs into the attacks; `sides` 1, 2, 2,
-  3, 3, 3, 3, 4, 4, 4, two known before battle, the rest reported from 260 s on (`reveal`, state 'hidden' until then,
-  and all at once when the mains are done); X-Zeit as the finale with chance `xzeit` (0.5 at level 5 to 0.8 at 10).
+  firing, a train or convoy wrecked holds their supply up (`TRAFFIC_CUT`: ×0.85 for 300 s). **Every target counts**
+  (since 2026-11-26; before, only `o.targets[0]` was judged, so "Silence the 18-pounders on the Frezenberg road and on
+  the Zouave Wood" was done with the first, and the battery that fired on the second fired for nothing):
+  `Objectives.left(o)` the targets still to be done, `out(o, id)` one out by the level's rules (destroyed; a battery
+  silenced, a laager broken up), `o.gone` those done (each stays done, a battery a new one moves into too), `o.done`
+  their count, a radio line ("Objective: ... done, 1 of 2") and `events.objective(o, 'step')` for each, complete when
+  all are; `ofTarget` skips the done ones.
+- **How many** (`threat.js`, the level table above): `mains` 1, 1, 1, 2, 2, 2, 2, 2, 3, 3 (before 2026-11-26: 1, 1, 2,
+  2, 2, 2, 3, 3, 3, 3); a plain main's targets fill `work` (in fire missions, each target weighed `w`, up to three of a
+  kind: "Blow up both ammunition dumps"); `later` (from level 4) of the plain mains reported during the battle near
+  the first attack, so the work runs into the attacks (a hold and a two-step main are on from the start, so level 8,
+  whose two mains are those, reports none); `sides` 1, 1, 1, 1, 2, 2, 2, 2, 3, 3 (level 1's, a short hold, since the
+  ramp guns' cut; before the rework: 1, 2, 2, 3, 3, 3, 3, 4, 4, 4), two known before battle, the rest reported from 260 s on (`reveal`, state 'hidden' until then, and all at once
+  when the mains are done); X-Zeit as the finale with chance `xzeit` (0.5 at level 5 to 0.8 at 10). The dealing:
+  the two-step mains first (`trace`), then the hold if `hold.main` rolls (always from level 8), then plain mains from
+  the archetype's kinds; levels 1 and 2 deal a short hold as their one secondary, first in `sides` (level 1's at
+  Hellfire Corner, `hold.at`: the places a level names, any the lineup reaches without; 5.3 km from the FK 16's pits,
+  so the starting field guns have a job of their own beside the main, since 2026-11-26).
 - **Only what the lineup can do** (`capability.js siteVerdict` on the lineup's batteries, with the level's deadline):
-  a main only where the lineup is 'ready', a secondary where it is not 'no'. The verdict now counts a ramp gun's
-  re-lay error (`GUNS.runback`, the C/92's: a lone C/92 was dealt the brigade HQ and failed it four times).
-- **Mains never fail on a clock.** Their fire missions open two at a time (`MAIN_LIVE`), one opening every 40 s
-  (`SPACING`), the secondaries' after the first 90 s; a mission whose window closes comes again after `REOPEN` (45 s)
-  and, a main's, counts against `fails` (3 or 4). A battery objective's mission has an observer who reports (an
-  aeroplane or the balloon by day, the VB by night), never the sound rangers' blind fix. Deep and concrete ones as the
+  a main only where the lineup is 'ready', a secondary where it is not 'no'; on levels 1 to 3 a main also only where
+  some battery of the lineup does the work within the level's `quick` seconds (`batteryVerdict` time). The verdict
+  counts a ramp gun's re-lay error (`GUNS.runback`, the C/92's: a lone C/92 was dealt the brigade HQ and failed it four
+  times; dormant since the ramp guns' cut, 2026-11-26).
+- **Mains never fail on a clock.** Every open objective has its fire missions at once (since 2026-11-26: one for each
+  target still to be done, `objectiveMission` taking the first without one and `unreachable` checking each; a
+  secondary when it is reported, a two-step main's first when its battery is located, a hold's `k` missions together; the
+  staggering went, `MAIN_LIVE` two mains at a time, one opening every 40 s `SPACING` and the secondaries after the
+  first 90 s, which made a level's length the sum of its parts); none within the `BEAT` of a mission done; a mission
+  whose window closes comes again after `REOPEN` (45 s) and, a main's, counts against `fails` (threat.js, 6 at level 1
+  to 3 at level 10). The objectives list says when an open objective's mission is not out yet (`objectiveWaits`, the
+  rule played forward: the beat, a reopening, or 'traffic'; `goal()` items' `wait`, the HUD's note "mission in 0:40",
+  "waits for traffic"; 'queued' no longer comes), so no objective reads as an order with nothing to take (the user,
+  2026-11-26). A battery objective's mission has an observer who reports (an
+  aeroplane or the balloon by day, the VB by night), never the sound rangers' blind fix; by night the other objectives'
+  missions (not the role ones) have the VB ('foo') too, in place of a map shoot (since 2026-11-26: an HQ by night got 13
+  minutes of blind rounds 80 m off), the laagers and the posts keeping `siteMission`'s own VB; by day nothing changed. Deep and concrete ones as the
   specialists' (`role`, `minHard`) with a 900 s window (`ROLE_WINDOW`). Marked `m.obj`, `m.objMain`, priority +5 for a
   main and +2 for a secondary (`tag`), so the crews put them before the routine counter-battery calls; on a mission the
   crews keep a long gun or a heavy on a main's shoot when the red flares go up and another battery can answer
   (`CrewsWW1.sosCalled`).
+- **Holds** (2026-11-26; `OBJECTIVES.hold`, the level's `hold: { need, r, g, k, main, side, at }`): "Keep <a place> under
+  fire for m:ss". The clock (`o.held`) runs while our bursts land within `r` m of the place at least every `g` s and
+  pauses otherwise; never failed by the clock; done at `need` s. Every burst of ours counts, whatever battery fired it,
+  so batteries may rotate (`ww1/director.js` `holdUpdate`: our shells that burst last step, still in `sim.shells`, set
+  `o.lastHit`; `o.running`). Holding forces sustained fire, so the British range in and the player must rotate
+  batteries or take cover: the counter-battery tension's objective, and a floor on the length a maxed lineup cannot
+  shorten. Dealt: levels 1 and 2 a short secondary (level 1's 60 s at Hellfire Corner, `at: ['X1']`, since the ramp
+  guns' cut: the starting FK 16's job), levels 3 to 7 a main in one mission in two (`main` 0.5, rolled from the
+  mission's seed), levels 8 to 10 a long main every time. The places (`operation.js` `HOLD_PLACES`): Hellfire Corner
+  (X1) and the railhead (R1), `effect` 'traffic' (done: `trafficCut` for `HOLD_CUT` 600 s), and the assembly area
+  behind each sector, 350 m behind the British support line, `effect` 'attacks' (the attacks to come thinner); a
+  place is dealt only where a battery is within 0.72 of its longest range and `batteryVerdict` on a soft site there is
+  'ready' (at the edge of its range the rounds fall too wide to keep a clock running). Its fire missions: kind
+  'destroy', `m.hold`, `k` at once titled "(A)", "(B)" so more than one battery can serve it, an observer who
+  reports ('foo': a map shoot cannot correct the guns' bias, the bursts fell 400 m off), no clock; done, they are
+  finished together. The crews' `ai.skip` is cleared every step for a hold's and a main's missions (a crew that gave
+  a main up took it again only after its window failed). Objective data: `{ kind: 'hold', targets: [], n: 1, hold: {
+  id, name, short, x, z, need, r, g, k, effect, done }, held, lastHit, running }`; `goal()` items' `hold: { held, need,
+  running, started, r, g }`.
+- **Two-step objectives** (levels 7 to 10, `trace`; `OBJECTIVES.trace`): a main of two steps. Step 1, a British
+  battery not yet located ("Find and silence the ..., then burn its ammunition dump"): its fire mission is offered
+  (`ready`, `ww1/director.js` `traceUpdate`) once our rangers' fix on it is within `RANGING.rangers.place`, laid on the
+  fix (`rangersMission`; a rangers' mission already open on it becomes the objective's), or `TRACE.loose` (300 s)
+  after the objective opened on the fix as it stands, so it never waits for ever; without the ranging model, at once.
+  So that it can be found, the battery must engage us early: `DirectorWW1.reset` sets `t.mustEngage` on it and the
+  British fire honours the flag ("Ranging counter-battery"). Step 2: the battery silenced (dead or `spent`),
+  `Objectives.advance` reports its ammunition dump (`then`; targets `[then]`, `done` 1, title and short changed, a
+  radio line, `events.objective(o, 'step')`); the dump gone, done. Never the hunted railway gun; both the battery and
+  the dump 'ready' for the lineup. Objective data: `{ kind: 'trace', targets: [battery], then: dump, n: 2, effect:
+  'supply', step, ready, openAt, fix }`; `ofTarget` and `openTargets()` skip it while `ready` is false; `goal()`
+  items' `step` and `locate` (the fix's error in m while not located).
+- **The safety net** (2026-11-26; `ww1/director.js` `STALL = { rounds: 40, s: 600, idle: 1200, per: 2, nk: 'm16' }`,
+  `stallUpdate`, `handOn`, `neighbourFire`, `nbrUpdate`). A level ends on its objectives, never on the clock, so a main
+  our fire does not move must not hold the battle for ever (before the stall fixes 7 battles in 720 never ended). Each
+  open main (not X-Zeit, not a two-step main still unlocated, until the mains are accomplished) has its effect watched
+  (`o.stall`: the standing parts' hp of its targets still to be done, the hold's clock, the step, the targets done).
+  With no effect, `rounds` (40) rounds on its missions and `s` (600 s) hand it on, for any lineup, a human's too (the
+  player who keeps firing at a target and cannot touch it is helped, one who has not fired at it is not); a lineup
+  all on auto also hands on its most stuck main after `idle` (1200 s) with no main moving at all. Handing on: the
+  radio's "Nachbargruppe: our fire has had no effect on "<title>" (40 rounds in 11 minutes); the neighbouring
+  Gruppe's heavies take it on. It counts as done, paid only for what our guns did.", its missions withdrawn
+  (`m.withdrawn`, no one's failure), its targets in `director.handedOff` (`offers()` refuses them), a British battery's
+  fire silenced, `per` 21 cm rounds a standing part falling on it over half a minute (`unitId` null, `neighbour`: no
+  pay, no report), what they leave standing knocked out after the last (`nbrUpdate`); the objective completes
+  (`o.handed`, its done line "the neighbouring Gruppe took it on"), and `complete` pays it only for the share of its
+  targets our guns had done (a hold or a two-step main nothing). Forced in tests (our damage to the mains' targets
+  blocked, a hold's radius 1 mm) every battle ended: level 2 seed 35 handed on at 15.6 min, level 4 seed 3 a hold at
+  10.0 and the HQ at 16.1, level 8 seed 5 a two-step main at 12.7.
 - **Attacks are pressure, never an objective**: the enemy's timetable must not decide when the player is done.
 - **The player calls the end** (above). Medals (`MEDALS`, the end card, not objectives: failed early, they would nag):
   no gun lost, not one of theirs in our trenches.
@@ -1009,7 +1245,11 @@ oatmeal", Sid Meier's interesting decisions) and the user's decisions:
   mains, diamonds the secondaries, progress, the failures, then "Mission accomplished", their fire's growth, the
   all-auto countdown and the finale's button), toasts and radio lines on each objective done, failed or reported, the
   reward feed's OBJECTIVE lines, the board's ochre rings on the objectives' targets (`board.js drawTargets`), the
-  missions list's ■ and ◇ (`missionList.js`), and the summary's Mission section (`ui/summary.js`).
+  missions list's ■ and ◇ (`missionList.js`), and the summary's Mission section (`ui/summary.js`). A hold's row reads
+  "1:10 of 2:00" (" · paused", or " · fire on it" before the first burst; class `holding`, its note green, or
+  `paused`, amber and italic, with the reason on hover) and the board draws its radius as a dashed ochre ring with
+  its clock as an arc round it (solid while it runs, faint while paused; labelled "■ Hold" or "◇ Hold"); a two-step
+  main's row reads "finding it · ±N m", then "step 1 of 2" and "step 2 of 2".
 - **Objectives of the moment** (phase 2, 2026-11-12; `Objectives.add`, `bonus`: a secondary that pays but has no part
   in the full clear, a △ on the HUD with its timer). One at a time besides the attacks, never during an attack or its
   massing (the research's middle of a battle: an attack with its counter-preparation, a pop-up target, a duel):
@@ -1046,6 +1286,241 @@ oatmeal", Sid Meier's interesting decisions) and the user's decisions:
   caught it and it decided whole battles, so a secondary.
 - **Still to come** (the plan's phases 3 and 4): neutralization, wire cutting, the box barrage, generated target
   positions, `tools/optest.mjs` and tuning against a scripted player.
+
+## Ranging counter-battery (`src/ww1/enemy.js` `RANGING`)
+
+The British counter-battery fire on the WW1 German open battle at a threat level: a British battery ranges in on one
+of our batteries and then fires for effect, our rangers place the battery that does it from the rounds it fires, and
+a crew can take cover. A prototype behind `?cb=ranging` from 2026-11-25; since 2026-11-26 the default on every level
+battle, and the levels' danger: what climbs with the level is which British guns answer, how few ranging rounds they
+need and how slowly we find them ("Threat levels", the level table). The knobs are one const, `RANGING`; its lists are
+per level (`sim.level.n - 1`).
+
+**The contract** (sim and console both build to it):
+
+- **The model.** `sim.newGame({ cbModel })`: on the WW1 theatre's op kind 'battle' with a level, `sim.cbModel` is
+  'ranging' unless `cbModel` is 'old' (any other value, or none, is the default); null anywhere else, so the British
+  game, the WW2 mode and the WW1 battle without a level are bit-identical to before. main passes the page's raw
+  `?cb=` (`CB_MODEL`, the career's level battles only): `?cb=old` gives the old fire (the drizzle on the loudest unit,
+  with `watchBatteries`' Gegenbatterie calls), `?cb=ranging` still works; `menuItems.js` `PASS` carries `cb` to the
+  menu and back.
+- **Cover.** `sim.command(unitId, 'cover', { on })` (`on` omitted toggles; not in `TAKE_MANUAL`; true when it changed
+  something; nothing without `sim.cbModel`). `unit.cover` (the crew in its shelters) and `unit.manAt` (after leaving,
+  the sim time the crews are back at the guns; null again once they are). Both only ever set with the model.
+  `guns.problem(u, short)`: 'in cover' / 'the crew is in cover: order them back to the guns (U)', then 'manning the
+  guns' / 'the crews are running back to the guns'. Event `events.cover?.(unit, on)`.
+- **The threat.** `sim.enemyAI.threatOn(unit)`: null, or the worst engagement on the unit the crew knows of,
+  `{ stage: 'ranging' | 'closing' | 'bracketed' | 'ffe', miss, name, by, since }` (`miss` in m to the nearest 10, the
+  last ranging round's; `name` as "British 6-inch battery"; `by` the target id; `since` the sim time of its first
+  round). Worst: ffe, bracketed, closing, ranging, then the smallest miss. Event `events.cbStage?.(unit, stage, info)`
+  when a unit's worst stage changes (`stage` null: no longer engaged). `unit.cbStage` holds the last one sent.
+- **The danger the crew knows of.** `sim.enemyAI.dangerOn(u, ffeOnly)`: true while an engagement known to the crew
+  (its rounds have fallen) has the unit bracketed or fires for effect on it, or its salvo is in the air (`ffeEnd`);
+  `ffeOnly` the fire for effect alone. The crews' own cover reads it.
+- **Our rangers.** Every British battery has `target.rangers = { err, x, z, placed }` from the start: the fix point,
+  its error in m, and `placed` once a Gegenbatterie mission has been offered on it (also `ax`, `az`, `n`, `heard`:
+  the fix's direction and the rounds counted, the sim's own).
+- **A battery to be found.** `t.mustEngage` on a British battery target (the director sets it on a two-step main's
+  battery, "Missions"): it engages first, past the level's count and its kind's level, at the latest `must` (60 to
+  120 s, from the sim's stream) after the flag is seen (`mustUpdate`, `t.mustAt`) or after its last engagement ends;
+  at `mustAt` its cooldown is waived and it takes a sure engagement on our busiest battery, even before the fire opens.
+
+**The model** (`EnemyWW1.rangingUpdate`, in place of the loop over the batteries; harassing fire, the Trommelfeuer and
+the aircraft as before):
+
+- **Which guns answer.** `from`, a kind's first level (the 18-pounders from 1, the 60-pounders and the 6-inch from 4,
+  the 9.2-inch from 5, the 15-inch from 7, the 18-inch railway gun from 8), replaces the `heavies` gate for the
+  counter-battery fire; `heavies` (threat.js) still gates the harassing fire and the Trommelfeuer, and the sites
+  (operation.js 'heavy' from level 4) still decide which British batteries can be objectives (they agree: no heavies
+  on levels 1 to 3). Exceptions: a flagged battery, the hunted railway gun (on levels 4 to 7 too: a sure engagement
+  whenever it is up), and the opening's fallback. `batteries` British batteries engage at once (the flagged and the
+  hunted besides), at most `perUnit` of them on one of our units.
+- **Their fire answers ours.** Nothing of theirs fires on our guns before one of ours has fired (`firstShotAt`): the
+  opening comes `after` s past our first round at the soonest (35 to 60 on level 1, down to 15 to 30 on level 10; the
+  same draw as `open`, placed in that range, so no draw more), and a flagged battery waits for it too (the user,
+  2026-11-26: counter-battery fire before a first round broke the cause and effect it teaches).
+- **The opening** (the sure engagement). At `open` s into the battle (from the sim's stream), and not before `after` s
+  past our first round, a battery of a kind that answers takes on our busiest battery in its
+  reach (the loudest of those that fired within `busy`, 90 s, the latest to fire among equals), loud or not (a lone
+  gun on the lower levels is never loud enough for `engage`), and ranges on it while it fires. A battery no fire
+  mission of ours is on is preferred (the opening should come through to its fire for effect); one under our fire
+  waits. A battery whose shell flies longer
+  than `fly` (20 s) fires that much sooner, so `open` is about the first fall. When no kind that answers reaches our
+  busiest battery, the lightest that does takes it on (a Langer Max in the lineup is 10.3 km from the 18-pounders,
+  whose reach is 8.5 km: the 60-pounders, 48 s of flight, open on it). One broken off before its first
+  round is given again 10 s later; after its first fire for effect it is an ordinary engagement. Levels 2 and 3 give
+  the next one `every` s after one ends. The fire no longer waits for phase 2.
+- **Engagement** (the rest, by loudness). A battery free to fire (alive, in sight, not silenced, the level's rule too:
+  half its guns out, `spent`; not suppressed, with ammunition, of a kind that answers) takes on the loudest of our
+  units in its reach with a signature of `engage` (0.3, times their balloon's eyes) that fewer than `perUnit`
+  batteries already have, while the level's `batteries` has room. One engagement a battery (`enemyAI.engs`, target id
+  to engagement).
+- **Ranging.** One gun, one round every `gap[kind] * gapK / ((0.6 + 0.4 * cb / cb0) * supply)` s (`gapK` the level's
+  pace; `cb0` is `difficulty.cb` at the start, so the level's own `cb` no longer sets the pace and it grows only with
+  `PRESSURE` after the mission is accomplished; times `spotGap` 0.7 with the RE8 over the unit), never sooner than
+  `wait` (0.5) of the last one's flight (their corrections lag a round behind), at one live gun of ours, off by `miss`
+  along a line within 35 degrees of their line of fire (overs or shorts for the whole engagement). The first miss is
+  320 to 480 m by our loudness; `rounds` (in place of `corr`) is how many ranging rounds come before the bracket: the
+  miss shrinks by `(bracket * 0.85 / firstMiss)^(1 / rounds)` a round (squared with the RE8 over the unit, about half
+  the rounds; times 0.92 with their balloon up). The crew knows of an engagement from its first round's fall
+  (`threatOn` null before), and the stages follow the falls, not the firing.
+- **Bracket and fire for effect.** When the next miss would be within `bracket` (60 m) the round in the air is the
+  last: at its fall the unit is bracketed, and `bracketWait` (0.6) of a gap later the battery fires `salvos` salvos
+  `salvoGap` (10 s) apart, each by `share` of its live guns (one at least; level 1's is a scare, half an 18-pounder
+  battery once, wide), `sigma` m of scatter round the gun.
+- **Cut short.** A battery of ours gone silent under it (no round since the fire for effect began: its crew in cover,
+  or holding) gets only the first salvo: they take it for knocked out (`cbStats.cut`, a radio line); the phase stays
+  'ffe' until the salvo in the air has fallen. One that serves on through it takes every salvo.
+- **The check round.** Then `rest` (70 s), and on a unit still (or again) as loud as `engage` one ranging round at
+  1.25 times `bracket` (they have the range: it falls within the bracket), bracketed at its fall, then the fire for
+  effect: the crew sees it coming. On a quieter one the bracket is kept. (Before 2026-11-26 the next fire for effect
+  came at once, with no warning.)
+- **Lost.** No ranging round on a unit under `located` (0.15); after `lose` s under it (75; 45 in cover) the
+  engagement is dropped, never in the middle of a fire for effect.
+- **Hit back.** Our bursts that suppress the battery (`TargetsWW1.applyBurst`) stop it, multiply its next miss by
+  `spoil` (1.6) and end a fire for effect under way: it must range again. Silenced or destroyed ends it.
+- **Our rangers** (discovery by level). Every round a British battery fires (counter-battery, harassing, Trommelfeuer:
+  `EnemyWW1.launch`) tightens the fix: `rangers.err` m at first, times `rangers.k` for every round heard, `rangers.min`
+  at best, all three larger on the higher levels (better camouflage: the fix forms slower and stops further off), in a
+  direction that stays. A battery with one of ours under its fire and a fix within `place` (180 m) gets a
+  Gegenbatterie mission (`DirectorWW1.rangersUpdate`, `m.rangers`: kind 'cb', laid on the fix and moved with it as the
+  hunt's is, an observer who reports, by night named the flash rangers, no clock, 40 points, never an objective's
+  failure; withdrawn without penalty when nobody took it and the battery has left us alone for two minutes).
+  `watchBatteries` gives none with the model. Not the hunted railway gun, which keeps its own fix.
+- **They shift** (levels 9 and 10, `shift` 2). After a fire for effect the battery moves to a position nearby (its
+  target stays at its site, a game's shortcut: only the fix moves): our rangers' error doubles (up to their first) in a
+  new direction, `t.cbErr` moves if it was placed, and every open mission on it (`m.rangers` or kind 'cb') is laid on
+  the new fix, its auto batteries re-laid (`cbStats.shifts`; the radio: "Sound rangers: the ... has shifted after its
+  salvos; fix now ±170 m, the mission laid on it").
+- **Take cover.** No fire and no loading (a round half loaded waits, a gun laid stays laid), the signature fades at the
+  hold rate (0.014 a second), a direct hit (under 5 m) on a gun does all its damage but a near miss only `COVER.gun`
+  (0.5: no rounds or cordite out at the gun to go up with it; without it the guns died as fast in cover as out of it,
+  nine lost on level 10 either way, so cover saved men only), the crew's casualties come at `COVER.cas` (0.15) of the
+  usual chance (`guns.js` `COVER`), and leaving takes `COVER.run` (10 s) before the guns answer. An order to fire
+  given while the crews run back (`unit.fireOnMan`) goes when they are at the guns, and a Sperrfeuer (`ww1/theatre.js`
+  `sosCommand`) takes a battery out of cover: no cover in a barrage. `sim/crews.js` passes over a unit in cover or
+  running back (its drill waits; the crew used to give its mission up when FIRE was refused).
+- **The crews' own cover** (`ww1/crews.js` `CREW_COVER`, `coverUpdate`, run first in `CrewsWW1.update` with
+  `sim.cbModel`): a crew on auto (not a battery the player serves a gun of, nor one at the player's orders: those are
+  the player's, U) takes cover `react` (2 to 8 s) after `dangerOn`, a time in five (`late`) `lateBy` (10 to 30 s)
+  later still, a time in twelve (`stay`) not at all for that episode; it leaves `after` (15 to 40 s) once the danger
+  is over. On a Sperrfeuer or the Feuerwalze (its state 'sos' or 'barrage', or its Sperrfeuer reaction due) it stays
+  at the guns while only bracketed, ducks for the fire for effect itself and is back `duty` (4 to 10 s) after the last
+  salvo. Imperfect on purpose, as the rest of its drill. It serves the tests and the gunner's other batteries
+  (`othersAuto`); `sim.crews.cover = false` turns it off (cbtest `--policy none` and `cover`).
+- **Taking cover, drawn** (2026-11-26; `render/shelters.js`, `render/cover.js`). On a battle where the crews can take
+  cover (`sim.cbModel`) each German gun has a shelter: a 1918 position's own dugout (`models/v/de/gun_sites_ww1.js`
+  `dugoutOf1918`: the field pits and the 42 cm emplacement), a rocket launcher's slit trench (`rig.anchors.cover`), or an
+  Unterstand of its own (`buildUnterstand`: the dugout's timbered and sandbagged mouth with its steps going down, a gas
+  curtain rolled up under the lintel, a stovepipe, a duckboard to the door between two low sandbag walls). When the
+  crew takes cover each man drops what he is doing and runs to it, the men a moment apart, and ducks through the
+  doorway (in a slit trench he crouches, facing his gun); the gun stands unmanned. Sent back, they come up out of it and
+  run back to their posts, the last one there by `manAt`, and the drill takes over where the gun stands (its job waits
+  in the sim, so each man comes back to the place he left). The gun the player serves in person (`piece.manned`) keeps
+  its crew.
+  - *The clock.* `setCover` keeps the times the crew turned since it last stood at its guns: one new unit field,
+    `u.coverLog` ([into cover, out, in again, ...]; a new array when the crew takes cover from its guns, a time pushed
+    at each later turn; plain times, no random number, read by nothing in the sim). `render/cover.js` `wayClock` folds
+    it into the seconds of the way done: rising a second a second while in cover, up to the crew's last man in; sent
+    back, 0.6 s (up the steps) and then falling a second a second, never later than to be 0 at `manAt` (the men come
+    straight out and are at their posts before the sim has the guns manned). Everything drawn is a pure function of the
+    log, `manAt`, the time and the drill's places, so time compression and `fastForward` give the same men, and a crew
+    sent back to cover halfway back turns where it is.
+  - *Placement* (`render/shelters.js`, once a battle: main calls `shelters.reset(sim)` after the render layers' reset).
+    A new Unterstand goes where the crew reaches it by the shortest walk from its posts round the position's scenery,
+    measured: the scenery's triangles (the position's and the battery's works) rasterized in plan at 0.25 m through a
+    man's height (0.15 to 1.6 m: he ducks under a net's skirt) and, for the dugout only, what lies low on the ground
+    (0.04 to 0.15 m: walks, platforms, tracks); kept clear also of the gun swept through its whole traverse (a
+    turntable: its whole circle; not what stays above 2.4 m, a long barrel overhead), the crew's posts swept with it, the
+    ready rounds, the battery's other guns and the shelters placed before it. Doors on rings round the crew's middle from
+    3 m out, behind the gun first, up to 120 degrees either side and never in front; its door faces the crew; ground that
+    tilts it more than 1.2 m across is refused. Tried in turn: clear of everything and reached round the scenery; then
+    allowed on the low things (a position paved all round); then, for a crew shut in its position (a turntable's pit),
+    at the straight way's cost. It is a child of the position's root (it turns with a relaid bed and is culled with the
+    position), or of the scene for a gun with no position (then in the sub-pixel cull itself). A self-propelled gun has
+    one at each of its positions, the Karl one at each prepared stop, each placed with the rig standing there. With no
+    room at all the men get down in the open behind their gun (no ridge kind comes to that now). Shelters are placed per
+    kind as a battle fields it, so a kind cut from the tree simply never takes one.
+  - *The way* (`render/cover.js`, once a turn of cover per crew): an A* over the same grid and the crew field's steel at
+    the gun's traverse now (0.22 m clear; ends relaxed 0.6 m), string pulled: out through the pit's gate, round the
+    trail. A man on a platform walks across it to its side edge on his own side of the gun and climbs down it (steps
+    down off one under 1.3 m) first. Pace: a run of 3 m/s, a reaction of 0.1 to 0.7 s by the man's number, the doorway
+    taken one man at a time 0.4 s apart (a later man jogs, down to 1.7 m/s, before he sets off later), ducking through
+    it bent double in 0.85 s; a long way is fitted into 9.85 s by a quicker reaction, then runs and climbs at their
+    quickest (3.4 and 1.8 m/s: never faster than the spacing shows a man moving, `crewspace.js` `V_MAX`), then a
+    quicker duck. The pair who carry a shell between them go each his own way (the spacing does not hold them together
+    while they take cover).
+  - *Props.* A shell or a cartridge a man had in his arms is laid on the ground where he stood and comes up into his
+    arms again as he comes back; the rammer's staff is laid down beside his post; the lanyard is let go. The gun's own
+    rounds (on its tray, in a hoist, on a cart) stay.
+  - *Cost.* Each position's scenery is rasterized once in its own frame and stamped into each nearby gun's grid;
+    placing the shelters took 26 to 145 ms at a battle's start in the headless browser, five batteries a battle (42 ms
+    for five 1918 batteries, which have their dugouts; 145 ms for five WW2 batteries of 14 guns that each get an
+    Unterstand); the ways are searched once a turn of cover for each crew drawn; nothing is allocated per frame (the
+    per-frame work is a matrix product and a few legs per man).
+- **The duel** still reads the battery's `fire.focus` and `fire.lock`: the model sets them from the engagement
+  (`fixOf(lock)` is its miss).
+- **Radio**, a line per stage from the battery under fire (`cbSay`, not two within 4 s): ranging "about 400 m short"
+  (to 50 m), closing in (under 200 m), bracketed and fire for effect as alerts, "has lost us", "its aim on us is
+  spoiled" when our shells are on it, and "has stopped its salvos: they take us for knocked out" when it is cut short.
+- **Back from cover** the fire broken off goes on where it stopped (`unit.coverResume`, the rounds each gun had
+  left) if the order is still the same; a new order needs FIRE as usual.
+- **Console** (lean, only with `sim.cbModel`). Each battery tab has a crosshair (amber ranging, red closing, pulsing
+  bracketed, flashing fire for effect; `common.js` `threatTip` on hover), the ring shows D in cover and the tab's state
+  IN COVER or MANNING n s. The DECKUNG key stands at the right of the fire order card's rounds row (`orderCard.js`;
+  TO THE GUNS in cover, MANNING n s, red pulse when bracketed; its hover says the men are spared and near misses do
+  the guns half the damage), key U (Unterstand) does the same. The status slip, after the Sperrfeuer call, a silenced
+  battery and a toast: IN COVER, MANNING THE GUNS, or RANGED ON with the battery and its last miss (red when
+  bracketed). main's `cbStage` handler gives a `hud.hint` on bracketed and fire for effect (one every 6 s, none for a
+  battery in cover, no bracketed hint within 60 s of that battery's fire for effect), worded to send the player to the
+  battery (its number key) and to U; in the first battles the coach says it instead while its cover step is open
+  (`coach.speaksFor`, "First run").
+- **Counts** (`enemyAI.cbStats`, the tests'): `engagements`, `ffes`, `lost`, `spoiled`, `shifts`, `cut`, `toFfe` and
+  `toFfeClean` (from the first ranging round, `e.r0`, to the first fire for effect, with and without our shells on the
+  battery), `firstRound`, `firstFall`, `firstFfe`.
+
+**Tests.** Identity: `node tools/simtest.mjs 1 2 3 --both --quiet`, `node tools/ww1test.mjs 1 2 3 4 --quiet` and
+`node tools/ww2test.mjs 1 2 --op all --quiet` give the same output as before (the timing column aside);
+`tools/leveltest.mjs` and `tools/cbtest.mjs` run the ranging model by default (`--cb old` for the old fire), so their
+older numbers are not comparable. `node tools/cbtest.mjs [--levels 1,3,5] [--seeds 12] [--jobs N] [--cb ranging|old]
+[--policy auto|none|cover] [--lineup kind:guns,...] [--quiet x]`: each level's reference lineup (or `--lineup`, no
+upgrades), every crew on auto; `--policy auto` (the default) the crews' own cover, `none` never, `cover` the
+prototype's scripted rule with the crews' own off (cover when bracketed or under fire for effect, out when lost or
+40 s after the fire for effect). It prints the counter-battery rounds and where they fell; guns and men lost,
+engagements, fires for effect, shifts, fires cut short and covers taken; and when the fire opens, the first ranging
+round, its fall and the first fire for effect (median and range, minutes), the games with one, the defeats by their
+title. Measured on 2026-11-26 before the levels' tuning passes and the stall fixes (12 seeds, reference lineups, all auto;
+after both, the crews' own cover: guns lost 0, 0, 0, 0, 0, 0, 0.8, 4.0, 5.1, 6.8 a game on levels 1 to 10, won 12, 12,
+12, 12, 10, 6, 7, 3, 5, 1 of 12; the losses on 5 to 10 almost all the X-Zeit assault):
+
+| Level | guns lost (auto) | men down | engagements | fires for effect | first round to FFE | none: guns, men | cover: guns, men | won: auto / none / cover |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.0 of 1 | 0.0 | 1.0 | 1.0 | 1.4 min | 0.0, 0.1 | 0.0, 0.0 | 12 / 12 / 12 |
+| 2 | 0.0 of 2 | 0.1 | 2.9 | 2.7 | 1.4 min | 0.0, 0.2 | 0.0, 0.0 | 12 / 12 / 10 |
+| 3 | 0.0 of 6 | 0.0 | 2.3 | 2.3 | 1.3 min | 0.0, 0.6 | 0.0, 0.0 | 11 / 12 / 12 |
+| 4 | 0.0 of 7 | 0.5 | 4.3 | 4.2 | 1.5 min | 0.0, 2.4 | 0.0, 0.3 | 12 / 11 / 12 |
+| 5 | 0.0 of 12 | 0.7 | 7.2 | 6.7 | 1.5 min | 0.6, 7.3 | 0.0, 0.4 | 11 / 10 / 11 |
+| 6 | 0.3 of 13 | 1.8 | 7.8 | 8.1 | 1.5 min | 0.7, 7.3 | 0.0, 0.8 | 11 / 9 / 9 |
+| 7 | 1.3 of 15 | 3.8 | 10.5 | 11.2 | 1.3 min | 3.9, 17.3 | 0.1, 2.1 | 7 / 8 / 6 |
+| 8 | 4.3 of 13 | 5.1 | 13.8 | 15.3 | 1.5 min | 6.7, 17.0 | 1.4, 3.3 | 8 / 5 / 6 |
+| 9 | 6.3 of 13 | 7.2 | 17.3 | 19.6 | 1.1 min | 7.8, 18.2 | 4.5, 3.1 | 5 / 2 / 7 |
+| 10 | 7.2 of 15 | 7.3 | 22.6 | 23.4 | 1.1 min | 8.8, 20.0 | 6.3, 5.1 | 4 / 1 / 4 |
+
+- **Reading it.** Level 1 is a scare that costs nothing (one engagement, one light fire for effect, no gun or man lost
+  with or without cover); the cost climbs from level 4 (men) and 6 (guns); from 7 a battery that does not take cover
+  loses guns and many men. The step from 7 to 8 (the 18-inch, the 15-inch in more engagements, a lineup of lighter
+  field howitzers) is the steepest. The prototype's scripted cover does better than the crews' own, which is
+  imperfect on purpose (1.4 guns lost at level 8 against 4.3).
+- **The opening** (auto, minutes, median): level 1 first round 1.0, first fall 1.4, first fire for effect 2.3, in 12
+  games of 12; level 10: 0.3, 1.0, 1.8.
+- **The old fire** (`--cb old`, auto): guns lost 0, 0, 0, 0, 1.9, 4.4, 5.6, 6.6, 6.3, 7.1; men 0, 0, 0.2, 0.7, 11.3,
+  15.8, 19.3, 18.7, 18.1, 17.2; no fire at all on levels 1 and 2.
+- **Before** (the prototype, 2026-11-25, 12 seeds): level 5 ranging 4.6 guns lost of 12 against 3.9 with the old fire,
+  in 8 fires for effect; with cover taken at the bracket 2.8 guns and 2 men against 14.
+
+**Not done:** the gunner's own gun in a battery in cover still serves on; a battery that shifts keeps its target at
+its site (only the fix moves); threat.js `cb`, `dmg` and `sig` still matter (`dmg` scales every hit, `sig` the
+loudness rule) and are the levels' tuning pass's.
 
 ## Test range
 
@@ -1136,10 +1611,12 @@ Every step has an optional `demo(T)` that performs its goal with the same comman
 unattended; it is how the lessons are tested (every lesson must complete under autoplay).
 
 **Basic training** (`WW1_TUTORIALS` in `src/ww1/tutorial.js`, id `training`, `/?mode=ww1&tutorial=training`): the
-German career's first lesson, on the career's own ridge, offered to a new player (`src/ui/invite.js`: every menu
-load, and the career battle opened straight from a link, until the lesson is finished or Stop reminding me is clicked,
-which stores `'never'` in localStorage `drumfire.invite`; Not now and Start ask again next load; never under
-`navigator.webdriver`). The Gruppe lends a battery above a new career's: the ridge's WW2 21 cm Mörser 18 pair "Julius"
+German career's first lesson and the game's designed first impression (late-war guns in a new player's hands), on
+the career's own ridge, offered to a new player (`src/ui/invite.js`: every menu load, and the career battle opened
+from outside the game, main.js `fromOutside`: `document.referrer` not this origin, never when the game opened the page
+itself (the menu has asked already; the summary's Next), until the lesson is finished or Stop reminding me is
+clicked, which stores `'never'` in localStorage `drumfire.invite`; Not now and Start ask again next load; never under
+`navigator.webdriver`). A player who skips it gets the first battle's coach ("First run"). The Gruppe lends a battery above a new career's: the ridge's WW2 21 cm Mörser 18 pair "Julius"
 (ops.js `RIDGE_WW2`, unit 11) with every upgrade, so the career's first battle with its one K 17 feels the difference.
 Steps: the view, the console a section at a time (the battery: its tab, the slip that says why it cannot fire, that it
 waits for orders and S for the Sperrfeuer; the board, the fire order, the guns, the calls, the messages; since
@@ -1180,6 +1657,88 @@ stop a pointer press, click or wheel that lands in the dark (outside every hole,
 hole reaches the control; keys work everywhere. The card and the hints stand above it (`body.spotlit`); a list that finds
 no visible element darkens nothing; `[]` darkens all but the card (the welcome and the finished card). A spotlit lesson
 draws no `.tut-hi` pulse: the holes have their own rim. At a gun the card moves to the view's upper right.
+
+## First run (`src/firstrun.js`)
+
+What a new player meets first, and what this browser's player has done since (2026-11-26, the landing work). The
+designed first impression is the basic training, late-war guns in the player's hands, offered by the menu ("Tutorial",
+Basic training); the career's first battle respects the progression: the player's own guns, nothing lent (the user:
+"why would we give them a siege gun right up front? we need to make sure the progression mechanism is well
+respected"). `src/firstrun.js` (plain data and DOM-free logic; the coach reaches the game only through main's host)
+keeps the first battle's rule, the coach and the funnel.
+
+- **The record.** localStorage `drumfire.firstrun` (`saves.js` mirrors it, Export save carries it): `{ v: 1, at: {
+  first_battle, first_shot, first_hit, first_mission, first_win, second_battle }, coach: { started, take, fire,
+  follow, correct, effect, cover, back, end } }`, the times in ms since 1970. Exports: `has`, `mark`, `milestone(flag,
+  tele)`, `firstWin`, `isFirstBattle`, `Coach`.
+- **The first battle** (`isFirstBattle(career, q)`, main.js `FIRST`): the career's ridge battle page with `?play`, no
+  battle fought yet (`career.battles.de` 0), at level 1 (a link without `?level` is level 1), never in dev mode. It is
+  fought with the career's own lineup (a new career's FK 16 and sFH 13, two guns each, since 2026-11-26; the
+  Ringkanone C/92 before). Its guns stand loaded: after `newGame`
+  main loads every idle piece of the fielded units (`p.loaded`, state 'ready', one HE from the stock), so the first
+  shot comes as soon as a mission is taken and the gun laid, never after a loading cycle; level 1 also deals only a
+  quick main (threat.js `quick`). The briefing (the loading screen, the menu's level card) is dealt from
+  `lineupLevels('de')`, as the battle is.
+- **The lent gun, taken out.** On the same day a 38 cm Langer Max was lent at its best beside the C/92 for the first
+  battle (`LENT`, `lentKind`, `LENT_KIND`, `LENT_LEVELS`, `battleLevels`, the battery preloaded, its pay to research
+  only). The user took it out: it showed the top of the tree for free, made the second battle a step down and paid the
+  first battle with its kills. `research.js`'s lent-unit pay rule stays, generic ("Research and upgrades").
+- **The coach** (`Coach`, main.js `coach`): the fallback for a player who skipped the basic training, so it runs only
+  while `LESSONS_KEY` has no finished `training` (main.js: `begin({ first: FIRST && !trained, battles })`). It puts
+  the first battles' hints over the view (`hud.hint`), one line at a time, each until it is done. Every step's `due`
+  and `done` read the battle as it stands (never "since this step opened"), so a player ahead of the coach finds the
+  steps done and never sees them; what is done is kept in the record, so a reload does not teach it twice. Polled
+  twice a second from main's frame, from 4.5 s after the start (the opening toasts first), paused while not playing,
+  at a gun (P) or left; it waits for another hint to clear (a new mission's, the shell ride's), renewing its own while
+  it stands, and only the cover line (urgent) may take the hint's place, once, when it is new. Started on the first
+  battle (`coach.started`), it carries the steps still open into the next two (`battles <= 2` at the start: a bracket
+  may not come in the first); a career begun before it existed never sees it, nor dev mode, nor a player who has
+  finished the training. The steps, in precedence order (danger first):
+  1. `cover`: a fielded battery bracketed or under fire for effect, out of cover: "Deckung! The British have X's
+     range. U takes its crew into cover until their fire passes." ("Select X (k), then" when it is not selected).
+     Done on any cover taken. While it is open it stands in for main's bracket hint (`speaksFor`).
+  2. `back`: in cover 20 s (sim) with no fire for effect falling: "X: their salvo has passed, and the guns are
+     silent. U sends the crew back to the guns." Done on leaving cover.
+  3. `take`: an open mission and none taken: "Take a fire mission: click a target on the map board, or Tab then Enter
+     on a call in the list." Done when a fielded battery has a mission or has fired.
+  4. `fire`: a battery with a live mission: loading "X's crew loads and lays the gun on the target. Wait for READY (]
+     speeds time).", ready "Space fires. X is laid on the target." Done on the first round fired.
+  5. `follow` (optional): a round of ours in the air: "F rides the shell to the target, if you like (F again: back to
+     the guns; ] speeds time)." Done when F is pressed or the first round lands.
+  6. `correct`: the newest report on a live mission has a correction: "The observer reports where it fell (on the
+     message pad). Press . (full stop) to apply his correction, then Space fires again." Done when the aim has moved
+     since such a report came (the aim at the poll before it, so a quick `.` counts); a first round on target leaves
+     it open for a later battle.
+  7. `effect`: the newest report on target: "On target ("Ziel!"). Keep firing (Space) until it is destroyed: R fires
+     more rounds a gun." Done when more rounds a gun are set, two more rounds have gone, or that mission is over.
+  8. `end`: the mission accomplished: "Mission accomplished: K (End the battle) ends it and pays. Or finish what you
+     will first." (the X-Zeit wording when it is dealt). Done when the battle ends accomplished.
+  No Sperrfeuer step: level 1 has no attack.
+- **The invite** to the basic training is the user's original rule ("Tutorial", Basic training): every menu load
+  until the lesson is finished or Stop reminding me is clicked, and a career battle page opened from outside the game.
+- **The end card** (main.js `showBattleSummary`, the career battle's summary page, `ui/summary.js`). A level won below
+  10: the primary button "Next: level N+1 · <name>", its second line the English name and "first win +X RP"
+  (`career.firstWinBonus`), its hover the level's `sub`; it opens that level's battle page at once (`menuItems.js`
+  `hrefOf` with a new seed and `rollModifiers(n, seed)`, as the menu's To battle builds it, the page's settings
+  passed on) and writes the menu's memo level (`drumfire.menu` `level`, merged) so the menu's level card follows when
+  the player comes back. A defeat: "Try again" (this page, a new mission). Level 10 won, or the battle left: Main menu
+  as the primary, Fight again beside it after a level 10 win. Research and Main menu stay as secondary buttons.
+  summary.js actions take `sub` (a second, smaller line, `.sm-btn small`) and `title`; the RP rows add "First win of
+  level N" (`rp.first`, in the total), and a note says when the overmatch cut applied (`cut`).
+- **The funnel** (`milestone(flag, tele)`: marked once per browser whether reports run or not, its count
+  `funnel.<flag>` sent only where they run, at the moment it happens; "Crash and lag reports"): `first_battle` (the
+  first battle's start, the funnel's top), `first_shot` (with `funnel.to_first_shot`, ms from opening the page),
+  `first_hit` (a round of ours bursting within `HIT_NEAR`, 100 m, of the target of the mission it was fired on),
+  `first_mission` (a mission done that a fielded battery fired on), `first_win`, `second_battle` (a career battle
+  started after the first battle's own start: a Try again, or any later page); and `battle.end` for each career
+  battle that ends. Career battles only, never attract or scripted; only the player's fielded batteries count.
+- **Checked** headless on 2026-11-26 with the lent Max, since taken out (history): the shared link went straight into
+  the first battle with the coach's first line up, the summary's Next led to level 2 with the first win's 250 RP, and
+  a coach probe showed every step in order. With the C/92 alone the British bracket came at 3.5 to 3.7 min and the
+  cover and back lines showed. Checked again after the ramp guns' cut (2026-11-26): a new career's first battle loads
+  the sFH 13 and the FK 16, two guns each and standing loaded, a dump or battery main and the Hellfire Corner hold, no
+  page errors; all auto with the guns loaded (72 seeds, a throwaway probe) it is won 72 times, the main done at a median
+  3.0 min (mean 3.2, worst 7.6), the hold at 1.7 min, the FK 16 firing 41 rounds to the sFH 13's 16.
 
 ## Dicke Bertha mode (demo)
 
@@ -2874,3 +3433,32 @@ tools/simtest.mjs` and `node tools/ww2test.mjs` to confirm the other modes are u
 - (reports: crash and lag reports to Sentry, 2026-11-25) At the user's request ("sentry could fire when a lag spike is detected and say what caused it"; the browser version is the one to grow, so players' machines matter): Module contracts, "Crash and lag reports". New `src/reports.js`, `src/telemetry.js`, `src/perfcause.js` (`analyse` and `describe` moved out of `tools/perfreport.mjs`, its report unchanged); `perfrec.js` takes `post` and `onLine`, keeps `hist` and has `drain()`; `gpu.js` exports `gpuInfo`; main makes the recorder in the build when reports run; the switch in the menu footer and the gear menu; `vite.config.js` names the release and uploads source maps with a token. Runtime dependency `@sentry/browser` (about 36 kB gzipped, its own chunk, loaded beside the page); dev dependency `@sentry/bundler-plugins`.
 - (render: the gunner's eye on the lifelike crewman, 2026-11-25) Ported from the Godot game's `CrewFigure.Eye`: with crew2 on, the first-person eye is the head's joint as the animator posed the man this frame, 0.063 m ahead and 0.075 m above (`render/crew2/index.js` `Man2.eye`, called by `render/crews.js` `GunCrew.eye`; the old figure's neck rule without crew2); the man at the player's post is posed in full every frame, in view or not. Measured on the range over an sFH 13 cycle: the eye 5 to 7 cm from the old one, no frame read before its pose, the view's motion above about 3 Hz 3.2 mm RMS against 2.3 with the old figure (no extra damping). Fixed on the way: `GunCrew.makeField` put the rig back at its place before `gripPost` read the grips' world matrices as root space, so a layer at a named handwheel had the wheel's map position for his home and walked kilometres off whenever he laid (since 2026-11-14), the gunner's view at the layer's post with him; the rig now stays at rest through the men's places.
 - (menu: the lifelike crewmen on parade, 2026-11-25) As the Godot game's hangar (its commit 96d3948): the hangar's German dress is worn by the lifelike crewmen (Module contracts, "Lifelike crewmen (crew2)", "The hangar's parade"). New `render/crew2/files.js` (`Crew2Files`, `OUTFITS`, `standsInZero`: the loading `index.js` had, shared, without `shaderlib.js`; `index.js` `_load` now goes through it with `patch` for the fog, nothing else changed in battle) and `render/crew2/parade.js` (`ParadeCrew2`, `ParadeMen`). `ui/hangar.js`: `men(list, c2)`, a `draw()` for every frame (the men's lods, the shadow's stand-ins), `shadowMap.autoUpdate` false with `needsUpdate` from `light()` and the cover's toggle in `look()`, `bestView` rays through the stand-ins (`userData.ray`, `noRay`), `CREW2` (`?crew2=0`), the parade's `men2` (`park.men2.stats`).
+- (sim: ranging counter-battery, a prototype behind `?cb=ranging`, 2026-11-25) At the user's request (past the easy levels, staying alive under the British counter-battery fire should be half the game): "Ranging counter-battery (prototype, `?cb=ranging`)" above. `sim.newGame({ cbModel })` and `sim.cbModel`; the command `cover`, `unit.cover`, `unit.manAt`, `guns.js` `setCover` and `COVER`, two reasons in `problem()`; `src/ww1/enemy.js` `RANGING`, `rangingUpdate`, `threatOn`, `britName`, the events `cbStage` and `cover`, `target.rangers`; `src/ww1/director.js` `rangersUpdate`, `rangersMission`, `rangersFix` (and no `watchBatteries` calls, nor a lull held by a rangers' mission nobody took, with the flag). Without the flag nothing changes: the British, WW1 and level tests give the same output as before. Departures from the first plan: the Gegenbatterie mission is offered only while the battery has one of ours under its fire (every round it fires still tightens the fix, so a battery that harassed first is placed at its first round on us); a battery the level counts as silenced (half its guns out) engages no more; the stages follow the fall of the rounds, so an engagement is unknown until its first round lands; the bracket stands 0.6 of a gap. Measured on level 5 (12 seeds, all auto): 4.6 guns lost of 12 against 3.9 today, in 8 fires for effect; with cover taken at the bracket 2.8 guns and 2 men against 14.
+- (HUD: the objectives list's wait notes, 2026-11-26) The user saw objectives announced with no fire mission to take ("blow up the HQ to reduce attacks, but no mission"): the director opens them one at a time (`SPACING`, `MAIN_LIVE`, the secondaries after 90 s, `REOPEN`). `ww1/director.js` `objectiveWaits` plays that schedule forward read-only, `goal()` items carry `wait`, `hud.js` shows "mission in m:ss", "queued" or "waits for traffic" (italic, `#ob-list li.waiting`) with the reason on hover. The battle is unchanged (leveltest identical). Planned with the threat levels' retune: drop the staggering, so every objective shown has its mission.
+- (German console: no charge control, 2026-11-26) At the user's request the lean fire order card loses its CHARGE stepper (`orderCard.js`: the rounds stepper alone in its row, `.frow3.lean`, the DECKUNG key of the `?cb=ranging` prototype at the row's right) and Q and E do nothing on the German pages (`console.js` act 'charge'), except the Paris Gun's LADUNG, which its card takes first (`special.route`). The charge stays the crews' (`order.chargeAuto`, set again by every laying and mission). The basic training's fire order text no longer names it.
+- (levels: the difficulty rework, holds and two-step objectives, 2026-11-26) For landing and keeping players (the user lost interest in playing it fairly quickly; a browser session is 11 to 20 minutes, and level 1 took 13 minutes, levels 3 to 10 23 to 34): "Threat levels" (the shape, the bands, the level table) and "Missions" (Holds, Two-step objectives). `threat.js`: new fields `minutes`, `fresh`, `quick` (levels 1 to 3), `hold`, `trace`; `mains` 1, 1, 1, 2, 2, 2, 2, 2, 3, 3 and `sides` 0, 1, 1, 1, 2, 2, 2, 2, 3, 3; `sub`, `lines` and `fits` rewritten. `operation.js`: objective kinds `hold` and `trace` (`title`/`short` get the candidate as a third argument, `why`/`done` may be functions of it), `HOLD_PLACES` (X1, R1, the assembly areas behind sectors A to D), the attacks scheduled from `minutes`. `sim/objectives.js`: a hold's `held`, `lastHit`, `running`; a trace's `step`, `ready`, `openAt`, `fix` and `advance(o)`; `ofTarget` and `openTargets()` skip an objective not `ready`. `ww1/director.js`: the staggering of the objectives' missions removed (`MAIN_LIVE`, `SPACING`, the secondaries' 90 s and `objAt`: every open objective has its mission at once; `objectiveWaits` no longer says 'queued'), `holdUpdate` (`HOLD_CUT` 600 s), `traceUpdate` (`TRACE.loose` 300 s), `t.mustEngage` set at `reset` on every trace battery, the crews' `ai.skip` cleared for holds and mains, `lv.calledAt`; a duel is no longer offered on a battery an open objective already has (it made a new Gegenbatterie mission every step, re-tagged to the main: 68 open missions on F2 in 3 s on level 3, seed 1). `hud.js`: the hold's and the trace's notes; `style.css` `#ob-list li.holding` and `.paused`; `board.js` draws a hold's radius as a dashed ochre ring with its clock as an arc. `tools/leveltest.mjs`: `--cb`, the `human` length proxy (mean and median beside `minutes`), the mains done's median, holds and traces done. Measured (72 seeds, all auto, reference lineups, after the second tuning pass and the stall fixes): 100, 100, 100, 100, 72, 56, 56, 43, 36, 28 % won, human proxy medians 5.6, 4.2, 7.3, 9.4, 15.8, 16.4, 18.3, 18.4, 20.9, 20.9 min. Unchanged: simtest and ww1test without a level.
+- (sim: the ranging counter-battery the levels' default, the crews' own cover, 2026-11-26) The prototype of 2026-11-25 becomes the British fire on every level battle ("Ranging counter-battery"; `?cb=old` and `cbModel: 'old'` give the old fire). `src/ww1/enemy.js` `RANGING`: per level `from` (in place of `heavies` for this fire), `batteries`, `perUnit`, `open` and `every` (the opening's sure engagement on our busiest battery, `busy`, `fly`, the lightest kind's fallback), `gapK` and `wait`, `rounds` (in place of `corr`), `salvos`, `share`, `sigma`, `shift` (levels 9 and 10), `must` (`t.mustEngage`, `mustUpdate`), `rangers.err`, `k`, `min` per level; the fire for effect cut short on a battery gone silent, the check round after `rest`, `dangerOn(u, ffeOnly)`, `cbStats` `shifts`, `cut`, `firstRound`, `firstFall`, `firstFfe` (and `toFfe` from the first ranging round). `sim/guns.js` `COVER.gun` 0.5 (a near miss on a gun in cover does half its damage; the DECKUNG key's hover, `orderCard.js`, says so); `sim/crews.js` passes over a unit in cover or running back; `ww1/crews.js` `CREW_COVER` and `coverUpdate` (the crews on auto take cover by their own, imperfect rule; `sim.crews.cover = false` off); `sim.js` `newGame({ cbModel })` defaults to 'ranging' on a level battle. `tools/cbtest.mjs`: `--cb old|ranging` (default the levels'), `--policy auto|none|cover` (auto the crews' own, the default), `--lineup`, `--levels` default 1 to 10, the opening's table. Identity: simtest, ww1test and ww2test as before (the timing column aside); leveltest and cbtest numbers change with the default. Measured (12 seeds, before the levels' tuning pass): level 1 a scare that costs nothing (the first fire for effect at about 2.3 min), guns lost of the lineup's from level 6, 7.2 of 15 at level 10 with the crews' own cover against 8.8 without.
+- (career: first wins, the overmatch cut, the top part gate, lent batteries, 2026-11-26) The climb's pay ("Research and upgrades", docs/PROGRESSION.md): `research.js` `firstWinRP(n)` (a level's victory paid again, once: 250 to 1,000 RP), `OVERMATCH` and `overmatchCut` (×0.75 three levels under the lineup's rating, ×0.5 four or more), `TOP_PART_WIN` 6 (the third level of every part opens with a win at level 6 or higher), `lentKey` and `battleReward(sim, { won, cut })` (the cut on the level's pay; a lent battery's credit under `lent:<kind>`: research points, no battery points). `progression.js`: the save's `wins` (backward compatible, cleared by `reset`), `wonLevel`, `levelWins`, `firstWinBonus`, `overmatch`, `rating` (`Progression.rater`, capability.js `recommendedLevel`, loaded late so the loading screen never waits), `partGate`, `topPartsOpen`. `ui/menu.js`: the level card opens on the lineup's rating until a level is picked, ticks the levels won, shows "New <fresh>", Length, the first win's bonus and the cut; the modifications row says WIN A LEVEL 6 BATTLE on a gated part. Measured: a level 1 win pays 450 to 520 RP before the bonus; on the default research targets, winning levels 1 to 4 once and then level 4 again, 14 batteries in 10 battles with the bonus (12 without; two after the first four-minute battle). `node tools/progressiontest.mjs` extended and passing; ww1test identical.
+- (first run: the lent Langer Max, the coach, the invite after the first win, the end card's Next, the funnel, 2026-11-26) For players landing from a link ("First run"): new `src/firstrun.js` (the record `drumfire.firstrun`, the first battle's rule, `battleLevels`, the `Coach`, `milestone`). `main.js`: `FIRST`, `LENT` (the Langer Max lent at its best for a new career's first battle at level 1, after the lineup's keys, the page opening on it, loaded at the start so its first shot comes about 25 s in instead of 74 s, its pay to research only via `owed()`), `CB_MODEL` (the raw `?cb=` passed through), `sim.payCut` and `payK`, `career.wonLevel` before `payOut`, the coach's host and its stand-in for the bracket hint (`speaksFor`), the funnel's milestones and `battle.end`, the summary's Next, Try again and Main menu, and the training invite on a battle page only when it was opened from outside the game (`fromOutside`). `ui/invite.js`: shown only after the first win (`firstWin()`), kicker "Learn the whole drill". `ui/summary.js` and `summary.css`: actions with `sub` and `title`, the first win's row, the cut's note. `ui/loading.js` and the menu's level card deal the briefing's mission from `battleLevels`, so it matches the battle with the lent gun. `telemetry.js`: `count` and `distribution` for the game's events. Checked headless with a fresh profile: the shared link straight into the first battle, Victory at about 3 min, the summary's Next to level 2 with the first win's 250 RP, no battery points for the lent gun.
+- (levels: the battles that never ended, the safety net, 2026-11-26) A chain of bugs let a level battle stall for ever (level 2 seed 35: 7 battles in 720 never ended): a shrapnel round left in the breech from a Sperrfeuer burst over the target at its time and read "on target" with the gun 330 m over; fire for effect is never observed; old reports read as new when a crew took a mission up again, and corrections from reports of earlier lays were applied again (the aim ran 900 m off); the observer stopped reading rounds laid more than 400 m from the mission's point; a main naming two targets was judged on its first only; and a rangers' mission adopted by a main has no deadline, so nothing ever failed. Fixed, all gated on `sim.level` (simtest, ww2test and ww1test identical to before): `sim/observers.js` `fallPoint` for airbursts and the `near` rule, `fired` and `aim` on the reports (also `ww2/observers.js`; `sim.js` passes `air` to `onBurst`); `ww1/crews.js` the level crews' `pick`, `await` (`since`), `effectUpdate` and `handOver`; `sim/objectives.js` every target of a main counts (`left`, `out`, `o.gone`) and a handed-on objective is paid for our share; `ww1/director.js` one mission per target, the VB by night for the objectives' missions, and the safety net (`STALL`, `stallUpdate`, `handOn`, `neighbourFire`, `nbrUpdate`, the Nachbargruppe's radio line; "Missions", "Threat levels" "Reading the fall on a level"). `tools/leveltest.mjs` stages every pad and prints the safety net; its `--cb old` now reaches the sim; cbtest stages every pad too. `threat.js` level 2 `work` back to 1.3 (one target: with every target counting, two made level 2 about 13 min against its 7). Measured (leveltest 1 to 72, all levels, all auto): no battle unfinished (7 of 720 before), the safety net in 4 of 720 (a deep strike by night, a map shoot by design; three two-step mains' dumps for a leFH 18 near its longest range); the won rates rose on the higher levels (the crews now hit). The final numbers, after a second tuning pass on levels 5 to 10 (`zero` up on 6, 8, 9 and 10; level 8's hold 270 s): 100, 100, 100, 100, 72, 56, 56, 43, 36, 28 % won.
+- (first run: the loan taken out, the training invite restored, 2026-11-26) A design reversal the same day, at the user's word: "why would we give them a siege gun right up front? we need to make sure the progression mechanism is well respected" and "my designed good first impression is the tutorial where you get to use late game impressive guns". The career's first battle lends nothing ("First run"): main.js `LENT` and `firstrun.js` `lentKind`, `LENT_KIND`, `LENT_LEVELS` and `battleLevels` are gone (`isFirstBattle` stays, with a comment on why the loan was taken out); the first battle is level 1 with the career's own lineup, its guns standing loaded (main.js `FIRST`: every idle piece of the fielded units loaded and 'ready', one HE taken), so the first shot comes as soon as a mission is taken and laid. `ui/loading.js` and the menu's level card brief from `lineupLevels('de')` again. `ui/invite.js` is back to its committed version (every menu load until the lesson is finished or Stop reminding me, no first-win condition, the old wording); main.js keeps the invite on a career battle page opened from outside the game (`fromOutside()`), not when the game opened the page itself. The coach runs only for a player who has not finished the basic training (main.js reads `LESSONS_KEY` 'training'): the fallback for those who skip it. `research.js`'s lent-unit pay rule (`u.lent`, `lent:<kind>`) stays as a generic rule; no battle lends one today.
+- (sim: the counter-battery fire answers ours, 2026-11-26) The user started a new career and took 18-pounder fire before
+  firing a round: the opening engaged our busiest battery "loud or not", from the map while none had fired. Now nothing of
+  theirs fires on our guns before our first round (`ww1/enemy.js` `firstShotAt`, `RANGING.after`: the opening and the
+  flagged batteries `after` s past it at the soonest, the existing `open` draw placed in that range, no draw more). Level 1:
+  no round at our gun in 4 minutes without firing; with our first round at about 71 s, theirs at 103 to 116 s. ww1test
+  without a level unchanged.
+- (missions: the mission named for what it deals, 2026-11-26) The user's level 1 battle was named "Tankabwehr (Their tanks)"
+  and dealt only an 18-pounder battery: an archetype was dealt when any of its main kinds fitted (`operation.js`), and
+  level 1 has no laagers. Now an archetype is dealt when its defining main kind (its first) fits, the old rule only as a
+  fallback; and when the hold and the two-step main fill every main, the mission is named for them (a battery to find:
+  Gegenbatterie; a road or the railhead held: Nachschub; an assembly area: Führung), its secondaries following. Over 300
+  seeds a level, every mission now deals at least one main of its name's kind (before: 159 on level 3, 148 on level 7,
+  all 300 on level 8 did not). Level 1 now deals Gegenbatterie only, level 8 Gegenbatterie only (its two-step main first).
+  Measured with the counter-battery waiting for our first round as well (72 seeds, all auto): 100, 100, 100, 100, 72, 57,
+  56, 40, 38, 25 % won, human proxy medians 5.1, 4.5, 7.2, 9.4, 15.8, 16.3, 19.8, 18.5, 20.9, 21.5 min, none unfinished,
+  the safety net in 9 of 720 (the table in "Threat levels" is the run before, within a point or two).
+- (career: the starting C/92 with two guns of four, 2026-11-26) The user found level 1 slow and repetitive with one C/92 gun: "one shot at a time was repetitive", "1 ww1 gun firing doesn't seem to do much". The C/92's battery has four pits (`ww1/ops.js`, the first two where they stood), a career starts with two guns (`progression.js` `START_GUNS`, `startGuns()`: a save with fewer is brought up to them, on load and on Reset), so two stay to earn (240 and 360 battery points). `capability.js` REFERENCE: level 1 the C/92 with two guns, level 2 three, level 3 three and the FK 16 battery; the `fits` lines follow. Measured before (level 1, 24 seeds, crews on auto): one gun 5.1 min median to the main done (worst 10.6), two guns 4.6 (worst 7.3); an FK 16 gun beside the one C/92 made it slower (6.4: its 7.7 cm shell kills within about 12 m, too little for gun pits).
+- (career: the ramp guns cut, the FK 16 and the sFH 13 to start, 2026-11-26) The user: "cut the ramp guns. record it that if we want to bring them back what commit has them." **Restore point: commit 1dd259b** ("Send crash and lag reports to Sentry", 2026-11-25), where the three ramp guns without a recoil system are whole and in play: the 15 cm Ringkanone C/92 (`rk92`, ridge unit 28 "Richard", the career's starter since 2026-11-01), the 15 cm sFH 93 (`sfh93`, unit 29 "Siegfried") and the 21 cm Mörser 99 (`m99`, unit 16 "Paula"); they came in with commit 8937c91 (2026-11-01). Out of the game: their `TREES.de` nodes (the field line is now FK 16 -> sFH 13 -> leFH 18, the long guns start at the K 17, 350 RP, the mortars at the Mörser 16, 900 RP, rank II), their `RIDGE_MORE` units and pad sizes (`ww1/ops.js`), `campaign-data.js` `BATTERIES` rows, `research.js` `DETACHMENT`, `capability.js` `BARRAGE`, `ww1/director.js` `FEUERWALZE` and `GUNS_SHRAPNEL`, `ww1/crews.js` (`HEAVY`, `LONG`, `FIELD`, the balloon's and the columns' suits, the dumps and tanks), `ww1/ui.js` console rows and short names, `ww2/gunner.js` `MANNABLE`, the menu's stills (`menuItems.js` `STILLS`, `public/menu/{rk92,sfh93,m99}.jpg` deleted) and the hangar's fallback, the tools (`menushots`, `gunnertest`, `cbtest`'s example, the crewaudit list in CLAUDE.md and docs/DEVELOPMENT.md). Dormant, kept in the tree unreachable (each with a note at its top or beside it; a later cleanup can delete them): the models `models/v/de/{rk92,sfh93,m99}.js`, the drills `render/ramp_drill.js` and `render/ww1/{rk92,sfh93,m99}.js`, their `GUNS`/`SHELLS`/`FFE` rows in `tables_ww1.js` (with `runback` and the 'relay' step; `guns.js` and `capability.js` still read `runback`), and the per-kind lookups that only draw or sound a gun (`models/guns.js` registry, `models/shells.js`, `models/v/de/gun_sites_ww1.js` pits, `render/guns.js`, `ww1/render.js` `PITS`, `ww2/gunnerView.js` posts, `ww2/voices.js`, `audio.js` `KIND_CAL`, main.js's view and net tables) and the dev viewers. The user's next word (through the lead): a career starts with **both the FK 16 and the sFH 13, two guns of four each**: `research.js` `START_KINDS = { '1917': ['bl6'], de: ['fk16', 'sfh13'] }` and `isStartKind`, both nodes cost 0; `Progression.isStart` follows the list (it was "a root with cost 0"), and with it `owns`, the lineup picked for you (sFH 13, FK 16), the hangar and the Research screen; `START_GUNS = { fk16: 2, sfh13: 2 }` moved to research.js (progression.js re-exports it). Rank I is now the two starters and the K 17; `RANK_GATE.de[2]` stays 3, so rank II opens with the K 17 (the default target, 350 RP: a level 1 win with its first-win bonus pays about 950, so the first battle researches it and opens a rank); 2 would have opened rank II from the start. Saves (`progression.js`, mark `START` 3): `REMOVED` gives back the RP put into the sFH 93 (350) and the Mörser 99 (600); `NOW_FREE` the RP a save marked below 3 put into the FK 16 (300) and the sFH 13 (450); `CUT` sends a cut battery's battery points and what its upgrades cost to its heir (sFH 93 and C/92 to the sFH 13, Mörser 99 to the Mörser 16), the C/92's guns and parts to the sFH 13 themselves (the higher of the two per part, the lower's cost as points) with its lineup slot (a lineup left empty fields the sFH 13); a starter's guns bought before `START_GUNS` come back as points; the K 17 careers (`OLD_START`) keep their K 17. Threat levels: `capability.js` `REFERENCE` level 1 FK 16 and sFH 13 two guns each, level 2 the same and a K 17, level 3 the same, a K 17 and a K 16 (what the first battles buy: about 700 RP and 80 to 100 battery points a battery a battle, so a third gun, 240, waits; the lead's richer suggestion, three guns each at 2 and four each and a K 17 at 3, measured too); `threat.js` `fits` follow; level 1 gets a short secondary hold for the FK 16, `hold: { need: 60, r: 220, g: 45, k: 1, main: 0, side: true, at: ['X1'] }` (Hellfire Corner, 5.3 km from its pits), `sides` 1, its `sub` and `lines`; `operation.js` deals a level's `hold.at` places first. Measured (72 seeds, all auto): levels 1 to 3 won 72, 72, 72, the human proxy's median 3.0, 4.0, 5.7 min (mean 3.3, 6.5, 6.2; targets 4, 7, 9), level 1's hold done in all 72; the first battle (level 1, the new career's lineup, guns standing loaded) the main at a median 3.0 min, the hold at 1.7. `tools/progressiontest.mjs` rewritten for the starters, the tree and the migration (C/92, sFH 93, Mörser 99, the starters' RP and guns, once only); ww1test, simtest and ww2test unchanged but for timing.
+- (career: the tree cut to 20 batteries, the Gamma merged into Bertha, 2026-11-26) After a review of every battery against the new start (each should be a step up in something the open battle asks for), the user: "ok lets do what you suggest. like the roller guns recording it so if we want them back we know where to look". **Restore point: commit 1dd259b** (2026-11-25), where every battery below is in the tree and in play. Out of `research.js` `TREES.de` (each listed in `OUT_OF_TREE` with its cost, weight, line and heir): the **schweres Wurfgerät 40** (`swg40`: its 1.9 km reached nothing but the forward posts made for it; ridge unit 27, `RIDGE_MORE`; the posts P3 and P4, `RIDGE_FORWARD` and `FORWARD_KINDS` in ww1/ops.js and ww1Theatre; `models/v/de/swg40.js`, `render/de/swg40.js`, its `tables_ww2.js` rows, the rocket kits and voices it shared), the **35.5 cm H M1** (`hm1`: a ±30 degree arc that missed most targets from its pit; unit 20; `models/v/de/hm1.js`, `render/de/hm1.js`), the **21 cm K 12** (`k12`: the slowest gun on the map to effect; unit 23 and its lead-track pad; `models/v/de/k12.js`, `render/de/k12.js`, `railway_kit.js`, `rail_drill_de.js`), the **28 cm Kurze Bruno** (`bruno`: a step back from the Langer Max in every figure; unit 21 and its lead-track pad; `models/v/de/bruno.js`, `render/de/bruno.js`, the same rail kits), the **28 cm K5** (`k5`: a Langer Max with a third of the shell; unit 22 and its approach-spur pad; `models/v/de/k5.js`, `render/de/k5.js`) and the **10.5 cm Wespe** (`wespe`: the leFH 18's shell after the sFH 18; unit 24; `models/v/de/wespe.js`, `render/de/wespe.js`, `sp_kit.js` still the Hummel's); out of their per-kind sets (`ww1/crews.js` SUPER, HEAVY, RAIL, ROCKETS, TRAFFIC, SOFT_ONLY, FIELD and the suits, `ww1/director.js` FEUERWALZE and GUNS_SHRAPNEL, `ww1/ops.js` SUPER_WW1 and the pad sizes, `capability.js` BARRAGE, `ww2/gunner.js` MANNABLE and DRIVEN, `ui/consoles/common.js` KINDS and KIND_SHORT, `campaign-data.js` BATTERIES, `research.js` DETACHMENT, `menuItems.js` STILLS with `public/menu/{swg40,hm1,k12,bruno,k5,wespe}.jpg` deleted, `tools/menushots.mjs`, `tools/gunnertest.mjs`, the crewaudit list); their GUNS, SHELLS and FFE rows, models and drills dormant in the tree (a note at the top of each file and beside each table row), with the lookups that only draw or sound a gun (`models/guns.js`, `models/shells.js`, `render/guns.js`, `ui/hangar.js`, `ww2/render.js`, `ww2/gunnerView.js`, `ww2/voices.js`, `audio.js`, main.js's tables, the dev viewers). Out of the tree only, their own missions exactly as they were: the **Paris Gun** (`paris`, op `paris` in ww1/ops.js, `ww1/paris.js`, its models and console) and the **V-1** (`v1`, op `v1` in ww2/ops.js, `ww2/special.js`, `launch.js`); both stay off-map weapons (`isOffmap` reads `OUT_OF_TREE`) and keep their first-win bonuses (`specialBonus`, `missionBonus` read their old costs, 2,000 and 1,500), their `SUPPORT` entries dormant. **Merged:** the **Gamma** (`gamma`) leaves the tree for **Bertha**, which takes its place and price (after the Beta-Gerät, 2,400 RP, 2,800 before; the Karl after it): Bertha is twice as quick to effect with half again the shells; the Gamma stays in the 1918 sandbox battle (ridge unit 6) with everything it had. The lines now: FK 16, sFH 13, leFH 18, sFH 18, Hummel; K 17, K 16, K 18, K 38; Langer Max, Gustav; Mörser 16, Mörser 18; Beta-Gerät, Bertha, Karl; Nebelwerfer 41, Nebelwerfer 42; Gotha strike, V-2 (ranks 3, 6, 6, 5; `RANK_GATE.de` unchanged, 3, 3 and 4; 34,000 RP to the end, 59,500 before). **Fixes** the review found: (1) `capability.js` `inArc`: a site outside the arc a gun lays on from its pit is 'no' (no arc for a bed relaid, the Karl, a self-propelled hull); (2) a rocket launcher timed per ripple of `salvo.n` in `batteryVerdict` and counted so in `firepower` (the NbW 41 was 'no' on a dump it destroys in three minutes); (3) the career's Gustav stands 900 m further east (`RIDGE_WW2` P(14400, 600), P(13500, 600) before and still on the WW2 map), so the strongpoints, 9.7 km from the old spot, lie 10.6 to 10.8 km off, past its 10.2 km minimum and within its 18 degree arc; (4) Bertha's lowest elevation 13 degrees (20 before, `tables_ww2.js`), its first charge's minimum range 3.75 km (5.3), so lane B's strongpoints, 4.3 and 4.7 km from its bed, are in reach (the table, not the bed: the 1918 battle's Bertha stands where it stood, and ww1test is unchanged); (5) the off-map line runs Gotha strike, then V-2, the V-2's `SUPPORT` retuned (prep 120 s, reload 480 s, spread 35 m; 170, 780, 80 before): one strike in 3.6 min silences a field battery 12 times in 12 and burns a dump 12 in 12 where the Gotha needs 5.3 min, and a tank laager falls in two strikes where the Gotha takes none (12 seeds). The **K 16** stays with about 9 % more reach (`cd` 0.195, 0.228 before: 23.9 km to 22.0), so it is the first long gun on the deep targets (W1 22.7 km, W3 22.5 km). **Saves** (`progression.js`, mark `START` 4): the RP put into every cut battery come back (`REMOVED`); its battery points, and what its upgrades cost at its own prices (`research.js` `levelCost`), go to its heir (the Wespe's to the Hummel, the H M1's to the Mörser 18, the Paris Gun's, Bruno's, K5's and K 12's to the Gustav, the Wurfgerät's to the Nebelwerfer 42, the V-1's to the V-2); `MERGED` (the C/92 to the sFH 13, the Gamma to Bertha) carries guns, parts and the lineup slot themselves, and the Gamma's research is Bertha's (its RP back only when the save had Bertha too; RP put into it go on into Bertha; a target on it is Bertha); `REPRICED` gives a save that had Bertha its 400 RP; RP put into any battery past its cost come back. **References:** levels 7, 9 and 10 name Bertha for the Gamma, level 8 the Gotha strike for the V-1 (`threat.js` `fits` follow). **Measured** (72 seeds, all auto): 100, 100, 100, 100, 72, 57, 67, 40, 49, 51 % won, human-proxy medians 3.0, 4.0, 5.6, 9.4, 15.8, 16.3, 18.6, 18.5, 20.2, 21.5 min (means 3.3, 6.5, 6.0, 10.6, 14.9, 16.1, 17.5, 16.7, 19.7, 21.6); before the cuts 100, 100, 100, 100, 72, 57, 56, 40, 38, 25 % and medians the same but 7 (19.8), 9 (20.9) and 3 (5.7). Levels 7, 9 and 10 now run well above their aims (55, 35, 25 %): Bertha does the Gamma's work quicker and reaches every strongpoint; left for the user's call. ww1test (both ops, the Paris Gun's included), simtest and ww2test (the V-1's op included) unchanged; progressiontest extended (the 20 nodes and their lines, ranks and costs, the off-map and bonus rules, a whole old career's carry-over, the Gamma and Bertha cases, repricing, once only); supporttest (Gotha and V-2) and researchtest run clean.
+- (render: the crews run to their shelters, 2026-11-26) The crews run to their shelters when they take cover and back to their guns after ("Taking cover, drawn" under Ranging counter-battery): `render/shelters.js`, `render/cover.js`; the unit field `u.coverLog` (sim/guns.js `setCover`); `models/v/de/gun_sites_ww1.js` `dugoutOf1918`, `buildUnterstand`, `UNTERSTAND_NEED`; `render/crewfield.js` `deckAt`; main.js `shelters`, also on `window.__drumfire.shelters`. tools/shot.mjs and tools/crewaudit.mjs take `DRUMFIRE_PORT` for another dev server than 5201 (a worktree's own). ww1test 1 2 3 4 unchanged.

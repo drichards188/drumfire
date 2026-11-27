@@ -59,7 +59,11 @@ export class Sim {
   // seed, src/operation.js; the ww1 director deals the level's mission from it): the level sets the
   // enemy's side of the difficulty (Normal's for the player's own guns) and the day (the director, the enemy), in
   // place of `opposition`; without a level everything is as before
-  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, manning = false, build = false, level = null, modifiers = null, opSeed = null } = {}) {
+  // cbModel: the British counter-battery fire on the WW1 German open battle at a threat level. There the ranging model
+  // ('ranging', the default since 2026-11-26: their fire that ranges in, our rangers' fixes, take cover; ww1/enemy.js
+  // RANGING) unless `cbModel` is 'old' (the drizzle on the loudest unit, as before; the page's ?cb=old); any other
+  // value, or none, is the default. Null (today's fire) anywhere else
+  newGame({ difficulty = 'Normal', attract = false, seed = this.seed, scripted = false, allowedKinds = null, loadout = null, opposition = null, range = false, manning = false, build = false, level = null, modifiers = null, opSeed = null, cbModel = null } = {}) {
     this.loadout = loadout;
     this.lessonBuild = scripted && build;
     this.range = scripted && range;
@@ -75,6 +79,7 @@ export class Sim {
     this.attract = attract;
     this.level = level != null && !attract && !scripted ? threatOf(level) : null;
     this.modifiers = new Set(this.level ? modifiers ?? [] : []);
+    this.cbModel = cbModel !== 'old' && this.level && this.theatre?.id === 'ww1' && this.theatre.op?.kind === 'battle' ? 'ranging' : null;
     this.opSeed = opSeed; // the level's mission's seed (src/operation.js: the menu's, so the briefing and the battle agree); the game's seed without one
     this.supplyK = 1; // the ammunition columns' pace (the modifiers' shells and rain)
     this.drillK = 1; // the crews' drill (the modifier rain: mud at the guns)
@@ -299,7 +304,7 @@ export class Sim {
       info.hit = this.targetAI.applyBurst(s, p, air);
       this.targetAI.wireBurst(s, p);
       this.infAI.onBurst(s, p, air);
-      this.observers.onBurst(s, p);
+      this.observers.onBurst(s, p, air);
       const a = this.assaultOf(s);
       if (a && a.firstShotT == null && s.t0 >= a.rocketsT) a.firstShotT = s.t0;
     } else {
@@ -353,6 +358,8 @@ export class Sim {
       }
       case 'cease': g.cease(u); return true;
       case 'mode': g.setMode(u, args.mode); return true;
+      // (the ranging counter-battery fire: the crew to its shelters and back, guns.js setCover)
+      case 'cover': if (this.cbModel) return g.setCover(u, args.on); break;
     }
     return this.special?.command(u, name, args) ?? false;
   }

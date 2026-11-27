@@ -108,6 +108,7 @@ export class GunViews {
         v = { unit: u, piece: p, rig, key, crew: null, baseY: rig.root.position.y, wrecked: false, dist: 0 };
         // the V-weapon sites have a launch crew of their own (crews_vweap.js), driven by the drill's state
         try { v.crew = VKINDS.has(p.kind) ? new VCrew(rig, p.kind) : new GunCrew(rig, p.kind); } catch (e) { console.warn('crew', p.kind, e.message); }
+        if (v.crew) v.crew.unit = u;
         this.detail?.add(`gun:${key}`, rig.root);
         this.views.push(v);
         this.byKey.set(key, v);
@@ -130,6 +131,7 @@ export class GunViews {
       const u = sim.unitById(v.unit.id);
       v.unit = u;
       v.piece = u.pieces[v.piece.i];
+      if (v.crew) v.crew.unit = u; // (its cover, render/cover.js: the sim's unit)
       v.wrecked = false;
       v.rig.root.rotation.x = 0;
       v.rig.root.position.y = v.baseY;

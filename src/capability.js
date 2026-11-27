@@ -1,6 +1,7 @@
 // What a lineup can do in the career's open battle (threat.js levels): for every kind of site, whether its batteries
 // reach it and can finish it in time, judged from the tables the sim fights with. Node-safe pure functions.
-//   reach   the gun's range table (shells.js autoCharge) from its pit on the 1918 ridge to the site
+//   reach   the gun's range table (shells.js autoCharge) from its pit on the 1918 ridge to the site, within the arc it
+//           lays on from there (a bed relaid, the Karl turned, a self-propelled gun's hull: any line)
 //   effect  its shell's damage (tables.js SHELLS, the best fuze against the target's hardness, the shells upgrade)
 //           on each part of the target (models/t/layout.js) under its spread at that range (GUNS disp, the barrel
 //           upgrade), the guns laid on the target's centre, or on one tank at a time on a tank laager (the threat
@@ -13,6 +14,8 @@
 // recommendedLevel for a career's lineup.
 import { GUNS, SHELLS, TARGETS, FUZE } from './sim/tables.js';
 import { autoCharge } from './sim/shells.js';
+import { wrapPi } from './sim/flight.js';
+import { bearingOf } from './sector.js';
 import { partLayout } from './models/t/layout.js';
 import { modsOf, levelOf, maxGuns, maxedLevels, isOffmap } from './research.js';
 import { OPS } from './ww1/ops.js';
@@ -44,8 +47,8 @@ function perRound(kind, mods, tKind, D, aimPart = null) {
   const fz = (g.fuzes ?? ['instant']).filter((f) => f !== 'shrapnel');
   const fk = Math.max(...fz.map((f) => (hard ? FUZE[f]?.hard : FUZE[f]?.soft) ?? 0), 0);
   const Dm = hit.D * fk * (mods.dmg ?? 1), R = hit.R;
-  // (a gun without a recoil system, the ramp guns: laid afresh after every roll back, a new error each round, guns.js
-  // `runback`; its velocity's error doubled in range)
+  // (a gun without a recoil system, the ramp guns, dormant since 2026-11-26: laid afresh after every roll back, a new
+  // error each round, guns.js `runback`; its velocity's error doubled in range)
   const rb = g.runback, bk = mods.bias ?? 1;
   const sr = Math.hypot(g.disp.r * D * mods.disp, rb ? 2 * rb.r * D * bk : 0, RESID), sl = Math.hypot(g.disp.l * D * mods.disp, rb ? rb.l * D * bk : 0, RESID);
   const parts = partLayout(tKind).map((p) => ({ x: p.x, z: p.z }));
@@ -66,10 +69,24 @@ function perRound(kind, mods, tKind, D, aimPart = null) {
   return sum;
 }
 
+// Whether a battery lays on a site from its pit (sim/guns.js: each piece's line within the unit's `arc`, its definition's
+// or GUNS traverse, of its zero; 2026-11-26, the tree review found the verdicts handed the H M1 and the Kurze Bruno
+// targets they could not turn to). A battery that can turn onto any line has no arc here: Bertha's, the Gamma's and the
+// Beta's beds relaid (ww1/special.js BedCtl), the Karl turned on its tracks, a self-propelled gun's hull (`move`)
+const TURNS = new Set(['bertha', 'gamma', 'beta', 'karl', 'move']);
+const DEFS = Object.fromEntries([...OPS.ridge.units, ...RIDGE_WW2, ...RIDGE_MORE].map((u) => [u.kind, u]));
+export function inArc(b, site) {
+  const d = DEFS[b.kind], g = GUNS[b.kind];
+  if (!d || !g || TURNS.has(d.special ?? g.special ?? '')) return true;
+  const zero = b.zero ?? d.zero, arc = b.arc ?? d.arc ?? g.traverse;
+  return Math.abs(wrapPi(zero - bearingOf(site.pos.x - b.pos.x, site.pos.z - b.pos.z))) <= arc + 1e-9;
+}
+
 // a battery's verdict on a site: { verdict, rounds, time } ({ kind, guns, mods, pos } and { kind, pos, role })
 export function batteryVerdict(b, site, { deadlineK = 1 } = {}) {
   const g = GUNS[b.kind];
   if (!g || isOffmap(b.kind)) return { verdict: 'no', rounds: Infinity, time: Infinity };
+  if (!inArc(b, site)) return { verdict: 'no', rounds: Infinity, time: Infinity, arc: false };
   // concrete a lighter shell does not touch (a strongpoint's own floor, a heavy target's MIN_HARD: the crews' rule)
   const floor = site.minHard ?? (site.role === 'hard' ? MIN_HARD : 0);
   if (floor && (SHELLS[g.shell ?? b.kind]?.hard?.D ?? 0) < floor) return { verdict: 'no', rounds: Infinity, time: Infinity };
@@ -80,8 +97,10 @@ export function batteryVerdict(b, site, { deadlineK = 1 } = {}) {
   if (!(e > 0)) return { verdict: 'no', rounds: Infinity, time: Infinity };
   // (the parts knocked out stop taking damage, the rounds that overkill a part are lost: half again)
   const rounds = ((needOf(site.kind, n) * (site.partHp ?? T.partHp)) / e) * 1.5;
-  const cycle = g.load.reduce((a, s) => a + s.dur, 0) * (b.mods.load ?? 1) + 2;
-  const time = RANGING + (rounds * cycle) / Math.max(1, b.guns);
+  // (a rocket launcher's cycle is a ripple of `salvo.n` rockets, each a round here: the cycle per ripple, not per rocket;
+  // the NbW 41 was rated 'no' on a dump it destroys in three minutes, 2026-11-26)
+  const cycle = g.load.reduce((a, s) => a + s.dur, 0) * (b.mods.load ?? 1) + 2, ripple = g.salvo?.n ?? 1;
+  const time = RANGING + (rounds * cycle) / ripple / Math.max(1, b.guns);
   const dl = deadlineOf(site.kind, site.role) * deadlineK, ammo = g.ammo.he * b.guns * (b.mods.ammo ?? 1);
   const verdict = time <= dl * 0.6 && rounds <= ammo * 0.5 ? 'ready' : time <= dl && rounds <= ammo ? 'slow' : 'no';
   return { verdict, rounds, time };
@@ -117,14 +136,15 @@ export function capabilities(levelsByKind, opts) {
 
 // the lineup's weight in the Sperrfeuer and the Feuerwalze: the soft damage its field guns can put down a minute
 // (the super-heavies, the mortars' few shells and the off-map weapons apart, as the levels' crews fire them)
-const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18', 'fk16', 'k16', 'm99', 'rk92', 'sfh93', 'wespe', 'hummel', 'nbw42', 'swg40']);
+const BARRAGE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'nbw41', 'm16', 'mrs18', 'k18', 'fk16', 'k16', 'hummel', 'nbw42']);
 export function firepower(levelsByKind) {
   let f = 0;
   for (const b of batteriesOf(levelsByKind)) {
     if (!BARRAGE.has(b.kind)) continue;
     const g = GUNS[b.kind], sc = SHELLS[g.shell ?? b.kind];
+    // (a rocket launcher puts a ripple of `salvo.n` rockets down each cycle)
     const cycle = g.load.reduce((a, s) => a + s.dur, 0) * (b.mods.load ?? 1) + 2;
-    f += (b.guns * 60 / cycle) * sc.soft.R * sc.soft.R * sc.soft.D * (b.mods.dmg ?? 1) / 1000;
+    f += (b.guns * (g.salvo?.n ?? 1) * 60 / cycle) * sc.soft.R * sc.soft.R * sc.soft.D * (b.mods.dmg ?? 1) / 1000;
   }
   return f;
 }
@@ -135,17 +155,22 @@ const P = (k, l) => Object.fromEntries(['shells', 'barrel', 'breech', 'sights', 
 const B = (kind, guns, parts = 0) => [kind, { guns, ...(parts ? P(kind, parts) : {}) }];
 const MAX = (kind) => [kind, maxedLevels(kind)];
 export const REFERENCE = {
-  1: Object.fromEntries([B('rk92', 1)]), // (the career's first battery since 2026-11-01; the K 17 before)
-  2: Object.fromEntries([B('rk92', 2)]),
-  3: Object.fromEntries([B('rk92', 2), B('fk16', 4)]),
+  // (a new career's two batteries since 2026-11-26, the FK 16 and the sFH 13 with two guns of four each, research.js
+  // START_KINDS and START_GUNS; the Ringkanone C/92 from 2026-11-01, the K 17 before. Then what the first battles buy:
+  // a level 1 win pays about 700 RP and the first win's 250, the K 17 (350) and most of the K 16 (700), the next the
+  // K 16; each battery's points, about 80 to 100 a battle, are still short of a third gun, 240)
+  1: Object.fromEntries([B('fk16', 2), B('sfh13', 2)]),
+  2: Object.fromEntries([B('fk16', 2), B('sfh13', 2), B('k17', 1)]),
+  3: Object.fromEntries([B('sfh13', 2), B('fk16', 2), B('k17', 1), B('k16', 1)]),
   4: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4), B('m16', 1)]),
   5: Object.fromEntries([B('k17', 2, 1), B('sfh13', 4, 1), B('lefh18', 4), B('m16', 2)]),
   6: Object.fromEntries([B('k18', 2, 1), B('sfh13', 4, 1), B('lefh18', 4, 1), B('m16', 2, 1), B('max38', 1)]),
-  7: Object.fromEntries([B('k18', 2, 1), B('sfh18', 4, 2), B('sfh13', 4, 2), B('lefh18', 4, 1), B('gamma', 1, 1)]),
+  7: Object.fromEntries([B('k18', 2, 1), B('sfh18', 4, 2), B('sfh13', 4, 2), B('lefh18', 4, 1), B('bertha', 1, 1)]),
   // (from level 6 a super-heavy for the strongpoints, ops.js RIDGE_FORTS, in one of the five slots)
-  8: Object.fromEntries([B('k18', 2, 2), B('sfh18', 4, 2), B('lefh18', 4, 2), B('mrs18', 2, 2), B('beta', 1, 2), B('v1', 1)]),
-  9: Object.fromEntries([B('k18', 2, 3), B('sfh18', 4, 3), B('lefh18', 4, 3), B('mrs18', 2, 2), B('gamma', 1, 2), B('v2', 1, 1)]),
-  10: Object.fromEntries([MAX('k38'), MAX('sfh18'), MAX('hummel'), MAX('lefh18'), MAX('gamma'), MAX('v2')]),
+  // (since the tree's cuts, 2026-11-26: Bertha where the Gamma stood, the Gotha strike where the V-1 did)
+  8: Object.fromEntries([B('k18', 2, 2), B('sfh18', 4, 2), B('lefh18', 4, 2), B('mrs18', 2, 2), B('beta', 1, 2), B('gotha', 1)]),
+  9: Object.fromEntries([B('k18', 2, 3), B('sfh18', 4, 3), B('lefh18', 4, 3), B('mrs18', 2, 2), B('bertha', 1, 2), B('v2', 1, 1)]),
+  10: Object.fromEntries([MAX('k38'), MAX('sfh18'), MAX('hummel'), MAX('lefh18'), MAX('bertha'), MAX('v2')]),
 };
 
 // the highest level the lineup can carry: every kind of site the level asks for at least 'slow', and the field guns'

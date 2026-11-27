@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 35.5 cm Haubitze M1 was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import { smooth, headingOf } from '../anim.js';
 
 // The 35.5 cm Haubitze M1's drill for render/crews.js (see render/crews_ww1.js for what this module may export). A

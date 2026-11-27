@@ -2,8 +2,8 @@
 //   [--lineup start|early|mid|full|max|all] [--difficulty Easy|Normal|Hard|all] [--jobs N]
 // Every crew on auto, as tools/simtest.mjs, but the battle is fielded the way a career fields it (src/research.js:
 // the lineup's guns and upgrades, the opposition scaled to it) and prints per lineup the games won, the minutes, the
-// opposition and what the battle paid: the RP and each battery's points. The lineups: start (the tier I battery with
-// one gun), early (tier I with all its guns, both tier II with one), mid (tiers I and II with all their guns and a
+// opposition and what the battle paid: the RP and each battery's points. The lineups: start (the starting batteries
+// with their first guns), early (tier I with all its guns, both tier II with one), mid (tiers I and II with all their guns and a
 // level of each part), full (every battery, every gun, no parts: the old open battle), max (dev mode: all at the top).
 // The German tree ('de', research.js TREES.de) fights the career's battle: the 1918 ridge with the lineup's WW2
 // batteries beside the 1918 ones (src/ww1/theatre.js { kinds }); each era's games run in workers of their own, so the
@@ -12,13 +12,13 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Sim } from '../src/sim/sim.js';
-import { TREES, PARTS, maxGuns, maxedLevels, loadoutOf, opposition, battleReward, nextCost } from '../src/research.js';
+import { TREES, PARTS, maxGuns, maxedLevels, loadoutOf, opposition, battleReward, nextCost, isStartKind, START_GUNS } from '../src/research.js';
 import { sandboxTheatre } from '../src/campaign.js';
 import { ww1Theatre } from '../src/ww1/theatre.js';
 import { RIDGE_WW2, RIDGE_MORE } from '../src/ww1/ops.js';
 
 const LINEUPS = {
-  start: (tree) => ({ [(tree.find((n) => n.cost === 0 && !n.after) ?? tree[0]).kind]: { guns: 1 } }), // (the career's own first battery)
+  start: (tree) => Object.fromEntries(tree.filter((n) => isStartKind(n.kind)).map((n) => [n.kind, { guns: START_GUNS[n.kind] ?? 1 }])), // (the career's own first batteries)
   early: (tree) => Object.fromEntries(tree.filter((n) => n.tier <= 2).map((n) => [n.kind, { guns: n.tier === 1 ? maxGuns(n.kind) : 1 }])),
   mid: (tree) => Object.fromEntries(tree.filter((n) => n.tier <= 2).map((n) => [n.kind, { guns: maxGuns(n.kind), ...Object.fromEntries(PARTS.map((p) => [p.id, 1])) }])),
   full: (tree) => Object.fromEntries(tree.map((n) => [n.kind, { guns: maxGuns(n.kind) }])),

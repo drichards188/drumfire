@@ -52,7 +52,7 @@ export const KIND_SHORT = {
   // battery tab gives the type a line of its own)
   lefh18: '10.5 cm leFH 18', sfh18: '15 cm sFH 18', k18: '17 cm K 18', mrs18: '21 cm Mörser 18', nbw41: '15 cm NbW 41',
   gustav: '80 cm Gustav', bertha: '42 cm Bertha', karl: '60 cm Karl', v1: 'V-1', v2: 'V-2',
-  k38: '21 cm K 38', hm1: '35.5 cm H M1', bruno: '28 cm Kurze Bruno', k5: '28 cm K5 (E)', k12: '21 cm K 12 (E)', wespe: '10.5 cm Wespe', hummel: '15 cm Hummel', nbw42: '21 cm NbW 42', swg40: 'sWG 40',
+  k38: '21 cm K 38', hummel: '15 cm Hummel', nbw42: '21 cm NbW 42',
 };
 
 // Per-kind touches: how the console differs. `rounds` are the series lengths offered per piece, `pieces` how many guns
@@ -72,16 +72,11 @@ export const KINDS = {
   gustav: { pieces: 1, title: '80 CM SCHWERER GUSTAV', note: 'Railway gun on its firing curve: 4.8 t shells to 47 km, a handful of rounds. Every shot counts', rounds: [1], fuzes: ['instant', 'delay'], charges: 3, deep: true },
   bertha: { pieces: 1, title: '42 CM BIG BERTHA', note: 'The giant siege howitzer: 810 kg shells to 12 km against the hardest targets', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4 },
   karl: { pieces: 1, title: '60 CM KARL-GERÄT', note: 'Siege mortar: 2.2 t shells at 3 to 6.5 km, 4 degrees of traverse: turn the whole vehicle', rounds: [1], fuzes: ['instant', 'delay'], charges: 3 },
-  // the rest of the German tree (research.js TREES.de), fought on the career's ridge
+  // the rest of the German tree (research.js TREES.de), fought on the career's ridge (the H M1, the Kurze Bruno, the K5,
+  // the K 12, the Wespe and the schweres Wurfgerät 40, cut on 2026-11-26, had rows here: commit 1dd259b)
   k38: { pieces: 2, title: '21 CM KANONE 38', note: 'Two long heavy guns, 120 kg shells to 34 km: counter-battery and the depots far behind', rounds: [1, 2, 3, 4], fuzes: ['instant', 'delay'], charges: 3, deep: true },
-  hm1: { pieces: 1, title: '35.5 CM HAUBITZE M1', note: 'The siege howitzer on its platform: 575 kg shells to 21 km, high angle only, against concrete and the heavies', rounds: [1, 2], fuzes: ['instant', 'delay'], charges: 4, deep: true },
-  bruno: { pieces: 1, title: '28 CM KURZE BRUNO (E)', note: 'Railway gun on its firing curve: 240 kg shells to 29 km. It lays for line by shunting along the curve: slowly', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 3, deep: true },
-  k5: { pieces: 1, title: '28 CM K5 (E)', note: 'Railway gun on its Vögele turntable: any bearing, but the turntable turns slowly. 255 kg shells anywhere on the map', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4, deep: true },
-  k12: { pieces: 1, title: '21 CM K 12 (E)', note: 'The longest gun on rails, on its curve far behind the ridge: everything on the map is in reach. Slow to lay for line', rounds: [1, 2, 3], fuzes: ['instant', 'delay'], charges: 4, deep: true },
-  wespe: { pieces: 4, title: '10.5 CM WESPE', note: 'Four self-propelled field howitzers: the leFH 18 on a tank chassis. Fire, then move (T) before their guns answer', rounds: [1, 2, 4, 6, 8], fuzes: ['instant', 'delay', 'shrapnel'], charges: 6 },
   hummel: { pieces: 4, title: '15 CM HUMMEL', note: 'Four self-propelled heavy howitzers: the sFH 18 on a tank chassis. Fire, then move (T) before their guns answer', rounds: [1, 2, 4, 6], fuzes: ['instant', 'delay'], charges: 5 },
   nbw42: { pieces: 3, title: '21 CM NEBELWERFER 42', note: 'Three five-tube launchers: a round is a ripple of five 112 kg rockets to 7.8 km. Slow to reload, the smoke gives you away', rounds: [1, 2, 3], fuzes: ['instant'], charges: 1 },
-  swg40: { pieces: 3, title: 'SCHWERES WURFGERÄT 40', note: 'Three frames of four heavy rockets fired from their crates: 82 kg rockets, 750 m to 1.9 km. A drenching at short range', rounds: [1, 2], fuzes: ['instant'], charges: 1 },
   v1: { pieces: 1, title: 'V-1 LAUNCH SITE', note: 'Walter catapult: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },
   v2: { pieces: 1, title: 'V-2 FIRING TABLE', note: 'A4 mobile battery: the launch drill', rounds: [1], fuzes: ['instant'], charges: 1, launcher: true },
 };
@@ -126,6 +121,11 @@ export function unanswered(sim) {
 }
 
 // open missions in the order the Tab key walks them: priority first, then the nearest deadline
+// a British battery's engagement on one of ours (the ranging counter-battery, ?cb=ranging: the sim's enemyAI.threatOn,
+// { stage, miss, name }): the hover text of the tab's crosshair and of the console's slip
+const STAGE_VERB = { ranging: 'ranging on you', closing: 'closing in on you', bracketed: 'has you bracketed', ffe: 'firing for effect on you' };
+export const threatTip = (th) => `${th.name} ${STAGE_VERB[th.stage] ?? 'ranging on you'}: last round about ${th.miss} m off. Take cover (U), switch batteries, or fire on it.`;
+
 export function liveMissions(sim) {
   return (sim.missions || []).filter((m) => m.state === 'open' || m.state === 'ranging' || m.state === 'ffe')
     .sort((a, b) => (b.priority || 0) - (a.priority || 0) || (a.deadline || 1e9) - (b.deadline || 1e9));

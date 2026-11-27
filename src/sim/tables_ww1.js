@@ -120,7 +120,9 @@ export const GUNS_WW1 = {
   },
   k16: {
     // 15 cm Kanone 16 (Krupp): 51.4 kg shell at 757 m/s, about 22 km; the long gun that outranged every British
-    // field piece. Travelled in two loads. Real traverse 8 degrees (widened for play), elevation -3 to +42.
+    // field piece. Travelled in two loads. Real traverse 8 degrees (widened for play), elevation -3 to +42. Here
+    // about 24 km since 2026-11-26 (`cd` 0.195, 0.228 before: a game number, so it reaches the deep targets behind the
+    // British line, the corps depot at 22.7 km, and is a step on the K 17 before the K 18)
     name: '15 cm K 16', short: '15 cm K', calibre: IN(149.3), mass: 51.4, shell: 'k16',
     charges: [{ name: 'Kleine Ladung', v: 520 }, { name: 'Mittlere Ladung', v: 640 }, { name: 'Große Ladung', v: 757 }],
     elMin: D(2), elMax: D(42), restEl: D(15), loadEl: D(3), traverse: D(60),
@@ -128,9 +130,11 @@ export const GUNS_WW1 = {
     load: seq(['open', 1.2], ['shell', 3], ['ram', 1.8], ['cartridge', 2.2], ['close', 1.2], ['prime', 1], ['lay', 2.5]),
     crew: 9, hp: 90, recoil: 0.8, runout: 3, sheaf: 28,
     disp: { r: 0.0027, l: 0.0010 }, calib: { v: 0.0012, line: 0.0006 }, wearPerRound: 0.0012,
-    ammo: { he: 130, shrapnel: 0 }, sig: 0.05, cd: 0.228,
+    ammo: { he: 130, shrapnel: 0 }, sig: 0.05, cd: 0.195,
     fuzes: ['instant', 'delay'], metric: true, side: 'german', era: 'ww1', rowStep: 100,
   },
+  // (the ramp guns, the Mörser 99, the Ringkanone C/92 and the sFH 93 below, dormant since 2026-11-26: cut from the
+  // game at the user's word, kept unreachable; commit 1dd259b has them in play. Their SHELLS and FFE rows too)
   m99: {
     // 21 cm Mörser 99 (Krupp, about 1900): no recoil system. Two wooden ramps lie behind its wheels on the firing
     // platform: at the shot the wheels run up them and the gun rolls back down into position by its own weight. It
@@ -155,7 +159,7 @@ export const GUNS_WW1 = {
     // them and the gun rolls back down by its own weight; with no traversing gear it is levered back onto its line
     // and laid afresh after every shot ('relay'; `runback` as the Mörser 99's: each round falls like a ranging round).
     // 40 kg shell, 10.5 to 12 km (en.wikipedia "15 cm Ring Kanone C/92"); real rate 2 a minute, here about 3, and the
-    // re-lay error smaller than the Mörser 99's: the career's first battery, it must carry threat level 1 alone (92 %
+    // re-lay error smaller than the Mörser 99's: the career's first battery then, it had to carry threat level 1 alone (92 %
     // of 24 seeds, the K 17 96 %; with a 16 s re-lay and the Mörser's error 50 %). Charges and elevation [E].
     name: '15 cm Ringkanone C/92', short: '15 cm RK', calibre: IN(149.1), mass: 40, shell: 'rk92',
     charges: [{ name: 'Kleine Ladung', v: 360 }, { name: 'Große Ladung', v: 500 }],

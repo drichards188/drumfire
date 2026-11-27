@@ -618,3 +618,41 @@
 .card.guns.lean .gbed { margin-top: 2px; padding: 4px 2px 2px; gap: 3px; }
 .card.guns.lean .gbed > i { font-size: 10.5px; line-height: 1.25; }
 .card.guns.lean .gbed .bedbtn { height: 28px; }
+
+/* ---------- the ranging counter-battery (?cb=ranging, 2026-11-25: a prototype on the German level battles) ---------- */
+/* the battery tab's crosshair: a British battery ranging on it; amber while it ranges, red as its rounds close in,
+   pulsing once it has the bracket, flashing while it fires for effect */
+.tcross { display: none; flex: none; width: 14px; height: 14px; }
+.tcross.on { display: block; }
+.tcross svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.tcross svg .dot { fill: currentColor; stroke: none; }
+.tcross.ranging { color: #f0a21c; }
+.tcross.closing, .tcross.bracketed, .tcross.ffe { color: #ff4a30; filter: drop-shadow(0 0 2px rgba(255,60,30,.7)); }
+.tcross.bracketed { animation: crosspulse .9s ease-in-out infinite; }
+.tcross.ffe { animation: blink .25s steps(2, jump-none) infinite; }
+@keyframes crosspulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.3); } }
+.tab.sel .tcross.ranging { color: #a8640a; }
+.tab.sel .tcross.closing, .tab.sel .tcross.bracketed, .tab.sel .tcross.ffe { color: #c0200f; filter: none; }
+/* D in the ring: the crew in its shelters */
+.tmode.cover { color: #e8b13e; border-color: #e8b13e; opacity: 1; }
+.tab.sel .tmode.cover { color: #8a5a08; border-color: #8a5a08; }
+.tltxt.st-cover { color: #e8b13e; }
+.tab.sel .tltxt.st-cover { color: #8a5a08; }
+/* the slip while in cover: the sandbag colour of the shelters */
+.statslip.cover { background: rgba(214,200,160,.95); border-color: #6b5a30; }
+/* the cover key: DECKUNG beside the charge and the rounds (the lean card's third place), lit TO THE GUNS while in cover,
+   pulsing red while the battery is bracketed or under fire for effect and out of cover */
+.btn.cover { flex: 0 0 92px; align-self: stretch; height: auto; min-width: 0; padding: 2px; background: linear-gradient(#a8a07a, #4f4a30); border-color: #2a2614; }
+.btn.cover.hide { display: none; }
+/* the lean card's rounds row (no charge control): the rounds stepper at its old width, the cover key at the far right */
+.frow3.lean > .stp { flex: 0 1 48%; }
+.frow3.lean > .btn.cover { margin-left: auto; }
+.btn.cover .face { background: linear-gradient(#d9d2ae, #9c9468); color: #232010; padding: 0 3px; }
+.btn.cover .lbl b { font: 800 12px/1.05 var(--serif); letter-spacing: .08em; white-space: nowrap; }
+.btn.cover .lbl i { font: normal 8px/1.1 var(--type); font-style: normal; margin-top: 3px; letter-spacing: 0; white-space: nowrap; }
+.btn.cover.lit .face { background: linear-gradient(#fff0b8, #f0b73c); box-shadow: inset 0 0 8px rgba(255,255,255,.55), 0 0 10px rgba(255,190,60,.7); }
+.btn.cover.lit .lbl b { font-size: 10.5px; letter-spacing: .04em; }
+.btn.cover.back .face { background: linear-gradient(#e8e0c0, #c4b98c); color: #5a5030; }
+.btn.cover.hot { animation: coverhot .8s ease-in-out infinite; }
+.btn.cover.hot .face { background: linear-gradient(#f0c8b0, #c0806a); color: #3a0d06; }
+@keyframes coverhot { 0%, 100% { box-shadow: 0 2px 0 #3b2a0a, 0 0 0 0 rgba(255,60,30,0); } 50% { box-shadow: 0 2px 0 #3b2a0a, 0 0 0 3px rgba(255,60,30,.75), 0 0 12px rgba(255,60,30,.8); } }

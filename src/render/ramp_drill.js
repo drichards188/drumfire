@@ -1,3 +1,6 @@
+// Dormant since 2026-11-26: the ramp guns it drills (the Mörser 99, the Ringkanone C/92, the sFH 93) were cut from
+// the game at the user's word (DESIGN.md changelog); kept here unreachable. Commit 1dd259b has them in play: restore
+// from it.
 import * as THREE from 'three';
 import { smooth, headingOf } from './anim.js';
 import { CREW_GAITS } from '../models/v/crew.js';

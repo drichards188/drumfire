@@ -1,7 +1,8 @@
 // The battle's summary page (War Thunder's battle results): shown when a career battle ends, when it is left early, and
 // by the menu for a battle left without seeing it (the tab closed). Built from a plain record (main.js battleRecord):
 //   { v, at, seen, title, sub, outcome ('victory' | 'defeat' | 'left'), level: { n, name, en } | null, mods: [names],
-//     minutes, rp: { fought, time, win, objectives, total }, research: { target, from, to, researched: [names] }, opened: { n, name } | null,
+//     minutes, rp: { fought, time, win, objectives, first, total }, cut (the overmatch cut on the pay, < 1) | null,
+//     research: { target, from, to, researched: [names] }, opened: { n, name } | null,
 //     batteries: [{ name, callsign, points, rounds, kills }], tally: { kill, part, men, mission, hit }, top: [{ act, what, who, pts }],
 //     mission: { name, title, en } | null, objectives: [{ title, main, bonus, state, pts }], medals: [{ title, state, pts }], clear }
 //   (a level's mission, src/operation.js: each objective's outcome and pay, the medals, the full clear)
@@ -24,7 +25,8 @@ export function markSeen() {
   if (r && !r.seen) saveSummary({ ...r, seen: true });
 }
 
-// the page over `root`; `actions`: [{ label, onClick, primary }] (the menu, Research, fight again); returns { close }
+// the page over `root`; `actions`: [{ label, onClick, primary, sub, title }] (the menu, Research, the next level, try
+// again; `sub` a second, smaller line on the button, `title` its tooltip); returns { close }
 export function showSummary(rec, { root = document.body, actions = [] } = {}) {
   const page = el('div', `sm-page sm-${rec.outcome}`);
   page.setAttribute('role', 'dialog');
@@ -42,11 +44,13 @@ export function showSummary(rec, { root = document.body, actions = [] } = {}) {
   const big = el('p', 'sm-big');
   big.append(el('b', null, `+${num(rec.rp.total)}`), ' research points');
   const rows = el('dl', 'sm-rows');
-  for (const [k, v] of [['Kills, damage and missions', rec.rp.fought], ['Objectives', rec.rp.objectives ?? 0], ['Time in action', rec.rp.time], ['Victory', rec.rp.win]]) {
-    if (!v && (k === 'Victory' || k === 'Objectives')) continue;
+  const firstOf = rec.level ? `First win of level ${rec.level.n}` : 'First win';
+  for (const [k, v] of [['Kills, damage and missions', rec.rp.fought], ['Objectives', rec.rp.objectives ?? 0], ['Time in action', rec.rp.time], ['Victory', rec.rp.win], [firstOf, rec.rp.first ?? 0]]) {
+    if (!v && (k === 'Victory' || k === 'Objectives' || k === firstOf)) continue;
     rows.append(el('dt', null, k), el('dd', null, `+${num(v)}`));
   }
   left.append(big, rows);
+  if (rec.cut != null && rec.cut < 1) left.append(el('p', 'sm-note', `Your lineup outclasses this front: pay ×${Math.round(rec.cut * 100) / 100}. A higher level pays in full.`));
   if (rec.outcome === 'left') left.append(el('p', 'sm-note', 'You left early: everything earned until then is yours. The victory bonus is paid only for a battle won.'));
   if (rec.research) {
     const r = rec.research, box = el('div', 'sm-research');
@@ -117,6 +121,8 @@ export function showSummary(rec, { root = document.body, actions = [] } = {}) {
   for (const a of actions) {
     const b = el('button', a.primary ? 'sm-btn primary' : 'sm-btn', a.label);
     b.type = 'button';
+    if (a.sub) b.append(el('small', null, a.sub));
+    if (a.title) b.title = a.title;
     b.addEventListener('click', a.onClick);
     foot.append(b);
   }

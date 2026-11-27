@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 28 cm Kurze Bruno K (E) was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import * as THREE from 'three';
 import { V, box, rbox, xTube, yTube, zTube, rod, sideProfile, zLathe, rivets, rivetRow, rivetPoly, handwheel, gearArc, Parts, DEG } from '../../kit.js';
 import { newGunRig, anchor, crewSpot, finishGun, pivotAt, hb, node } from '../../rig.js';

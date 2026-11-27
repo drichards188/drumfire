@@ -1,5 +1,5 @@
 import { BATTERIES, CAMPAIGN, missionById } from './campaign-data.js';
-import { TREES, TREE_OF, RANK_GATE, nodeOf, needsOf, weightOf, eraOfKind, nextCost, levelOf, maxedLevels, loadoutOf, opposition, missionBonus, specialBonus, PARTS, isOffmap } from './research.js';
+import { TREES, TREE_OF, RANK_GATE, nodeOf, needsOf, weightOf, eraOfKind, nextCost, levelOf, maxedLevels, maxGuns, loadoutOf, opposition, missionBonus, specialBonus, PARTS, LEVELS, isOffmap, firstWinRP, overmatchCut, TOP_PART_WIN, isStartKind, START_GUNS, START_KINDS, OUT_OF_TREE, levelCost } from './research.js';
 import { SLOTS, MAX_LEVEL } from './threat.js';
 const ROMAN = ['I', 'II', 'III', 'IV'];
 export { BATTERIES };
@@ -11,16 +11,33 @@ const LEVEL_KEYS = ['guns', ...PARTS.map((p) => p.id)];
 const treeOf = (era) => TREE_OF[era] ?? era;
 // the starting batteries of the saves written before `start` was saved (they owned these without researching them)
 const OLD_START = ['k17'];
-// batteries taken out of the game, with what their research cost (a save's RP in them are given back): the 25 cm
-// schwerer Minenwerfer (2026-11-02: its kilometre's reach left it almost nothing to do on the ridge)
-const REMOVED = { smw: { tree: 'de', cost: 300 } };
-const START = 2; // the saves' mark: careers begun with the C/92 (an older save has none)
+// The batteries taken out of the game (2026-11-26, research.js OUT_OF_TREE, `to` the battery that inherits): a save's
+// RP in them come back, its battery points go to the heir with what its upgrades cost (at the cut battery's own
+// prices), so nothing earned is lost. The 25 cm schwerer Minenwerfer (2026-11-02) gave back its RP alone.
+// MERGED: the two whose heir takes their place itself, guns, parts and slot in the lineup: the starting Ringkanone C/92
+// (2026-11-01 to 2026-11-26) into the sFH 13, and the Gamma into Bertha, whose research it also is (`research`: a save
+// that had the Gamma has Bertha; its RP come back only when it had Bertha as well)
+const MERGED = { rk92: { research: false }, gamma: { research: true } };
+const REMOVED = { smw: { tree: 'de', cost: 300 }, ...Object.fromEntries(Object.entries(OUT_OF_TREE).filter(([k]) => !MERGED[k]?.research).map(([k, o]) => [k, { tree: 'de', cost: o.cost }])) };
+// batteries a career now owns from the start (research.js START_KINDS) that an older save had to research, and what
+// they cost then: the RP a save put into them come back (the FK 16 and the sFH 13, starters since 2026-11-26)
+const NOW_FREE = { fk16: { tree: 'de', cost: 300 }, sfh13: { tree: 'de', cost: 450 } };
+// batteries whose research cost fell, and what a save paid before: the difference comes back (Bertha at the Gamma's
+// 2,400 since the merge, 2,800 before)
+const REPRICED = { bertha: { tree: 'de', was: 2800 } };
+// the saves' mark: 4 the 20-battery tree (2026-11-26, the cuts and the merge), 3 careers begun with the FK 16 and the
+// sFH 13 (the same day, before the cuts), 2 with the C/92 (2026-11-01), none with the K 17
+const START = 4, MARK_STARTERS = 3;
+// (the starting batteries' first guns, research.js START_GUNS: a career with fewer is brought up to them)
+export { START_GUNS };
+// the trees whose open battle is played at the threat levels (the top part level waits for a win at TOP_PART_WIN there)
+const LEVELLED = new Set(['de']);
 
 // The career, per tree: the research points put into each battery (`progress`), the battery the battles' RP go to
 // (`target`, always one while anything is left to research), the batteries researched, each battery's points and the
-// levels of its parts, the campaign missions won. RP left over when nothing is left to research wait in `rp`. Dev mode
-// lays every battery researched and at its top over it for the open battles; the career underneath still earns and is
-// what the player sees again with dev mode off.
+// levels of its parts, the campaign missions won, the threat levels won (`wins`: how often each). RP left over when
+// nothing is left to research wait in `rp`. Dev mode lays every battery researched and at its top over it for the open
+// battles; the career underneath still earns and is what the player sees again with dev mode off.
 export class Progression {
   constructor(storage) {
     this.storage = storage;
@@ -35,6 +52,7 @@ export class Progression {
     this.battles = Object.fromEntries(Object.keys(TREES).map((e) => [e, 0])); // open battles paid, per tree
     this.lineup = Object.fromEntries(Object.keys(TREES).map((e) => [e, null])); // the batteries chosen for battle (null: picked for you)
     this.threat = Object.fromEntries(Object.keys(TREES).map((e) => [e, 1])); // the highest threat level unlocked
+    this.wins = Object.fromEntries(Object.keys(TREES).map((e) => [e, {}])); // the threat levels won: { level: times }
     this.dev = DEV_DEFAULT;
     this.devSet = false; // the player's own switch, kept over the default
     this.free = false; // unlimited points (a testing switch): research and upgrades cost nothing, the tree order still holds
@@ -43,32 +61,94 @@ export class Progression {
       const data = JSON.parse(storage?.getItem(SAVE_KEY) || 'null');
       for (const m of CAMPAIGN) if (Array.isArray(data?.completed) && data.completed.includes(m.id)) this.completed.add(m.id);
       for (const k of data?.specials ?? []) if (typeof k === 'string') this.specials.add(k);
+      const mark = data ? +data.start || 0 : START;
       for (const k of data?.researched ?? []) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
       // a career begun before the Ringkanone C/92 headed the guns' line (2026-11-01) started with the K 17: it keeps it
       if (data && !data.start) for (const k of OLD_START) if (nodeOf(k) && !this.isStart(k)) this.researched.add(k);
       for (const e of Object.keys(this.rp)) this.rp[e] = Math.max(0, Math.round(+data?.rp?.[e] || 0));
-      // a battery taken out of the game (REMOVED): the RP put into it come back (its battery points go with it)
-      for (const [k, { tree, cost }] of Object.entries(REMOVED)) {
-        const put = data?.researched?.includes(k) ? cost : Math.min(cost, +data?.progress?.[k] || 0);
-        if (put > 0 && tree in this.rp) this.rp[tree] += Math.round(put);
+      const back = (tree, n) => { if (n > 0 && tree in this.rp) this.rp[tree] += Math.round(n); };
+      // a battery taken out of the game (REMOVED), or one a career now has from the start (NOW_FREE, saves from before
+      // it): the RP put into it come back
+      const refund = (table) => {
+        for (const [k, { tree, cost }] of Object.entries(table)) back(tree, data?.researched?.includes(k) ? cost : Math.min(cost, +data?.progress?.[k] || 0));
+      };
+      refund(REMOVED);
+      if (data && mark < MARK_STARTERS) refund(NOW_FREE);
+      // a battery whose research cost fell (REPRICED): what a save paid over the new cost comes back
+      if (data && mark < START) for (const [k, { tree, was }] of Object.entries(REPRICED)) if (data.researched?.includes(k) && nodeOf(k)) back(tree, was - nodeOf(k).cost);
+      for (const [k, v] of Object.entries(data?.progress ?? {})) if (nodeOf(k) && !this.isStart(k)) this.progress[k] = Math.max(0, Math.round(+v || 0));
+      // a merged battery's research (MERGED `research`: the Gamma's): its heir is researched with it, or, the heir had
+      // already, its RP come back; RP put into it go on into its heir
+      for (const [k, { research }] of Object.entries(MERGED)) {
+        const to = OUT_OF_TREE[k]?.to, tree = eraOfKind(to), cost = OUT_OF_TREE[k]?.cost ?? 0;
+        if (!research || !tree || nodeOf(k)) continue;
+        if (data?.researched?.includes(k)) { if (this.researched.has(to)) back(tree, cost); else { this.researched.add(to); delete this.progress[to]; } }
+        else if (+data?.progress?.[k] > 0) {
+          const put = Math.min(cost, +data.progress[k]);
+          if (this.researched.has(to)) back(tree, put); else this.progress[to] = (this.progress[to] ?? 0) + Math.round(put);
+        }
       }
-      for (const [k, v] of Object.entries(data?.progress ?? {})) if (nodeOf(k)) this.progress[k] = Math.max(0, Math.round(+v || 0));
-      for (const e of Object.keys(this.target)) if (nodeOf(data?.target?.[e]) && eraOfKind(data.target[e]) === e) this.target[e] = data.target[e];
+      // (RP put into a battery past its cost, now that some cost less, come back; settle researches it)
+      for (const [k, v] of Object.entries(this.progress)) { const over = v - (nodeOf(k)?.cost ?? v); if (over > 0) { back(eraOfKind(k), over); this.progress[k] = v - over; } }
+      // (a target on a merged battery is its heir; on a cut one, settle picks the next)
+      for (const e of Object.keys(this.target)) {
+        const t = MERGED[data?.target?.[e]] && !nodeOf(data.target[e]) ? OUT_OF_TREE[data.target[e]].to : data?.target?.[e];
+        if (nodeOf(t) && eraOfKind(t) === e) this.target[e] = t;
+      }
       for (const [k, v] of Object.entries(data?.bp ?? {})) if (nodeOf(k)) this.bp[k] = Math.max(0, Math.round(+v || 0));
-      for (const [k, l] of Object.entries(data?.levels ?? {})) if (nodeOf(k)) this.levels[k] = Object.fromEntries(LEVEL_KEYS.filter((p) => Number.isInteger(l?.[p])).map((p) => [p, l[p]]));
+      const levelsIn = (l) => Object.fromEntries(LEVEL_KEYS.filter((p) => Number.isInteger(l?.[p])).map((p) => [p, l[p]]));
+      for (const [k, l] of Object.entries(data?.levels ?? {})) if (nodeOf(k)) this.levels[k] = levelsIn(l);
+      // a battery cut (OUT_OF_TREE): its battery points go to its heir, and what its upgrades cost (at its own weight's
+      // prices) as more points; a merged one's guns and parts go over themselves (MERGED), each the higher of the two
+      // where the heir has levels of its own, the lower one's cost as points. And the guns a starting battery now has
+      // free (START_GUNS) that a save from before them bought come back as points. So nothing bought is lost
+      const cost = (w, p, n) => { let c = 0; for (let h = p === 'guns' ? 1 : 0; h < n; h++) c += levelCost(w, p, h); return c; };
+      const paid = {}; // (what the starters' guns cost a save from before START_GUNS)
+      if (data && mark < MARK_STARTERS) for (const k of Object.keys(START_GUNS)) if (this.levels[k]) paid[k] = cost(weightOf(k), 'guns', levelOf(this.levels[k], 'guns'));
+      for (const [cut, { to, weight }] of Object.entries(OUT_OF_TREE)) {
+        if (!nodeOf(to) || nodeOf(cut)) continue;
+        const l = levelsIn(data?.levels?.[cut]), have = this.levels[to] ?? {}, merged = {}, whole = !!MERGED[cut];
+        let pts = Math.max(0, Math.round(+data?.bp?.[cut] || 0));
+        if (Object.keys(l).length) for (const p of LEVEL_KEYS) {
+          const a = Math.min(levelOf(l, p), p === 'guns' ? maxGuns(to) : LEVELS), b = levelOf(have, p);
+          if (!whole) pts += cost(weight, p, levelOf(l, p));
+          else if (p === 'guns') { merged[p] = Math.max(a, b); paid[to] = (paid[to] ?? 0) + cost(weight, p, a); }
+          else { merged[p] = Math.max(a, b); pts += cost(weight, p, Math.min(a, b)); }
+        }
+        if (whole && Object.keys(l).length) this.levels[to] = merged;
+        if (pts) this.bp[to] = (this.bp[to] ?? 0) + pts;
+      }
+      for (const [k, c] of Object.entries(paid)) {
+        const n = START_GUNS[k] ?? 1, g = levelOf(this.levels[k], 'guns'), w = weightOf(k), pts = c - (cost(w, 'guns', Math.max(g, n)) - cost(w, 'guns', n));
+        if (pts > 0) this.bp[k] = (this.bp[k] ?? 0) + pts;
+      }
       for (const e of Object.keys(this.battles)) this.battles[e] = Math.max(0, data?.battles?.[e] | 0);
-      for (const e of Object.keys(this.lineup)) if (Array.isArray(data?.lineup?.[e])) this.lineup[e] = data.lineup[e].filter((k) => eraOfKind(k) === e);
+      // (a lineup naming a battery taken out leaves it out; a merged one's slot goes to its heir, and a lineup left empty
+      // fields the sFH 13)
+      const heirOf = (k) => (MERGED[k] && !nodeOf(k) ? OUT_OF_TREE[k].to : null);
+      for (const e of Object.keys(this.lineup)) if (Array.isArray(data?.lineup?.[e])) {
+        const ks = data.lineup[e].map((k) => (heirOf(k) && !data.lineup[e].includes(heirOf(k)) ? heirOf(k) : k));
+        this.lineup[e] = [...new Set(ks.filter((k) => eraOfKind(k) === e))];
+        if (!this.lineup[e].length && data.lineup[e].length) this.lineup[e] = START_KINDS[e]?.slice(-1) ?? null;
+      }
       for (const e of Object.keys(this.threat)) this.threat[e] = Math.max(1, Math.min(MAX_LEVEL, data?.threat?.[e] | 0 || 1));
+      // (a save from before the wins were kept has none: its first win at each level pays the bonus)
+      for (const e of Object.keys(this.wins)) for (const [n, c] of Object.entries(data?.wins?.[e] ?? {})) if (+n >= 1 && +n <= MAX_LEVEL && (c | 0) > 0) this.wins[e][+n] = c | 0;
       if (data?.devSet) { this.dev = data.dev === true; this.devSet = true; }
       this.free = data?.free === true;
     } catch { this.saved = false; }
+    this.startGuns();
     for (const e of Object.keys(TREES)) this.settle(e, false);
   }
 
   // ------------------------------------------------------------------ research
+  // the starting batteries' first guns (START_GUNS): never fewer, whatever the save says
+  startGuns() {
+    for (const [k, n] of Object.entries(START_GUNS)) if (this.isStart(k) && levelOf(this.levels[k], 'guns') < n) this.levels[k] = { ...this.levels[k], guns: n };
+  }
+  // a battery the career owns from the start (research.js START_KINDS: the FK 16 and the sFH 13 since 2026-11-26)
   isStart(kind) {
-    const n = nodeOf(kind);
-    return !!n && !n.after && n.cost === 0;
+    return !!nodeOf(kind) && isStartKind(kind);
   }
   // the career's own (dev mode aside): the starting battery, or researched
   owns(kind) {
@@ -166,10 +246,23 @@ export class Progression {
   upgradeCost(kind, part) {
     return nextCost(kind, part, this.level(kind, part, false));
   }
+  // why the next level of a part waits for a battle ('' when it does not): the top level (research.js LEVELS) opens with
+  // a win at threat level TOP_PART_WIN or higher, as Helldivers 2's super samples; dev mode and unlimited points open it
+  partGate(kind, part) {
+    const tree = eraOfKind(kind);
+    if (part === 'guns' || this.dev || this.free || !LEVELLED.has(tree) || this.level(kind, part, false) + 1 < LEVELS) return '';
+    return this.topPartsOpen(tree) ? '' : `win a level ${TOP_PART_WIN} battle`;
+  }
+  // a win at TOP_PART_WIN or higher in the tree's open battle
+  topPartsOpen(era) {
+    return this.levelWins(era).some((n) => n >= TOP_PART_WIN);
+  }
   upgradeBlock(kind, part) {
     if (!this.owns(kind)) return 'research the battery first';
     const c = this.upgradeCost(kind, part);
     if (c == null) return 'at its best';
+    const gate = this.partGate(kind, part);
+    if (gate) return gate;
     const short = this.free ? 0 : c - (this.bp[kind] ?? 0);
     return short > 0 ? `${short.toLocaleString('en-US')} points short` : '';
   }
@@ -186,7 +279,7 @@ export class Progression {
   // War Thunder's crew slots: at most SLOTS.map batteries on the map and SLOTS.support off it, chosen in the hangar from
   // the batteries the career has (dev mode: every one). Until the player chooses: the best of each line (the last it
   // has researched), then more field howitzers (the Sperrfeuer's guns), then the heaviest; off the map the dearest.
-  // So a new career fields its Ringkanone C/92, and a full one a lineup that can still answer the red rockets.
+  // So a new career fields its sFH 13 and FK 16, and a full one a lineup that can still answer the red rockets.
   lineupKinds(era) {
     const tree = treeOf(era), have = (TREES[tree] ?? []).filter((n) => this.unlocked(n.kind));
     const chosen = this.lineup[tree];
@@ -273,6 +366,41 @@ export class Progression {
     this.save();
     return n + 1;
   }
+  // a level won (main.js at the battle's end, with playedLevel): counted, and the first win pays its bonus (research.js
+  // firstWinRP) to the research target; returns the bonus, 0 when the level was won before
+  wonLevel(era, n) {
+    const tree = treeOf(era), w = this.wins[tree];
+    if (!w || !(n >= 1 && n <= MAX_LEVEL)) return 0;
+    const bonus = w[n] ? 0 : firstWinRP(n);
+    w[n] = (w[n] ?? 0) + 1;
+    if (bonus) this.addRP(tree, bonus); else this.save();
+    return bonus;
+  }
+  // the levels the career has won, lowest first
+  levelWins(era) {
+    return Object.keys(this.wins[treeOf(era)] ?? {}).map(Number).filter((n) => this.wins[treeOf(era)][n] > 0).sort((a, b) => a - b);
+  }
+  // the RP the first win at level n would pay (0 when it is won)
+  firstWinBonus(era, n) {
+    const w = this.wins[treeOf(era)];
+    return w && n >= 1 && n <= MAX_LEVEL && !w[n] ? firstWinRP(n) : 0;
+  }
+  // The lineup's rating: the highest level it can carry (capability.js recommendedLevel on lineupLevels, so dev mode's
+  // lineup in dev mode; a battery lent for a battle is not in it), or null without a rater. `Progression.rater` is
+  // capability.js's recommendedLevel: the menu sets it at once, and this module imports it late (below) so the loading
+  // screen (ui/loading.js), which reads the career, shows before capability.js and the sim's tables are loaded.
+  rating(era) {
+    const rate = Progression.rater, tree = treeOf(era);
+    if (!rate || !LEVELLED.has(tree)) return null;
+    const lv = this.lineupLevels(tree), key = JSON.stringify(lv);
+    if (this._rated?.key !== key || this._rated.rate !== rate) this._rated = { key, rate, n: rate(lv) };
+    return this._rated.n;
+  }
+  // the overmatch cut on the battle's pay at level n (research.js overmatchCut): 1 down to two levels below the
+  // lineup's rating, 0.75 at three, 0.5 at four or more; 1 without a rating. main.js hands it to battleReward (`cut`)
+  overmatch(era, n) {
+    return overmatchCut(this.rating(era), n);
+  }
 
   // ------------------------------------------------------------------ the open battle and its pay
   // a battery's levels as it would take the field ({ guns, shells, ... }; dev mode: at its top)
@@ -293,7 +421,8 @@ export class Progression {
     return { loadout: loadoutOf(levels), opposition: opposition(era, levels) };
   }
   // pay as it is earned in battle ({ rp, batteries: { kind: points } }): the RP to the research target, each battery's
-  // points to it; `save` false lets the page gather a few kills before writing
+  // points to it; `save` false lets the page gather a few kills before writing. A lent battery's entry (research.js
+  // lentKey, `lent:<kind>`) is research points only: it is in `rp`, and no battery of the tree gets its points
   gain(era, r, save = true) {
     const tree = treeOf(era);
     if (!(tree in this.rp) || !r) return false;
@@ -346,7 +475,7 @@ export class Progression {
       if (!this.storage) throw new Error('Storage unavailable');
       this.storage.setItem(SAVE_KEY, JSON.stringify({ completed: [...this.completed], specials: [...this.specials], rp: this.rp, target: this.target, progress: this.progress,
         researched: [...this.researched], bp: this.bp, levels: this.levels, battles: this.battles, lineup: this.lineup, threat: this.threat,
-        dev: this.dev, devSet: this.devSet, free: this.free, start: START }));
+        wins: this.wins, dev: this.dev, devSet: this.devSet, free: this.free, start: START }));
       this.saved = true;
     } catch { this.saved = false; }
   }
@@ -354,18 +483,23 @@ export class Progression {
   setDev(on) { this.dev = !!on; this.devSet = true; this.save(); }
   // unlimited points: research and upgrades free, for testing (the points earned keep adding up underneath)
   setFree(on) { this.free = !!on; this.save(); }
-  // back to a new career: no research, upgrades, points or battles, the campaign missions unwon (their RP bonus can be
-  // won again); the dev and unlimited points switches stay as they are
+  // back to a new career: no research, upgrades, points or battles, the campaign missions and the threat levels unwon
+  // (their RP bonuses can be won again); the dev and unlimited points switches stay as they are
   reset() {
     this.completed.clear();
     this.specials.clear();
     this.researched.clear();
-    for (const e of Object.keys(this.rp)) { this.rp[e] = 0; this.battles[e] = 0; this.target[e] = null; this.lineup[e] = null; this.threat[e] = 1; }
+    for (const e of Object.keys(this.rp)) { this.rp[e] = 0; this.battles[e] = 0; this.target[e] = null; this.lineup[e] = null; this.threat[e] = 1; this.wins[e] = {}; }
     this.progress = {};
     this.bp = {};
     this.levels = {};
+    this.startGuns();
     for (const e of Object.keys(TREES)) this.settle(e, false);
     this.save();
   }
   unlockAll() { this.setDev(true); }
 }
+// the lineup's rating for the overmatch cut (rating): capability.js recommendedLevel, set by the menu at once and here
+// when capability.js has loaded (a dynamic import: the loading screen imports this module and must not wait for it)
+Progression.rater = null;
+import('./capability.js').then((m) => { Progression.rater ??= m.recommendedLevel; }).catch(() => {});

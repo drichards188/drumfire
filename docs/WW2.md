@@ -576,6 +576,8 @@ The Brest Hero-Fortress memorial complex is the institutional source to consult 
 
 They fight on the German career's 1918 ridge (`src/ww1/ops.js` `RIDGE_MORE`). Real figures first, the game's after (`tables_ww2.js`).
 
+The H M1, the Kurze Bruno, the K5, the K 12, the Wespe and the schweres Wurfgerät 40 were cut from the German tree on 2026-11-26 (each no step up on the battery before it in its line); their research stays here, their tables, models and drills stay dormant in the code, and commit 1dd259b has them in play.
+
 | Battery | Real | Game |
 | --- | --- | --- |
 | 21 cm K 38 | 120 kg shell, 905 m/s, 33.9 km; all round on its platform | three charges to 33.9 km; traverse 60 degrees either way |

@@ -39,15 +39,16 @@ const wip = (item, on = true) => (on ? { ...item, wip: true, lines: [WIP_LINE, .
 // weapon); one without shows its era's in turn (ERA_STILLS).
 export const STILLS = new Set(['bl15', 'bl92', 'bl6', 'bl60', 'rail', 'max38', 'gamma', 'm16', 'sfh13', 'k17', 'paris', 'bertha-demo',
   'lefh18', 'sfh18', 'k18', 'mrs18', 'nbw41', 'gustav', 'karl', 'v1', 'v2',
-  'rk92', 'fk16', 'sfh93', 'k16', 'm99', 'bruno', 'beta', 'swg40', 'gotha', 'wespe', 'hummel', 'k38', 'k5', 'k12', 'hm1', 'nbw42']);
+  'fk16', 'k16', 'beta', 'gotha', 'hummel', 'k38', 'nbw42']);
 export const ERA_STILLS = { '1917': ['bl15', 'rail', 'bl92', 'bl60', 'bl6'], ww1: ['max38', 'paris', 'gamma', 'm16'], ww2: ['gustav', 'nbw41', 'v2', 'karl', 'k18'], de: ['max38', 'gustav', 'nbw41', 'paris', 'v2', 'k18'] };
 // a battery's still (Bertha's is the demo's)
 export const stillOf = (kind) => (kind === 'bertha' ? 'bertha-demo' : STILLS.has(kind) ? kind : null);
 const stillFor = stillOf;
 export const stillsOf = (item) => (item?.still ? [item.still] : ERA_STILLS[item?.era] ?? []);
 export const stillUrl = (id) => `menu/${id}.jpg`; // (relative, as every link here: the build may live in a subfolder)
-// the settings a menu URL hands on to the game it opens (in the game the gear menu sets them)
-const PASS = ['quality', 'hour', 'weather'];
+// the settings a menu URL hands on to the game it opens (in the game the gear menu sets them); `cb` (?cb=old: the old
+// counter-battery fire in place of the ranging model, main.js CB_MODEL) goes there and back so the menu keeps it between battles
+const PASS = ['quality', 'hour', 'weather', 'cb'];
 export const DIFFICULTIES = ['Easy', 'Normal', 'Hard'];
 export const LESSONS_KEY = 'drumfire.tutorials';
 const pad = (n) => String(n).padStart(2, '0');

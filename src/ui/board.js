@@ -739,6 +739,23 @@ export class Board {
       g.globalAlpha = 1;
       if (!dead) lbl.push([o && o.state === 'open' ? `${o.main ? '■' : '◇'} ${t.name}` : t.name, X, Z, s, s + (t.maxHp && t.hp < t.maxHp ? 8 : 3) + (o ? 6 : 0), far]);
     }
+    // a hold (sim/objectives.js kind 'hold'): the radius its bursts must land in, ochre like the other objectives, and
+    // its clock as an arc round it (solid while it runs, faint while paused)
+    for (const o of sim.objectives?.list ?? []) {
+      if (o.kind !== 'hold' || !o.hold || (o.state !== 'open' && o.state !== 'done')) continue;
+      const X = this.sx(o.hold.x), Z = this.sz(o.hold.z), R = Math.max(10, o.hold.r / this.view.mpp);
+      if (X < -R || X > this.W + R || Z < -R || Z > this.H + R) continue;
+      const done = o.state === 'done', k = done ? 1 : Math.min(1, (o.held ?? 0) / Math.max(1, o.hold.need));
+      g.strokeStyle = '#9a6a10'; g.globalAlpha = done ? 0.45 : 0.9;
+      g.lineWidth = o.main ? 2 : 1.4; g.setLineDash([6, 4]);
+      g.beginPath(); g.arc(X, Z, R, 0, TAU); g.stroke(); g.setLineDash([]);
+      if (k > 0) {
+        g.globalAlpha = done ? 0.45 : o.running ? 1 : 0.5; g.lineWidth = 3.5;
+        g.beginPath(); g.arc(X, Z, R + 3, -Math.PI / 2, -Math.PI / 2 + k * TAU); g.stroke();
+      }
+      g.globalAlpha = 1;
+      if (!done) lbl.push([`${o.main ? '■' : '◇'} Hold`, X, Z, R, R + 6, false]);
+    }
     // each label below its symbol, else above, right or left, kept inside the board; one that finds no room is drawn
     // below anyway, or left out if it is out of reach (the cursor names it), and a place name already on the map is not
     // repeated

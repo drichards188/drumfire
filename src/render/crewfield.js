@@ -182,6 +182,8 @@ export class CrewField {
     });
     this.n = n;
     this.pit = pit;
+    // each floor's decks by layer (buildRig: what tops out at its height), for deckAt
+    this.decks = { rot: base.rot.surf, fix: base.fix.surf };
     // for walks that climb from the ground to the work floor: the work band blocked, or the ground band blocked
     // where it is not a deck (a case on the ground stops him, the platform's skirt does not)
     this.lwI = this.level(workY); this.l0I = this.level(0);
@@ -254,6 +256,15 @@ export class CrewField {
     let rx, rz, fx, fz;
     if (world) { const dx = x - px, dz = z - pz; fx = x; fz = z; rx = dx * c - dz * s + px; rz = dx * s + dz * c + pz; } else { const dx = x - px, dz = z - pz; rx = x; rz = z; fx = dx * c + dz * s + px; fz = -dx * s + dz * c + pz; }
     return Math.min(this.cellD(this.dist.rot[fl][l], rx, rz), this.cellD(this.dist.fix[fl][l], fx, fz));
+  }
+
+  // on a deck of floor l at a point of the root frame (world) or of the gun's own: a man up there can stand on it
+  // (render/cover.js: the way off a platform when the crew takes cover)
+  deckAt(l, x, z, world = true) {
+    const c = this.ca, s = this.sa, px = this.px, pz = this.pz, dx = x - px, dz = z - pz;
+    const rx = world ? dx * c - dz * s + px : x, rz = world ? dx * s + dz * c + pz : z, fx = world ? x : dx * c + dz * s + px, fz = world ? z : -dx * s + dz * c + pz;
+    const { x0, z0, w, h } = this.b, on = (M, X, Z) => { const i = Math.floor((X - x0) / CELL), j = Math.floor((Z - z0) / CELL); return i >= 0 && j >= 0 && i < w && j < h && M[j * w + i] === 1; };
+    return !!this.decks && (on(this.decks.rot[l], rx, rz) || on(this.decks.fix[l], fx, fz));
   }
 
   free(fl, l, x, z, r, world = false) {

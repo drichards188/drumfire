@@ -87,7 +87,15 @@ export class HUD {
     const rows = g.items.map((o) => {
       const li = document.createElement('li');
       li.className = `${o.main ? 'main' : 'side'} ${o.state}${o.timed && o.state === 'open' ? ' timed' : ''}${o.bonus ? ' bonus' : ''}${(o.kind === 'duel' && o.state === 'open' && o.fix < 120) || (o.kind === 'railgun' && o.up && o.state === 'open') ? ' danger' : ''}`;
-      li.title = `${o.main ? 'Main objective' : 'Secondary objective'}: ${o.title}. ${o.why}`;
+      // (an open objective whose fire mission is not out yet says when it comes, director.js objectiveWaits)
+      const mmss0 = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+      const wait = o.wait == null ? null : o.wait === 'traffic' ? 'waits for traffic' : o.wait === 'queued' ? 'queued' : o.wait > 0 ? `mission in ${mmss0(o.wait)}` : 'mission next';
+      const waitTip = o.wait == null ? '' : o.wait === 'traffic' ? ' Its fire missions come when a train or a convoy is on the move.'
+        : o.wait === 'queued' ? ' Its fire mission opens when one of the main missions open now ends.' : ' Its fire mission is not out yet: the missions open one at a time.';
+      li.title = `${o.main ? 'Main objective' : 'Secondary objective'}: ${o.title}. ${o.why}${waitTip}`;
+      // (a hold's clock waits while nothing lands near the place)
+      if (o.kind === 'hold' && o.state === 'open' && o.hold) { li.classList.add(o.hold.running ? 'holding' : 'paused'); li.title += o.hold.running ? '' : ` The clock is paused: no burst within ${o.hold.r} m in the last ${o.hold.g} s.`; }
+      if (wait) li.classList.add('waiting');
       const glyph = document.createElement('i');
       glyph.textContent = o.main ? (o.state === 'done' ? '■' : o.state === 'failed' ? '✕' : '□') : o.bonus ? (o.state === 'done' ? '▲' : o.state === 'failed' ? '✕' : '△') : (o.state === 'done' ? '◆' : o.state === 'failed' ? '✕' : '◇');
       const name = document.createElement('span');
@@ -96,8 +104,11 @@ export class HUD {
       const mmss = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
       note.textContent = o.state === 'done' ? '✓' : o.state === 'failed' ? 'failed' : o.kind === 'xzeit' ? (g.accomplished ? 'call it' : 'finale')
         : o.kind === 'duel' ? `±${o.fix} m · ${mmss(o.left)}` : o.kind === 'railgun' && o.fix != null ? `${o.up ? 'FIRING' : 'away'} · ±${o.fix} m`
-          : o.kind === 'balloon' && o.haul ? (o.haul.left > 0 ? `hauled down ${mmss(o.haul.left)}` : o.haul.k > 0.05 ? 'going up' : 'up') : o.kind === 'prep' ? `${o.pct}/25% · ${mmss(o.left)}` : o.kind === 'column' ? `${o.pct}/30% · ${mmss(o.left)}`
-          : o.n > 1 ? `${o.done}/${o.n}` : o.kind === 'tanks' ? 'before attack' : '';
+          : o.kind === 'balloon' && o.haul && !wait ? (o.haul.left > 0 ? `hauled down ${mmss(o.haul.left)}` : o.haul.k > 0.05 ? 'going up' : 'up') : o.kind === 'prep' ? `${o.pct}/25% · ${mmss(o.left)}` : o.kind === 'column' ? `${o.pct}/30% · ${mmss(o.left)}`
+          : o.kind === 'hold' && o.hold ? `${mmss(o.hold.held)} of ${mmss(o.hold.need)}${o.hold.running ? '' : o.hold.started ? ' · paused' : ' · fire on it'}`
+            : o.kind === 'trace' && o.locate != null ? `finding it${o.locate ? ` · ±${o.locate} m` : ''}`
+              : o.kind === 'trace' && o.step ? `step ${o.step} of 2${wait ? ` · ${wait}` : ''}`
+                : wait ? (o.n > 1 ? `${o.done}/${o.n} · ${wait}` : wait) : o.n > 1 ? `${o.done}/${o.n}` : o.kind === 'tanks' ? 'before attack' : '';
       li.append(glyph, name, note);
       return li;
     });

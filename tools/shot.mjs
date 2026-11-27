@@ -1,5 +1,5 @@
 // Headless screenshot and console capture, private to whoever runs it (no shared browser).
-//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--dev] [--lineup k5,wespe,...]
+//   node tools/shot.mjs <path> <out.png> [--size 1600x900] [--wait 4000] [--eval "js expression"] [--until "js expression"] [--dev] [--lineup k38,hummel,...]
 // <path> is relative to the dev server (http://localhost:5201), e.g. "/" or "/models.html?kind=bl15in".
 // --until polls the expression (up to 60 s) before --wait starts; --eval runs after the wait and its result is printed.
 // Console errors and page errors are printed so a broken module shows up immediately.
@@ -19,7 +19,7 @@ const size = opt('--size', '1600x900').split('x').map(Number);
 const wait = Number(opt('--wait', '3000'));
 const evalExpr = opt('--eval', null);
 const until = opt('--until', null);
-const lineup = opt('--lineup', null); // --lineup k5,wespe,...: dev mode with that career lineup (the German tree)
+const lineup = opt('--lineup', null); // --lineup k38,hummel,...: dev mode with that career lineup (the German tree)
 const dev = args.includes('--dev') || !!lineup;
 if (args.includes('--dev')) args.splice(args.indexOf('--dev'), 1);
 const [path = '/', out = 'shots/shot.png'] = args;
@@ -49,7 +49,8 @@ page.on('console', (m) => {
 });
 page.on('pageerror', (e) => console.log(`[pageerror] ${e.message}\n${e.stack ?? ''}`));
 
-await page.goto(`http://localhost:5201${path}`, { waitUntil: 'load', timeout: 60000 });
+// (DRUMFIRE_PORT: another dev server than the usual 5201, a worktree's own)
+await page.goto(`http://localhost:${process.env.DRUMFIRE_PORT ?? 5201}${path}`, { waitUntil: 'load', timeout: 60000 });
 if (until) await page.waitForFunction(until, null, { timeout: 60000, polling: 250 }).catch((e) => console.log(`[until timeout] ${e.message}`));
 await page.waitForTimeout(wait);
 if (evalExpr) {

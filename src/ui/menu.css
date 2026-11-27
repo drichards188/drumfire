@@ -163,14 +163,20 @@ body.menu #view, body.menu #panel { display: none; }
 .lv-seg:disabled { opacity: .3; cursor: default; }
 .lv-seg small { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); white-space: nowrap; font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #9fbf86; }
 .lv-seg small::before { content: '\25b2 '; }
+/* a level won: a tick in its step's corner (its first-win bonus paid) */
+.lv-seg.won::after { content: '\2713'; position: absolute; top: 2px; right: 4px; font: 9px var(--mono); color: #9fbf86; }
+.lv-seg.won.on::after { color: #12140f; }
 .lv-head small { font: 9px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #aaa88b; }
 .lv-head h3 { font: normal 28px/1.1 var(--serif); color: #ece2c6; margin: 4px 0; }
 .lv-head p { font: italic 14px/1.4 var(--serif); color: #bdb9a9; }
+/* what is new at this level (threat.js fresh) */
+.lv-head .lv-new b { font: 700 8px var(--mono); font-style: normal; letter-spacing: .16em; text-transform: uppercase; color: #12140f; background: #d2b77d; padding: 2px 5px; margin-right: 4px; vertical-align: 2px; }
 .lv-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .lv-fact { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid #a49b6933; background: #c2bc930a; }
 .lv-fact small { font: 8px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #aaa88b; }
 .lv-fact b { font: normal 15px var(--serif); color: #ece2c6; }
 .lv-fact .lv-en { font: italic 11px var(--serif); color: #aaa88b; margin-top: -3px; }
+.lv-fact .lv-bonus { font: 10px var(--mono); font-style: normal; color: #f0d999; }
 /* the mission dealt (src/operation.js): its main objectives (squares) and the secondaries known before battle (diamonds) */
 .lv-obj { list-style: none; display: grid; gap: 2px; padding: 8px 10px; border-left: 2px solid #a49b6966; font: 12px/1.45 var(--mono); color: #ddd8c5; }
 .lv-obj li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; }
@@ -184,6 +190,7 @@ body.menu #view, body.menu #panel { display: none; }
 .mn-chip.calm { color: #b9cfa6; border-color: #9fbf8677; background: #9fbf8614; }
 .lv-fit { font: 12px var(--mono); color: #9fbf86; }
 .lv-fit.over { color: #e6a35a; }
+.lv-fit.cut { color: #d9c27a; }
 /* the special missions and the training: picture cards, the chosen one's line under them */
 .mn-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .mn-cards.one { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -457,6 +464,8 @@ body.menu #view, body.menu #panel { display: none; }
 .rs-act:hover:not(:disabled) { background: #bca16a; color: #171b16; }
 .rs-act:disabled { cursor: default; border-color: #a49b6944; background: none; color: #7f8573; }
 .rs-top { font: 9px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #9fbf86; white-space: nowrap; }
+/* a part's top level shut until a hard battle is won (progression.js partGate) */
+.rs-lock { font: 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #e6a35a; white-space: nowrap; cursor: help; }
 @media (max-width: 999px) {
   .rs { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'tree' 'card'; }
 }

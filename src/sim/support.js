@@ -1,8 +1,9 @@
-// Off-map support: the lineup's weapons that fire from beyond the map (research.js `offmap`: the V-1 flying bomb, the
-// V-2 rocket, the Paris Gun's shell). Node-safe. The player picks one, gives it a point on the map, and it fires in its
-// own time: a preparation, a flight partly off the map, then the arrival (the V-1 low and buzzing, diving in silence
-// when its motor cuts; the V-2 falling from high, ahead of its own sound; the Paris shell's steep fall) and a burst
-// through the normal path (sim.burst: targets, infantry, wire, craters); then a long reload. Each asset is a plain
+// Off-map support: the lineup's weapons that fire from beyond the map (research.js `offmap`: the Gotha strike and the
+// V-2 rocket; the V-1 flying bomb and the Paris Gun's shell, out of the tree since 2026-11-26, dormant here).
+// Node-safe. The player picks one, gives it a point on the map, and it fires in its own time: a preparation, a flight
+// partly off the map, then the arrival (the V-1 low and buzzing, diving in silence when its motor cuts; the V-2
+// falling from high, ahead of its own sound; the Paris shell's steep fall) and a burst through the normal path
+// (sim.burst: targets, infantry, wire, craters); then a long reload. Each asset is a plain
 // object the console reads: { kind, name, state 'ready' | 'preparing' | 'flight' | 'reloading', t (s left in it), aim,
 // shellId, last }. Game values, not weapons data (DESIGN.md "Off-map support"): the real spreads are kilometres, here
 // they are sized so a strike can hit a battery position on this map; the times are short enough for two or three
@@ -21,7 +22,10 @@ import { gridRef } from '../sector.js';
 // the fall about the aim point (m)
 export const SUPPORT = {
   v1: { name: 'V-1', prep: 110, reload: 540, offmap: 45, spread: 110, word: 'flying bomb' },
-  v2: { name: 'V-2', prep: 170, reload: 780, offmap: 60, spread: 80, word: 'rocket' },
+  // (the V-2 the off-map line's step up on the Gotha strike since 2026-11-26: prep 170, reload 780 and spread 80
+  // before, when the Gotha, two ranks below it, silenced a field battery in one strike and the V-2 needed two in 22 min;
+  // now one strike in 3.6 min, 12 of 12, a laager in two where the Gotha takes none. Its own mission is not this)
+  v2: { name: 'V-2', prep: 120, reload: 480, offmap: 60, spread: 35, word: 'rocket' },
   paris: { name: 'Paris Gun', prep: 75, reload: 600, offmap: 80, spread: 60, word: 'shell' },
   // a flight of three Gotha bombers (1917): the aircraft come over the map from the east at 1,800 m and each drops a
   // stick of 100 kg bombs across the aim point (GOTHA below). `spread` is the flight's error about the aim.

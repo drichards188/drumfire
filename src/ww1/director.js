@@ -16,12 +16,13 @@ import { generateOperation } from '../operation.js';
 import { Objectives } from '../sim/objectives.js';
 import { MIN_HARD } from '../sim/specialists.js';
 import { tracks } from '../trenchlines.js';
+import { RANGING, britName } from './enemy.js';
 
 const OBS_AIR = ['Flieger FA 6', 'Flieger FA 9', 'Flieger FA 213'];
 const sectorName = (id) => SECTORS.find((s) => s.id === id).name;
 const laneOf = (id) => ({ B: -1200, C: 2400 }[id]);
 export const PREP = 180; // the Feuervorbereitung before our infantry goes, s
-const GUNS_SHRAPNEL = new Set(['k17', 'lefh18', 'fk16', 'wespe', 'rk92']); // (the leFH 18's Doppelzünder: the career's battle, ops.js RIDGE_WW2; the FK 16 and the Wespe in RIDGE_MORE)
+const GUNS_SHRAPNEL = new Set(['k17', 'lefh18', 'fk16']); // (the leFH 18's Doppelzünder: the career's battle, ops.js RIDGE_WW2; the FK 16 in RIDGE_MORE)
 // the share of our assault that must reach the British line (the British game's 50, 60, 70 percent, narrowed: the
 // walk behind the Feuerwalze costs about the same on every difficulty, so a wider spread would decide the game by
 // the difficulty alone; Easy still forgives a ragged Feuerwalze)
@@ -49,8 +50,13 @@ const NO_HANDOFF = new Set(['bconvoy', 'railyard']); // the traffic: a chance in
 // a battery with a round loaded, shells at the guns or its ammunition column coming (guns.js resupply)
 const armed = (u) => u.pieces.some((p) => p.state !== 'dead' && p.loaded) || (u.ammo?.he ?? 0) + (u.ammo?.shrapnel ?? 0) > 0 || (u.def?.resupply ?? (u.def?.special ? 0 : 1)) > 0;
 const REOPEN = 45; // s before a main's failed fire mission comes again
-const MAIN_LIVE = 2; // the main objectives' fire missions open at once
-const SPACING = 40; // s between two objectives' missions opening
+// (every open objective has its fire mission at once, 2026-11-26: the staggering, two mains at a time and one opening
+// every 40 s, made a level's length the sum of its parts; the levels are shorter now)
+// a hold done at the crossroads or the railhead: their supply held up for this long (TRAFFIC_CUT's cut)
+const HOLD_CUT = 600;
+// a two-step main's battery (ww1/director.js traceUpdate): its fire mission is offered once our rangers' fix is within
+// RANGING.rangers.place, or, so it never waits for ever, `loose` s after the objective opened, on the fix as it stands
+const TRACE = { loose: 300 };
 // a mission done on a level: BEAT s before the next is given (the objectives', the lineup's, a duel, a column: not an
 // attack's counter-preparation, on the attack's clock, nor a call on a British battery firing), so the player sees it
 // done (the report, the toast, the pay) before anything new rings; then, with nothing else in hand, the day runs on
@@ -92,6 +98,18 @@ export const fixOf = (lock) => Math.round(35 + 400 * Math.pow(1 - Math.min(1, Ma
 const QUIET_END = 120; // s without an objective moving before a lineup all on auto ends an accomplished battle
 const PRESSURE = { perMin: 0.2, max: 3 }; // their counter-battery fire after the mission is accomplished
 const THIN = 0.85; // an attack's size for each objective done that thins them (the HQ, a shelter, the corps HQ), 0.6 at least
+// the ranging counter-battery prototype (sim.cbModel, ww1/enemy.js RANGING): a Gegenbatterie mission on a British
+// battery our rangers have placed while it has one of ours under its fire: its points (modest: it is self-defence, not
+// an objective), s without that fire before one nobody has taken is withdrawn, s after one ends before the next on it
+const RANGERS = { points: 40, quiet: 120, again: 60 };
+// The safety net (stallUpdate, 2026-11-26): a level's battle ends on its objectives, never on the clock, so a main that
+// our fire does not move must not hold it for ever. `rounds` rounds on its fire missions and `s` s with no damage to its
+// targets, no second on a hold's clock, no step, and the neighbouring Gruppe takes it on (handOn): done, unpaid but for
+// the share our guns did, said on the radio, their heavies' rounds seen falling on it. A lineup all on auto (the tests,
+// a player who left it to the crews) also hands on its most stuck main after `idle` s with no main moving at all,
+// whatever it fires. Fair to a human too: the player who keeps firing at a target and cannot touch it is helped, the
+// one who has not fired at it yet is left to it.
+const STALL = { rounds: 40, s: 600, idle: 1200, per: 2, nk: 'm16' };
 export const TRAFFIC_CUT = { k: 0.85, dur: 300 }; // their supply after a train or a convoy is wrecked (ww1/enemy.js)
 // the traffic on a level's day: [day's time, 'convoy' | 'train']
 const TRAFFIC = [[200, 'convoy'], [420, 'train'], [700, 'convoy'], [950, 'train'], [1200, 'convoy'], [1450, 'train'], [1700, 'convoy']];
@@ -100,7 +118,7 @@ const IDENTITY = { dmg: 1, disp: 1, load: 1, ammo: 1 };
 // the mortars and the long guns stay on the batteries and the depots), and how far beyond the line each lays its
 // rounds so that its shorts fall clear of our men, 85 m behind the line: two and a half spreads and its lethal
 // radius less 40 m
-export const FEUERWALZE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'fk16', 'wespe', 'hummel', 'rk92', 'sfh93']);
+export const FEUERWALZE = new Set(['k17', 'sfh13', 'lefh18', 'sfh18', 'fk16', 'hummel']);
 export function walzeMargin(u, x, z) {
   const g = GUNS[u.kind], sc = SHELLS[g?.shell ?? u.kind];
   if (!g || !sc) return 0;
@@ -123,7 +141,6 @@ export class DirectorWW1 extends DirectorWW2 {
     sim.objectives = sim.operation ? new Objectives(sim, sim.operation) : null;
     sim.objectivePay = 0;
     this.reopen = []; // [{ at, id }]: an objective whose mission failed, its next mission
-    this.objAt = 0; // the next objective's mission opens no sooner (objectiveMissions)
     this.beatAt = 0; // a mission just done: nothing new is given before then (BEAT; sim/lineup.js reads it too)
     this.saidLull = null; // the lull (its lullAt) whose lapse has been announced, and its leg's end and rate (pace)
     this.lapseTo = null;
@@ -135,6 +152,7 @@ export class DirectorWW1 extends DirectorWW2 {
     this.hunt = null; // the railway-gun hunt (HUNT): { t, up, next, upAt, shots, err, fired }
     super.reset();
     this.handedOff = new Set();
+    this.neighbours = []; // [{ t, at }]: the neighbouring Gruppe's rounds on a target handed on (handOn, nbrUpdate)
     this.verdicts = new Map(); // site id -> whether a battery of the lineup can finish it (canOffer)
     // a level's mission (levelUpdate): accomplished (`closing`), the finale called, the quiet before an all-auto end
     this.lv = battle ? { closing: false, finale: false, quietAt: 0, cb0: sim.difficulty.cb } : null;
@@ -167,6 +185,8 @@ export class DirectorWW1 extends DirectorWW2 {
         this.hunt = { t, up: false, next: HUNT.first[0] + sim.rng() * (HUNT.first[1] - HUNT.first[0]), upAt: 0, shots: 0, err: HUNT.err, fired: t.firedAt ?? null };
       }
     }
+    // a two-step main's battery must engage us early, so that our rangers can find it (ww1/enemy.js honours the flag)
+    for (const o of sim.operation.objectives) if (o.kind === 'trace') { const t = sim.targetById(o.targets[0]); if (t) t.mustEngage = true; }
     // (the deep and concrete targets come as the mission's objectives, from the director; the specialists only open
     // the strongpoints, which X-Zeit brings)
     this.specialists.allow = new Set(sim.operation.forts ? ['fort'] : []);
@@ -187,10 +207,10 @@ export class DirectorWW1 extends DirectorWW2 {
     // a mission done: a beat before the next; an objective's frees its place at once (not SPACING after the last opened)
     if (ok) {
       this.beatAt = sim.time + BEAT;
-      if (m.obj) this.objAt = Math.min(this.objAt ?? 0, this.beatAt);
     }
     // a train or a convoy wrecked holds their supply up for a while (a level's mission only)
     if (ok && m.kind === 'harass') this.trafficCut = sim.time + TRAFFIC_CUT.dur;
+    if (m.rangers) { const t = sim.targetById(m.targetId); if (t) t.rangersAt = sim.time + RANGERS.again; }
     if (!m.obj) return;
     ob.missionEnd(m, ok);
     // an objective's mission failed: another on it in a while, as long as the objective is open
@@ -206,6 +226,7 @@ export class DirectorWW1 extends DirectorWW2 {
   offers(t) {
     const L = this.sim.level;
     if (!L) return true;
+    if (this.handedOff.has(t.id)) return false; // (the neighbouring Gruppe's: said when it went)
     if (!L.sites.includes(tierOf(t))) return false;
     if (this.canOffer(t)) return true;
     if (!this.handedOff.has(t.id)) {
@@ -412,7 +433,70 @@ export class DirectorWW1 extends DirectorWW2 {
     const sim = this.sim;
     super.update(dt);
     if (!sim.scripted) this.fieldFire();
-    if (this.lv) { this.duelUpdate(); this.prepUpdate(); this.popUpdate(dt); this.huntUpdate(); this.levelUpdate(); }
+    if (this.lv) { this.holdUpdate(dt); this.traceUpdate(); this.duelUpdate(); this.prepUpdate(); this.popUpdate(dt); this.huntUpdate(); if (sim.cbModel) this.rangersUpdate(); this.stallUpdate(); this.nbrUpdate(); this.levelUpdate(); }
+  }
+
+  // ------------------------------------------------------------------ our rangers' missions (the ranging prototype)
+  // A British battery that has one of ours under its fire and that our sound and flash rangers have placed (its fix
+  // within RANGING.rangers.place m: ww1/enemy.js heard) gets a Gegenbatterie mission laid on the fix, with an observer
+  // who reports the fall of shot, no clock, and no part in the objectives' failures. In place of watchBatteries' calls.
+  rangersUpdate() {
+    const sim = this.sim, now = sim.time, en = sim.enemyAI;
+    if (sim.state !== 'playing') return;
+    const live = (m) => m.state !== 'done' && m.state !== 'failed';
+    if (!this.noOrders && !sim.barrage) for (const id of en.engs.keys()) {
+      const t = sim.targetById(id), r = t?.rangers;
+      if (!r || r.err > RANGING.rangers.place || !t.alive || this.hunt?.t === t || this.spent(t) || now < (t.rangersAt ?? 0)) continue;
+      if (sim.missions.some((m) => m.targetId === id && live(m))) continue;
+      this.rangersMission(t);
+    }
+    // one nobody has taken, its battery off our guns for a while: withdrawn (no penalty: it was never an order)
+    for (const m of sim.missions) {
+      if (!m.rangers || m.obj || m.state !== 'open' || m.units.length) continue;
+      if (en.engs.has(m.targetId)) m.quietAt = now;
+      else if (now - (m.quietAt ?? m.t0) > RANGERS.quiet) {
+        m.state = 'failed';
+        m.tEnd = now;
+        m.withdrawn = true;
+        const t = sim.targetById(m.targetId);
+        if (t) t.rangersAt = now + RANGERS.again;
+        sim.radio(`${m.title}: withdrawn, the battery has left our guns alone.`, 'info');
+      }
+    }
+  }
+
+  rangersMission(t) {
+    const sim = this.sim, r = t.rangers, night = sim.night, ev = sim.events, radio = ev.radio;
+    // (an observer who reports: by day the day's, by night the flash rangers read the bursts against its flashes)
+    let observer = this.dayObserver('foo');
+    if (observer === 'map') observer = 'foo';
+    let m;
+    ev.radio = null; // (the rangers' own line below, not the day's order)
+    try {
+      m = this.addMission({ kind: 'cb', title: `Gegenbatterie: ${t.name}`, targetId: t.id, x: r.x, z: r.z, observer, obsName: night ? 'Lichtmeßtrupp' : undefined,
+        deadline: null, points: RANGERS.points, hint: 'It is ranging on our guns. Laid on the rangers\' fix: range onto it with the reports. Shells on it spoil its aim.' });
+    } finally { ev.radio = radio; }
+    m.rangers = true;
+    t.cbErr = { x: r.x - t.pos.x, z: r.z - t.pos.z };
+    sim.radio(`${night ? 'Flash' : 'Sound'} rangers: the ${britName(t)} ${r.placed ? 'is firing on us again' : 'placed'}, ${m.gridRef}. Gegenbatterie mission M${m.id.slice(1)}.`, 'phone');
+    if (!r.placed) r.heard = r.n; // (the rounds it had fired when it was placed: the tests' count)
+    r.placed = true;
+    return m;
+  }
+
+  // the fix has tightened (ww1/enemy.js heard, every round the battery fires): the rangers' mission moves with it, as
+  // the hunt's does, and a later mission on the battery is laid on it
+  rangersFix(t) {
+    const sim = this.sim, r = t.rangers;
+    if (r.err > RANGING.rangers.place) return;
+    t.cbErr = { x: r.x - t.pos.x, z: r.z - t.pos.z };
+    for (const m of sim.missions) {
+      if (!m.rangers || m.targetId !== t.id || m.state === 'done' || m.state === 'failed') continue;
+      m.x = r.x; m.z = r.z;
+      m.gridRef = sim.theatre.ref(m.x, m.z);
+      // (the batteries on it on auto are laid on the new fix; the player's own re-lays from the board's flag)
+      for (const id of m.units) { const u = sim.unitById(id); if (u?.alive && u.mode === 'auto') sim.guns.setTarget(u, m.x, m.z); }
+    }
   }
 
   // ------------------------------------------------------------------ a threat level's mission (see the top)
@@ -459,6 +543,7 @@ export class DirectorWW1 extends DirectorWW2 {
     const sim = this.sim, lv = this.lv, ob = sim.objectives;
     if (!lv || !ob?.accomplished || lv.finale || sim.state !== 'playing') return false;
     lv.finale = true;
+    lv.calledAt = sim.time; // (the tests' human-length proxy: tools/leveltest.mjs)
     if (!ob.has('xzeit')) {
       this.levelEnd(true, 'Mission accomplished', this.summary());
       return true;
@@ -494,41 +579,216 @@ export class DirectorWW1 extends DirectorWW2 {
   unreachable() {
     const sim = this.sim, can = (u, m) => (sim.crews.canTake ? sim.crews.canTake(u, m) : sim.crews.canServe(u, m));
     for (const o of sim.objectives.openTargets()) {
-      if (!o.main) continue;
-      const t = sim.targetById(o.targets[0]);
-      if (!t || !t.alive) continue;
-      const probe = { kind: BRIT_BATTERIES.has(t.kind) ? 'cb' : 'destroy', targetId: t.id, x: t.pos.x, z: t.pos.z, alt: 0, minHard: o.role === 'hard' ? MIN_HARD : 0 };
-      if (!sim.units.some((u) => u.alive && armed(u) && can(u, probe))) return o;
+      if (!o.main || o.handed) continue;
+      // (each of its targets still to be done: a main may name two or three)
+      for (const id of o.kind === 'trace' ? o.targets.slice(0, 1) : sim.objectives.left(o)) {
+        const t = sim.targetById(id);
+        if (!t || !t.alive) continue;
+        const probe = { kind: BRIT_BATTERIES.has(t.kind) ? 'cb' : 'destroy', targetId: t.id, x: t.pos.x, z: t.pos.z, alt: 0, minHard: o.role === 'hard' ? MIN_HARD : 0 };
+        if (!sim.units.some((u) => u.alive && armed(u) && can(u, probe))) return o;
+      }
     }
     return null;
   }
 
-  // the objectives' fire missions: the mains' two at a time, the secondaries' as they are reported, one opening at a
-  // time (SPACING), a failed one again after REOPEN (sim/objectives.js says which are open)
+  // the objectives' fire missions: every open objective has its own at once (a secondary when it is reported, a two-step
+  // main's first when its battery is located), a failed one again after REOPEN, none within BEAT of a mission done
+  // (sim/objectives.js says which are open)
   objectiveMissions() {
     const sim = this.sim, ob = sim.objectives;
-    if (!ob || sim.state !== 'playing' || sim.barrage || this.lv?.finale || sim.time < Math.max(this.objAt ?? 0, this.beatAt ?? 0)) return;
+    if (!ob || sim.state !== 'playing' || sim.barrage || this.lv?.finale || sim.time < (this.beatAt ?? 0)) return;
     const live = (m) => m.state !== 'done' && m.state !== 'failed';
-    let mains = sim.missions.filter((m) => m.objMain && live(m)).length;
     for (const o of ob.openTargets()) {
-      if (o.main && mains >= MAIN_LIVE) continue;
-      if (sim.missions.some((m) => m.obj === o.id && live(m))) continue;
+      // (a hold has `k` missions at once, so that more than one battery can keep the place under fire; a main that names
+      // two or three targets one on each still to be done)
+      const have = sim.missions.filter((m) => m.obj === o.id && live(m)).length;
+      if (have >= (o.kind === 'hold' ? o.hold.k : ob.isTarget(o) ? ob.left(o).length : 1)) continue;
       const r = this.reopen.find((q) => q.id === o.id);
       if (r && sim.time < r.at) continue;
-      // (the secondaries after the opening: the first minutes are the mains')
-      if (!o.main && sim.time < 90 && !ob.accomplished) continue;
-      const m = this.objectiveMission(o);
-      if (!m) continue;
-      this.reopen = this.reopen.filter((q) => q.id !== o.id);
-      this.objAt = sim.time + SPACING;
-      return;
+      const m = this.objectiveMission(o, have);
+      if (m) this.reopen = this.reopen.filter((q) => q.id !== o.id);
+    }
+  }
+
+  // when each open objective without a fire mission gets one, for the objectives list (goal): objectiveMissions' rule
+  // played forward, `{ at }` in sim time, `{ why: 'traffic' }` waiting for a train or a convoy to move. Read only.
+  objectiveWaits() {
+    const sim = this.sim, ob = sim.objectives, out = new Map();
+    if (!ob || sim.barrage || this.lv?.finale) return out;
+    const live = (m) => m.state !== 'done' && m.state !== 'failed';
+    const has = (o) => sim.missions.some((m) => m.obj === o.id && live(m));
+    for (const o of ob.openTargets()) {
+      if (has(o)) continue;
+      let t = Math.max(sim.time, this.beatAt ?? 0);
+      const r = this.reopen.find((q) => q.id === o.id);
+      if (r) t = Math.max(t, r.at);
+      out.set(o.id, { at: t });
+    }
+    for (const o of ob.list) if (o.state === 'open' && o.kind === 'traffic' && !has(o)) out.set(o.id, { why: 'traffic' });
+    return out;
+  }
+
+  // ------------------------------------------------------------------ holds and two-step mains
+  // A hold: the clock runs while our bursts land within `hold.r` of the place at least every `hold.g` s and waits when
+  // they stop (never failed by the clock); done at `hold.need`. Every burst of ours counts, whatever battery it came
+  // from, so batteries may rotate. Our shells that burst last step are still in sim.shells (moveShells removes them at
+  // the next step). Done: its fire mission ends and its effect lands (their supply held up; the attacks are thinned by
+  // `effect: 'attacks'`, levelAssault and massing).
+  holdUpdate(dt) {
+    const sim = this.sim, ob = sim.objectives;
+    if (!ob || sim.state !== 'playing' || sim.barrage) return;
+    const live = (m) => m.state !== 'done' && m.state !== 'failed';
+    const holds = ob.list.filter((o) => o.kind === 'hold' && o.state === 'open');
+    for (const o of holds) {
+      const h = o.hold;
+      for (const s of sim.shells) if (s.own && !s.alive && s.burstAt && Math.hypot(s.burstAt.x - h.x, s.burstAt.z - h.z) <= h.r) o.lastHit = sim.time;
+      o.running = o.lastHit != null && sim.time - o.lastHit <= h.g;
+      if (o.running) o.held = Math.min(h.need, o.held + dt);
+    }
+    const said = new Set();
+    for (const m of sim.missions) {
+      if (!m.hold || !live(m)) continue;
+      const o = ob.byId(m.hold);
+      if (o?.state === 'done') {
+        // (one radio line for a hold's missions)
+        const ev = sim.events, radio = ev.radio;
+        if (said.has(o.id)) ev.radio = null;
+        said.add(o.id);
+        try { this.finish(m, true, 'held'); } finally { ev.radio = radio; }
+        if (o.effect === 'traffic') this.trafficCut = Math.max(this.trafficCut, sim.time + HOLD_CUT);
+      }
+    }
+    // (a crew that gave a main objective's mission up, a hold's above all, is not done with it: the crews on auto stand
+    // for a player who keeps at it, so they take it again after their pause)
+    for (const m of sim.missions) if ((m.hold || m.objMain) && live(m)) for (const u of sim.units) u.ai?.skip?.delete(m.id);
+  }
+
+  // the safety net (STALL): each open main's effect watched, the stuck one handed on
+  stallUpdate() {
+    const sim = this.sim, ob = sim.objectives, now = sim.time, lv = this.lv;
+    if (!ob || sim.state !== 'playing' || sim.barrage || lv.finale || ob.accomplished) return;
+    const allAuto = sim.units.every((u) => !u.alive || u.mode === 'auto') && !sim.gunner?.st;
+    let worst = null;
+    for (const o of ob.list) {
+      if (!o.main || o.state !== 'open' || o.kind === 'xzeit' || o.ready === false || o.handed) continue;
+      let fired = 0;
+      for (const m of sim.missions) if (m.obj === o.id && m.fired) for (const k in m.fired) fired += m.fired[k];
+      // (its targets' standing parts' hp: t.hp runs ahead of it, and read 0 with an HQ's last part standing)
+      const hp = o.kind === 'hold' ? 0 : ob.left(o).reduce((a, id) => a + (sim.targetById(id)?.parts.reduce((b, p) => b + (p.alive ? Math.max(0, p.hp) : 0), 0) ?? 0), 0);
+      const mark = `${o.step ?? 0}:${o.gone?.length ?? 0}:${Math.floor(o.held ?? 0)}`;
+      const w = o.stall;
+      if (!w || hp < w.hp - 0.01 || mark !== w.mark) { o.stall = { fired, hp, mark, at: now }; lv.movedAt = now; continue; }
+      w.hp = hp; // (a battery a new one moved into: its strength back, not our doing)
+      if (fired - w.fired >= STALL.rounds && now - w.at >= STALL.s) return this.handOn(o, `${fired - w.fired} rounds in ${Math.round((now - w.at) / 60)} minutes`);
+      if (!worst || w.at < worst.stall.at) worst = o;
+    }
+    if (worst && allAuto && now - (lv.movedAt ?? 0) >= STALL.idle) this.handOn(worst, `no main objective has moved for ${Math.round(STALL.idle / 60)} minutes`);
+  }
+
+  // a stuck main handed on to the neighbouring Gruppe (stallUpdate): its fire missions withdrawn (no one's failure), its
+  // targets' fire silenced and their heavies' rounds on them, the objective done and paid only for the share ours did
+  handOn(o, why) {
+    const sim = this.sim, ob = sim.objectives, now = sim.time;
+    o.handed = true;
+    o.doneLine = 'the neighbouring Gruppe took it on';
+    sim.radio(`Nachbargruppe: our fire has had no effect on "${o.title}" (${why}); the neighbouring Gruppe's heavies take it on. It counts as done, paid only for what our guns did.`, 'warn');
+    for (const id of o.kind === 'hold' ? [] : ob.left(o)) {
+      const t = sim.targetById(id);
+      if (!t || !t.alive) continue;
+      this.handedOff.add(t.id);
+      if (t.fire) t.fire.ammo = 0; // (their battery under the neighbours' fire: silent)
+      this.neighbourFire(t);
+    }
+    for (const m of sim.missions) {
+      if (m.obj !== o.id || m.state === 'done' || m.state === 'failed') continue;
+      for (const id of [...m.units]) { const u = sim.unitById(id); if (u && u.missionId === m.id) this.release(u); }
+      m.state = 'failed';
+      m.tEnd = now;
+      m.withdrawn = true;
+    }
+    this.reopen = this.reopen.filter((q) => q.id !== o.id);
+    ob.complete(o);
+  }
+
+  // a target handed on, once the neighbours' last round on it is down: what is left of it is out (their heavies' work, to
+  // the end: a battery handed on that kept shelling us, a dump left burning half, read as nothing done)
+  nbrUpdate() {
+    const sim = this.sim, now = sim.time, q = this.neighbours;
+    if (!q?.length) return;
+    for (let i = q.length - 1; i >= 0; i--) {
+      const { t, at } = q[i];
+      if (now < at) continue;
+      q.splice(i, 1);
+      if (q.some((e) => e.t === t) || !t.alive) continue;
+      t.parts.forEach((p, k) => { if (p.alive) sim.targetAI.damagePart(t, k, p.hp + 1, null); });
+    }
+  }
+
+  // the neighbouring Gruppe's heavies on a target handed on: STALL.per rounds on each of its parts still standing, from
+  // their positions behind our line, landing over half a minute (unitId null: no unit of ours, no pay, no report)
+  neighbourFire(t) {
+    const sim = this.sim, now = sim.time, sh = SHELLS[STALL.nk] ? STALL.nk : 'fk16';
+    const x0 = t.pos.x + 7000, z0 = t.pos.z + sim.gauss() * 900, y0 = sim.heightAt(x0, z0) + 2;
+    let i = 0;
+    for (const p of t.parts) {
+      if (!p.alive) continue;
+      for (let k = 0; k < STALL.per; k++, i++) {
+        this.neighbours.push({ t, at: now + 21 + i * 2.5 }); // (what their last round leaves standing is theirs too: nbrUpdate)
+        const ax = p.x + sim.gauss() * 6, az = p.z + sim.gauss() * 6, yT = sim.heightAt(ax, az);
+        const D = Math.hypot(ax - x0, az - z0), T = 20 + i * 2.5;
+        sim.shells.push({
+          id: sim.nextId('s'), own: true, unitId: null, piece: null, kind: sh, calibre: SHELLS[sh].calibre, neighbour: true,
+          pos: { x: x0, y: y0, z: z0 }, prev: { x: x0, y: y0, z: z0 }, vel: { x: (ax - x0) / T, y: (yT - y0 + 0.5 * G * T * T) / T, z: (az - z0) / T },
+          fuze: 'instant', t: 0, t0: now, tof: T, aim: { x: ax, z: az }, alive: true, k: 0, aimY: yT,
+          plane: D, pbx: (ax - x0) / D, pbz: (az - z0) / D, ox: x0, oz: z0, fuzeErr: 0,
+        });
+      }
+    }
+  }
+
+  // a two-step main's battery (step 1): its fire mission is offered once our rangers' fix on it is within
+  // RANGING.rangers.place (the ranging model; the old fire has no rangers: at once), or `TRACE.loose` s after the objective
+  // opened on the fix as it stands. A mission the rangers already opened on it becomes the objective's.
+  traceUpdate() {
+    const sim = this.sim, ob = sim.objectives;
+    if (!ob || sim.state !== 'playing' || sim.barrage || this.lv?.finale) return;
+    for (const o of ob.list) {
+      if (o.kind !== 'trace' || o.state !== 'open' || o.step !== 1 || o.ready) continue;
+      const t = sim.targetById(o.targets[0]);
+      if (!t || !t.alive) continue;
+      o.openAt ??= sim.time;
+      const r = sim.cbModel ? t.rangers : null;
+      const found = !sim.cbModel || (r && r.err <= RANGING.rangers.place);
+      o.fix = r ? Math.round(r.err) : null;
+      if (!found && sim.time - o.openAt < TRACE.loose) continue;
+      o.ready = true;
+      ob.lastProgress = sim.time;
+      if (sim.cbModel && r && !sim.missions.some((m) => m.targetId === t.id && m.state !== 'done' && m.state !== 'failed')) this.rangersMission(t);
+      sim.radio(`${found ? 'Our rangers have placed' : 'Our rangers have a rough fix on'} the ${britName(t)}: it is the one that is shelling us.`, 'info');
     }
   }
 
   // an objective's fire mission on its target: a deep or concrete one as the specialists open theirs (an aeroplane by
   // day, a map shoot by night, the long window), the rest as the day's site missions
-  objectiveMission(o) {
-    const sim = this.sim, t = sim.targetById(o.targets[0]);
+  objectiveMission(o, n = 0) {
+    const sim = this.sim, ob = sim.objectives, live = (m) => m.state !== 'done' && m.state !== 'failed';
+    // (of a main's two or three targets, the first still to be done that has no mission of the objective's on it)
+    const ids = ob.isTarget(o) ? ob.left(o) : o.targets;
+    const t = sim.targetById(ids.find((id) => !sim.missions.some((m) => m.obj === o.id && m.targetId === id && live(m))) ?? ids[0]);
+    // a hold: a fire mission on the place with a forward observer to range on (a map shoot cannot correct the guns' bias), no clock (holdUpdate keeps the crews at it)
+    if (o.kind === 'hold') {
+      const h = o.hold;
+      // (the radio's "new mission" line once for all of a hold's missions)
+      const ev = sim.events, radio = ev.radio;
+      if (n > 0) ev.radio = null;
+      let m;
+      try { m = this.addMission({ kind: 'destroy', title: `Hold: ${h.name}${h.k > 1 ? ` (${'ABC'[n] ?? n + 1})` : ''}`, x: h.x, z: h.z, observer: 'foo', deadline: null, priority: 5 + (o.main ? 5 : 2),
+        hint: `Keep shells landing within ${h.r} m of it: one burst at least every ${h.g} s runs the clock. Rotate batteries; the clock waits while nothing lands.` }); } finally { ev.radio = radio; }
+      m.obj = o.id;
+      m.objMain = o.main;
+      m.hold = o.id;
+      return m;
+    }
     if (!t || !t.alive || this.spent(t)) return null;
     // (a Gegenbatterie already open on it, from their battery's own fire: it becomes the objective's)
     const had = sim.missions.find((m) => m.targetId === t.id && !m.obj && m.state !== 'done' && m.state !== 'failed');
@@ -541,9 +801,11 @@ export class DirectorWW1 extends DirectorWW2 {
       return m;
     }
     const go = () => {
-      // (a British battery by an observer who reports, never the sound or flash rangers' blind fix: an objective
-      // missed for want of a report reads as unfair; by night the VB reads the bursts by their flash)
-      if (!o.role) return this.siteMission(t.id, o.kind === 'tanks' ? { title: `Tanks gathering: ${t.name}`, priority: 7 } : BRIT_BATTERIES.has(t.kind) ? { observer: this.dayObserver('foo') } : {});
+      // (by an observer who reports, never the sound or flash rangers' blind fix nor a map shoot: an objective missed for
+      // want of a report reads as unfair; by night the VB reads the bursts by their flash. A dump or the HQ by night was
+      // a map shoot until 2026-11-26: the guns' error never corrected, their rounds 80 m off for 13 minutes)
+      if (!o.role) return this.siteMission(t.id, o.kind === 'tanks' ? { title: `Tanks gathering: ${t.name}`, priority: 7 } : BRIT_BATTERIES.has(t.kind) ? { observer: this.dayObserver('foo') }
+        : sim.night && t.kind !== 'btanks' && t.kind !== 'bpost' ? { observer: 'foo' } : {}); // (the laagers and the posts: always the VB, siteMission)
       t.known = true;
       const observer = sim.night ? 'map' : sim.modifiers?.has('air') ? 'balloon' : 'air';
       return this.addMission({ kind: 'destroy', title: `${o.role === 'deep' ? 'Deep target' : 'Heavy target'}: ${t.name}`, targetId: t.id, x: t.pos.x, z: t.pos.z, observer,
@@ -568,7 +830,8 @@ export class DirectorWW1 extends DirectorWW2 {
     } else {
       // a lull: on to the next thing on the day's clock, never the next attack on top of one under way, never X-Zeit
       // (a target of opportunity does not hold it: it is a chance in passing, not work the day waits on)
-      const busy = fighting || this.day.queue.length > 0 || sim.missions.some((m) => !m.pop && (m.state === 'open' || m.state === 'ranging' || m.state === 'ffe'));
+      // (nor one of our rangers' Gegenbatterie missions nobody has taken: the ranging prototype, rangersUpdate)
+      const busy = fighting || this.day.queue.length > 0 || sim.missions.some((m) => !m.pop && !(m.rangers && m.state === 'open') && (m.state === 'open' || m.state === 'ranging' || m.state === 'ffe'));
       if (busy) this.lullAt = null;
       else if (this.lullAt == null) this.lullAt = sim.time;
       else if (sim.time - this.lullAt >= LULL_LV && this.si < this.script.length) { to = this.script[this.si].t; quiet = true; }
@@ -604,6 +867,7 @@ export class DirectorWW1 extends DirectorWW2 {
   // no new Gegenbatterie once X-Zeit is called
   watchBatteries() {
     if (this.noOrders) return;
+    if (this.sim.cbModel) return; // (the ranging prototype: our rangers place them, rangersUpdate)
     super.watchBatteries();
   }
 
@@ -613,6 +877,9 @@ export class DirectorWW1 extends DirectorWW2 {
     if (!lv || !ob || sim.state !== 'playing') return null;
     const allAuto = sim.units.every((u) => !u.alive || u.mode === 'auto') && !sim.gunner?.st;
     const auto = ob.accomplished && !lv.finale && allAuto ? Math.max(0, Math.ceil(QUIET_END - (sim.time - lv.quietAt))) : null;
+    const waits = this.objectiveWaits();
+    // (an open objective whose fire mission is not out yet: seconds until it is, or why it waits)
+    const waitOf = (o) => { const w = o.state === 'open' ? waits.get(o.id) : null; return w ? (w.at != null ? Math.max(0, Math.ceil(w.at - sim.time)) : w.why) : null; };
     return {
       name: sim.operation.name, title: sim.operation.title, en: sim.operation.en,
       // (an objective of the moment: its time left; the duel's fix, how far off their rounds fall; counter-preparation's
@@ -623,7 +890,11 @@ export class DirectorWW1 extends DirectorWW2 {
         fix: o.kind === 'duel' && o.state === 'open' ? fixOf(sim.targetById(o.targets[0])?.fire?.lock ?? 0) : o.kind === 'railgun' && this.hunt ? Math.round(this.hunt.err) : null,
         up: o.kind === 'railgun' && this.hunt ? this.hunt.up : null,
         haul: o.kind === 'balloon' ? (() => { const t = sim.targetById(o.targets[0]); return t?.alive ? { k: Math.round((t.haulK ?? 0) * 100) / 100, left: Math.max(0, Math.ceil((t.downUntil ?? 0) - sim.time)) } : null; })() : null,
-        pct: o.kind === 'prep' || o.kind === 'column' ? o.pct ?? 0 : null })),
+        pct: o.kind === 'prep' || o.kind === 'column' ? o.pct ?? 0 : null, wait: waitOf(o),
+        // (a hold: the clock s of its need, and whether it runs; a two-step main: its step, and while the battery is not
+        // located yet our rangers' fix, m)
+        hold: o.kind === 'hold' ? { held: Math.floor(o.held), need: o.hold.need, running: !!o.running, started: o.lastHit != null, r: o.hold.r, g: o.hold.g } : null,
+        step: o.kind === 'trace' ? o.step : null, locate: o.kind === 'trace' && o.state === 'open' && !o.ready ? o.fix ?? 0 : null })),
       hidden: ob.list.filter((o) => o.state === 'hidden').length,
       fails: ob.fails, maxFails: sim.level.fails,
       accomplished: !!ob.accomplished, finale: !!lv.finale, xzeit: !!ob.has('xzeit'), barrage: !!sim.barrage, auto,
@@ -754,6 +1025,8 @@ export class DirectorWW1 extends DirectorWW2 {
       const f = t.fire;
       if (!t.battery || !t.alive || !f || this.spent(t) || sim.time - (t.firedAt ?? -1e9) > 40 || f.lock < DUEL.lock) continue;
       if (this.hunt?.t === t) continue; // (the hunted railway gun: the hunt is its duel)
+      // (a battery an open objective has is that objective's: a duel on it made a new mission every step, re-tagged to the main)
+      if (ob.list.some((q) => q.state === 'open' && !q.bonus && q.targets?.includes(t.id))) continue;
       if (!sim.unitById(f.focus)?.alive) continue;
       const probe = { kind: 'cb', targetId: t.id, x: t.pos.x, z: t.pos.z, alt: 0, minHard: 0 };
       if (!sim.units.some((u) => u.alive && sim.crews.canServe(u, probe))) continue;

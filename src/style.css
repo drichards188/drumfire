@@ -125,6 +125,11 @@ kbd { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border: 1px s
 #ob-list li.failed, #ob-list li.failed i { color: #d98b6f; }
 #ob-list li.failed span { text-decoration: line-through; }
 #ob-list li.timed em { color: var(--amber); }
+/* an open objective whose fire mission is not out yet: "mission in 0:40", "queued", "waits for traffic" */
+#ob-list li.waiting em { font-style: italic; }
+/* a hold (kind 'hold'): its clock green while our bursts keep it running, amber and italic while it is paused */
+#ob-list li.holding em { color: #9fcf7a; }
+#ob-list li.paused em { color: var(--amber); font-style: italic; }
 /* an objective of the moment (the duel, counter-preparation): its own glyph, its timer; a duel whose fix is closing in red */
 #ob-list li.bonus.open { color: var(--paper); }
 #ob-list li.bonus.open i { color: var(--amber); }

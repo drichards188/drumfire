@@ -19,6 +19,11 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 // the fuze a battery starts with: delay for the concrete-breakers, instant for the rest. Set once; on manual nothing
 // changes it after (director.js assign: only a crew on auto picks the fuze for each mission)
 const DELAY_START = new Set(['gustav', 'karl', 'bertha', 'gamma', 'beta']);
+// take cover (the ranging counter-battery fire, sim.cbModel; unit.cover is never set without it): the share of the
+// usual chance of crew casualties while the crew is in its shelters, the share of a near miss's damage to a gun (no
+// rounds or cordite out at the gun to go up with it; a direct hit does all its damage), and the seconds to man the
+// guns again
+export const COVER = { cas: 0.15, gun: 0.5, run: 10 };
 
 // The pieces a `fire` command with `guns` sets going: 1, 2 or 'all' (the pieces most ready first, then
 // loaded ones, then the rest, in gun order, so "1" is No. 1 unless it is down or busy), or a list of piece
@@ -182,6 +187,8 @@ export class Guns {
   problem(u, short = false) {
     const o = u.order, g = GUNS[u.kind];
     if (!u.alive) return 'every gun is out of action';
+    if (u.cover) return short ? 'in cover' : 'the crew is in cover: order them back to the guns (U)';
+    if (u.manAt != null) return short ? 'manning the guns' : 'the crews are running back to the guns';
     if (!o.target) return '';
     // a range the gun cannot reach stays out of reach whatever holds it back (its preparation, its drill, a bed being
     // relaid), so it is said at the order, not when the gate lifts; the Karl is the exception (it drives to a new
@@ -259,6 +266,12 @@ export class Guns {
   fire(u, guns) {
     const sim = this.sim, o = u.order;
     if (!o.target || !o.ok || !u.alive || u.gate) return false;
+    // (in its shelters, or running back: problem() says so; an order to fire given while they run back is carried out
+    // when they are at the guns, update)
+    if (u.cover || u.manAt != null) {
+      if (!u.cover) u.fireOnMan = guns ?? true;
+      return false;
+    }
     const live = u.pieces.filter((p) => p.state !== 'dead' && !p.blocked);
     const m = u.missionId != null ? sim.missionById(u.missionId) : null;
     // without `guns`: ranging means one gun (the lead) fires a single round; the whole battery is for effect
@@ -294,6 +307,36 @@ export class Guns {
     if (mode === 'hold') this.cease(u);
   }
 
+  // Take cover (sim.command 'cover', only with sim.cbModel): the crew goes to its shelters and the guns fall silent
+  // (no fire, no loading; the signature fades as on hold, update), the men are spared most of what falls on the
+  // position (damagePiece) while the guns still take it; leaving, the crews need COVER.run s to man the guns again
+  // (unit.manAt, fire refused until then). `on` omitted toggles. True when it changed something.
+  setCover(u, on = !u.cover) {
+    const sim = this.sim;
+    on = !!on;
+    if (!u.alive || !!u.cover === on) return false;
+    // (when the crew turned, since it last stood at its guns: the render layer draws the men's way to the shelters and
+    // back from it, render/cover.js. Plain times, no random number; nothing in the sim reads them)
+    if (on && u.manAt == null) u.coverLog = [sim.time];
+    else (u.coverLog ??= []).push(sim.time);
+    u.cover = on;
+    if (on) {
+      // the fire broken off, to resume when the crews are back on the same order (not when they ran for it again
+      // before reaching the guns: that keeps what they broke off the first time)
+      const o = u.order;
+      if (u.manAt == null) u.coverResume = u.firing && o.target && u.pieces.some((p) => p.rounds > 0) ? { x: o.target.x, z: o.target.z, rounds: u.pieces.map((p) => p.rounds) } : null;
+      this.cease(u);
+      u.manAt = null;
+      u.fireOnMan = null;
+      sim.radio(`${u.callsign}: Deckung! The crews are in their shelters, the guns are silent.`, 'info');
+    } else {
+      u.manAt = sim.time + COVER.run;
+      sim.radio(`${u.callsign}: an die Geschütze! The crews are running back to the guns.`, 'info');
+    }
+    sim.events.cover?.(u, on);
+    return true;
+  }
+
   // ------------------------------------------------------------------ the loading cycle
   startLoad(u, p) {
     const g = GUNS[p.kind];
@@ -322,6 +365,7 @@ export class Guns {
     // `loadThrough` (set by a controller: the sandbox Karl turning its hull onto a line past its own traverse) lets the
     // crew load while the unit is gated or the line is out of arc, as the other guns load while they traverse
     if (p.loaded || p.state !== 'idle' || !u.alive || u.mode === 'hold' || (u.gate && !u.loadThrough)) return false;
+    if (u.cover || u.manAt != null) return false; // (nobody at the guns)
     if (!u.order.target || ((p.blocked || !p.cmd.ok) && !(u.loadThrough && u.order.why === 'out of arc'))) return false;
     if (p.crew < Math.ceil((p.crewNeed ?? p.crewMax) * 0.3)) return false;
     const sh = u.order.fuze === 'shrapnel';
@@ -334,7 +378,20 @@ export class Guns {
       if (!u.alive) continue;
       // signature fades, faster when the unit is silent on hold
       const sig = u.signature;
-      if (sig > 0) u.signature = Math.max(0, sig - (u.mode === 'hold' ? 0.014 : 0.006) * dt);
+      if (sig > 0) u.signature = Math.max(0, sig - (u.mode === 'hold' || u.cover ? 0.014 : 0.006) * dt);
+      if (u.manAt != null && sim.time >= u.manAt) {
+        // the crews are back at the guns: an order to fire given meanwhile (the player's, a Sperrfeuer) goes now; else
+        // the fire broken off by taking cover goes on, if the order is still the same
+        u.manAt = null;
+        const f = u.fireOnMan, r = u.coverResume, o = u.order;
+        u.fireOnMan = null;
+        u.coverResume = null;
+        if (f) this.fire(u, f === true ? undefined : f);
+        else if (r && o.target && o.ok && o.target.x === r.x && o.target.z === r.z) {
+          u.pieces.forEach((p, i) => { if (p.state !== 'dead') p.rounds = r.rounds[i]; });
+          u.firing = true;
+        }
+      }
       // supplies and replacements
       const quiet = sim.time - u.underFire > 40;
       for (const k of ['he', 'shrapnel']) if (u.ammo[k] < u.ammoMax[k]) {
@@ -384,6 +441,8 @@ export class Guns {
     // a gun the player serves in person (the WW2 mode's gunner, src/ww2/gunner.js) runs its drill there
     if (p.manned && this.sim.gunner) return this.sim.gunner.updatePiece(u, p, dt);
     const sim = this.sim, g = GUNS[p.kind];
+    // the crew in its shelters, or running back: a round being loaded waits where it is, a gun laid stays laid
+    if ((u.cover || u.manAt != null) && p.state !== 'recoil') return;
     const heavy = g.load[0]?.step === 'depress';
     // recoil: a quick kick back, then a slow run out
     if (p.state === 'recoil') {
@@ -533,8 +592,9 @@ export class Guns {
     const slope = elSlope(p.kind, o.charge, D);
     let brg = p.bearing - p.az + cl + br / D + sim.gauss() * g.disp.l * dk * wearK;
     let el = p.el + slope * bo + sim.gauss() * 0.00015;
-    // a gun without a recoil system (the Mörser 99) rolled back off its lay at every shot and was laid afresh by eye: a
-    // new error each round, smaller with better sights (its own draws: the other guns' rounds are as before)
+    // a gun without a recoil system (the ramp guns, dormant since 2026-11-26) rolled back off its lay at every shot and
+    // was laid afresh by eye: a new error each round, smaller with better sights (its own draws: the other guns' rounds
+    // are as before)
     if (g.runback && !sl) {
       const bk = u.mods ? u.mods.bias : 1;
       v *= 1 + sim.gauss() * g.runback.r * bk;
@@ -608,11 +668,11 @@ export class Guns {
       u.underFire = sim.time;
       return;
     }
-    p.hp -= dmg * sim.difficulty.dmg;
+    p.hp -= dmg * sim.difficulty.dmg * (u.cover && !direct ? COVER.gun : 1);
     u.underFire = sim.time;
     sim.events.pieceHit?.(u, p);
     // crew casualties
-    if (p.crew > 0 && sim.rng() < (direct ? 0.9 : 0.35 + dmg / 120)) {
+    if (p.crew > 0 && sim.rng() < (direct ? 0.9 : 0.35 + dmg / 120) * (u.cover ? COVER.cas : 1)) {
       p.crew = Math.max(0, p.crew - (1 + (sim.rng() < 0.4 ? 1 : 0)));
       sim.events.casualty?.(u, p);
       // the relief crews' payoff, named: a man down and the gun's pace held by a relief (not repeated within 20 s)

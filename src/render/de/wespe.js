@@ -1,3 +1,5 @@
+// Dormant since 2026-11-26: the 10.5 cm Wespe was cut from the German tree at the user's word (DESIGN.md changelog);
+// kept here unreachable (no tree, battle or menu fields it). Commit 1dd259b has it whole and in play: restore from it.
 import { smooth, lerp, wrapPi, headingOf } from '../anim.js';
 
 // The Wespe's drill for render/crews.js (see render/crews_ww1.js for what this module may export). A light gun's drill
